@@ -218,8 +218,12 @@ class PopoverContent extends Component<PopoverContentSignature> {
 	@tracked y = 0;
 	cleanup?: () => void;
 
+	// inside a <dialog> the body is behind the top layer
 	get destinationElement() {
-		return document.body;
+		return (
+			this.context.triggerElement?.closest('dialog') ??
+			document.body
+		);
 	}
 
 	handleClickOutside = () => {

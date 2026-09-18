@@ -1,0 +1,451 @@
+// errata: only what substrata has no counterpart for; the shell, top bar,
+// omnibar, empty card and modal reuse the sub- rules
+
+.err-pages {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	inline-size: 132px;
+	border-inline-end: 1px solid var(--border);
+	background-color: var(--card);
+}
+
+.err-pages-list {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 8px;
+	min-block-size: 0;
+	padding: 10px;
+	overflow-y: auto;
+}
+
+.err-page-cell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	padding: 6px;
+	border: 2px solid transparent;
+
+	&:hover {
+		background-color: var(--accent);
+	}
+
+	&.is-current {
+		border-color: var(--primary);
+	}
+
+	&.is-drag-over {
+		border-color: var(--primary);
+		border-style: dashed;
+	}
+}
+
+.err-page-pick {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+}
+
+.err-page-thumb {
+	display: block;
+	inline-size: 96px;
+	border: 1px solid var(--border);
+	background-color: #fff;
+	pointer-events: none;
+}
+
+.err-page-num {
+	font-size: 10.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted-foreground);
+}
+
+.err-page-actions {
+	display: flex;
+}
+
+// same as .sub-topbar-fit-btn
+.err-page-action {
+	display: grid;
+	place-items: center;
+	inline-size: 28px;
+	block-size: 28px;
+	color: var(--muted-foreground);
+	cursor: pointer;
+
+	.dt-icon {
+		inline-size: 15px;
+		block-size: 15px;
+	}
+
+	&:hover:not(:disabled) {
+		background-color: var(--accent);
+		color: var(--foreground);
+	}
+
+	&:disabled {
+		pointer-events: none;
+		opacity: 0.5;
+	}
+}
+
+// insert zone between cells, buttons appear on hover
+.err-page-gap {
+	display: flex;
+	justify-content: center;
+	gap: 2px;
+	block-size: 8px;
+	margin-block: -4px;
+	opacity: 0;
+	transition: opacity 120ms ease;
+
+	&:hover,
+	&:focus-within {
+		block-size: 28px;
+		margin-block: 0;
+		opacity: 1;
+	}
+}
+
+.err-page-gap-btn {
+	display: grid;
+	place-items: center;
+	inline-size: 28px;
+	block-size: 28px;
+	border: 1px solid var(--border);
+	background-color: var(--background);
+	color: var(--muted-foreground);
+	cursor: pointer;
+
+	.dt-icon {
+		inline-size: 13px;
+		block-size: 13px;
+	}
+
+	&:hover {
+		background-color: var(--accent);
+		color: var(--foreground);
+	}
+}
+
+// page size dialog
+
+.err-other {
+	grid-column: span 3;
+	justify-content: center;
+}
+
+.err-dims {
+	grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+}
+
+.err-swap {
+	block-size: 44px;
+
+	.dt-icon {
+		inline-size: 14px;
+		block-size: 14px;
+	}
+}
+
+.err-place-toggle {
+	margin-block-end: 8px;
+}
+
+.err-anchor-grid {
+	inline-size: max-content;
+	grid-template-columns: repeat(3, 40px);
+
+	> .sub-modal-opt {
+		block-size: 40px;
+	}
+
+	.dt-icon {
+		inline-size: 14px;
+		block-size: 14px;
+	}
+}
+
+.err-place-modes {
+	> .sub-modal-opt {
+		block-size: 40px;
+	}
+}
+
+// signature dialog body
+
+.err-sig-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.err-sig-cell {
+	position: relative;
+	block-size: 56px;
+	background-color: #fff;
+}
+
+.err-sig-place {
+	display: grid;
+	place-items: center;
+	inline-size: 100%;
+	block-size: 100%;
+	padding: 6px;
+	cursor: pointer;
+
+	&:hover {
+		background-color: var(--accent);
+	}
+}
+
+.err-sig-img {
+	max-inline-size: 100%;
+	max-block-size: 100%;
+	object-fit: contain;
+}
+
+.err-sig-remove {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	display: grid;
+	place-items: center;
+	inline-size: 18px;
+	block-size: 18px;
+	background-color: var(--card);
+	color: var(--muted-foreground);
+	cursor: pointer;
+
+	.dt-icon {
+		inline-size: 11px;
+		block-size: 11px;
+	}
+
+	&:hover {
+		color: var(--foreground);
+	}
+}
+
+.err-sig-pad {
+	display: block;
+	inline-size: 100%;
+	aspect-ratio: 480 / 180;
+	border: 1px solid var(--border);
+	background-color: #fff;
+	touch-action: none;
+	cursor: crosshair;
+}
+
+// toolbox: the bar and the sheet swap places (bar down and out, sheet up)
+
+.err-barrow {
+	transition:
+		translate 200ms cubic-bezier(0.2, 0.8, 0.2, 1) 180ms,
+		opacity 160ms 180ms;
+
+	&.is-hidden {
+		pointer-events: none;
+		translate: 0 96px;
+		opacity: 0;
+		transition-delay: 0ms;
+	}
+}
+
+.err-box-chevron {
+	inline-size: 13px;
+	block-size: 13px;
+	color: var(--muted-foreground);
+}
+
+.err-sheet {
+	position: absolute;
+	inset-block-end: 16px;
+	inset-inline-start: 50%;
+	display: flex;
+	flex-direction: column;
+	inline-size: 720px;
+	max-inline-size: calc(100% - 32px);
+	background-color: var(--background);
+	translate: -50% calc(100% + 40px);
+	opacity: 0;
+	pointer-events: none !important;
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+		opacity 200ms;
+
+	&.is-open {
+		translate: -50% 0;
+		opacity: 1;
+		pointer-events: auto !important;
+		transition-delay: 170ms;
+	}
+}
+
+.err-sheet-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	block-size: 34px;
+	padding-inline: 14px 6px;
+	border-block-end: 1px solid var(--border);
+	background-color: var(--card);
+}
+
+.err-sheet-close {
+	margin-inline-start: auto;
+}
+
+.err-sheet-body {
+	max-block-size: 60vh;
+	padding: 10px 12px 0;
+	overflow-y: auto;
+}
+
+// @use hoists this file above app.scss, so the home rules need out-specifying
+.err-sheet .err-sheet-section {
+	margin-block-end: 12px;
+
+	.dt-section-title {
+		margin-block-end: 6px;
+		font-size: 10.5px;
+	}
+
+	.dt-grid {
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	}
+}
+
+// a card that is also a button, compact: icon column, name and subtitle aligned
+.err-sheet .err-sheet-cell {
+	display: grid;
+	grid-template-columns: 14px minmax(0, 1fr);
+	gap: 2px 8px;
+	align-items: center;
+	padding: 7px 9px;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+
+	.dt-cell-icon {
+		grid-row: 1;
+		grid-column: 1;
+		inline-size: 14px;
+		block-size: 14px;
+		margin: 0;
+	}
+
+	.err-cell-title {
+		grid-row: 1;
+		grid-column: 2;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-inline-size: 0;
+	}
+
+	.dt-cell-name {
+		font-size: 12px;
+		line-height: 1.2;
+	}
+
+	.dt-cell-desc {
+		grid-row: 2;
+		grid-column: 2;
+		margin: 0;
+		font-size: 10.5px;
+		line-height: 1.3;
+	}
+
+	&.is-soon {
+		cursor: default;
+
+		.dt-cell-icon,
+		.dt-cell-name,
+		.dt-cell-desc {
+			opacity: 0.45;
+		}
+
+		&:hover {
+			background: var(--card);
+			color: var(--card-foreground);
+		}
+	}
+}
+
+// mode bar: replaces the markup bar while a toolbox mode runs
+.err-mode {
+	position: absolute;
+	inset-block-end: 16px;
+	inset-inline-start: 50%;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	block-size: 48px;
+	padding-inline: 14px 8px;
+	border: 1px solid var(--border);
+	background-color: var(--background);
+	box-shadow:
+		0 10px 15px -3px rgb(0 0 0 / 10%),
+		0 4px 6px -4px rgb(0 0 0 / 10%);
+	translate: -50% calc(100% + 40px);
+	opacity: 0;
+	pointer-events: none !important;
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+		opacity 200ms;
+
+	&.is-open {
+		translate: -50% 0;
+		opacity: 1;
+		pointer-events: auto !important;
+		transition-delay: 170ms;
+	}
+}
+
+.err-mode-cancel {
+	margin-inline-start: 6px;
+}
+
+// content tool hud, above the hovered or selected object
+.err-hud {
+	position: absolute;
+	z-index: 3;
+	display: flex;
+	gap: 8px;
+	padding: 3px 7px;
+	border: 1px solid var(--border);
+	background-color: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-mono);
+	font-size: 10.5px;
+	line-height: 1.4;
+	white-space: nowrap;
+	pointer-events: none;
+	translate: 0 calc(-100% - 6px);
+	box-shadow: 0 4px 6px -4px rgb(0 0 0 / 20%);
+
+	&.is-below {
+		translate: 0 0;
+	}
+
+	&[hidden] {
+		display: none;
+	}
+
+	&.is-warn {
+		border-color: var(--destructive);
+		color: var(--destructive);
+	}
+}
+
+.err-hud-kind {
+	font-weight: 600;
+}
+
+.err-hud-dims {
+	color: var(--muted-foreground);
+}

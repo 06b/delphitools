@@ -11,6 +11,7 @@ Router.map(function () {
 		this.route('tool', { path: '/:tool_id' });
 	});
 	this.route('editor');
+	this.route('errata');
 	this.route('workflows');
 	this.route('workflow', { path: '/w/:steps' });
 	this.route('experiments');

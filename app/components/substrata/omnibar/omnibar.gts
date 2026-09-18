@@ -272,7 +272,7 @@ function readoutChips(
 
 // wrapper padding spans trigger→bloom gap as hover bridge; idle stays
 // click-transparent
-const Bloom: TOC<{
+export const Bloom: TOC<{
 	Args: { edge: Edge; cross: 'center' | 'end' };
 	Blocks: { default: [] };
 }> = <template>

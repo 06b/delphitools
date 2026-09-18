@@ -14,12 +14,17 @@ export function getPdfJs(): Promise<typeof PdfJs> {
 	return pdfjs;
 }
 
-// vite serves codec wasm
+// vite serves codec wasm and the standard 14 font files (vite.config.mjs, pdfjsWasm)
 const PDF_WASM_URL = '/pdfjs-wasm/';
+const PDF_FONTS_URL = '/pdfjs-fonts/';
 
 export async function loadPdfDocument(
 	data: ArrayBuffer | Uint8Array,
 ): Promise<PDFDocumentProxy> {
 	const pdfjs = await getPdfJs();
-	return pdfjs.getDocument({ data, wasmUrl: PDF_WASM_URL }).promise;
+	return pdfjs.getDocument({
+		data,
+		wasmUrl: PDF_WASM_URL,
+		standardFontDataUrl: PDF_FONTS_URL,
+	}).promise;
 }

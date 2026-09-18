@@ -98,7 +98,7 @@ interface BoxSignature {
 }
 
 // shadow-lg test hook
-const Box: TOC<BoxSignature> = <template>
+export const Box: TOC<BoxSignature> = <template>
 	<div class="sub-topbar-box shadow-lg" ...attributes>{{yield}}</div>
 </template>;
 
@@ -116,7 +116,7 @@ function fireOptional(onClick: (() => void) | undefined): void {
 	onClick?.();
 }
 
-const Item: TOC<ItemSignature> = <template>
+export const Item: TOC<ItemSignature> = <template>
 	<button
 		type="button"
 		disabled={{@disabled}}
@@ -131,7 +131,7 @@ const Item: TOC<ItemSignature> = <template>
 	</button>
 </template>;
 
-const Sep: TOC<{ Element: HTMLDivElement }> = <template>
+export const Sep: TOC<{ Element: HTMLDivElement }> = <template>
 	<div class="sub-topbar-sep"></div>
 </template>;
 
@@ -377,7 +377,7 @@ interface UrButtonSignature {
 	};
 }
 
-const UrButton: TOC<UrButtonSignature> = <template>
+export const UrButton: TOC<UrButtonSignature> = <template>
 	<button
 		type="button"
 		class="sub-topbar-ur-btn"
@@ -402,7 +402,7 @@ interface AbSignature {
 	};
 }
 
-const Ab: TOC<AbSignature> = <template>
+export const Ab: TOC<AbSignature> = <template>
 	<button
 		type="button"
 		class="sub-topbar-ab"

@@ -13,6 +13,7 @@ import iAlignStartHorizontal from 'lucide-static/icons/align-start-horizontal.sv
 import iAlignStartVertical from 'lucide-static/icons/align-start-vertical.svg?raw';
 import iAlignVerticalDistributeCenter from 'lucide-static/icons/align-vertical-distribute-center.svg?raw';
 import iAperture from 'lucide-static/icons/aperture.svg?raw';
+import iArchive from 'lucide-static/icons/archive.svg?raw';
 import iArrowDown from 'lucide-static/icons/arrow-down.svg?raw';
 import iArrowDownLeft from 'lucide-static/icons/arrow-down-left.svg?raw';
 import iArrowDownRight from 'lucide-static/icons/arrow-down-right.svg?raw';
@@ -38,6 +39,7 @@ import iBookOpen from 'lucide-static/icons/book-open.svg?raw';
 import iBox from 'lucide-static/icons/box.svg?raw';
 import iBoxSelect from 'lucide-static/icons/box-select.svg?raw';
 import iBraces from 'lucide-static/icons/braces.svg?raw';
+import iBriefcase from 'lucide-static/icons/briefcase.svg?raw';
 import iBrush from 'lucide-static/icons/brush.svg?raw';
 import iCalculator from 'lucide-static/icons/calculator.svg?raw';
 import iCalendarClock from 'lucide-static/icons/calendar-clock.svg?raw';
@@ -127,6 +129,7 @@ import iGripVertical from 'lucide-static/icons/grip-vertical.svg?raw';
 import iGroup from 'lucide-static/icons/group.svg?raw';
 import iHardDrive from 'lucide-static/icons/hard-drive.svg?raw';
 import iHash from 'lucide-static/icons/hash.svg?raw';
+import iHighlighter from 'lucide-static/icons/highlighter.svg?raw';
 import iHome from 'lucide-static/icons/home.svg?raw';
 import iImage from 'lucide-static/icons/image.svg?raw';
 import iImagePlus from 'lucide-static/icons/image-plus.svg?raw';
@@ -150,6 +153,7 @@ import iMagnet from 'lucide-static/icons/magnet.svg?raw';
 import iMapPin from 'lucide-static/icons/map-pin.svg?raw';
 import iMaximize from 'lucide-static/icons/maximize.svg?raw';
 import iMaximize2 from 'lucide-static/icons/maximize-2.svg?raw';
+import iMessageSquare from 'lucide-static/icons/message-square.svg?raw';
 import iMessageSquarePlus from 'lucide-static/icons/message-square-plus.svg?raw';
 import iMic from 'lucide-static/icons/mic.svg?raw';
 import iMinimize from 'lucide-static/icons/minimize.svg?raw';
@@ -157,6 +161,7 @@ import iMinimize2 from 'lucide-static/icons/minimize-2.svg?raw';
 import iMinus from 'lucide-static/icons/minus.svg?raw';
 import iMonitorUp from 'lucide-static/icons/monitor-up.svg?raw';
 import iMoon from 'lucide-static/icons/moon.svg?raw';
+import iMousePointer2 from 'lucide-static/icons/mouse-pointer-2.svg?raw';
 import iMove from 'lucide-static/icons/move.svg?raw';
 import iPaintBucket from 'lucide-static/icons/paint-bucket.svg?raw';
 import iPalette from 'lucide-static/icons/palette.svg?raw';
@@ -166,6 +171,7 @@ import iPanelRight from 'lucide-static/icons/panel-right.svg?raw';
 import iPanelTop from 'lucide-static/icons/panel-top.svg?raw';
 import iPartyPopper from 'lucide-static/icons/party-popper.svg?raw';
 import iPause from 'lucide-static/icons/pause.svg?raw';
+import iPen from 'lucide-static/icons/pen.svg?raw';
 import iPenLine from 'lucide-static/icons/pen-line.svg?raw';
 import iPencil from 'lucide-static/icons/pencil.svg?raw';
 import iPentagon from 'lucide-static/icons/pentagon.svg?raw';
@@ -189,6 +195,7 @@ import iRotateCw from 'lucide-static/icons/rotate-cw.svg?raw';
 import iRuler from 'lucide-static/icons/ruler.svg?raw';
 import iScale from 'lucide-static/icons/scale.svg?raw';
 import iScaling from 'lucide-static/icons/scaling.svg?raw';
+import iScan from 'lucide-static/icons/scan.svg?raw';
 import iScanLine from 'lucide-static/icons/scan-line.svg?raw';
 import iScanSearch from 'lucide-static/icons/scan-search.svg?raw';
 import iScissors from 'lucide-static/icons/scissors.svg?raw';
@@ -210,6 +217,7 @@ import iSparkles from 'lucide-static/icons/sparkles.svg?raw';
 import iSpline from 'lucide-static/icons/spline.svg?raw';
 import iSquare from 'lucide-static/icons/square.svg?raw';
 import iSquareDashed from 'lucide-static/icons/square-dashed.svg?raw';
+import iSquareDashedMousePointer from 'lucide-static/icons/square-dashed-mouse-pointer.svg?raw';
 import iSquareSlash from 'lucide-static/icons/square-slash.svg?raw';
 import iSquareSquare from 'lucide-static/icons/square-square.svg?raw';
 import iSquareStack from 'lucide-static/icons/square-stack.svg?raw';
@@ -222,6 +230,7 @@ import iSun from 'lucide-static/icons/sun.svg?raw';
 import iSwatchBook from 'lucide-static/icons/swatch-book.svg?raw';
 import iTag from 'lucide-static/icons/tag.svg?raw';
 import iTerminal from 'lucide-static/icons/terminal.svg?raw';
+import iTextCursorInput from 'lucide-static/icons/text-cursor-input.svg?raw';
 import iThermometer from 'lucide-static/icons/thermometer.svg?raw';
 import iTrash2 from 'lucide-static/icons/trash-2.svg?raw';
 import iTriangle from 'lucide-static/icons/triangle.svg?raw';
@@ -258,6 +267,7 @@ export const icons: Record<string, string> = {
 	'align-start-vertical': iAlignStartVertical,
 	'align-vertical-distribute-center': iAlignVerticalDistributeCenter,
 	aperture: iAperture,
+	archive: iArchive,
 	'arrow-down': iArrowDown,
 	'arrow-down-left': iArrowDownLeft,
 	'arrow-down-right': iArrowDownRight,
@@ -283,6 +293,7 @@ export const icons: Record<string, string> = {
 	box: iBox,
 	'box-select': iBoxSelect,
 	braces: iBraces,
+	briefcase: iBriefcase,
 	brush: iBrush,
 	calculator: iCalculator,
 	'calendar-clock': iCalendarClock,
@@ -372,6 +383,7 @@ export const icons: Record<string, string> = {
 	group: iGroup,
 	'hard-drive': iHardDrive,
 	hash: iHash,
+	highlighter: iHighlighter,
 	home: iHome,
 	image: iImage,
 	'image-plus': iImagePlus,
@@ -395,6 +407,7 @@ export const icons: Record<string, string> = {
 	'map-pin': iMapPin,
 	maximize: iMaximize,
 	'maximize-2': iMaximize2,
+	'message-square': iMessageSquare,
 	'message-square-plus': iMessageSquarePlus,
 	mic: iMic,
 	minimize: iMinimize,
@@ -402,6 +415,7 @@ export const icons: Record<string, string> = {
 	minus: iMinus,
 	'monitor-up': iMonitorUp,
 	moon: iMoon,
+	'mouse-pointer-2': iMousePointer2,
 	move: iMove,
 	'paint-bucket': iPaintBucket,
 	palette: iPalette,
@@ -411,6 +425,7 @@ export const icons: Record<string, string> = {
 	'panel-top': iPanelTop,
 	'party-popper': iPartyPopper,
 	pause: iPause,
+	pen: iPen,
 	'pen-line': iPenLine,
 	pencil: iPencil,
 	pentagon: iPentagon,
@@ -434,6 +449,7 @@ export const icons: Record<string, string> = {
 	ruler: iRuler,
 	scale: iScale,
 	scaling: iScaling,
+	scan: iScan,
 	'scan-line': iScanLine,
 	'scan-search': iScanSearch,
 	scissors: iScissors,
@@ -455,6 +471,7 @@ export const icons: Record<string, string> = {
 	spline: iSpline,
 	square: iSquare,
 	'square-dashed': iSquareDashed,
+	'square-dashed-mouse-pointer': iSquareDashedMousePointer,
 	'square-slash': iSquareSlash,
 	'square-square': iSquareSquare,
 	'square-stack': iSquareStack,
@@ -467,6 +484,7 @@ export const icons: Record<string, string> = {
 	'swatch-book': iSwatchBook,
 	tag: iTag,
 	terminal: iTerminal,
+	'text-cursor-input': iTextCursorInput,
 	thermometer: iThermometer,
 	'trash-2': iTrash2,
 	triangle: iTriangle,

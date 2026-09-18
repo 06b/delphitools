@@ -49,6 +49,8 @@ export interface PaperSizeComboboxSignature {
 		inferredLabel?: string;
 		triggerClass?: string;
 		contentClass?: string;
+		// trigger text while value is 'custom'
+		customLabel?: string;
 	};
 }
 
@@ -64,7 +66,8 @@ export default class PaperSizeCombobox extends Component<PaperSizeComboboxSignat
 				? `Infer (${inferredLabel})`
 				: 'Infer from PDF';
 		}
-		if (value === 'custom') return 'Custom…';
+		if (value === 'custom')
+			return this.args.customLabel ?? 'Custom…';
 		return findPaperSize(value)?.label ?? value;
 	}
 
