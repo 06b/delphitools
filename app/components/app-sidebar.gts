@@ -14,15 +14,9 @@ import Icon from 'delphitools-v2/components/icon';
 import AboutDelphitoolsBody from 'delphitools-v2/components/about-delphitools';
 import { toolCategories, featuredTools } from 'delphitools-v2/lib/tools';
 import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
+import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
 import type SidebarService from 'delphitools-v2/services/sidebar';
-
-function matches(tool: Tool, query: string) {
-	return (
-		tool.name.toLowerCase().includes(query) ||
-		tool.description.toLowerCase().includes(query)
-	);
-}
 
 const NavTip: TOC<{
 	Args: { label: string; show: boolean };
@@ -69,14 +63,14 @@ export default class AppSidebar extends Component {
 	}
 
 	get featured(): Tool[] {
-		return featuredTools.filter((t) => matches(t, this.query));
+		return featuredTools.filter((t) => matchesQuery(t, this.query));
 	}
 
 	@cached
 	get categories(): ToolCategory[] {
 		return SIDEBAR_CATEGORIES.flatMap((cat) => {
 			const tools = cat.tools.filter((t) =>
-				matches(t, this.query),
+				matchesQuery(t, this.query),
 			);
 			return tools.length > 0 ? [{ ...cat, tools }] : [];
 		});

@@ -114,7 +114,7 @@ export const CUSTOM_PREFIX = 'custom:';
 export const CUSTOM_NAME = 'Custom workflow';
 export const ORDINALS = ['First,', 'Then...', 'Finally,'];
 
-const MIME: Record<string, string> = {
+export const MIME: Record<string, string> = {
 	'.png': 'image/png',
 	'.jpg': 'image/jpeg',
 	'.webp': 'image/webp',
@@ -141,7 +141,7 @@ const MIME: Record<string, string> = {
 };
 
 // file for accept matching
-function sample(produced: string): File {
+export function sample(produced: string): File {
 	const isExt = produced.startsWith('.');
 	const ext = isExt
 		? produced

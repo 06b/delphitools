@@ -11,6 +11,7 @@ import { colourToQuery } from './colour-query';
 import { simulateHex, type SimulationType } from './colour-vision';
 import { formatScientific } from './math-constants';
 import { acceptsFile } from 'delphitools-v2/modifiers/file-paste';
+import { matchesQuery } from './tool-search';
 import type { CategoryKey } from 'delphitools-v2/components/tools/unit-converter';
 
 export interface OmniAnswer {
@@ -32,11 +33,7 @@ const MAX_ANSWERS = 6;
 export function searchTools(query: string): Tool[] {
 	const q = query.trim().toLowerCase();
 	if (!q) return [];
-	return allTools.filter(
-		(tool) =>
-			tool.name.toLowerCase().includes(q) ||
-			tool.description.toLowerCase().includes(q),
-	);
+	return allTools.filter((tool) => matchesQuery(tool, q));
 }
 
 export function toolsForFile(file: File): Tool[] {
