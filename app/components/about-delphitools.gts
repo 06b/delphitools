@@ -12,6 +12,13 @@ const CONTRIBUTORS = [
 		url: 'https://github.com/TheTinkerersHaven',
 	},
 	{ name: 'Fleny', url: 'https://github.com/Fleny113' },
+	{ name: 'Pranav K', url: 'https://github.com/Pranavk-official' },
+	{ name: 'Mouaz Aldakkak', url: 'https://github.com/movoid12' },
+	{ name: 'Chris Hallberg', url: 'https://github.com/crhallberg' },
+	{
+		name: 'Bhagya Vishwakarma',
+		url: 'https://github.com/Bhagya-Vishwakarma-20',
+	},
 	{
 		name: 'Claude',
 		url: 'https://rmv.fyi/notes/i-hope-you-don-t-use-generative-ai',
