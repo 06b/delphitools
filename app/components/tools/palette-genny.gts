@@ -199,9 +199,6 @@ export default class PaletteGennyTool extends Component {
 	});
 
 	regenerate = () => {
-		// Anchor colour-theory relations on what the user pinned so
-		// unlocked swatches harmonise with locked ones instead of
-		// spawning an unrelated random palette.
 		const lockedHexes = this.colours
 			.filter((colour) => colour.locked)
 			.map((colour) => colour.hex);
@@ -227,8 +224,6 @@ export default class PaletteGennyTool extends Component {
 
 	addColour = () => {
 		if (this.atMax) return;
-		// Seed with the existing palette so the new swatch extends the
-		// current relation instead of arriving from a random base.
 		const seeds = this.colours.map((colour) => colour.hex);
 		this.colours.push(
 			swatch(generatePalette(1, this.strategy, seeds)[0]!),

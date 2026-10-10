@@ -26,6 +26,10 @@ import type ColourNotationService from 'delphitools-v2/services/colour-notation'
 type CategoryFilter = PaletteCollectionCategory | 'all';
 type CountFilter = number | 'all';
 
+const COLOUR_COUNTS = [
+	...new Set(CURATED_PALETTES.map((p) => p.colors.length)),
+].sort((a, b) => a - b);
+
 const CATEGORIES = Object.entries(COLLECTION_CATEGORIES) as [
 	PaletteCollectionCategory,
 	{ label: string; description: string },
@@ -54,12 +58,6 @@ export default class PaletteCollectionTool extends Component {
 			: COLLECTION_CATEGORIES[this.selectedCategory];
 	}
 
-	get availableCounts(): number[] {
-		return [
-			...new Set(CURATED_PALETTES.map((p) => p.colors.length)),
-		].sort((a, b) => a - b);
-	}
-
 	get hasActiveFilter(): boolean {
 		return (
 			this.selectedCategory !== 'all' ||
@@ -79,7 +77,9 @@ export default class PaletteCollectionTool extends Component {
 			this.selectedCount === 'all'
 				? inCategory
 				: inCategory.filter(
-						(p) => p.colors.length === this.selectedCount,
+						(p) =>
+							p.colors.length ===
+							this.selectedCount,
 					);
 
 		const query = this.searchQuery.trim().toLowerCase();
@@ -129,12 +129,10 @@ export default class PaletteCollectionTool extends Component {
 		this.selectedCategory = category;
 	};
 
-	get countOptions(): { value: string; label: string }[] {
-		return this.availableCounts.map((count) => ({
-			value: String(count),
-			label: `${count} colours`,
-		}));
-	}
+	countOptions = COLOUR_COUNTS.map((count) => ({
+		value: String(count),
+		label: `${count} colours`,
+	}));
 
 	get countValue(): string {
 		return this.selectedCount === 'all'
@@ -149,14 +147,7 @@ export default class PaletteCollectionTool extends Component {
 	}
 
 	chooseCount = (value: string) => {
-		if (value === 'all') {
-			this.selectedCount = 'all';
-			return;
-		}
-		const parsed = Number(value);
-		this.selectedCount = Number.isInteger(parsed)
-			? parsed
-			: 'all';
+		this.selectedCount = value === 'all' ? 'all' : Number(value);
 	};
 
 	setSearch = (event: Event) => {

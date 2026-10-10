@@ -195,26 +195,20 @@ function rgbToHex(r: number, g: number, b: number): string {
 	return (
 		'#' +
 		[r, g, b]
-			.map((x) => {
-				if (!Number.isFinite(x)) x = 0;
-				return Math.round(Math.max(0, Math.min(255, x)))
+			.map((x) =>
+				Math.round(Math.max(0, Math.min(255, x)))
 					.toString(16)
-					.padStart(2, '0');
-			})
+					.padStart(2, '0'),
+			)
 			.join('')
 	);
 }
 
 function linearToSrgb(c: number): number {
-	// Out-of-gamut Oklch routinely yields negative linear light, and a
-	// NaN hue (e.g. old count=1 division) used to poison everything into
-	// #NaNNaNNaN. Clip instead of propagating.
-	if (!Number.isFinite(c) || c <= 0) return 0;
 	const v =
 		c <= 0.0031308
 			? 12.92 * c
 			: 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
-	if (!Number.isFinite(v)) return 0;
 	return Math.max(0, Math.min(255, v * 255));
 }
 
@@ -235,9 +229,6 @@ function oklchToRgb(L: number, c: number, h: number): [number, number, number] {
 }
 
 function clampOklch(L: number, c: number, h: number): [number, number, number] {
-	if (!Number.isFinite(L)) L = 0.6;
-	if (!Number.isFinite(c)) c = 0.12;
-	if (!Number.isFinite(h)) h = 0;
 	L = Math.max(0, Math.min(1, L));
 	c = Math.max(0, Math.min(0.4, c));
 	h = ((h % 360) + 360) % 360;
@@ -258,46 +249,39 @@ function randomInRange(min: number, max: number): number {
 	return Math.random() * (max - min) + min;
 }
 
-function generateRandomBase(): [number, number, number] {
+type Oklch = [number, number, number];
+
+function generateRandomBase(): Oklch {
 	const L = randomInRange(0.4, 0.75);
 	const c = randomInRange(0.08, 0.2);
 	const h = randomInRange(0, 360);
 	return [L, c, h];
 }
 
-type Oklch = [number, number, number];
-
-/**
- * First parseable hex wins — callers pass locked colours first, so the
- * whole relation anchors on what the user pinned. Null = no usable seed,
- * fall back to a random base.
- */
-function baseFromSeeds(seeds?: string[]): Oklch | null {
-	if (!seeds) return null;
+// first parseable seed wins; callers pass locked colours first
+function baseFromSeeds(seeds: string[] = []): Oklch | null {
 	for (const seed of seeds) {
-		if (typeof seed !== 'string') continue;
-		const rgb = hexToRgb(seed.trim());
-		if (!rgb) continue;
-		const [L, c, h] = rgbToOklch(...rgb);
-		if (!Number.isFinite(L) || !Number.isFinite(c)) continue;
-		return clampOklch(L, c, Number.isFinite(h) ? h : 0);
+		const rgb = hexToRgb(seed);
+		if (rgb) return clampOklch(...rgbToOklch(...rgb));
 	}
 	return null;
 }
 
-function resolveBase(
-	seeds?: string[],
-	fallback?: Oklch,
-): { base: Oklch; seeded: boolean } {
-	const fromSeed = baseFromSeeds(seeds);
-	if (fromSeed) return { base: fromSeed, seeded: true };
-	return { base: fallback ?? generateRandomBase(), seeded: false };
+function resolveBase(seeds?: string[]): { base: Oklch; seeded: boolean } {
+	const seed = baseFromSeeds(seeds);
+	return { base: seed ?? generateRandomBase(), seeded: seed !== null };
 }
 
-/** Guarded count: non-integers floored, negatives/NaN → 0. */
-function saneCount(count: number): number {
-	if (!Number.isFinite(count)) return 0;
-	return Math.max(0, Math.floor(count));
+// a seeded single colour is a neighbour, so adding one never duplicates the seed
+function single([L, c, h]: Oklch, seeded: boolean): string[] {
+	if (!seeded) return [oklchToHex(L, c, h)];
+	return [
+		oklchToHex(
+			L + randomInRange(-0.1, 0.1),
+			c + randomInRange(-0.03, 0.03),
+			h + randomInRange(-15, 15),
+		),
+	];
 }
 
 interface HueRange {
@@ -341,23 +325,9 @@ function generateTrueRandomPalette(count: number): string[] {
 }
 
 function generateAnalogousPalette(count: number, seeds?: string[]): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
 	const { base, seeded } = resolveBase(seeds);
+	if (count === 1) return single(base, seeded);
 	const [baseL, baseC, baseH] = base;
-	if (count === 1) {
-		// No step to divide by: a neighbour of the base, not a duplicate.
-		if (seeded) {
-			return [
-				oklchToHex(
-					baseL + randomInRange(-0.08, 0.08),
-					baseC + randomInRange(-0.03, 0.03),
-					baseH + randomInRange(-20, 20),
-				),
-			];
-		}
-		return [oklchToHex(baseL, baseC, baseH)];
-	}
 	const spread = 40;
 	const step = spread / (count - 1);
 	const startH = baseH - spread / 2;
@@ -374,22 +344,9 @@ function generateComplementaryPalette(
 	count: number,
 	seeds?: string[],
 ): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
 	const { base, seeded } = resolveBase(seeds);
+	if (count === 1) return single(base, seeded);
 	const [baseL, baseC, baseH] = base;
-	if (count === 1) {
-		if (seeded) {
-			return [
-				oklchToHex(
-					baseL + randomInRange(-0.1, 0.1),
-					baseC + randomInRange(-0.03, 0.03),
-					baseH + randomInRange(-12, 12),
-				),
-			];
-		}
-		return [oklchToHex(baseL, baseC, baseH)];
-	}
 	const complementH = (baseH + 180) % 360;
 
 	const colours: string[] = [];
@@ -413,22 +370,9 @@ function generateComplementaryPalette(
 }
 
 function generateTriadicPalette(count: number, seeds?: string[]): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
 	const { base, seeded } = resolveBase(seeds);
+	if (count === 1) return single(base, seeded);
 	const [baseL, baseC, baseH] = base;
-	if (count === 1) {
-		if (seeded) {
-			return [
-				oklchToHex(
-					baseL + randomInRange(-0.1, 0.1),
-					baseC + randomInRange(-0.03, 0.03),
-					baseH + randomInRange(-10, 10),
-				),
-			];
-		}
-		return [oklchToHex(baseL, baseC, baseH)];
-	}
 	const angles = [baseH, (baseH + 120) % 360, (baseH + 240) % 360];
 
 	return Array.from({ length: count }, (_, i) => {
@@ -444,22 +388,9 @@ function generateSplitComplementaryPalette(
 	count: number,
 	seeds?: string[],
 ): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
 	const { base, seeded } = resolveBase(seeds);
+	if (count === 1) return single(base, seeded);
 	const [baseL, baseC, baseH] = base;
-	if (count === 1) {
-		if (seeded) {
-			return [
-				oklchToHex(
-					baseL + randomInRange(-0.1, 0.1),
-					baseC + randomInRange(-0.03, 0.03),
-					baseH + randomInRange(-10, 10),
-				),
-			];
-		}
-		return [oklchToHex(baseL, baseC, baseH)];
-	}
 	const split1 = (baseH + 150) % 360;
 	const split2 = (baseH + 210) % 360;
 	const angles = [baseH, split1, split2];
@@ -474,22 +405,9 @@ function generateSplitComplementaryPalette(
 }
 
 function generateTetradicPalette(count: number, seeds?: string[]): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
 	const { base, seeded } = resolveBase(seeds);
+	if (count === 1) return single(base, seeded);
 	const [baseL, baseC, baseH] = base;
-	if (count === 1) {
-		if (seeded) {
-			return [
-				oklchToHex(
-					baseL + randomInRange(-0.1, 0.1),
-					baseC + randomInRange(-0.03, 0.03),
-					baseH + randomInRange(-10, 10),
-				),
-			];
-		}
-		return [oklchToHex(baseL, baseC, baseH)];
-	}
 	const angles = [
 		baseH,
 		(baseH + 90) % 360,
@@ -506,64 +424,40 @@ function generateTetradicPalette(count: number, seeds?: string[]): string[] {
 	});
 }
 
+function shade(L: number, c: number, h: number): string {
+	const cMod = L < 0.4 || L > 0.75 ? 0.7 : 1;
+	return oklchToHex(L, c * cMod, h);
+}
+
 function generateMonochromaticPalette(
 	count: number,
 	seeds?: string[],
 ): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
-	const { base, seeded } = resolveBase(seeds, [
-		0.6,
-		randomInRange(0.1, 0.2),
-		randomInRange(0, 360),
-	]);
-	const [, seedC, seedH] = base;
-	const h = seeded ? seedH : randomInRange(0, 360);
-	const baseC = seeded
-		? Math.max(0.04, Math.min(0.3, seedC ?? 0.15))
+	const seed = baseFromSeeds(seeds);
+	const h = seed ? seed[2] : randomInRange(0, 360);
+	const baseC = seed
+		? Math.max(0.04, Math.min(0.3, seed[1]))
 		: randomInRange(0.1, 0.2);
+
 	if (count === 1) {
-		if (seeded) {
-			// Distinct shade, not a copy of the seed.
-			const L = Math.max(
-				0.25,
-				Math.min(0.9, base[0] + randomInRange(-0.18, 0.18) || 0.6),
-			);
-			const cMod = L < 0.4 || L > 0.75 ? 0.7 : 1;
-			if (Math.abs(L - base[0]) < 0.05) {
-				return [
-					oklchToHex(
-						Math.max(0.25, Math.min(0.9, base[0] + 0.18)),
-						baseC * cMod,
-						h,
-					),
-				];
-			}
-			return [oklchToHex(L, baseC * cMod, h)];
-		}
-		return [oklchToHex(0.6, baseC, h)];
+		if (!seed) return [shade(0.6, baseC, h)];
+		const L = seed[0] > 0.6 ? seed[0] - 0.18 : seed[0] + 0.18;
+		return [shade(L, baseC, h)];
 	}
+
+	// a seeded ramp wobbles, or every regenerate around a lock repeats it
+	const wobble = (r: number) => (seed ? randomInRange(-r, r) : 0);
 	const lMin = 0.3;
 	const lMax = 0.85;
 	const lStep = (lMax - lMin) / (count - 1);
 
-	return Array.from({ length: count }, (_, i) => {
-		// Anchor on the seed hue but jitter every swatch so successive
-		// regenerates with a locked colour still produce fresh shades
-		// instead of the identical ramp over and over.
-		const baseL = lMax - lStep * i;
-		const L = Math.max(
-			0.2,
-			Math.min(0.95, baseL + randomInRange(-0.03, 0.03)),
-		);
-		const hJitter = h + randomInRange(-7, 7);
-		const cJitter = Math.max(
-			0.02,
-			Math.min(0.32, baseC + randomInRange(-0.02, 0.02)),
-		);
-		const cMod = L < 0.4 || L > 0.75 ? 0.7 : 1;
-		return oklchToHex(L, cJitter * cMod, hJitter);
-	});
+	return Array.from({ length: count }, (_, i) =>
+		shade(
+			lMax - lStep * i + wobble(0.03),
+			baseC + wobble(0.02),
+			h + wobble(7),
+		),
+	);
 }
 
 function generateRandomCohesivePalette(
@@ -1134,8 +1028,6 @@ export function generatePalette(
 	strategy: PaletteStrategy,
 	seedHexes?: string[],
 ): string[] {
-	count = saneCount(count);
-	if (count === 0) return [];
 	switch (strategy) {
 		case 'true-random':
 			return generateTrueRandomPalette(count);
@@ -1148,7 +1040,10 @@ export function generatePalette(
 		case 'triadic':
 			return generateTriadicPalette(count, seedHexes);
 		case 'split-complementary':
-			return generateSplitComplementaryPalette(count, seedHexes);
+			return generateSplitComplementaryPalette(
+				count,
+				seedHexes,
+			);
 		case 'tetradic':
 			return generateTetradicPalette(count, seedHexes);
 		case 'monochromatic':
