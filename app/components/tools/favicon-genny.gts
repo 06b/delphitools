@@ -8,6 +8,7 @@ import DownloadLabel from 'delphitools-v2/components/download-label';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob, downloadUrl } from 'delphitools-v2/lib/download';
 import { buildIco, dataUrlToBytes } from 'delphitools-v2/lib/ico';
+import { pinSvgSize } from 'delphitools-v2/lib/svg-size';
 
 const FAVICON_SIZES = [16, 32, 48, 64, 128, 180, 192, 512];
 
@@ -15,7 +16,8 @@ const ICO_SIZES = [16, 32, 48, 64];
 
 const PREVIEW_MAX = 48;
 
-const HTML_SNIPPET = `<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+const HTML_SNIPPET = `<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180x180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png">
@@ -71,6 +73,10 @@ export default class FaviconGennyTool extends Component {
 	readFile = (file: File) => {
 		this.fileName = file.name.replace(/\.[^.]+$/, '');
 		this.loadFailed = false;
+		if (file.type === 'image/svg+xml') {
+			void this.#readSvg(file);
+			return;
+		}
 		const reader = new FileReader();
 		reader.onload = () => {
 			const dataUrl = reader.result as string;
@@ -80,6 +86,15 @@ export default class FaviconGennyTool extends Component {
 		reader.onerror = () => this.fail();
 		reader.readAsDataURL(file);
 	};
+
+	async #readSvg(file: File) {
+		const svg = pinSvgSize(await file.text());
+		if (this.isDestroyed) return;
+		if (svg === null) return this.fail();
+		const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+		this.sourceImage = dataUrl;
+		this.generate(dataUrl);
+	}
 
 	handleFileSelect = (event: Event) => {
 		const file = (event.target as HTMLInputElement).files?.[0];

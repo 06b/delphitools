@@ -11,6 +11,7 @@ import { downloadBlob } from 'delphitools-v2/lib/download';
 import { fitPlacement } from 'delphitools-v2/lib/pdf-pages';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { DEFAULT_MASK, type MaskShape } from 'delphitools-v2/lib/mask-shapes';
+import { pinSvgSize } from 'delphitools-v2/lib/svg-size';
 
 // wording from social-cropper
 const LOAD_FAILED = 'Image could not be read. Try another file?';
@@ -48,21 +49,9 @@ function loadImage(blob: Blob): Promise<HTMLImageElement> {
 	});
 }
 
-// firefox needs svg dimensions
 async function loadSvg(file: File): Promise<HTMLImageElement> {
-	const doc = new DOMParser().parseFromString(
-		await file.text(),
-		'image/svg+xml',
-	);
-	if (doc.querySelector('parsererror'))
-		throw new Error('svg parse failed');
-	const root = doc.documentElement as unknown as SVGSVGElement;
-	const box = root.viewBox.baseVal;
-	if (!root.hasAttribute('width'))
-		root.setAttribute('width', String(box.width || 100));
-	if (!root.hasAttribute('height'))
-		root.setAttribute('height', String(box.height || 100));
-	const text = new XMLSerializer().serializeToString(doc);
+	const text = pinSvgSize(await file.text());
+	if (text === null) throw new Error('svg parse failed');
 	return loadImage(new Blob([text], { type: 'image/svg+xml' }));
 }
 
