@@ -67,4 +67,9 @@ export const HERO_ART: HeroArt[] = [
 		artist: 'Beatrice Lebrun',
 		url: 'https://beatricelebrunauthor.com/',
 	},
+	{
+		src: '/heroes/beau.webp',
+		artist: 'beau',
+		url: 'https://bsky.app/profile/glasswave.bsky.social',
+	},
 ];
