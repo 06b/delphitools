@@ -205,7 +205,7 @@ export default class PaletteGennyTool extends Component {
 		const fresh = generatePalette(
 			this.colours.length,
 			this.strategy,
-			lockedHexes.length > 0 ? lockedHexes : undefined,
+			lockedHexes,
 		);
 		this.colours.forEach((colour, i) => {
 			if (colour.locked) return;

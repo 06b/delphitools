@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn, hash } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
@@ -24,7 +24,6 @@ import {
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
 
 type CategoryFilter = PaletteCollectionCategory | 'all';
-type CountFilter = number | 'all';
 
 const COLOUR_COUNTS = [
 	...new Set(CURATED_PALETTES.map((p) => p.colors.length)),
@@ -39,7 +38,7 @@ export default class PaletteCollectionTool extends Component {
 	@service declare colourNotation: ColourNotationService;
 
 	@tracked selectedCategory: CategoryFilter = 'all';
-	@tracked selectedCount: CountFilter = 'all';
+	@tracked selectedCount = 'all';
 	@tracked searchQuery = '';
 
 	total = CURATED_PALETTES.length;
@@ -66,6 +65,7 @@ export default class PaletteCollectionTool extends Component {
 		);
 	}
 
+	@cached
 	get filteredPalettes(): CuratedPalette[] {
 		const category = this.selectedCategory;
 		const inCategory =
@@ -78,7 +78,9 @@ export default class PaletteCollectionTool extends Component {
 				? inCategory
 				: inCategory.filter(
 						(p) =>
-							p.colors.length ===
+							String(
+								p.colors.length,
+							) ===
 							this.selectedCount,
 					);
 
@@ -102,7 +104,6 @@ export default class PaletteCollectionTool extends Component {
 		);
 	}
 
-	// untrimmed: whitespace counts
 	get countLabel() {
 		if (!this.hasActiveFilter) return `${this.total} palettes`;
 		const found = this.filteredPalettes.length;
@@ -134,12 +135,6 @@ export default class PaletteCollectionTool extends Component {
 		label: `${count} colours`,
 	}));
 
-	get countValue(): string {
-		return this.selectedCount === 'all'
-			? 'all'
-			: String(this.selectedCount);
-	}
-
 	get countName(): string {
 		return this.selectedCount === 'all'
 			? 'Any size'
@@ -147,7 +142,7 @@ export default class PaletteCollectionTool extends Component {
 	}
 
 	chooseCount = (value: string) => {
-		this.selectedCount = value === 'all' ? 'all' : Number(value);
+		this.selectedCount = value;
 	};
 
 	setSearch = (event: Event) => {
@@ -172,7 +167,7 @@ export default class PaletteCollectionTool extends Component {
 						class="dt-collection-label"
 					>Colours</span>
 					<Select
-						@value={{this.countValue}}
+						@value={{this.selectedCount}}
 						@onValueChange={{this.chooseCount}}
 					>
 						<SelectTrigger>

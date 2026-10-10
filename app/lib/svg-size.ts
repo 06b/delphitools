@@ -1,7 +1,6 @@
 const PX = /^\s*[\d.]+\s*(px)?\s*$/;
 
-// <img> reports 150x150 for viewBox-only or %-sized svgs and firefox will not
-// draw them at all; pin a pixel size, longest side `edge`, from the viewBox
+// img misreports unsized svgs
 export function pinSvgSize(svg: string, edge = 512): string | null {
 	const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
 	if (doc.querySelector('parsererror')) return null;
