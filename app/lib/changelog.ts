@@ -11,44 +11,18 @@ export const RELEASES: Release[] = [
 		version: '2.1.1',
 		since: '2.1.0',
 		features: [
-			// ∑CG: changelog feature line, privacy page
-			//   spec: one sentence; there is a new /privacy page linked from the sidebar footer under the about button, stating what the site does and does not collect
-			//   sample: "A new Privacy page spells out exactly what delphitools does not collect. Find it at the bottom of the sidebar."
-			'∑CG',
-			// ∑CG: changelog feature line, tool search by file type
-			//   spec: one or two sentences in the "pitch!" voice; the sidebar search and the omnibox now find tools by a file type they take or make ("md", "docx", "jpeg" finds .jpg tools) and by "x to y" queries ("md to html", "png -> webp"); credit @Bhagya-Vishwakarma-20 on GitHub for the change and @davidnoeee for asking, in the "Thanks, @x on GitHub!" form
-			//   sample: "Search now understands file types! Type \"docx\" or \"md to pdf\" and the right tool turns up. Thanks, @Bhagya-Vishwakarma-20 on GitHub, and @davidnoeee for the idea!"
-			'∑CG',
-			// ∑CG: changelog feature line, palette collection count filter
-			//   spec: one sentence, "Palette Collection:" prefix; a Colours dropdown filters the 284 curated palettes by how many colours they have (3 to 7); credit @TheTinkerersHaven on GitHub
-			//   sample: "Palette Collection: Filter palettes by how many colours they have. Thanks, @TheTinkerersHaven on GitHub!"
-			'∑CG',
-			// ∑CG: changelog feature line, palette generator seeding
-			//   spec: one or two sentences, "Palette Generator:" prefix; for the colour-theory strategies, regenerating builds the new colours around the locked swatches and the + button adds a colour that fits the current palette instead of a random one; credit @TheTinkerersHaven on GitHub (same PR as the line above, so "Thanks again" is fine)
-			//   sample: "Palette Generator: Regenerating now builds around your locked colours, and adding a colour picks one that fits. Thanks again, @TheTinkerersHaven!"
-			'∑CG',
-			// ∑CG: changelog feature line, wider text diff
-			//   spec: one sentence, "Text Diff:" prefix; the tool page now uses the wide layout so long or indented lines fit; credit @crhallberg on GitHub
-			//   sample: "Text Diff: More room for long lines. Thanks, @crhallberg on GitHub!"
-			'∑CG',
+			'A new privacy page now details what data gets collected. Find it in the sidebar!',
+			'The sidebar and omnibox now find tools by what file type they take or produce. Thanks to @Bhagya-Vishwakarma-20 and @davidnoeee on GitHub!',
+			'Palette Collection: Filter palettes by how many colours they have. Thanks, @TheTinkerersHaven on GitHub!',
+			'Palette Generator: Regenerating now correctly respects your locked colours, and adding a colour will get you one that fits. Thanks again, @TheTinkerersHaven!',
+			'Text Diff: So much more room for activities, like long lines. Thanks, @crhallberg on GitHub!',
+			'Added new hero art',
 		],
 		fixes: [
-			// ∑CG: changelog fix line, QR SVG export
-			//   spec: one sentence, "QR Generator:" prefix; downloaded SVGs showed as a solid black square in macOS Preview and other apps using Apple's SVG renderer, now they render; credit the reporter @SpacyRicochet on GitHub
-			//   sample: "QR Generator: SVG downloads no longer turn into a black square in Preview. Thanks, @SpacyRicochet on GitHub!"
-			'∑CG',
-			// ∑CG: changelog fix line, favicon generator SVG input
-			//   spec: one or two sentences, "Favicon Generator:" prefix; SVGs without a fixed pixel size (only a viewBox, or width in % or em) came out cropped or tiny, now they fill every size; the HTML snippet also gains the favicon.ico line; credit the reporter @Kaio20 on GitHub
-			//   sample: "Favicon Generator: SVGs now fill every icon size instead of coming out cropped, and the HTML snippet includes the .ico. Thanks, @Kaio20 on GitHub!"
-			'∑CG',
-			// ∑CG: changelog fix line, palette generator NaN colour
-			//   spec: one sentence, "Palette Generator:" prefix; adding a colour with the Analogous or Mono strategy produced an invalid colour shown as #NaNNaNNaN; credit @TheTinkerersHaven on GitHub
-			//   sample: "Palette Generator: Adding a colour no longer produces #NaNNaNNaN. Thanks, @TheTinkerersHaven!"
-			'∑CG',
-			// ∑CG: changelog fix line, mobile sidebar
-			//   spec: one sentence; on phones the sidebar drawer stayed open over the page after picking a tool, now it closes on navigation
-			//   sample: "On phones, the sidebar now closes after you pick a tool."
-			'∑CG',
+			'QR Generator: SVG downloads have been transitioned away from black scraps on WebKit. Thanks, @SpacyRicochet on GitHub!',
+			'Favicon Generator: SVGs now fill every icon size instead of coming out cropped, and the HTML snippet includes the ICO. Thanks, @Kaio20 on GitHub!',
+			'Palette Generator: Adding a colour no longer produces #NaNNaNNaN. Jeez, that was embarrassing. Thanks, @TheTinkerersHaven!',
+			'On phones, the sidebar now closes after you pick a tool.',
 		],
 		technical: [],
 	},
