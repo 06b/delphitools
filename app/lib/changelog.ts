@@ -23,10 +23,7 @@ export const RELEASES: Release[] = [
 			'Favicon Generator: SVGs now fill every icon size instead of coming out cropped, and the HTML snippet includes the ICO. Thanks, @Kaio20 on GitHub!',
 			'Palette Generator: Adding a colour no longer produces #NaNNaNNaN. Jeez, that was embarrassing. Thanks, @TheTinkerersHaven!',
 			'On phones, the sidebar now closes after you pick a tool.',
-			// ∑CG: changelog fix line, document converter pdf top gap
-			//   spec: one sentence, "Document Converter:" prefix; PDFs started with a large blank gap above the first heading (about 4.7cm instead of the 2cm page margin) and the text column was narrower than the page; credit the reporter @davidnoeee on GitHub
-			//   sample: "Document Converter: PDFs no longer start with a big empty gap at the top. Thanks, @davidnoeee on GitHub!"
-			'∑CG',
+			'Document Converter: PDFs no longer start with a big empty gap at the top. Thanks, @davidnoeee on GitHub!',
 		],
 		technical: [],
 	},
