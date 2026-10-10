@@ -2,7 +2,8 @@ export const PRINT_CSS = `
 @page { margin: 2cm; }
 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html { font-size: 12pt; }
-body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #111; margin: 0; }
+body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #111; margin: 0; padding: 0; max-width: none; }
+body > :first-child { margin-top: 0; }
 h1, h2, h3, h4 { line-height: 1.25; page-break-after: avoid; }
 h1 { font-size: 1.9em; } h2 { font-size: 1.5em; } h3 { font-size: 1.25em; }
 p, li { orphans: 3; widows: 3; }
