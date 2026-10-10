@@ -30,8 +30,10 @@ import {
 import type QRCodeStyling from 'qr-code-styling';
 import type { Options as StylingOptions } from 'qr-code-styling';
 
-// stroke of same fill colour closes antialiasing gaps between modules
+// stroke of same fill colour closes antialiasing gaps between modules.
+// also unquotes url('#id'): CoreSVG (Preview, macOS 27) ignores the quoted form
 export function sealSvgSeams(svg: string, strokeWidth = 0.5): string {
+	svg = svg.replace(/url\('(#[^']*)'\)/g, 'url($1)');
 	const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
 	if (doc.querySelector('parsererror')) return svg;
 	for (const el of doc.querySelectorAll('[fill]')) {

@@ -39,6 +39,14 @@ module('Unit | Tool | qr-genny', function () {
 		assert.true(sealSvgSeams(SVG, 1).includes('stroke-width="1"'));
 	});
 
+	test('quoted url references are unquoted', function (assert) {
+		const out = sealSvgSeams(
+			`<svg xmlns="http://www.w3.org/2000/svg"><rect clip-path="url('#c')" fill="url('#g')"/></svg>`,
+		);
+		assert.true(out.includes('clip-path="url(#c)"'), out);
+		assert.true(out.includes('stroke="url(#g)"'), out);
+	});
+
 	test('unparseable input comes back unchanged', function (assert) {
 		assert.strictEqual(sealSvgSeams('not svg'), 'not svg');
 	});
