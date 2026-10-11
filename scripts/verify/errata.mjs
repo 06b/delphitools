@@ -591,7 +591,7 @@ await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'comme
 await page.waitForFunction(() => window.__errata.doc()?.name === 'comments', { timeout: 10000 });
 await sleep(600);
 const comments = async () => (await doc()).pages[0].objects.filter((o) => o.kind === 'comment');
-let cs = await comments();
+cs = await comments();
 check('comment imported', cs.length === 1 && cs[0].text === 'Imported note' && cs[0].author === 'Ann' && Math.round(cs[0].cx) === 60 && Math.round(cs[0].cy) === 90, JSON.stringify(cs));
 await openCell('Comment');
 const bar = '.err-mode.is-open[data-mode="comment"]';
@@ -719,7 +719,8 @@ await sleep(300);
 check('redact mark undo', (await marks())[0].length === 2);
 await clickIn('Cancel');
 await sleep(300);
-check('redact cancel drops session marks', (await marks())[0].length === 0 && !(await modeOpen('redact')));
+const afterCancel = await marks();
+check('redact cancel drops session marks', afterCancel[0].length === 0 && !(await modeOpen('redact')), JSON.stringify([afterCancel, await page.evaluate(() => [...document.querySelectorAll('.err-mode.is-open')].map((e) => e.dataset.mode + ':' + e.textContent.replace(/\\s+/g, ' ').trim()))]));
 await page.keyboard.down('Meta');
 await page.keyboard.press('z');
 await page.keyboard.up('Meta');

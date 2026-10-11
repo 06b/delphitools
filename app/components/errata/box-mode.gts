@@ -234,10 +234,13 @@ export default class BoxModeBar extends Component<Signature> {
 
 	// cancel keeps earlier marks
 	#kept = new Set<string>();
+	#sessionMode: Mode | null | undefined;
+	// reruns on any ui change; snapshot on entry only
 	redactSession = modifier(
 		(_el: HTMLElement, [mode]: [Mode | null | undefined]) => {
-			if (mode === 'redact')
+			if (mode === 'redact' && this.#sessionMode !== 'redact')
 				this.#kept = redactIds(store.getSnapshot());
+			this.#sessionMode = mode;
 		},
 	);
 
