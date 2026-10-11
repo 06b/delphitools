@@ -48,7 +48,13 @@ export interface ImageObject extends BaseObject {
 	dataUrl: string;
 }
 
-export type PageObject = TextObject | InkObject | ShapeObject | ImageObject;
+/** burnt in on export */
+export interface RedactObject extends BaseObject {
+	kind: 'redact';
+}
+
+export type PageObject =
+	TextObject | InkObject | ShapeObject | ImageObject | RedactObject;
 
 export interface Stamped {
 	index: number;

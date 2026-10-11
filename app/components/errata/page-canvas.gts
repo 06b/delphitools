@@ -7,6 +7,7 @@ import {
 	IText,
 	Line,
 	Path,
+	Pattern,
 	PencilBrush,
 	Point,
 	Rect,
@@ -69,7 +70,12 @@ import {
 	setActiveTool,
 	subscribeTool,
 } from 'delphitools-v2/lib/errata/tool';
-import { registerCanvasActions } from 'delphitools-v2/lib/errata/ui';
+import {
+	getMode,
+	registerCanvasActions,
+	subscribeUi,
+} from 'delphitools-v2/lib/errata/ui';
+import { redactObject } from 'delphitools-v2/lib/errata/redact';
 import {
 	registerViewportController,
 	reportZoom,
@@ -91,6 +97,7 @@ const TILE_MARGIN = 0.5;
 const TILE_DEBOUNCE = 80;
 const K_MIN = 0.5;
 const K_MAX = 40;
+const REDACT = '#d1242f';
 
 // half-octave buckets keep zoom wobble from re-rendering
 function bucket(k: number): number {
@@ -494,12 +501,37 @@ export default class PageCanvas extends Component {
 		ro.observe(wrap);
 		size();
 
+		const hatchTile = document.createElement('canvas');
+		hatchTile.width = hatchTile.height = 8;
+		const hg = hatchTile.getContext('2d')!;
+		hg.strokeStyle = REDACT;
+		hg.beginPath();
+		for (const d of [-8, 0, 8]) {
+			hg.moveTo(d, 8);
+			hg.lineTo(d + 8, 0);
+		}
+		hg.stroke();
+		const hatch = new Pattern({ source: hatchTile });
+
 		const build = (
 			o: PageObject,
 			slot: Slot,
 		): FabricObject | null => {
 			const base = centreProps(o, slot);
 			switch (o.kind) {
+				case 'redact': {
+					const r = new Rect({
+						...base,
+						width: o.w,
+						height: o.h,
+						fill: hatch,
+						stroke: REDACT,
+						strokeWidth: 1,
+						strokeUniform: true,
+					});
+					r.setControlVisible('mtr', false);
+					return r;
+				}
 				case 'text':
 					return new IText(o.text, {
 						...base,
@@ -1136,9 +1168,54 @@ export default class PageCanvas extends Component {
 				strokeDashArray: [4, 4],
 			});
 
+		const redactFromDrag = (slot: Slot, a: Point, b: Point) =>
+			redactObject(
+				Math.min(a.x, b.x) - slot.x,
+				Math.min(a.y, b.y) - slot.y,
+				Math.abs(b.x - a.x),
+				Math.abs(b.y - a.y),
+			);
+
+		const markLine = async (slot: Slot, p: Point) => {
+			const page = store
+				.getSnapshot()
+				?.pages.find((pg) => pg.id === slot.id);
+			const view = page ? await pageContent(page) : null;
+			if (!view) return;
+			const x = p.x - slot.x;
+			const y = p.y - slot.y;
+			const b = view.lines
+				.filter((l) => l.text.trim())
+				.map((l) => view.toDisplayed(l.bbox))
+				.find(
+					(r) =>
+						x >= r.x &&
+						x <= r.x + r.width &&
+						y >= r.y &&
+						y <= r.y + r.height,
+				);
+			if (b)
+				addObject(
+					slot.id,
+					redactObject(
+						b.x - 1,
+						b.y - 1,
+						b.width + 2,
+						b.height + 2,
+					),
+				);
+		};
+
 		canvas.on('mouse:down', (opt: TPointerEventInfo) => {
 			const tool = getActiveTool();
 			if (order.length === 0) return;
+			if (getMode() === 'redact') {
+				// fabric moves the mark
+				if (opt.target) return;
+				dragStart = canvas.getScenePoint(opt.e);
+				dragSlot = pageAt(dragStart);
+				return;
+			}
 			// own double-click detection: pointer events carry no click count and fabric's dblclick is unreliable here
 			if (tool === 'content') {
 				const t = opt.target;
@@ -1196,16 +1273,25 @@ export default class PageCanvas extends Component {
 			const p = canvas.getScenePoint(opt.e);
 			if (ghost) canvas.remove(ghost);
 			ghost =
-				getActiveTool() === 'crop'
-					? cropGhost(dragStart, p)
-					: build(
-							shapeObject(
+				getMode() === 'redact'
+					? build(
+							redactFromDrag(
 								dragSlot,
 								dragStart,
 								p,
 							),
 							dragSlot,
-						);
+						)
+					: getActiveTool() === 'crop'
+						? cropGhost(dragStart, p)
+						: build(
+								shapeObject(
+									dragSlot,
+									dragStart,
+									p,
+								),
+								dragSlot,
+							);
 			if (ghost) {
 				ghost.selectable = false;
 				ghost.evented = false;
@@ -1230,6 +1316,13 @@ export default class PageCanvas extends Component {
 			dragSlot = null;
 			if (ghost) canvas.remove(ghost);
 			ghost = null;
+			if (getMode() === 'redact') {
+				const o = redactFromDrag(slot, start, p);
+				if (o.w < 2 || o.h < 2) void markLine(slot, p);
+				else addObject(slot.id, o);
+				canvas.requestRenderAll();
+				return;
+			}
 			if (getActiveTool() === 'crop') {
 				const page = store
 					.getSnapshot()
@@ -1954,23 +2047,27 @@ export default class PageCanvas extends Component {
 			brush.width = s.strokeWidth;
 			const interactive = tool === 'select';
 			const content = tool === 'content';
+			const redacting = getMode() === 'redact';
 			if (!content && editing) finishTextEdit(true);
-			canvas.selection = interactive || content;
+			canvas.selection =
+				(interactive && !redacting) || content;
 			canvas.skipTargetFind =
 				tool === 'shape' ||
 				tool === 'highlight' ||
 				tool === 'crop';
-			for (const { fabric } of tracked.values()) {
-				fabric.selectable =
-					interactive ||
-					(tool === 'text' &&
-						fabric instanceof IText);
+			for (const { fabric, doc } of tracked.values()) {
+				fabric.selectable = redacting
+					? doc.kind === 'redact'
+					: interactive ||
+						(tool === 'text' &&
+							fabric instanceof
+								IText);
 				fabric.evented = fabric.selectable;
 			}
 			if (!interactive && tool !== 'text')
 				canvas.discardActiveObject();
 			canvas.defaultCursor =
-				interactive || content
+				(interactive || content) && !redacting
 					? 'default'
 					: 'crosshair';
 			refreshProxies();
@@ -2157,12 +2254,14 @@ export default class PageCanvas extends Component {
 		const offDoc = store.subscribe(sync);
 		const offPage = subscribePage(onPageIndex);
 		const offTool = subscribeTool(applyTool);
+		const offUi = subscribeUi(applyTool);
 		sync();
 
 		return () => {
 			offDoc();
 			offPage();
 			offTool();
+			offUi();
 			if (visibleRaf) cancelAnimationFrame(visibleRaf);
 			if (tileTimer) clearTimeout(tileTimer);
 			for (const slot of slots.values()) slot.job?.cancel();
