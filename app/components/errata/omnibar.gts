@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import { eq, or } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import BoxModeBar from 'delphitools-v2/components/errata/box-mode';
+import CommentModeBar from 'delphitools-v2/components/errata/comment-mode';
 import { Bloom } from 'delphitools-v2/components/substrata/omnibar/omnibar';
 import {
 	ColourCell,
@@ -175,6 +176,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Comment',
 				icon: 'message-square',
 				description: 'Leave notes PDF viewers can read',
+				tool: 'comment',
 			},
 			{
 				label: 'Preflight',
@@ -328,6 +330,13 @@ export default class Omnibar extends Component {
 			label: cell?.label ?? '',
 			icon: cell?.icon ?? '',
 		};
+	}
+
+	get boxModeOpen() {
+		return (
+			this.mode.current !== null &&
+			this.mode.current !== 'comment'
+		);
 	}
 
 	pick = (id: ToolId) => {
@@ -778,7 +787,10 @@ export default class Omnibar extends Component {
 				@mode={{this.modeCell.mode}}
 				@label={{this.modeCell.label}}
 				@icon={{this.modeCell.icon}}
-				@open={{if this.mode.current true false}}
+				@open={{this.boxModeOpen}}
+			/>
+			<CommentModeBar
+				@open={{eq this.mode.current "comment"}}
 			/>
 		</div>
 	</template>

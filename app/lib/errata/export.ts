@@ -25,6 +25,7 @@ import {
 	type PageObject,
 } from './doc-model';
 import { applyEditsToDoc } from './content';
+import { writeComments } from './comments';
 import { hexToRgb } from '../colour-maths';
 
 function colour(hex: string) {
@@ -278,7 +279,15 @@ export async function exportPdf(
 		}
 		pdfPage.setRotation(degrees(totalRotation(page)));
 		for (const object of page.objects)
-			await drawObject(pdfPage, page, object, font, images);
+			if (object.kind !== 'comment')
+				await drawObject(
+					pdfPage,
+					page,
+					object,
+					font,
+					images,
+				);
+		writeComments(pdfPage, page);
 	}
 	return out.save();
 }

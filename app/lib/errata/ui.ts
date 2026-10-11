@@ -104,7 +104,12 @@ export function pickImageFile(): void {
 }
 
 export type BoxMode =
-	'page-numbers' | 'watermark' | 'stamp' | 'compress' | 'impose';
+	| 'page-numbers'
+	| 'watermark'
+	| 'stamp'
+	| 'compress'
+	| 'impose'
+	| 'comment';
 
 let mode: BoxMode | null = null;
 
@@ -116,5 +121,18 @@ export function getMode(): BoxMode | null {
 export function setMode(next: BoxMode | null): void {
 	if (next === mode) return;
 	mode = next;
+	for (const l of listeners) l();
+}
+
+let selectedIds: readonly string[] = [];
+
+/** ids of the objects selected on the canvas */
+export function getSelectedIds(): readonly string[] {
+	return selectedIds;
+}
+
+export function setSelectedIds(ids: readonly string[]): void {
+	if (ids.join() === selectedIds.join()) return;
+	selectedIds = ids;
 	for (const l of listeners) l();
 }

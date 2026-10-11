@@ -52,7 +52,7 @@ function load(bytes: Uint8Array): Promise<PDFDocument> {
 	});
 }
 
-function cleanDoc(): Promise<PDFDocument> | null {
+export function cleanDoc(): Promise<PDFDocument> | null {
 	if (!sourceBytes) return null;
 	if (!clean) clean = load(sourceBytes);
 	return clean;

@@ -447,4 +447,86 @@ if (imposed) {
 	check('impose sheets', im.getPageCount() === 2 && Math.round(p0.getWidth()) === 842 && Math.round(p0.getHeight()) === 595, `${im.getPageCount()} ${p0.getWidth()}x${p0.getHeight()}`);
 }
 
+// comments: a source /Text note (with popup) imports as a comment; notes export once, as /Annots
+const cdoc = await PDFDocument.create();
+const cpage = cdoc.addPage([400, 500]);
+const cctx = cdoc.context;
+const srcNote = cctx.register(cctx.obj({ Type: 'Annot', Subtype: 'Text', Rect: [50, 400, 70, 420], Contents: PDFHexString.fromText('Imported note'), T: PDFHexString.fromText('Ann') }));
+const srcPopup = cctx.register(cctx.obj({ Type: 'Annot', Subtype: 'Popup', Parent: srcNote, Rect: [70, 300, 250, 420] }));
+cctx.lookup(srcNote).set(PDFName.of('Popup'), srcPopup);
+const srcSquare = cctx.register(cctx.obj({ Type: 'Annot', Subtype: 'Square', Rect: [100, 100, 150, 150] }));
+for (const r of [srcNote, srcPopup, srcSquare]) cpage.node.addAnnot(r);
+const cbytes = [...(await cdoc.save())];
+await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'comments.pdf', 'application/pdf'), cbytes);
+await page.waitForFunction(() => window.__errata.doc()?.name === 'comments', { timeout: 10000 });
+await sleep(600);
+const comments = async () => (await doc()).pages[0].objects.filter((o) => o.kind === 'comment');
+let cs = await comments();
+check('comment imported', cs.length === 1 && cs[0].text === 'Imported note' && cs[0].author === 'Ann' && Math.round(cs[0].cx) === 60 && Math.round(cs[0].cy) === 90, JSON.stringify(cs));
+await openCell('Comment');
+const bar = '.err-mode.is-open[data-mode="comment"]';
+check('comment mode bar', !!(await page.$(bar)));
+const [noteInput, authorInput] = await page.$$(`${bar} input`);
+await authorInput.evaluate((el) => el.select());
+await authorInput.type('Ruby');
+const crect = await page.evaluate(() => window.__errata.pageRect(0));
+const cz = crect.w / 400;
+const at = (x, y) => [crect.x + x * cz, crect.y + y * cz];
+await page.mouse.click(...at(200, 250));
+await sleep(400);
+cs = await comments();
+check('comment placed', cs.length === 2 && cs[1].text === '' && cs[1].author === 'Ruby' && Math.round(cs[1].cx) === 200 && Math.round(cs[1].cy) === 250, JSON.stringify(cs[1]));
+check('comment note focused', await page.evaluate((el) => document.activeElement === el, noteInput));
+await page.keyboard.type('Fresh note');
+await page.keyboard.press('Enter');
+await sleep(300);
+cs = await comments();
+check('comment note stored', cs[1].text === 'Fresh note' && !!cs[1].date, JSON.stringify(cs[1]));
+await page.click(`${bar} .err-mode-select`);
+await sleep(300);
+const options = await page.$$eval('.dt-select-item', (els) => els.map((e) => e.textContent.trim()));
+check('comment list', options.length === 2 && options[0] === '1 · Imported note' && options[1] === '1 · Fresh note', JSON.stringify(options));
+await page.evaluate(() => [...document.querySelectorAll('.dt-select-item')].find((e) => e.textContent.includes('Imported'))?.click());
+await sleep(300);
+check('comment list selects', (await page.evaluate((el) => el.value, noteInput)) === 'Imported note' && (await page.evaluate(() => !!window.__errataCanvas.getActiveObject())));
+// typing without Enter, then placing another note, keeps the typed text on the first note
+await noteInput.evaluate((el) => el.select());
+await noteInput.type('Edited');
+await page.mouse.click(...at(300, 120));
+await sleep(400);
+cs = await comments();
+check('comment edit kept on switch', cs.length === 3 && cs[0].text === 'Edited' && cs[2].text === '', JSON.stringify(cs.map((c) => c.text)));
+// move and delete like other objects
+await page.mouse.move(...at(200, 250));
+await page.mouse.down();
+await page.mouse.move(...at(220, 260), { steps: 6 });
+await page.mouse.move(...at(240, 270), { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+cs = await comments();
+check('comment moved', Math.round(cs[1].cx) === 240 && Math.round(cs[1].cy) === 270, `${cs[1].cx},${cs[1].cy}`);
+await page.keyboard.press('Backspace');
+await sleep(300);
+check('comment deleted', (await comments()).length === 2);
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(300);
+check('comment undo', (await comments()).length === 3);
+await clickIn('Done');
+await sleep(300);
+check('comment mode closed', !(await page.$(bar)));
+
+const commented = await PDFDocument.load(new Uint8Array(await page.evaluate(() => window.__errata.export())));
+const annots = commented.getPage(0).node.Annots().asArray().map((r) => commented.context.lookup(r));
+const sub = (d) => d.get(PDFName.of('Subtype')).toString();
+const notes = annots.filter((d) => sub(d) === '/Text');
+const noteText = (d) => d.lookup(PDFName.of('Contents')).decodeText();
+check('export comments once', notes.length === 3 && JSON.stringify(notes.map(noteText)) === JSON.stringify(['Edited', 'Fresh note', '']), JSON.stringify(notes.map(noteText)));
+check('export drops source popup', !annots.some((d) => sub(d) === '/Popup'));
+check('export keeps other annots', annots.some((d) => sub(d) === '/Square'));
+const fresh = notes[1];
+check('export comment dict', fresh.lookup(PDFName.of('T')).decodeText() === 'Ruby' && !!fresh.get(PDFName.of('M')) && fresh.get(PDFName.of('P')) === commented.getPage(0).ref);
+check('export comment rect', notes[0].get(PDFName.of('Rect')).toString().replace(/\s+/g, ' ') === '[ 50 400 70 420 ]', notes[0].get(PDFName.of('Rect')).toString());
+
 await finish(browser);
