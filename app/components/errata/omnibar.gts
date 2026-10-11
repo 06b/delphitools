@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import { eq, or } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import BoxModeBar from 'delphitools-v2/components/errata/box-mode';
+import Organise from 'delphitools-v2/components/errata/organise';
 import { Bloom } from 'delphitools-v2/components/substrata/omnibar/omnibar';
 import {
 	ColourCell,
@@ -98,6 +99,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Organise',
 				icon: 'layout-grid',
 				description: fromRegistry('pdf-organiser'),
+				tool: 'organise',
 			},
 			{
 				label: 'Page size',
@@ -315,6 +317,14 @@ export default class Omnibar extends Component {
 		);
 	}
 
+	get organising() {
+		return this.mode.current === 'organise';
+	}
+
+	get boxModeOpen() {
+		return this.mode.current !== null && !this.organising;
+	}
+
 	// kept for slide-out
 	#lastMode: BoxMode | null = null;
 
@@ -408,6 +418,9 @@ export default class Omnibar extends Component {
 	};
 
 	<template>
+		{{#if this.organising}}
+			<Organise />
+		{{/if}}
 		<div
 			class="sub-omni-dock pointer-events-none absolute z-40 is-bottom"
 		>
@@ -778,7 +791,7 @@ export default class Omnibar extends Component {
 				@mode={{this.modeCell.mode}}
 				@label={{this.modeCell.label}}
 				@icon={{this.modeCell.icon}}
-				@open={{if this.mode.current true false}}
+				@open={{this.boxModeOpen}}
 			/>
 		</div>
 	</template>

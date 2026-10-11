@@ -447,4 +447,102 @@ if (imposed) {
 	check('impose sheets', im.getPageCount() === 2 && Math.round(p0.getWidth()) === 842 && Math.round(p0.getHeight()) === 595, `${im.getPageCount()} ${p0.getWidth()}x${p0.getHeight()}`);
 }
 
+// organise page grid
+const orgCells = () => page.$$('.err-organise-cell');
+const pressed = () => page.$$eval('.err-organise-cell', (cs) => cs.map((c) => c.getAttribute('aria-pressed') === 'true'));
+const orgClick = (label) => page.evaluate((l) => document.querySelector(`.err-organise button[aria-label="${l}"]`)?.click(), label);
+const withKey = async (key, fn) => {
+	await page.keyboard.down(key);
+	await fn();
+	await page.keyboard.up(key);
+};
+const undo = () => withKey('Meta', () => page.keyboard.press('z'));
+const pageIds = async () => (await doc()).pages.map((p) => p.id);
+
+await openCell('Organise');
+check('organise grid', (await orgCells()).length === 3 && (await page.$eval('.err-organise .err-mode', (e) => e.dataset.mode === 'organise')));
+check('organise markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
+await sleep(600);
+check('organise thumbs', await page.$$eval('.err-organise .err-page-thumb', (imgs) => imgs.every((i) => i.naturalWidth >= 270)));
+let cs = await orgCells();
+await cs[0].click();
+await withKey('Shift', () => cs[2].click());
+check('organise shift range', JSON.stringify(await pressed()) === '[true,true,true]');
+await withKey('Meta', () => cs[1].click());
+check('organise cmd toggle', JSON.stringify(await pressed()) === '[true,false,true]');
+
+const org0 = await doc();
+await orgClick('Rotate right');
+await sleep(200);
+let orgDoc = await doc();
+check('organise rotate selection', orgDoc.pages.every((p, i) => p.rotation === (i === 1 ? org0.pages[i].rotation : (org0.pages[i].rotation + 90) % 360)), JSON.stringify(orgDoc.pages.map((p) => p.rotation)));
+check('organise rotate carries objects', orgDoc.pages[0].objects.length === org0.pages[0].objects.length && orgDoc.pages[0].objects[0].angle === org0.pages[0].objects[0].angle + 90);
+await undo();
+await sleep(200);
+check('organise rotate one undo', JSON.stringify((await doc()).pages.map((p) => p.rotation)) === JSON.stringify(org0.pages.map((p) => p.rotation)));
+
+cs = await orgCells();
+await cs[0].click();
+await orgClick('Duplicate');
+await sleep(200);
+orgDoc = await doc();
+check('organise duplicate', orgDoc.pages.length === 4 && orgDoc.pages[1].sourceIndex === org0.pages[0].sourceIndex && orgDoc.pages[1].id !== org0.pages[0].id && orgDoc.pages[1].objects.length === org0.pages[0].objects.length && orgDoc.pages[1].objects[0].id !== org0.pages[0].objects[0].id);
+check('organise duplicate selects copy', JSON.stringify(await pressed()) === '[false,true,false,false]');
+const dupPdf = await PDFDocument.load(new Uint8Array(await page.evaluate(() => window.__errata.export())));
+const pageText = (pdf, i) => {
+	const c = pdf.getPage(i).node.Contents();
+	const list = c.constructor.name === 'PDFArray' ? c.asArray().map((r) => pdf.context.lookup(r)) : [c];
+	return list.map((st) => new TextDecoder('latin1').decode(decodePDFRawStream(st).decode())).join('\n');
+};
+check('organise duplicate exports edits once', dupPdf.getPageCount() === 4 && [0, 1].every((i) => (pageText(dupPdf, i).match(/<74776f> Tj/gi) ?? []).length === 1));
+await page.keyboard.press('Backspace');
+await sleep(200);
+orgDoc = await doc();
+check('organise delete key', JSON.stringify(orgDoc.pages.map((p) => p.id)) === JSON.stringify(org0.pages.map((p) => p.id)) && orgDoc.pages.every((p, i) => p.objects.length === org0.pages[i].objects.length));
+
+cs = await orgCells();
+await cs[1].click();
+await orgClick('Insert blank page');
+await sleep(200);
+orgDoc = await doc();
+check('organise insert blank', orgDoc.pages.length === 4 && orgDoc.pages[2].sourceIndex === null && orgDoc.pages[2].objects.length === 0);
+await undo();
+await sleep(200);
+
+// page 1 after page 3
+await page.evaluate(() => {
+	const cells = [...document.querySelectorAll('.err-organise-cell')];
+	const dt = new DataTransfer();
+	const fire = (el, type, x) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x }));
+	const r = cells[2].getBoundingClientRect();
+	fire(cells[0], 'dragstart', 0);
+	fire(cells[2], 'dragover', r.right - 4);
+	fire(cells[2], 'drop', r.right - 4);
+	fire(cells[0], 'dragend', 0);
+});
+await sleep(200);
+orgDoc = await doc();
+const movedId = org0.pages[0].id;
+check('organise drag reorder', JSON.stringify(orgDoc.pages.map((p) => p.id)) === JSON.stringify([org0.pages[1].id, org0.pages[2].id, movedId]), JSON.stringify(orgDoc.pages.map((p) => p.id)));
+check('organise objects stay attached', JSON.stringify(orgDoc.pages[2].objects) === JSON.stringify(org0.pages[0].objects));
+await undo();
+await sleep(200);
+check('organise drag one undo', JSON.stringify(await pageIds()) === JSON.stringify(org0.pages.map((p) => p.id)));
+
+cs = await orgCells();
+await cs[2].click();
+await page.evaluate(() => [...document.querySelectorAll('.err-organise .sub-modal-btn')].find((b) => b.textContent.trim() === 'Done')?.click());
+await sleep(300);
+check('organise done', (await orgCells()).length === 0 && !(await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden'))));
+check('organise done opens selected page', (await page.evaluate(() => window.__errata.pageIndex())) === 2);
+
+await openCell('Organise');
+await page.evaluate(() => document.querySelector('.err-organise-cell').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+await sleep(300);
+check('organise double-click opens page', (await orgCells()).length === 0 && (await page.evaluate(() => window.__errata.pageIndex())) === 0);
+await openCell('Organise');
+await page.keyboard.press('Escape');
+await sleep(300);
+check('organise escape closes', (await orgCells()).length === 0);
+
 await finish(browser);

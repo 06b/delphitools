@@ -307,12 +307,15 @@ export function renderTile(
 	};
 }
 
-export function renderThumb(page: ErrataPage): Promise<string> {
-	const k = pageKey(page);
+export function renderThumb(
+	page: ErrataPage,
+	width = THUMB_WIDTH,
+): Promise<string> {
+	const k = `${pageKey(page)}:${width}`;
 	let p = thumbCache.get(k);
 	if (!p) {
-		p = rasterise(page, THUMB_WIDTH / pageSize(page).width).then(
-			(c) => c.toDataURL('image/png'),
+		p = rasterise(page, width / pageSize(page).width).then((c) =>
+			c.toDataURL('image/png'),
 		);
 		thumbCache.set(k, p);
 	}

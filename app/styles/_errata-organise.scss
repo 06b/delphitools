@@ -1,0 +1,88 @@
+// organise page grid
+
+@keyframes err-organise-in {
+	from {
+		translate: -50% calc(100% + 40px);
+		opacity: 0;
+	}
+}
+
+.err-organise {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: flex;
+	background-color: var(--muted);
+
+	> .err-mode {
+		animation: err-organise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1)
+			170ms backwards;
+	}
+}
+
+.err-organise-grid {
+	display: grid;
+	flex: 1;
+	grid-template-columns: repeat(auto-fill, 160px);
+	gap: 16px;
+	place-content: start center;
+	padding: 24px 24px 96px;
+	overflow-y: auto;
+}
+
+.err-organise-cell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 8px;
+	border: 2px solid transparent;
+	cursor: pointer;
+	user-select: none;
+
+	&:hover {
+		background-color: var(--accent);
+	}
+
+	&.is-selected {
+		border-color: var(--primary);
+	}
+
+	&.is-drop-before::before,
+	&.is-drop-after::after {
+		position: absolute;
+		inset-block: 0;
+		inline-size: 2px;
+		background-color: var(--primary);
+		content: "";
+	}
+
+	&.is-drop-before::before {
+		inset-inline-start: -11px;
+	}
+
+	&.is-drop-after::after {
+		inset-inline-end: -11px;
+	}
+}
+
+// percent max needs flex
+.err-organise-frame {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 140px;
+	block-size: 140px;
+
+	.err-page-thumb {
+		inline-size: auto;
+		max-inline-size: 100%;
+		max-block-size: 100%;
+	}
+}
+
+.err-organise-ops .sub-seg-cell:disabled {
+	pointer-events: none;
+	opacity: 0.45;
+}

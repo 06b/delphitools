@@ -92,10 +92,27 @@ export function movePage(fromId: string, toId: string): void {
 
 export function addContentEdits(pageId: string, edits: ContentEdit[]): void {
 	if (edits.length === 0) return;
-	updatePage(pageId, (page) => ({
-		...page,
-		edits: [...page.edits, ...edits],
-	}));
+	store.update((doc) => {
+		const source = doc.pages.find(
+			(p) => p.id === pageId,
+		)?.sourceIndex;
+		// copies share source stream
+		return {
+			...doc,
+			pages: doc.pages.map((p) =>
+				p.id === pageId ||
+				(source != null && p.sourceIndex === source)
+					? {
+							...p,
+							edits: [
+								...p.edits,
+								...edits,
+							],
+						}
+					: p,
+			),
+		};
+	});
 }
 
 /** an image file becomes an object at the centre of the current page, at most half the page each way */

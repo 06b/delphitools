@@ -210,9 +210,13 @@ function invertLinear(m: Matrix, x: number, y: number) {
 /** write every page's edits into `doc` (a pdf-lib document of the same source) */
 export function applyEditsToDoc(doc: PDFDocument, pages: ErrataPage[]): void {
 	const ctx = doc.context;
+	const done = new Set<number>();
 	for (const page of pages) {
 		if (page.sourceIndex === null || page.edits.length === 0)
 			continue;
+		// copies share edits
+		if (done.has(page.sourceIndex)) continue;
+		done.add(page.sourceIndex);
 		const src = doc.getPage(page.sourceIndex);
 		const { content, streams } = applyPageEdits(src, page.edits);
 		for (const [path, bytes] of streams) {

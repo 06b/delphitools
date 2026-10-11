@@ -28,15 +28,17 @@ import {
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 // thumbnail keyed by page id and rotation
-const thumb = modifier((img: HTMLImageElement, [page]: [ErrataPage]) => {
-	let live = true;
-	void renderThumb(page).then((url) => {
-		if (live) img.src = url;
-	});
-	return () => {
-		live = false;
-	};
-});
+export const thumb = modifier(
+	(img: HTMLImageElement, [page, width]: [ErrataPage, number?]) => {
+		let live = true;
+		void renderThumb(page, width).then((url) => {
+			if (live) img.src = url;
+		});
+		return () => {
+			live = false;
+		};
+	},
+);
 
 const Gap: TOC<{
 	Args: {
