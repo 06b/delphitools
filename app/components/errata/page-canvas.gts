@@ -69,7 +69,12 @@ import {
 	setActiveTool,
 	subscribeTool,
 } from 'delphitools-v2/lib/errata/tool';
-import { registerCanvasActions } from 'delphitools-v2/lib/errata/ui';
+import {
+	getMode,
+	registerCanvasActions,
+	setSelectedIds,
+} from 'delphitools-v2/lib/errata/ui';
+import { commentAuthor, newComment } from 'delphitools-v2/lib/errata/comments';
 import {
 	registerViewportController,
 	reportZoom,
@@ -78,6 +83,7 @@ import {
 // continuous scroll: every page sits in one scene, stacked with GAP between
 
 const FONT = 'Helvetica, Arial, sans-serif';
+const NOTE_PATH = 'M1 1H19V14H8L3 19V14H1Z';
 const ZMIN = 0.1;
 const ZMAX = 16;
 const FIT_PAD = 24;
@@ -558,6 +564,15 @@ export default class PageCanvas extends Component {
 						stroke: o.colour,
 						strokeWidth: o.strokeWidth,
 					});
+				case 'comment':
+					return new Path(NOTE_PATH, {
+						...base,
+						fill: '#ffd100',
+						stroke: '#1a1a1a',
+						strokeWidth: 1,
+						strokeLineJoin: 'round',
+						hasControls: false,
+					});
 				case 'image': {
 					const img = images.get(o.dataUrl);
 					if (!img || img === 'loading') {
@@ -944,6 +959,17 @@ export default class PageCanvas extends Component {
 			}
 		};
 
+		const reportSelection = () =>
+			setSelectedIds(
+				canvas.getActiveObjects().flatMap((f) => {
+					const id = idOf(f);
+					return id ? [id] : [];
+				}),
+			);
+		canvas.on('selection:created', reportSelection);
+		canvas.on('selection:updated', reportSelection);
+		canvas.on('selection:cleared', reportSelection);
+
 		canvas.on('object:modified', (e) => {
 			const targets =
 				e.target && e.target.type === 'activeselection'
@@ -1151,6 +1177,24 @@ export default class PageCanvas extends Component {
 				)
 					pendingEdit = t;
 				lastPress = { target: t ?? null, at: now };
+				return;
+			}
+			if (
+				getMode() === 'comment' &&
+				tool === 'select' &&
+				!opt.target
+			) {
+				const p = canvas.getScenePoint(opt.e);
+				const slot = pageAt(p);
+				if (!slot) return;
+				const note = newComment(
+					p.x - slot.x,
+					p.y - slot.y,
+					commentAuthor(),
+				);
+				addObject(slot.id, note);
+				const f = tracked.get(note.id)?.fabric;
+				if (f) canvas.setActiveObject(f);
 				return;
 			}
 			if (tool === 'text') {
@@ -2170,6 +2214,7 @@ export default class PageCanvas extends Component {
 			wrap.removeEventListener('wheel', onWheel);
 			registerCanvasActions(null);
 			registerViewportController(null);
+			setSelectedIds([]);
 			void canvas.dispose();
 		};
 	});

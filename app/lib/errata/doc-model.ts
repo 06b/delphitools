@@ -48,7 +48,17 @@ export interface ImageObject extends BaseObject {
 	dataUrl: string;
 }
 
-export type PageObject = TextObject | InkObject | ShapeObject | ImageObject;
+/** a PDF /Text annotation; w and h are the note icon */
+export interface CommentObject extends BaseObject {
+	kind: 'comment';
+	text: string;
+	author: string;
+	/** ISO 8601, empty when unknown */
+	date: string;
+}
+
+export type PageObject =
+	TextObject | InkObject | ShapeObject | ImageObject | CommentObject;
 
 export interface Stamped {
 	index: number;

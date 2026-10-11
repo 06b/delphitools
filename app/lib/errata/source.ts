@@ -15,7 +15,8 @@ import {
 	type Rotation,
 } from './doc-model';
 import { store, setPageIndex } from './store';
-import { editedBytes, setContentSource } from './content';
+import { cleanDoc, editedBytes, setContentSource } from './content';
+import { readComments } from './comments';
 
 let sourceBytes: Uint8Array | null = null;
 let sourcePdf: PDFDocumentProxy | null = null;
@@ -75,11 +76,13 @@ export async function openPdf(file: File): Promise<void> {
 	const bytes = new Uint8Array(await file.arrayBuffer());
 	await setSource(bytes);
 	const pdf = sourcePdf!;
+	// pdf-lib stricter than pdf.js
+	const lib = await cleanDoc()?.catch(() => null);
 	const pages: ErrataPage[] = [];
 	for (let i = 1; i <= pdf.numPages; i++) {
 		const page = await pdf.getPage(i);
 		const view = page.getViewport({ scale: 1, rotation: 0 });
-		pages.push({
+		const added: ErrataPage = {
 			id: newId(),
 			sourceIndex: i - 1,
 			image: null,
@@ -92,7 +95,10 @@ export async function openPdf(file: File): Promise<void> {
 			resize: null,
 			objects: [],
 			edits: [],
-		});
+		};
+		if (lib && !lib.isEncrypted)
+			added.objects = readComments(lib.getPage(i - 1), added);
+		pages.push(added);
 	}
 	store.setDoc({ name: stripExt(file.name), pages });
 	setPageIndex(0);

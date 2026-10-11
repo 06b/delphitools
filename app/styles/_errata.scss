@@ -446,6 +446,10 @@
 		inline-size: 72px;
 	}
 
+	&.is-wide {
+		inline-size: 240px;
+	}
+
 	&[aria-invalid="true"] {
 		border-color: var(--destructive);
 	}
