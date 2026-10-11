@@ -104,7 +104,12 @@ export function pickImageFile(): void {
 }
 
 export type BoxMode =
-	'page-numbers' | 'watermark' | 'stamp' | 'compress' | 'impose';
+	| 'page-numbers'
+	| 'watermark'
+	| 'stamp'
+	| 'compress'
+	| 'impose'
+	| 'preflight';
 
 let mode: BoxMode | null = null;
 

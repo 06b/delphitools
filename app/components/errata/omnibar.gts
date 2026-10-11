@@ -180,6 +180,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Preflight',
 				icon: 'list-checks',
 				description: fromRegistry('pdf-preflight'),
+				tool: 'preflight',
 			},
 			{
 				label: 'Compress',
@@ -313,6 +314,12 @@ export default class Omnibar extends Component {
 			this.inMode ||
 			this.mode.current !== null
 		);
+	}
+
+	// preflight renders own bar
+	get boxModeOpen() {
+		const mode = this.mode.current;
+		return mode !== null && mode !== 'preflight';
 	}
 
 	// kept for slide-out
@@ -778,7 +785,7 @@ export default class Omnibar extends Component {
 				@mode={{this.modeCell.mode}}
 				@label={{this.modeCell.label}}
 				@icon={{this.modeCell.icon}}
-				@open={{if this.mode.current true false}}
+				@open={{this.boxModeOpen}}
 			/>
 		</div>
 	</template>

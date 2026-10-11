@@ -447,4 +447,36 @@ if (imposed) {
 	check('impose sheets', im.getPageCount() === 2 && Math.round(p0.getWidth()) === 842 && Math.round(p0.getHeight()) === 595, `${im.getPageCount()} ${p0.getWidth()}x${p0.getHeight()}`);
 }
 
+const preflightOpen = () => page.$('.err-mode.is-open[data-mode="preflight"]').then((e) => !!e);
+const findings = () => page.$$eval('.err-preflight.is-open .err-preflight-group', (gs) => gs.map((g) => ({
+	head: g.querySelector('.dt-preflight-page-btn')?.textContent.trim(),
+	issues: [...g.querySelectorAll('.dt-preflight-issue-message')].map((m) => m.textContent.trim()),
+})));
+await page.keyboard.press('[');
+await page.keyboard.press('[');
+await sleep(300);
+await openCell('Preflight');
+check('preflight mode bar', await preflightOpen());
+check('preflight markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
+await page.waitForSelector('.err-preflight.is-open .err-preflight-group', { timeout: 15000 }).catch(() => {});
+const groups = await findings();
+check('preflight pages', JSON.stringify(groups.filter((g) => g.head !== 'Document').map((g) => g.head)) === JSON.stringify(['Page 1', 'Page 2', 'Page 3']), JSON.stringify(groups.map((g) => g.head)));
+check('preflight checks run', groups.every((g) => g.head === 'Document' || g.issues.includes('No BleedBox defined')));
+// watermark opacity only exists in the edited export
+check('preflight sees edits', groups.find((g) => g.head === `Page ${wmPage + 1}`)?.issues.some((m) => /transparency effects/.test(m)), JSON.stringify(groups));
+check('preflight counts', /\d+ (warnings?|errors?|info)/.test(await page.$eval('.err-mode.is-open[data-mode="preflight"]', (e) => e.textContent)));
+await page.evaluate(() => [...document.querySelectorAll('.err-preflight-group')].find((g) => g.querySelector('.dt-preflight-page-btn')?.textContent.trim() === 'Page 3')?.querySelector('.dt-preflight-issue')?.click());
+await sleep(500);
+check('preflight finding goes to page', (await page.evaluate(() => window.__errata.pageIndex())) === 2);
+const canvasTop = await page.$eval('.sub-canvas-wrap canvas', (c) => c.getBoundingClientRect().top);
+const p3 = await page.evaluate(() => window.__errata.pageRect(2));
+check('preflight finding scrolls', p3 && Math.abs(p3.y - canvasTop) < 60, `${p3?.y} vs ${canvasTop}`);
+await clickIn('Close');
+await sleep(400);
+check('preflight close', !(await preflightOpen()) && !(await page.$('.err-preflight.is-open')));
+await openCell('Preflight');
+await page.keyboard.press('Escape');
+await sleep(300);
+check('preflight escape', !(await preflightOpen()));
+
 await finish(browser);

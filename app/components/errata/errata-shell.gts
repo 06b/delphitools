@@ -6,6 +6,7 @@ import Omnibar from 'delphitools-v2/components/errata/omnibar';
 import PageCanvas from 'delphitools-v2/components/errata/page-canvas';
 import PageRail from 'delphitools-v2/components/errata/page-rail';
 import PageSizeModal from 'delphitools-v2/components/errata/page-size-modal';
+import PreflightPanel from 'delphitools-v2/components/errata/preflight-panel';
 import SignatureModal from 'delphitools-v2/components/errata/signature-modal';
 import TopBar from 'delphitools-v2/components/errata/top-bar';
 import errataShortcuts from 'delphitools-v2/modifiers/errata-shortcuts';
@@ -258,6 +259,7 @@ export default class ErrataShell extends Component {
 					<PageCanvas />
 					{{#if this.doc.current}}
 						<Omnibar />
+						<PreflightPanel />
 					{{else}}
 						<div class="sub-empty-hint">
 							<div
