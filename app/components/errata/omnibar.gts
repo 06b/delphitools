@@ -37,6 +37,7 @@ import {
 import {
 	getMode,
 	isToolboxOpen,
+	OWN_BAR_MODES,
 	openModal,
 	pickImageFile,
 	setMode,
@@ -182,6 +183,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Preflight',
 				icon: 'list-checks',
 				description: fromRegistry('pdf-preflight'),
+				tool: 'preflight',
 			},
 			{
 				label: 'Compress',
@@ -321,8 +323,10 @@ export default class Omnibar extends Component {
 		return this.mode.current === 'organise';
 	}
 
+	// these modes render own bars
 	get boxModeOpen() {
-		return this.mode.current !== null && !this.organising;
+		const mode = this.mode.current;
+		return mode !== null && !OWN_BAR_MODES.includes(mode);
 	}
 
 	// kept for slide-out

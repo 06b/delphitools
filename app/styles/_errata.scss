@@ -482,6 +482,56 @@
 	}
 }
 
+.err-preflight-count {
+	gap: 5px;
+
+	.dt-preflight-sev {
+		inline-size: 13px;
+		block-size: 13px;
+		margin: 0;
+	}
+}
+
+// preflight findings, docked right above the mode bar
+.err-preflight {
+	position: absolute;
+	inset-block: 16px 80px;
+	inset-inline-end: 16px;
+	inline-size: 320px;
+	max-inline-size: calc(100% - 32px);
+	overflow-y: auto;
+	border: 1px solid var(--border);
+	background-color: var(--background);
+	translate: calc(100% + 40px) 0;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+		opacity 200ms;
+
+	&.is-open {
+		translate: 0 0;
+		opacity: 1;
+		pointer-events: auto;
+		transition-delay: 170ms;
+	}
+
+	.dt-preflight-page-btn {
+		display: block;
+		margin: 0;
+		padding: 8px 10px 4px;
+	}
+
+	.dt-preflight-issue {
+		border-block-start: 1px solid var(--border);
+		border-block-end: 0;
+	}
+}
+
+.err-preflight-group + .err-preflight-group {
+	border-block-start: 1px solid var(--border);
+}
+
 // content tool hud, above the hovered or selected object
 .err-hud {
 	position: absolute;

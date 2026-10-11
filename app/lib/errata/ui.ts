@@ -109,7 +109,10 @@ export type BoxMode =
 	| 'stamp'
 	| 'compress'
 	| 'impose'
-	| 'organise';
+	| 'organise'
+	| 'preflight';
+
+export const OWN_BAR_MODES: BoxMode[] = ['organise', 'preflight'];
 
 let mode: BoxMode | null = null;
 
