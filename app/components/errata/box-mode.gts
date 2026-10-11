@@ -33,6 +33,7 @@ import {
 	subscribePage,
 } from 'delphitools-v2/lib/errata/store';
 import type { Stamped } from 'delphitools-v2/lib/errata/doc-model';
+import { dropRedactions, redactIds } from 'delphitools-v2/lib/errata/redact';
 import {
 	getMode,
 	preview,
@@ -142,6 +143,11 @@ export default class BoxModeBar extends Component<Signature> {
 	@tracked busy = false;
 	@tracked failedMode: Mode | null = null;
 
+	// ∑CG: redact mode bar hint chip, beside the mark count
+	//   spec: at most 32 chars, no period; drag on a page marks an area, a click on a text line marks that line
+	//   sample: "Drag an area or click a line"
+	redactHint = '∑CG';
+
 	get failed() {
 		return (
 			this.failedMode !== null &&
@@ -216,10 +222,24 @@ export default class BoxModeBar extends Component<Signature> {
 		}
 	}
 
+	get marks() {
+		return redactIds(this.doc.current).size;
+	}
+
 	get canApply() {
 		if (!this.args.open || this.busy) return false;
+		if (this.args.mode === 'redact') return this.marks > 0;
 		return this.stamping ? this.items.length > 0 : true;
 	}
+
+	// cancel keeps earlier marks
+	#kept = new Set<string>();
+	redactSession = modifier(
+		(_el: HTMLElement, [mode]: [Mode | null | undefined]) => {
+			if (mode === 'redact')
+				this.#kept = redactIds(store.getSnapshot());
+		},
+	);
 
 	get layoutName() {
 		return LAYOUTS.find((l) => l.id === this.layout)?.name ?? '';
@@ -248,6 +268,7 @@ export default class BoxModeBar extends Component<Signature> {
 
 	cancel = () => {
 		this.failedMode = null;
+		if (this.args.mode === 'redact') dropRedactions(this.#kept);
 		setMode(null);
 	};
 
@@ -278,10 +299,18 @@ export default class BoxModeBar extends Component<Signature> {
 		this.busy = true;
 		this.failedMode = null;
 		const compress = mode === 'compress';
-		const ok = await exportCurrent(
-			compress ? this.compress : this.impose,
-			compress ? '-compressed' : `-imposed-${this.layout}`,
-		);
+		// exportPdf applies redactions
+		const ok =
+			mode === 'redact'
+				? await exportCurrent(undefined, '-redacted')
+				: await exportCurrent(
+						compress
+							? this.compress
+							: this.impose,
+						compress
+							? '-compressed'
+							: `-imposed-${this.layout}`,
+					);
 		this.busy = false;
 		if (!ok) this.failedMode = mode;
 		else if (getMode() === mode) setMode(null);
@@ -293,6 +322,7 @@ export default class BoxModeBar extends Component<Signature> {
 				{{if @open 'is-open'}}"
 			data-mode={{@mode}}
 			{{this.livePreview (if @open this.items)}}
+			{{this.redactSession (if @open @mode)}}
 		>
 			<Icon @name={{@icon}} class="sub-omni-tool-glyph" />
 			<span class="sub-omni-tool-name">{{@label}}</span>
@@ -541,6 +571,12 @@ export default class BoxModeBar extends Component<Signature> {
 						</SelectContent>
 					</Select>
 				</span>
+			{{else if (eq @mode "redact")}}
+				<span
+					class="sub-omni-tag"
+				>{{this.redactHint}}</span>
+				<span class="sub-omni-tag">{{this.marks}}
+					marked</span>
 			{{/if}}
 
 			{{#if this.stamping}}

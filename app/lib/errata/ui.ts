@@ -111,7 +111,8 @@ export type BoxMode =
 	| 'impose'
 	| 'organise'
 	| 'preflight'
-	| 'comment';
+	| 'comment'
+	| 'redact';
 
 export const OWN_BAR_MODES: BoxMode[] = ['organise', 'preflight', 'comment'];
 

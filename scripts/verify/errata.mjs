@@ -3,7 +3,9 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDocument, PDFHexString, PDFName, beginText, decodePDFRawStream, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
+import { PDFDocument, PDFHexString, PDFName, PDFString, StandardFonts, beginText, decodePDFRawStream, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
+import * as mupdf from 'mupdf';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { BASE, check, finish, launch, sleep } from './harness.mjs';
 
 const { browser, page } = await launch();
@@ -656,5 +658,127 @@ check('export keeps other annots', annots.some((d) => sub(d) === '/Square'));
 const fresh = notes[1];
 check('export comment dict', fresh.lookup(PDFName.of('T')).decodeText() === 'Ruby' && !!fresh.get(PDFName.of('M')) && fresh.get(PDFName.of('P')) === commented.getPage(0).ref);
 check('export comment rect', notes[0].get(PDFName.of('Rect')).toString().replace(/\s+/g, ' ') === '[ 50 400 70 420 ]', notes[0].get(PDFName.of('Rect')).toString());
+
+// redact; page 2 nests page 1
+const rd = await PDFDocument.create();
+const helv = await rd.embedFont(StandardFonts.Helvetica);
+const rp = rd.addPage([400, 500]);
+rp.drawText('TOPSECRET', { x: 40, y: 440, size: 18, font: helv });
+rp.drawText('KEEPME', { x: 40, y: 200, size: 18, font: helv });
+rp.drawText('LINESECRET', { x: 40, y: 120, size: 18, font: helv });
+const greenPng = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 16; c.height = 16; const g = c.getContext('2d'); g.fillStyle = '#00c853'; g.fillRect(0, 0, 16, 16); return c.toDataURL().split(',')[1]; });
+rp.drawImage(await rd.embedPng(Buffer.from(greenPng, 'base64')), { x: 200, y: 400, width: 60, height: 60 });
+const rform = rd.getForm();
+const secretField = rform.createTextField('secret');
+secretField.setText('FIELDSECRET');
+secretField.addToPage(rp, { x: 40, y: 400, width: 120, height: 20 });
+const keepField = rform.createTextField('keep');
+keepField.setText('FIELDKEEP');
+keepField.addToPage(rp, { x: 40, y: 40, width: 120, height: 20 });
+rp.node.addAnnot(rd.context.register(rd.context.obj({ Type: 'Annot', Subtype: 'Link', Rect: [40, 470, 150, 490], Border: [0, 0, 0], A: { S: 'URI', URI: PDFString.of('https://secret.example/') } })));
+rd.addPage([400, 500]).drawPage(await rd.embedPage(rp));
+const rdBytes = await rd.save();
+await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'redact.pdf', 'application/pdf'), [...rdBytes]);
+await page.waitForFunction(() => window.__errata.doc()?.name === 'redact' && window.__errata.doc().pages.length === 2, { timeout: 10000 });
+await sleep(800);
+const marks = async () => (await doc()).pages.map((p) => p.objects.filter((o) => o.kind === 'redact'));
+const pageRectR = (i) => page.evaluate((n) => window.__errata.pageRect(n), i);
+const lineBox = (i, text) => page.evaluate(async (n, t) => (await window.__errata.content(n)).lines.find((l) => l.text === t)?.box, i, text);
+const clickBox = async (r, b, w) => {
+	const z = r.w / w;
+	await page.mouse.click(r.x + (b.x + b.width / 2) * z, r.y + (b.y + b.height / 2) * z);
+	await sleep(600);
+};
+
+await openCell('Redact');
+check('redact mode bar', await modeOpen('redact'));
+check('redact apply waits for a mark', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+let rr = await pageRectR(0);
+let rz = rr.w / 400;
+await page.mouse.move(rr.x + 20 * rz, rr.y + 5 * rz);
+await page.mouse.down();
+await page.mouse.move(rr.x + 300 * rz, rr.y + 110 * rz, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+let rm = await marks();
+check('redact area marked', rm[0].length === 1 && Math.abs(rm[0][0].w - 280) < 2 && Math.abs(rm[0][0].h - 105) < 2, JSON.stringify(rm[0]));
+check('redact mark hatched', await page.evaluate(() => window.__errataCanvas.getObjects().some((o) => o.fill?.source && o.stroke === '#d1242f')));
+await clickBox(rr, await lineBox(0, 'LINESECRET'), 400);
+rm = await marks();
+const lsb = await lineBox(0, 'LINESECRET');
+check('redact text line marked', rm[0].length === 2 && Math.abs(rm[0][1].cx - (lsb.x + lsb.width / 2)) < 1 && rm[0][1].w > lsb.width, JSON.stringify(rm[0][1]));
+check('redact count', await page.$eval('.err-mode.is-open', (e) => e.textContent.replace(/\s+/g, ' ').includes('2 marked')));
+await clickBox(rr, lsb, 400);
+await page.keyboard.press('Backspace');
+await sleep(300);
+check('redact mark deleted', (await marks())[0].length === 1);
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(300);
+check('redact mark undo', (await marks())[0].length === 2);
+await clickIn('Cancel');
+await sleep(300);
+check('redact cancel drops session marks', (await marks())[0].length === 0 && !(await modeOpen('redact')));
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(300);
+check('redact cancel one undo step', (await marks())[0].length === 2);
+
+await page.keyboard.press(']');
+await sleep(600);
+await page.evaluate(() => window.__errata.resize({ width: 595.28, height: 841.89, mode: 'fit', anchor: 'middle-center' }));
+await sleep(900);
+await openCell('Redact');
+rr = await pageRectR(1);
+await clickBox(rr, await lineBox(1, 'TOPSECRET'), 595.28);
+rm = await marks();
+check('redact form line marked', rm[1].length === 1, JSON.stringify(rm[1]));
+await clickIn('Apply');
+const redacted = await waitFile(/^redact-redacted\.pdf$/);
+check('redact downloads', !!redacted);
+await sleep(300);
+check('redact mode closed, marks kept', !(await modeOpen('redact')) && (await marks()).flat().length === 3);
+
+if (redacted) {
+	const outBytes = new Uint8Array(readFileSync(redacted));
+	const pdf = await getDocument({ data: outBytes.slice(), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
+	const textOf = async (n) => (await (await pdf.getPage(n)).getTextContent()).items.map((i) => i.str).join(' ');
+	const t1 = await textOf(1);
+	const t2 = await textOf(2);
+	check('redact text gone', !t1.includes('TOPSECRET') && !t1.includes('LINESECRET') && !t2.includes('TOPSECRET'), `${t1} | ${t2}`);
+	check('redact text outside kept', t1.includes('KEEPME') && t2.includes('KEEPME') && t2.includes('LINESECRET'), `${t1} | ${t2}`);
+	const annots = await (await pdf.getPage(1)).getAnnotations();
+	check('redact link and field gone', !annots.some((a) => a.url || a.fieldValue === 'FIELDSECRET') && annots.some((a) => a.fieldValue === 'FIELDKEEP'), JSON.stringify(annots.map((a) => [a.subtype, a.fieldValue ?? a.url])));
+	// pdf-lib writes hex strings
+	const rawOf = (b) => new TextDecoder('latin1').decode(new mupdf.PDFDocument(b.slice()).saveToBuffer('decompress').asUint8Array()).toLowerCase();
+	const hex = (s) => [...s].map((c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+	const hex16 = (s) => [...s].map((c) => c.charCodeAt(0).toString(16).padStart(4, '0')).join('');
+	const leaks = (raw, s) => [s.toLowerCase(), hex(s), hex16(s)].some((v) => raw.includes(v));
+	const rawIn = rawOf(rdBytes);
+	const rawOut = rawOf(outBytes);
+	// unmarked on page 2
+	const gone = ['TOPSECRET', 'FIELDSECRET', 'secret.example'];
+	check('redact raw control', gone.every((s) => leaks(rawIn, s)));
+	check('redact raw gone', !gone.some((s) => leaks(rawOut, s)) && leaks(rawOut, 'KEEPME') && leaks(rawOut, 'FIELDKEEP'), gone.filter((s) => leaks(rawOut, s)).join());
+	// page 1 images only
+	const greenPixels = (b) => {
+		const m = new mupdf.PDFDocument(b.slice());
+		let n = 0;
+		const walk = (res) => res.get('XObject').forEach((x) => {
+			if (String(x.get('Subtype')) === '/Form') return walk(x.get('Resources'));
+			const px = m.loadImage(x).toPixmap().getPixels();
+			for (let j = 0; j + 2 < px.length; j += 3) if (px[j] < 40 && px[j + 1] > 160 && px[j + 2] < 120) n++;
+		});
+		walk(m.loadPage(0).getObject().get('Resources'));
+		return n;
+	};
+	check('redact image control', greenPixels(rdBytes) > 0);
+	check('redact image gone', greenPixels(outBytes) === 0, String(greenPixels(outBytes)));
+	const pix = new mupdf.PDFDocument(outBytes.slice()).loadPage(0).toPixmap(mupdf.Matrix.identity, mupdf.ColorSpace.DeviceRGB, false);
+	const at = (x, y) => [...pix.getPixels().slice((y * pix.getWidth() + x) * 3, (y * pix.getWidth() + x) * 3 + 3)];
+	check('redact black box', at(150, 50).every((v) => v < 10) && at(150, 300).every((v) => v > 245), JSON.stringify([at(150, 50), at(150, 300)]));
+}
 
 await finish(browser);

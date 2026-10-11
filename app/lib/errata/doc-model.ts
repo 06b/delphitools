@@ -57,8 +57,18 @@ export interface CommentObject extends BaseObject {
 	date: string;
 }
 
+/** burnt in on export */
+export interface RedactObject extends BaseObject {
+	kind: 'redact';
+}
+
 export type PageObject =
-	TextObject | InkObject | ShapeObject | ImageObject | CommentObject;
+	| TextObject
+	| InkObject
+	| ShapeObject
+	| ImageObject
+	| CommentObject
+	| RedactObject;
 
 export interface Stamped {
 	index: number;

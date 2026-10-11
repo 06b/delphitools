@@ -169,6 +169,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Redact',
 				icon: 'eye-off',
 				description: 'Remove content for good',
+				tool: 'redact',
 			},
 		],
 	},

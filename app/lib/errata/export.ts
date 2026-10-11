@@ -26,6 +26,7 @@ import {
 } from './doc-model';
 import { applyEditsToDoc } from './content';
 import { writeComments } from './comments';
+import { redactPdf } from './redact';
 import { hexToRgb } from '../colour-maths';
 
 function colour(hex: string) {
@@ -279,7 +280,10 @@ export async function exportPdf(
 		}
 		pdfPage.setRotation(degrees(totalRotation(page)));
 		for (const object of page.objects)
-			if (object.kind !== 'comment')
+			if (
+				object.kind !== 'comment' &&
+				object.kind !== 'redact'
+			)
 				await drawObject(
 					pdfPage,
 					page,
@@ -289,7 +293,7 @@ export async function exportPdf(
 				);
 		writeComments(pdfPage, page);
 	}
-	return out.save();
+	return redactPdf(await out.save(), doc.pages);
 }
 
 async function asPng(dataUrl: string): Promise<string> {
