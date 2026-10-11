@@ -19,6 +19,7 @@ import { downloadBlob } from 'delphitools-v2/lib/download';
 import { loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
 import {
 	ANCHORS,
+	ANCHOR_ICON,
 	expandNumber,
 	placeText,
 	resolvePageNumbers,
@@ -74,19 +75,6 @@ const NUMERAL_STYLES: { value: NumeralStyle; label: string }[] = [
 const STYLE_LABEL = Object.fromEntries(
 	NUMERAL_STYLES.map((s) => [s.value, s.label]),
 ) as Record<NumeralStyle, string>;
-
-// via get(); see gen-icons.mjs EXTRA
-const ANCHOR_ICON: Record<Anchor, string> = {
-	'top-left': 'arrow-up-left',
-	'top-center': 'arrow-up',
-	'top-right': 'arrow-up-right',
-	'middle-left': 'arrow-left',
-	'middle-center': 'dot',
-	'middle-right': 'arrow-right',
-	'bottom-left': 'arrow-down-left',
-	'bottom-center': 'arrow-down',
-	'bottom-right': 'arrow-down-right',
-};
 
 interface Preview {
 	url: string;

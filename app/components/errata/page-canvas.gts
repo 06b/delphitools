@@ -149,6 +149,10 @@ function centreProps(o: PageObject, slot: Slot) {
 	};
 }
 
+function opacityOf(o: PageObject): number {
+	return o.kind === 'text' ? (o.opacity ?? 1) : 1;
+}
+
 function needsRebuild(prev: PageObject, next: PageObject): boolean {
 	if (prev.kind !== next.kind) return true;
 	if (next.kind === 'ink') return (prev as InkObject).d !== next.d;
@@ -845,14 +849,18 @@ export default class PageCanvas extends Component {
 		// main pass and drawn twice in after:render: the part on the page as is, the rest dimmed
 		const OUTSIDE_OPACITY = 0.4;
 		const overhanging = new Set<FabricObject>();
-		const slotFor = (f: FabricObject): Slot | null => {
+		const placed = (f: FabricObject) => {
 			const id = idOf(f);
 			const t = id ? tracked.get(id) : null;
-			return t ? (slotOf(t.pageId) ?? null) : null;
+			const slot = t && slotOf(t.pageId);
+			return t && slot
+				? { slot, opacity: opacityOf(t.doc) }
+				: null;
 		};
 		const dimOutside = (f: FabricObject) => {
-			const slot = slotFor(f);
-			if (!slot) return;
+			const p = placed(f);
+			if (!p) return;
+			const { slot } = p;
 			const b = f.getBoundingRect();
 			const outside =
 				b.left < slot.x - 0.5 ||
@@ -861,7 +869,7 @@ export default class PageCanvas extends Component {
 				b.top + b.height > slot.y + slot.height + 0.5;
 			if (outside) overhanging.add(f);
 			else overhanging.delete(f);
-			const opacity = outside ? 0 : 1;
+			const opacity = outside ? 0 : p.opacity;
 			if (f.opacity !== opacity) f.set({ opacity });
 		};
 		const dimActive = () => {
@@ -876,11 +884,12 @@ export default class PageCanvas extends Component {
 			const ctx = canvas.getContext();
 			const vpt = canvas.viewportTransform;
 			for (const f of overhanging) {
-				const slot = slotFor(f);
-				if (!slot || !canvas.contains(f)) {
+				const p = placed(f);
+				if (!p || !canvas.contains(f)) {
 					overhanging.delete(f);
 					continue;
 				}
+				const { slot, opacity } = p;
 				for (const [alpha, evenodd] of [
 					[1, false],
 					[OUTSIDE_OPACITY, true],
@@ -900,7 +909,7 @@ export default class PageCanvas extends Component {
 						evenodd ? 'evenodd' : 'nonzero',
 					);
 					// direct assignment: set() would mark the object dirty on every frame
-					f.opacity = alpha;
+					f.opacity = alpha * opacity;
 					f.render(ctx);
 					f.opacity = 0;
 					ctx.restore();
@@ -1969,7 +1978,30 @@ export default class PageCanvas extends Component {
 		};
 
 		let debugRects: FabricObject[] = [];
+		let previews: FabricObject[] = [];
 		registerCanvasActions({
+			preview: (items) => {
+				for (const f of previews) canvas.remove(f);
+				previews = items.flatMap(
+					({ index, object }) => {
+						const slot = slotAt(index);
+						const f = slot
+							? build(object, slot)
+							: null;
+						if (!f) return [];
+						f.set({
+							selectable: false,
+							evented: false,
+							opacity: opacityOf(
+								object,
+							),
+						});
+						return [f];
+					},
+				);
+				for (const f of previews) canvas.add(f);
+				canvas.requestRenderAll();
+			},
 			selectObject: (id) => {
 				const t = tracked.get(id);
 				// images build once their bitmap has loaded; select then

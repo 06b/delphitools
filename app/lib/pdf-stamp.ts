@@ -21,6 +21,19 @@ export const ANCHORS: Anchor[] = [
 	'bottom-right',
 ];
 
+// listed in gen-icons extra
+export const ANCHOR_ICON: Record<Anchor, string> = {
+	'top-left': 'arrow-up-left',
+	'top-center': 'arrow-up',
+	'top-right': 'arrow-up-right',
+	'middle-left': 'arrow-left',
+	'middle-center': 'dot',
+	'middle-right': 'arrow-right',
+	'bottom-left': 'arrow-down-left',
+	'bottom-center': 'arrow-down',
+	'bottom-right': 'arrow-down-right',
+};
+
 export interface Point {
 	x: number;
 	y: number;

@@ -91,6 +91,7 @@ async function drawObject(
 				size,
 				font,
 				color: colour(object.colour),
+				opacity: object.opacity,
 				lineHeight: size * 1.16 * 1.13,
 			});
 			break;

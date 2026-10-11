@@ -1,3 +1,10 @@
+import {
+	PDFDocument,
+	degrees,
+	type PDFEmbeddedPage,
+	type PDFPage,
+} from 'pdf-lib';
+
 export const MM_TO_POINTS = 72 / 25.4;
 
 export interface PaperSize {
@@ -109,6 +116,18 @@ export const PAPER_SIZES: PaperSize[] = [
 		heightMm: 457.2,
 	},
 ];
+
+export const DEFAULT_IMPOSITION_CONFIG: ImpositionConfig = {
+	layoutId: 'saddle-stitch',
+	paperSize: PAPER_SIZES[0]!,
+	orientation: 'landscape',
+	marginMm: 5,
+	gutterMm: 2,
+	creepMm: 0,
+	scaling: 'fit',
+	blankHandling: 'auto',
+	cropMarks: true,
+};
 
 function sheetDimensions(
 	paperSize: PaperSize,
@@ -690,4 +709,234 @@ export function getOuterEdges(placements: PagePlacement[]): {
 		top: Math.abs(p.y - minY) < eps,
 		bottom: Math.abs(p.y + p.height - maxY) < eps,
 	}));
+}
+
+export function normaliseRotation(degrees: number): number {
+	return (((Math.round(degrees / 90) * 90) % 360) + 360) % 360;
+}
+
+export function effectiveSheetW(
+	paperSize: PaperSize,
+	orientation: 'portrait' | 'landscape',
+): number {
+	return orientation === 'landscape'
+		? Math.max(paperSize.widthMm, paperSize.heightMm)
+		: Math.min(paperSize.widthMm, paperSize.heightMm);
+}
+
+export function effectiveSheetH(
+	paperSize: PaperSize,
+	orientation: 'portrait' | 'landscape',
+): number {
+	return orientation === 'landscape'
+		? Math.min(paperSize.widthMm, paperSize.heightMm)
+		: Math.max(paperSize.widthMm, paperSize.heightMm);
+}
+
+export function drawPlacementsOnPage(
+	page: PDFPage,
+	placements: PagePlacement[],
+	embeddedPages: PDFEmbeddedPage[],
+	sheetHPt: number,
+) {
+	for (const p of placements) {
+		if (p.pageNumber === 0) continue;
+		const embedded = embeddedPages[p.pageNumber - 1];
+		if (!embedded) continue;
+
+		const xPt = p.x * MM_TO_POINTS;
+		const wPt = p.width * MM_TO_POINTS;
+		const hPt = p.height * MM_TO_POINTS;
+		const yPt = sheetHPt - (p.y * MM_TO_POINTS + hPt);
+
+		if (p.rotation === 0) {
+			page.drawPage(embedded, {
+				x: xPt,
+				y: yPt,
+				width: wPt,
+				height: hPt,
+			});
+		} else if (p.rotation === 180) {
+			page.drawPage(embedded, {
+				x: xPt + wPt,
+				y: yPt + hPt,
+				width: wPt,
+				height: hPt,
+				rotate: degrees(180),
+			});
+		} else if (p.rotation === 90) {
+			page.drawPage(embedded, {
+				x: xPt + wPt,
+				y: yPt,
+				width: hPt,
+				height: wPt,
+				rotate: degrees(90),
+			});
+		} else if (p.rotation === 270) {
+			page.drawPage(embedded, {
+				x: xPt,
+				y: yPt + hPt,
+				width: hPt,
+				height: wPt,
+				rotate: degrees(270),
+			});
+		}
+	}
+}
+
+function drawPdfMarkH(
+	page: PDFPage,
+	x: number,
+	y: number,
+	dir: number,
+	offset: number,
+	len: number,
+) {
+	page.drawLine({
+		start: { x: x + dir * offset, y },
+		end: { x: x + dir * (offset + len), y },
+		thickness: 0.25,
+	});
+}
+
+function drawPdfMarkV(
+	page: PDFPage,
+	x: number,
+	y: number,
+	dir: number,
+	offset: number,
+	len: number,
+) {
+	page.drawLine({
+		start: { x, y: y + dir * offset },
+		end: { x, y: y + dir * (offset + len) },
+		thickness: 0.25,
+	});
+}
+
+export function drawCropMarksOnPdfPage(
+	page: PDFPage,
+	placements: PagePlacement[],
+	sheetHPt: number,
+) {
+	const markLen = 18;
+	const offset = 3;
+
+	const edges = getOuterEdges(placements);
+
+	placements.forEach((p, i) => {
+		const e = edges[i];
+		if (!e) return;
+
+		const x1 = p.x * MM_TO_POINTS;
+		const x2 = (p.x + p.width) * MM_TO_POINTS;
+		const y1Pdf = sheetHPt - p.y * MM_TO_POINTS;
+		const y2Pdf = sheetHPt - (p.y + p.height) * MM_TO_POINTS;
+
+		if (e.left) drawPdfMarkH(page, x1, y1Pdf, -1, offset, markLen);
+		if (e.top) drawPdfMarkV(page, x1, y1Pdf, 1, offset, markLen);
+		if (e.right) drawPdfMarkH(page, x2, y1Pdf, 1, offset, markLen);
+		if (e.top) drawPdfMarkV(page, x2, y1Pdf, 1, offset, markLen);
+		if (e.left) drawPdfMarkH(page, x1, y2Pdf, -1, offset, markLen);
+		if (e.bottom)
+			drawPdfMarkV(page, x1, y2Pdf, -1, offset, markLen);
+		if (e.right) drawPdfMarkH(page, x2, y2Pdf, 1, offset, markLen);
+		if (e.bottom)
+			drawPdfMarkV(page, x2, y2Pdf, -1, offset, markLen);
+	});
+}
+
+// embedpage ignores rotate, cropbox
+async function upright(
+	src: PDFDocument,
+	out: PDFDocument,
+): Promise<PDFEmbeddedPage[]> {
+	const pages = src.getPages();
+	const fast: number[] = [];
+	const slow: number[] = [];
+	pages.forEach((page, i) => {
+		const box = page.getCropBox();
+		const media = page.getMediaBox();
+		const plain =
+			!!page.node.Contents() &&
+			normaliseRotation(page.getRotation().angle) === 0 &&
+			media.x === 0 &&
+			media.y === 0 &&
+			box.x === 0 &&
+			box.y === 0 &&
+			box.width === media.width &&
+			box.height === media.height;
+		(plain ? fast : slow).push(i);
+	});
+	// batched: resources copied once
+	const embedded: PDFEmbeddedPage[] = [];
+	const fastForms = await out.embedPages(fast.map((i) => pages[i]!));
+	fast.forEach((i, k) => (embedded[i] = fastForms[k]!));
+	if (!slow.length) return embedded;
+
+	const flat = await PDFDocument.create();
+	const withContent = slow.filter((i) => !!pages[i]!.node.Contents());
+	const forms = await flat.embedPages(
+		withContent.map((i) => pages[i]!),
+		withContent.map((i) => {
+			const b = pages[i]!.getCropBox();
+			return {
+				left: b.x,
+				bottom: b.y,
+				right: b.x + b.width,
+				top: b.y + b.height,
+			};
+		}),
+	);
+	for (const i of slow) {
+		const page = pages[i]!;
+		const { width: w, height: h } = page.getCropBox();
+		const r = normaliseRotation(page.getRotation().angle) as
+			0 | 90 | 180 | 270;
+		const flatPage = flat.addPage(r % 180 ? [h, w] : [w, h]);
+		// pdf-lib needs content stream
+		flatPage.pushOperators();
+		const k = withContent.indexOf(i);
+		if (k < 0) continue;
+		flatPage.drawPage(
+			forms[k]!,
+			{
+				0: {},
+				90: { x: 0, y: w, rotate: degrees(-90) },
+				180: { x: w, y: h, rotate: degrees(180) },
+				270: { x: h, y: 0, rotate: degrees(90) },
+			}[r],
+		);
+	}
+	const slowForms = await out.embedPages(flat.getPages());
+	slow.forEach((i, k) => (embedded[i] = slowForms[k]!));
+	return embedded;
+}
+
+export async function imposePdf(
+	bytes: Uint8Array,
+	config: ImpositionConfig,
+): Promise<Uint8Array> {
+	const src = await PDFDocument.load(bytes);
+	const out = await PDFDocument.create();
+	const pages = await upright(src, out);
+	const result = getLayoutById(config.layoutId)!.calculate(
+		pages.length,
+		config,
+	);
+	const sheetW =
+		effectiveSheetW(config.paperSize, config.orientation) *
+		MM_TO_POINTS;
+	const sheetH =
+		effectiveSheetH(config.paperSize, config.orientation) *
+		MM_TO_POINTS;
+	for (const sheet of result.sheets) {
+		for (const side of [sheet.front, sheet.back]) {
+			const page = out.addPage([sheetW, sheetH]);
+			drawPlacementsOnPage(page, side, pages, sheetH);
+			if (config.cropMarks)
+				drawCropMarksOnPdfPage(page, side, sheetH);
+		}
+	}
+	return out.save();
 }

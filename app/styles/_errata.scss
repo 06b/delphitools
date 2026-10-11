@@ -384,10 +384,13 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	inline-size: max-content;
 	block-size: 48px;
 	padding-inline: 14px 8px;
 	border: 1px solid var(--border);
 	background-color: var(--background);
+	font-size: 11px;
+	white-space: nowrap;
 	box-shadow:
 		0 10px 15px -3px rgb(0 0 0 / 10%),
 		0 4px 6px -4px rgb(0 0 0 / 10%);
@@ -404,10 +407,79 @@
 		pointer-events: auto !important;
 		transition-delay: 170ms;
 	}
+
+	> * {
+		flex-shrink: 0;
+	}
+
+	.sub-preset-row {
+		flex-direction: row;
+		align-items: center;
+	}
 }
 
-.err-mode-cancel {
-	margin-inline-start: 6px;
+.err-mode-field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.err-mode-seg {
+	grid-auto-columns: minmax(26px, auto);
+	grid-auto-flow: column;
+}
+
+.err-mode-input {
+	inline-size: 140px;
+	block-size: 24px;
+	border: 1px solid var(--border);
+	background-color: var(--card);
+	padding-inline: 8px;
+	color: var(--foreground);
+	outline: none;
+
+	&:focus {
+		border-color: var(--primary);
+	}
+
+	&.is-narrow {
+		inline-size: 72px;
+	}
+
+	&[aria-invalid="true"] {
+		border-color: var(--destructive);
+	}
+}
+
+.err-mode-select {
+	block-size: 24px;
+	font-size: 11px;
+}
+
+.err-mode-failed {
+	color: var(--destructive);
+}
+
+.err-mode-actions {
+	display: flex;
+	margin-inline-start: auto;
+	border: 1px solid var(--border);
+
+	.sub-modal-btn {
+		gap: 6px;
+		block-size: 30px;
+		padding-inline: 12px;
+		font-size: 12px;
+
+		&:last-child {
+			border-inline-end: 0;
+		}
+
+		.dt-icon {
+			inline-size: 13px;
+			block-size: 13px;
+		}
+	}
 }
 
 // content tool hud, above the hovered or selected object

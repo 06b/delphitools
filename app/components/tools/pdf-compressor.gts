@@ -9,25 +9,13 @@ import DownloadLabel from 'delphitools-v2/components/download-label';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import {
+	MAX_SIZES,
 	compressPdf,
 	formatBytes,
 	savingsPercent,
 } from 'delphitools-v2/lib/pdf-compress';
 
 const ACCEPT = '.pdf,application/pdf';
-
-interface SizeOption {
-	value: number;
-	label: string;
-}
-
-// 0 = full resolution
-const MAX_SIZES: SizeOption[] = [
-	{ value: 0, label: 'Full' },
-	{ value: 2400, label: '2400' },
-	{ value: 1600, label: '1600' },
-	{ value: 1000, label: '1000' },
-];
 
 interface Source {
 	file: File;

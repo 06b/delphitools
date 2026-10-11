@@ -5,6 +5,7 @@ import type { TOC } from '@ember/component/template-only';
 import { modifier } from 'ember-modifier';
 import { eq, or } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
+import BoxModeBar from 'delphitools-v2/components/errata/box-mode';
 import { Bloom } from 'delphitools-v2/components/substrata/omnibar/omnibar';
 import {
 	ColourCell,
@@ -33,11 +34,14 @@ import {
 	type ToolSettings,
 } from 'delphitools-v2/lib/errata/tool';
 import {
+	getMode,
 	isToolboxOpen,
 	openModal,
 	pickImageFile,
+	setMode,
 	setToolboxOpen,
 	subscribeUi,
+	type BoxMode,
 } from 'delphitools-v2/lib/errata/ui';
 import { allTools } from 'delphitools-v2/lib/tools';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
@@ -64,7 +68,13 @@ const FONT_SIZES: PresetOption[] = [10, 12, 14, 18].map((v) => ({
 }));
 
 type BoxTool =
-	'page-size' | 'rotate' | 'crop' | 'insert' | 'fill-sign' | 'export';
+	| 'page-size'
+	| 'rotate'
+	| 'crop'
+	| 'insert'
+	| 'fill-sign'
+	| 'export'
+	| BoxMode;
 
 interface BoxCell {
 	label: string;
@@ -118,6 +128,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Page numbers',
 				icon: 'hash',
 				description: fromRegistry('pdf-page-numberer'),
+				tool: 'page-numbers',
 			},
 		],
 	},
@@ -142,11 +153,13 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				icon: 'stamp',
 				description:
 					'Stamp text or an image on the document',
+				tool: 'stamp',
 			},
 			{
 				label: 'Watermark',
 				icon: 'droplet',
 				description: 'Add a watermark to the document',
+				tool: 'watermark',
 			},
 			{
 				label: 'Redact',
@@ -172,6 +185,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Compress',
 				icon: 'archive',
 				description: fromRegistry('pdf-compressor'),
+				tool: 'compress',
 			},
 		],
 	},
@@ -182,6 +196,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				label: 'Impose',
 				icon: 'book-open',
 				description: fromRegistry('imposer'),
+				tool: 'impose',
 			},
 			{
 				label: 'Export',
@@ -253,6 +268,7 @@ export default class Omnibar extends Component {
 	tool = new TrackedExternal(subscribeTool, getActiveTool);
 	settings = new TrackedExternal(subscribeTool, getToolSettings);
 	boxOpen = new TrackedExternal(subscribeUi, isToolboxOpen);
+	mode = new TrackedExternal(subscribeUi, getMode);
 
 	cropHint = 'Drag on the page';
 
@@ -261,7 +277,9 @@ export default class Omnibar extends Component {
 		this.tool.unsubscribe();
 		this.settings.unsubscribe();
 		this.boxOpen.unsubscribe();
+		this.mode.unsubscribe();
 		setToolboxOpen(false);
+		setMode(null);
 	}
 
 	get s() {
@@ -290,7 +308,26 @@ export default class Omnibar extends Component {
 	}
 
 	get barHidden() {
-		return this.boxOpen.current || this.inMode;
+		return (
+			this.boxOpen.current ||
+			this.inMode ||
+			this.mode.current !== null
+		);
+	}
+
+	// kept for slide-out
+	#lastMode: BoxMode | null = null;
+
+	get modeCell() {
+		const mode = this.mode.current ?? this.#lastMode;
+		const cell = BOX_GROUPS.flatMap((g) => g.cells).find(
+			(c) => c.tool === mode,
+		);
+		return {
+			mode,
+			label: cell?.label ?? '',
+			icon: cell?.icon ?? '',
+		};
 	}
 
 	pick = (id: ToolId) => {
@@ -363,6 +400,10 @@ export default class Omnibar extends Component {
 			case 'export':
 				void exportCurrent();
 				break;
+			default:
+				setActiveTool('select');
+				this.#lastMode = tool;
+				setMode(tool);
 		}
 	};
 
@@ -721,15 +762,24 @@ export default class Omnibar extends Component {
 				<span
 					class="sub-omni-tag"
 				>{{this.cropHint}}</span>
-				<button
-					type="button"
-					class="sub-topbar-feedback err-mode-cancel"
-					{{on "click" this.leaveMode}}
-				>
-					<Icon @name="x" />
-					Cancel
-				</button>
+				<span class="err-mode-actions">
+					<button
+						type="button"
+						class="sub-modal-btn is-ghost"
+						{{on "click" this.leaveMode}}
+					>
+						<Icon @name="x" />
+						Cancel
+					</button>
+				</span>
 			</div>
+
+			<BoxModeBar
+				@mode={{this.modeCell.mode}}
+				@label={{this.modeCell.label}}
+				@icon={{this.modeCell.icon}}
+				@open={{if this.mode.current true false}}
+			/>
 		</div>
 	</template>
 }

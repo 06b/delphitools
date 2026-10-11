@@ -21,6 +21,8 @@ export interface TextObject extends BaseObject {
 	text: string;
 	fontSize: number;
 	colour: string;
+	/** 0..1, absent is opaque */
+	opacity?: number;
 }
 
 /** d is in local coords, 0..w by 0..h */
@@ -47,6 +49,11 @@ export interface ImageObject extends BaseObject {
 }
 
 export type PageObject = TextObject | InkObject | ShapeObject | ImageObject;
+
+export interface Stamped {
+	index: number;
+	object: PageObject;
+}
 
 export interface PageImage {
 	dataUrl: string;

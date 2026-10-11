@@ -1,6 +1,6 @@
 // errata smoke: open, annotate, page ops, export
 
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PDFDocument, PDFHexString, PDFName, beginText, decodePDFRawStream, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
@@ -298,7 +298,7 @@ await page.evaluate(() => [...document.querySelectorAll('.sub-modal-opt')].find(
 await page.evaluate(() => [...document.querySelectorAll('.sub-modal-opt')].find((b) => b.textContent.trim() === 'Resample')?.click());
 await page.evaluate(() => [...document.querySelectorAll('.sub-modal-opt')].find((b) => b.textContent.trim() === 'Fit page')?.click());
 await page.evaluate(() => document.querySelector('.sub-csm-reflow .dt-switch')?.click());
-await page.evaluate(() => [...document.querySelectorAll('.sub-modal-btn.is-primary')].find((b) => b.textContent.includes('Apply'))?.click());
+await page.evaluate(() => [...document.querySelectorAll('dialog[open] .sub-modal-btn.is-primary')].find((b) => b.textContent.includes('Apply'))?.click());
 await sleep(400);
 cropped = (await doc()).pages[2];
 check('resize stored', cropped.resize?.mode === 'fit' && Math.round(cropped.resize.width) === 859 && Math.round(cropped.resize.height) === 612 && Math.round(cropped.resize.bleed) === 9, JSON.stringify(cropped.resize));
@@ -345,5 +345,106 @@ const allText = result.context.enumerateIndirectObjects().flatMap(([, obj]) => {
 check('export substitute font', /\/ErrHelv 24 Tf\s*<7a6f6e65> Tj\s*\/F9 24 Tf/.test(allText));
 // blank copies the rotated page 0 size
 check('export blank size', result.getPage(1).getWidth() === 500 && result.getPage(1).getHeight() === 400);
+
+const openCell = async (name) => {
+	await page.click('[data-toolbox]');
+	await sleep(400);
+	await page.evaluate((n) => [...document.querySelectorAll('.err-sheet-cell')].find((b) => b.querySelector('.dt-cell-name')?.textContent.trim() === n)?.click(), name);
+	await sleep(500);
+};
+const modeOpen = (m) => page.$eval('.err-mode[data-mode]', (e, m) => e.classList.contains('is-open') && e.dataset.mode === m, m).catch(() => false);
+const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l)?.click(), label);
+const previews = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && typeof o.text === 'string').map((o) => o.text));
+const texts = async () => (await doc()).pages.map((p) => p.objects.filter((o) => o.kind === 'text').map((o) => o.text));
+
+await openCell('Page numbers');
+check('numbers mode bar', await modeOpen('page-numbers'));
+check('numbers markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
+check('numbers preview', JSON.stringify(await previews()) === JSON.stringify(['1 / 3', '2 / 3', '3 / 3']), JSON.stringify(await previews()));
+await page.keyboard.press('t');
+check('numbers mode swallows tool keys', (await page.evaluate(() => document.querySelector('.sub-omni-box .is-active')?.title)) === 'Select');
+const beforeNumbers = await texts();
+await clickIn('Apply');
+await sleep(500);
+let afterTexts = await texts();
+check('numbers applied', afterTexts.every((t, i) => t.length === beforeNumbers[i].length + 1 && t.at(-1) === `${i + 1} / 3`), JSON.stringify(afterTexts));
+check('numbers mode closed', !(await modeOpen('page-numbers')) && (await previews()).length === 0);
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(300);
+check('numbers one undo step', JSON.stringify(await texts()) === JSON.stringify(beforeNumbers));
+await page.keyboard.down('Meta');
+await page.keyboard.down('Shift');
+await page.keyboard.press('z');
+await page.keyboard.up('Shift');
+await page.keyboard.up('Meta');
+await sleep(300);
+
+await openCell('Watermark');
+check('watermark mode bar', await modeOpen('watermark'));
+await clickIn('Current');
+await sleep(200);
+check('watermark preview current only', (await previews()).length === 1);
+const wmPage = await page.evaluate(() => window.__errata.pageIndex());
+await clickIn('Apply');
+await sleep(500);
+const wm = (await doc()).pages[wmPage].objects.at(-1);
+check('watermark applied', wm?.kind === 'text' && wm.text === 'DRAFT' && wm.opacity === 0.15 && wm.angle === -45, JSON.stringify(wm));
+check('watermark canvas opacity', await page.evaluate((id) => window.__errataCanvas.getObjects().some((o) => o.text === 'DRAFT' && Math.abs(o.opacity - 0.15) < 1e-9 && o.evented), wm?.id));
+
+await openCell('Stamp');
+check('stamp mode bar', await modeOpen('stamp'));
+await clickIn('Range');
+await sleep(200);
+check('stamp apply waits for a range', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+await page.type('.err-mode.is-open input[aria-label="Range"]', '1, 3');
+await sleep(200);
+await clickIn('Apply');
+await sleep(500);
+afterTexts = await texts();
+check('stamp applied to range', afterTexts[0].includes('APPROVED') && !afterTexts[1].includes('APPROVED') && afterTexts[2].includes('APPROVED'), JSON.stringify(afterTexts));
+await openCell('Stamp');
+await page.keyboard.press('Escape');
+await sleep(300);
+check('escape cancels mode', !(await modeOpen('stamp')) && (await previews()).length === 0);
+
+const stamped = await PDFDocument.load(new Uint8Array(await page.evaluate(() => window.__errata.export())));
+const gs = stamped.getPage(wmPage).node.Resources()?.lookup(PDFName.of('ExtGState'));
+const gsOpacity = gs ? gs.entries().map(([, v]) => String(stamped.context.lookup(v).get(PDFName.of('ca')))) : [];
+check('export watermark opacity', gsOpacity.includes('0.15'), JSON.stringify(gsOpacity));
+
+const downloads = mkdtempSync(join(tmpdir(), 'errata-dl-'));
+const cdp = await page.createCDPSession();
+await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
+const waitFile = async (re) => {
+	for (let i = 0; i < 120; i++) {
+		const f = readdirSync(downloads).find((n) => re.test(n));
+		if (f) return join(downloads, f);
+		await sleep(250);
+	}
+	return null;
+};
+
+await openCell('Compress');
+check('compress mode bar', await modeOpen('compress'));
+await clickIn('Apply');
+const compressed = await waitFile(/-compressed\.pdf$/);
+check('compress downloads', !!compressed);
+if (compressed) check('compress valid pdf', (await PDFDocument.load(readFileSync(compressed))).getPageCount() === 3);
+await sleep(300);
+check('compress mode closed', !(await modeOpen('compress')));
+
+await openCell('Impose');
+check('impose mode bar', await modeOpen('impose'));
+await clickIn('Apply');
+const imposed = await waitFile(/-imposed-saddle-stitch\.pdf$/);
+check('impose downloads', !!imposed);
+if (imposed) {
+	const im = await PDFDocument.load(readFileSync(imposed));
+	const p0 = im.getPage(0);
+	// 3 pages pad to 4
+	check('impose sheets', im.getPageCount() === 2 && Math.round(p0.getWidth()) === 842 && Math.round(p0.getHeight()) === 595, `${im.getPageCount()} ${p0.getWidth()}x${p0.getHeight()}`);
+}
 
 await finish(browser);

@@ -7,9 +7,11 @@ import {
 import { TOOL_ORDER, setActiveTool } from 'delphitools-v2/lib/errata/tool';
 import {
 	deleteSelection,
+	getMode,
 	isToolboxOpen,
 	openModal,
 	pickImageFile,
+	setMode,
 	setToolboxOpen,
 } from 'delphitools-v2/lib/errata/ui';
 import { viewport } from 'delphitools-v2/lib/substrata/viewport';
@@ -35,9 +37,12 @@ export default modifier(() => {
 			}
 			if (e.key === 'Escape') {
 				if (isToolboxOpen()) setToolboxOpen(false);
+				else if (getMode()) setMode(null);
 				else setActiveTool('select');
 				return;
 			}
+			// mode bar blocks tools
+			if (getMode() && /^[a-z]$/i.test(e.key)) return;
 			if (e.key.toLowerCase() === 'c') {
 				setToolboxOpen(false);
 				setActiveTool('crop');

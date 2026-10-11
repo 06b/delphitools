@@ -1,3 +1,5 @@
+import type { Stamped } from './doc-model';
+
 export interface PageRect {
 	x: number;
 	y: number;
@@ -12,6 +14,8 @@ export interface CanvasActions {
 	/** outline boxes in displayed page space, for rigs; empty clears */
 	debugBoxes(index: number, boxes: DebugBox[]): void;
 	selectObject(id: string): void;
+	/** non-interactive stand-ins for objects a mode would add; empty clears */
+	preview(items: Stamped[]): void;
 }
 
 export interface DebugBox {
@@ -42,6 +46,10 @@ export function debugBoxes(index: number, boxes: DebugBox[]): void {
 
 export function selectObject(id: string): void {
 	actions?.selectObject(id);
+}
+
+export function preview(items: Stamped[]): void {
+	actions?.preview(items);
 }
 
 export type ModalId = 'signature' | 'page-size';
@@ -93,4 +101,20 @@ export function registerImagePicker(open: (() => void) | null): void {
 
 export function pickImageFile(): void {
 	imagePicker?.();
+}
+
+export type BoxMode =
+	'page-numbers' | 'watermark' | 'stamp' | 'compress' | 'impose';
+
+let mode: BoxMode | null = null;
+
+/** a toolbox tool running as a mode bar */
+export function getMode(): BoxMode | null {
+	return mode;
+}
+
+export function setMode(next: BoxMode | null): void {
+	if (next === mode) return;
+	mode = next;
+	for (const l of listeners) l();
 }
