@@ -3,7 +3,7 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDocument, PDFHexString, PDFName, beginText, decodePDFRawStream, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
+import { PDFDocument, PDFHexString, PDFName, beginText, degrees, decodePDFRawStream, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
 import { BASE, check, finish, launch, sleep } from './harness.mjs';
 
 const { browser, page } = await launch();
@@ -353,7 +353,7 @@ const openCell = async (name) => {
 	await sleep(500);
 };
 const modeOpen = (m) => page.$eval('.err-mode[data-mode]', (e, m) => e.classList.contains('is-open') && e.dataset.mode === m, m).catch(() => false);
-const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l)?.click(), label);
+const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l || b.getAttribute('aria-label') === l)?.click(), label);
 const previews = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && typeof o.text === 'string').map((o) => o.text));
 const texts = async () => (await doc()).pages.map((p) => p.objects.filter((o) => o.kind === 'text').map((o) => o.text));
 
@@ -446,5 +446,159 @@ if (imposed) {
 	// 3 pages pad to 4
 	check('impose sheets', im.getPageCount() === 2 && Math.round(p0.getWidth()) === 842 && Math.round(p0.getHeight()) === 595, `${im.getPageCount()} ${p0.getWidth()}x${p0.getHeight()}`);
 }
+
+// a source form: a text field on page 1, a checkbox on a /Rotate 90 page 2
+const formSrc = await PDFDocument.create();
+formSrc.addPage([400, 500]);
+formSrc.addPage([400, 500]).setRotation(degrees(90));
+formSrc.getForm().createTextField('given').addToPage(formSrc.getPage(0), { x: 40, y: 400, width: 150, height: 20 });
+formSrc.getForm().createCheckBox('agree').addToPage(formSrc.getPage(1), { x: 40, y: 40, width: 14, height: 14 });
+await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'form.pdf', 'application/pdf'), [...(await formSrc.save())]);
+await page.waitForFunction(() => window.__errata.doc()?.name === 'form', { timeout: 10000 });
+await sleep(600);
+const exported = async () => PDFDocument.load(new Uint8Array(await page.evaluate(() => window.__errata.export())));
+const onPage = (pdf, field, index) => {
+	const annots = pdf.getPage(index).node.Annots()?.asArray() ?? [];
+	return field.acroField.getWidgets().every((w) => annots.some((a) => pdf.context.lookup(a) === w.dict));
+};
+
+const plain = await exported();
+const plainFields = plain.getForm().getFields();
+check('form source fields kept', plainFields.map((f) => f.getName()).join() === 'given,agree', plainFields.map((f) => f.getName()).join());
+check('form source widgets on their pages', onPage(plain, plain.getForm().getTextField('given'), 0) && onPage(plain, plain.getForm().getCheckBox('agree'), 1));
+
+await openCell('Prepare form');
+check('form mode bar', await modeOpen('form'));
+check('form tool active', await page.evaluate(() => window.__errataCanvas.defaultCursor === 'crosshair'));
+await page.waitForFunction(() => window.__errataCanvas.getObjects().filter((o) => o.type === 'group' && !o.evented).length === 2, { timeout: 20000 }).catch(() => {});
+const standIn = await page.evaluate(() => {
+	const c = window.__errataCanvas;
+	const g = c.getObjects().find((o) => o.type === 'group' && !o.evented);
+	if (!g) return null;
+	const p = g.getCenterPoint();
+	const v = c.viewportTransform;
+	const r = c.upperCanvasEl.getBoundingClientRect();
+	return { x: r.left + p.x * v[0] + v[4], y: r.top + p.y * v[3] + v[5], w: g.width * v[0] };
+});
+const fr0 = await page.evaluate(() => window.__errata.pageRect(0));
+const fz = fr0.w / 400;
+check('form source widgets shown', !!standIn && Math.abs(standIn.x - (fr0.x + 115 * fz)) < 2 && Math.abs(standIn.y - (fr0.y + 90 * fz)) < 2, JSON.stringify(standIn));
+
+const setInput = (label, value) =>
+	page.evaluate(
+		(l, v) => {
+			const i = [...document.querySelectorAll('.err-mode.is-open label')].find((e) => e.textContent.trim().startsWith(l)).querySelector('input');
+			i.value = v;
+			i.dispatchEvent(new Event('change', { bubbles: true }));
+		},
+		label,
+		value,
+	);
+const toggle = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open label')].find((e) => e.textContent.trim().startsWith(l)).querySelector('input').click(), label);
+const nameValue = () => page.evaluate(() => [...document.querySelectorAll('.err-mode.is-open label')].find((e) => e.textContent.trim().startsWith('Name')).querySelector('input').value);
+const fieldObjs = async (i = 0) => (await doc()).pages[i].objects.filter((o) => o.kind === 'field');
+const drag = async (r, a, b) => {
+	const z = r.w / 400;
+	await page.mouse.move(r.x + a[0] * z, r.y + a[1] * z);
+	await page.mouse.down();
+	await page.mouse.move(r.x + ((a[0] + b[0]) / 2) * z, r.y + ((a[1] + b[1]) / 2) * z, { steps: 4 });
+	await page.mouse.move(r.x + b[0] * z, r.y + b[1] * z, { steps: 4 });
+	await page.mouse.up();
+	await sleep(250);
+};
+
+await setInput('Name', 'email');
+await setInput('Default', 'a@b.c');
+await toggle('Required');
+await drag(fr0, [60, 150], [260, 175]);
+let fobjs = await fieldObjs();
+const email = fobjs[0];
+check('form text field placed', fobjs.length === 1 && email.field === 'text' && email.name === 'email' && email.value === 'a@b.c' && email.required && Math.abs(email.w - 200) < 1 && Math.abs(email.h - 25) < 1, JSON.stringify(email));
+check('form field selected', (await nameValue()) === 'email');
+await setInput('Name', 'mail');
+check('form rename selected', (await fieldObjs())[0].name === 'mail');
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(200);
+check('form rename undo', (await fieldObjs())[0].name === 'email');
+
+// a click on the page deselects; the bar edits the draft again
+await drag(fr0, [300, 450], [301, 451]);
+check('form click deselects', (await fieldObjs()).length === 1 && (await nameValue()) === 'email');
+await setInput('Name', '');
+await clickIn('Radio');
+await sleep(100);
+await setInput('Options', 'Yes, No');
+await drag(fr0, [60, 220], [160, 270]);
+await drag(fr0, [300, 450], [301, 451]);
+await clickIn('Dropdown');
+await sleep(100);
+await setInput('Options', 'Red, Green');
+await drag(fr0, [200, 220], [320, 242]);
+await drag(fr0, [300, 450], [301, 451]);
+await clickIn('Checkbox');
+await sleep(100);
+await toggle('Checked');
+await drag(fr0, [60, 300], [76, 316]);
+await drag(fr0, [300, 450], [301, 451]);
+await clickIn('Signature');
+await drag(fr0, [200, 300], [360, 340]);
+fobjs = await fieldObjs();
+check('form five types', fobjs.map((o) => `${o.field}:${o.name}`).join() === 'text:email,radio:radio,dropdown:dropdown,checkbox:checkbox,signature:signature', fobjs.map((o) => `${o.field}:${o.name}`).join());
+
+// fields move like other objects; a resize bakes into w/h
+const placed = fobjs[0];
+const z0 = fr0.w / 400;
+await page.mouse.move(fr0.x + placed.cx * z0, fr0.y + placed.cy * z0);
+await page.mouse.down();
+await page.mouse.move(fr0.x + (placed.cx + 10) * z0, fr0.y + (placed.cy + 5) * z0, { steps: 4 });
+await page.mouse.move(fr0.x + (placed.cx + 20) * z0, fr0.y + (placed.cy + 10) * z0, { steps: 4 });
+await page.mouse.up();
+await sleep(250);
+const movedField = (await fieldObjs())[0];
+check('form field moves', Math.abs(movedField.cx - placed.cx - 20) < 1 && Math.abs(movedField.cy - placed.cy - 10) < 1, `${placed.cx},${placed.cy} -> ${movedField.cx},${movedField.cy}`);
+const handle = await page.evaluate(() => {
+	const c = window.__errataCanvas;
+	const a = c.getActiveObject();
+	const r = c.upperCanvasEl.getBoundingClientRect();
+	return { x: r.left + a.oCoords.mr.x, y: r.top + a.oCoords.mr.y, w: a.getScaledWidth() * c.viewportTransform[0] };
+});
+await page.mouse.move(handle.x, handle.y);
+await page.mouse.down();
+await page.mouse.move(handle.x + handle.w / 4, handle.y, { steps: 4 });
+await page.mouse.move(handle.x + handle.w / 2, handle.y, { steps: 4 });
+await page.mouse.up();
+await sleep(250);
+const scaled = (await fieldObjs())[0];
+check('form resize bakes', Math.abs(scaled.w - placed.w * 1.5) < 0.5 && scaled.scaleX === 1, `${scaled.w} ${scaled.scaleX}`);
+check('form stays selected after rebuild', (await nameValue()) === 'email');
+
+// page 2 is turned: its field is written upright for the viewer
+await page.keyboard.press(']');
+await sleep(700);
+const fr1 = await page.evaluate(() => window.__errata.pageRect(1));
+await drag(fr0, [300, 450], [301, 451]);
+await clickIn('Text');
+await setInput('Name', 'turned');
+await drag({ ...fr1, w: (fr1.w * 400) / 500 }, [100, 100], [250, 120]);
+check('form field on turned page', (await fieldObjs(1)).length === 1);
+
+await clickIn('Done');
+await sleep(400);
+check('form done closes', !(await modeOpen('form')) && (await page.evaluate(() => document.querySelector('.sub-omni-box .is-active')?.title)) === 'Select');
+
+const formOut = await exported();
+const form = formOut.getForm();
+const kinds = form.getFields().map((f) => `${f.getName()}:${f.constructor.name}`).join();
+check('form export fields', kinds === 'given:PDFTextField,agree:PDFCheckBox,email:PDFTextField,radio:PDFRadioGroup,dropdown:PDFDropdown,checkbox:PDFCheckBox,signature:PDFSignature,turned:PDFTextField', kinds);
+const final = (await doc()).pages[0].objects.find((o) => o.name === 'email');
+const er = form.getTextField('email').acroField.getWidgets()[0].getRectangle();
+const want = { x: final.cx - final.w / 2, y: 500 - final.cy - final.h / 2, width: final.w, height: final.h };
+check('form export rect', ['x', 'y', 'width', 'height'].every((k) => Math.abs(er[k] - want[k]) < 0.01), `${JSON.stringify(er)} vs ${JSON.stringify(want)}`);
+check('form export values', form.getTextField('email').getText() === 'a@b.c' && form.getTextField('email').isRequired() && form.getCheckBox('checkbox').isChecked() && form.getDropdown('dropdown').getOptions().join() === 'Red,Green' && form.getRadioGroup('radio').getOptions().join() === 'Yes,No');
+check('form export pages', onPage(formOut, form.getTextField('email'), 0) && onPage(formOut, form.getSignature('signature'), 0) && onPage(formOut, form.getTextField('turned'), 1) && onPage(formOut, form.getCheckBox('agree'), 1));
+const mk = form.getTextField('turned').acroField.getWidgets()[0].getAppearanceCharacteristics()?.getRotation();
+check('form turned page widget upright', mk === 90, String(mk));
 
 await finish(browser);

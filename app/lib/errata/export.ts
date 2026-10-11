@@ -25,6 +25,7 @@ import {
 	type PageObject,
 } from './doc-model';
 import { applyEditsToDoc } from './content';
+import { addFormFields, carryAcroForm } from './fields';
 import { hexToRgb } from '../colour-maths';
 
 function colour(hex: string) {
@@ -183,6 +184,7 @@ export async function exportPdf(
 		.filter((p) => p.sourceIndex !== null && !p.resize)
 		.map((p) => p.sourceIndex!);
 	const copied = source ? await out.copyPages(source, copyIndices) : [];
+	if (source) carryAcroForm(source, out, copied);
 	let copiedAt = 0;
 
 	for (const page of doc.pages) {
@@ -277,9 +279,12 @@ export async function exportPdf(
 			}
 		}
 		pdfPage.setRotation(degrees(totalRotation(page)));
-		for (const object of page.objects)
+		for (const object of page.objects) {
+			if (object.kind === 'field') continue;
 			await drawObject(pdfPage, page, object, font, images);
+		}
 	}
+	addFormFields(out, doc, font);
 	return out.save();
 }
 

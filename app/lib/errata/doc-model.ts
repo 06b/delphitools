@@ -48,7 +48,22 @@ export interface ImageObject extends BaseObject {
 	dataUrl: string;
 }
 
-export type PageObject = TextObject | InkObject | ShapeObject | ImageObject;
+export type FieldType =
+	'text' | 'checkbox' | 'radio' | 'dropdown' | 'signature';
+
+export interface FieldObject extends BaseObject {
+	kind: 'field';
+	field: FieldType;
+	name: string;
+	/** radio buttons, dropdown choices */
+	options: string[];
+	required: boolean;
+	/** ticked checkbox: 'on' */
+	value: string;
+}
+
+export type PageObject =
+	TextObject | InkObject | ShapeObject | ImageObject | FieldObject;
 
 export interface Stamped {
 	index: number;

@@ -216,6 +216,7 @@ import iSparkle from 'lucide-static/icons/sparkle.svg?raw';
 import iSparkles from 'lucide-static/icons/sparkles.svg?raw';
 import iSpline from 'lucide-static/icons/spline.svg?raw';
 import iSquare from 'lucide-static/icons/square.svg?raw';
+import iSquareCheck from 'lucide-static/icons/square-check.svg?raw';
 import iSquareDashed from 'lucide-static/icons/square-dashed.svg?raw';
 import iSquareDashedMousePointer from 'lucide-static/icons/square-dashed-mouse-pointer.svg?raw';
 import iSquareSlash from 'lucide-static/icons/square-slash.svg?raw';
@@ -470,6 +471,7 @@ export const icons: Record<string, string> = {
 	sparkles: iSparkles,
 	spline: iSpline,
 	square: iSquare,
+	'square-check': iSquareCheck,
 	'square-dashed': iSquareDashed,
 	'square-dashed-mouse-pointer': iSquareDashedMousePointer,
 	'square-slash': iSquareSlash,

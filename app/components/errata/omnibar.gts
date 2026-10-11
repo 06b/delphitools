@@ -140,6 +140,7 @@ const BOX_GROUPS: { heading: string; cells: BoxCell[] }[] = [
 				icon: 'text-cursor-input',
 				description:
 					'Add interactive fields like checkboxes',
+				tool: 'form',
 			},
 			{
 				label: 'Fill & sign',
