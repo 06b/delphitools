@@ -109,6 +109,7 @@ export type BoxMode =
 	| 'stamp'
 	| 'compress'
 	| 'impose'
+	| 'form'
 	| 'organise'
 	| 'preflight'
 	| 'comment'

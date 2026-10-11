@@ -27,6 +27,7 @@ import {
 import { applyEditsToDoc } from './content';
 import { writeComments } from './comments';
 import { redactPdf } from './redact';
+import { addFormFields, carryAcroForm } from './fields';
 import { hexToRgb } from '../colour-maths';
 
 function colour(hex: string) {
@@ -185,6 +186,7 @@ export async function exportPdf(
 		.filter((p) => p.sourceIndex !== null && !p.resize)
 		.map((p) => p.sourceIndex!);
 	const copied = source ? await out.copyPages(source, copyIndices) : [];
+	if (source) carryAcroForm(source, out, copied);
 	let copiedAt = 0;
 
 	for (const page of doc.pages) {
@@ -279,20 +281,18 @@ export async function exportPdf(
 			}
 		}
 		pdfPage.setRotation(degrees(totalRotation(page)));
-		for (const object of page.objects)
+		for (const object of page.objects) {
 			if (
-				object.kind !== 'comment' &&
-				object.kind !== 'redact'
+				object.kind === 'comment' ||
+				object.kind === 'redact' ||
+				object.kind === 'field'
 			)
-				await drawObject(
-					pdfPage,
-					page,
-					object,
-					font,
-					images,
-				);
+				continue;
+			await drawObject(pdfPage, page, object, font, images);
+		}
 		writeComments(pdfPage, page);
 	}
+	addFormFields(out, doc, font);
 	return redactPdf(await out.save(), doc.pages);
 }
 

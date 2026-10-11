@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import { eq, not } from 'ember-truth-helpers';
 import type { TOC } from '@ember/component/template-only';
 import Icon from 'delphitools-v2/components/icon';
+import FormFields from 'delphitools-v2/components/errata/form-mode';
 import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
 import {
 	Select,
@@ -53,6 +54,11 @@ import {
 } from 'delphitools-v2/lib/pdf-stamp';
 import { MAX_SIZES, compressPdf } from 'delphitools-v2/lib/pdf-compress';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import {
+	getSourceWidgets,
+	subscribeWidgets,
+	widgetStandIns,
+} from 'delphitools-v2/lib/errata/widgets';
 
 const SCOPES: { value: PageScope; label: string }[] = [
 	{ value: 'all', label: 'All' },
@@ -124,6 +130,7 @@ interface Signature {
 export default class BoxModeBar extends Component<Signature> {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
 	pageIndex = new TrackedExternal(subscribePage, getPageIndex);
+	widgets = new TrackedExternal(subscribeWidgets, getSourceWidgets);
 
 	@tracked scope: PageScope = 'all';
 	@tracked range = '';
@@ -159,6 +166,7 @@ export default class BoxModeBar extends Component<Signature> {
 		super.willDestroy();
 		this.doc.unsubscribe();
 		this.pageIndex.unsubscribe();
+		this.widgets.unsubscribe();
 		preview([]);
 	}
 
@@ -190,6 +198,8 @@ export default class BoxModeBar extends Component<Signature> {
 	@cached
 	get items(): Stamped[] {
 		const doc = this.doc.current;
+		if (doc && this.args.mode === 'form')
+			return widgetStandIns(doc, this.widgets.current ?? []);
 		const indices = this.indices;
 		if (!doc || !indices) return [];
 		switch (this.args.mode) {
@@ -295,6 +305,11 @@ export default class BoxModeBar extends Component<Signature> {
 		if (!this.canApply) return;
 		if (this.stamping) {
 			addStamped(this.items);
+			setMode(null);
+			return;
+		}
+		// fields apply when drawn
+		if (this.args.mode === 'form') {
 			setMode(null);
 			return;
 		}
@@ -512,6 +527,8 @@ export default class BoxModeBar extends Component<Signature> {
 						}}
 					/>
 				</span>
+			{{else if (eq @mode "form")}}
+				<FormFields @open={{@open}} />
 			{{else if (eq @mode "impose")}}
 				<span class="err-mode-field">
 					<span
@@ -625,14 +642,16 @@ export default class BoxModeBar extends Component<Signature> {
 			{{/if}}
 
 			<span class="err-mode-actions">
-				<button
-					type="button"
-					class="sub-modal-btn is-ghost"
-					{{on "click" this.cancel}}
-				>
-					<Icon @name="x" />
-					Cancel
-				</button>
+				{{#unless (eq @mode "form")}}
+					<button
+						type="button"
+						class="sub-modal-btn is-ghost"
+						{{on "click" this.cancel}}
+					>
+						<Icon @name="x" />
+						Cancel
+					</button>
+				{{/unless}}
 				<button
 					type="button"
 					class="sub-modal-btn is-primary"
@@ -644,7 +663,7 @@ export default class BoxModeBar extends Component<Signature> {
 					{{else}}
 						<Icon @name="check" />
 					{{/if}}
-					Apply
+					{{if (eq @mode "form") "Done" "Apply"}}
 				</button>
 			</span>
 		</div>

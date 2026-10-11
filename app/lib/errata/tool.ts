@@ -9,7 +9,8 @@ export type ToolId =
 	| 'shape'
 	| 'highlight'
 	| 'image'
-	| 'signature';
+	| 'signature'
+	| 'field';
 
 export interface ToolSettings {
 	colour: string;

@@ -34,6 +34,7 @@ import {
 	type TextObject,
 	applyMatrix,
 	type ContentEdit,
+	type FieldObject,
 } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	addObject,
@@ -78,6 +79,13 @@ import {
 } from 'delphitools-v2/lib/errata/ui';
 import { commentAuthor, newComment } from 'delphitools-v2/lib/errata/comments';
 import { redactObject } from 'delphitools-v2/lib/errata/redact';
+import {
+	getFieldDraft,
+	newField,
+	setSelectedField,
+} from 'delphitools-v2/lib/errata/fields';
+import { fieldVisual } from 'delphitools-v2/lib/errata/field-visual';
+import { takenNames } from 'delphitools-v2/lib/errata/widgets';
 import {
 	registerViewportController,
 	reportZoom,
@@ -170,6 +178,17 @@ function needsRebuild(prev: PageObject, next: PageObject): boolean {
 		return (prev as ShapeObject).shape !== next.shape;
 	if (next.kind === 'image')
 		return (prev as ImageObject).dataUrl !== next.dataUrl;
+	if (next.kind === 'field') {
+		const p = prev as FieldObject;
+		return (
+			p.field !== next.field ||
+			p.name !== next.name ||
+			p.value !== next.value ||
+			p.w !== next.w ||
+			p.h !== next.h ||
+			p.options.join('\n') !== next.options.join('\n')
+		);
+	}
 	return false;
 }
 
@@ -640,6 +659,8 @@ export default class PageCanvas extends Component {
 							o.scaleY,
 					});
 				}
+				case 'field':
+					return fieldVisual(o, base);
 			}
 		};
 
@@ -825,6 +846,10 @@ export default class PageCanvas extends Component {
 						dimOutside(t.fabric);
 						continue;
 					}
+					const wasActive =
+						!!t &&
+						canvas.getActiveObject() ===
+							t.fabric;
 					if (t) {
 						canvas.remove(t.fabric);
 						tracked.delete(o.id);
@@ -838,6 +863,8 @@ export default class PageCanvas extends Component {
 						doc: o,
 						pageId: page.id,
 					});
+					if (wasActive)
+						canvas.setActiveObject(f);
 					dimOutside(f);
 					if (pendingSelect === o.id) {
 						pendingSelect = null;
@@ -1015,6 +1042,7 @@ export default class PageCanvas extends Component {
 				string,
 				Map<string, Partial<PageObject>>
 			>();
+			let rebuilds = false;
 			for (const f of targets) {
 				const id = idOf(f);
 				const t = id ? tracked.get(id) : null;
@@ -1036,6 +1064,21 @@ export default class PageCanvas extends Component {
 					patch.scaleY =
 						(d.scaleY * f.height) / t.doc.h;
 				}
+				// keeps labels crisp
+				if (
+					t.doc.kind === 'field' &&
+					Math.abs(d.scaleX - 1) +
+						Math.abs(d.scaleY - 1) >
+						1e-6
+				) {
+					rebuilds = true;
+					Object.assign(patch, {
+						w: t.doc.w * d.scaleX,
+						h: t.doc.h * d.scaleY,
+						scaleX: 1,
+						scaleY: 1,
+					});
+				}
 				let patches = byPage.get(t.pageId);
 				if (!patches) {
 					patches = new Map();
@@ -1043,8 +1086,13 @@ export default class PageCanvas extends Component {
 				}
 				patches.set(id, patch);
 			}
-			for (const [pageId, patches] of byPage)
-				patchObjects(pageId, patches);
+			const commit = () => {
+				for (const [pageId, patches] of byPage)
+					patchObjects(pageId, patches);
+			};
+			// rebuild outside fabric transform
+			if (rebuilds) queueMicrotask(commit);
+			else commit();
 		});
 
 		canvas.on('path:created', ({ path }) => {
@@ -1302,7 +1350,8 @@ export default class PageCanvas extends Component {
 			if (
 				tool === 'shape' ||
 				tool === 'highlight' ||
-				tool === 'crop'
+				tool === 'crop' ||
+				(tool === 'field' && !opt.target)
 			) {
 				dragStart = canvas.getScenePoint(opt.e);
 				dragSlot = pageAt(dragStart);
@@ -1323,7 +1372,8 @@ export default class PageCanvas extends Component {
 							),
 							dragSlot,
 						)
-					: getActiveTool() === 'crop'
+					: getActiveTool() === 'crop' ||
+						  getActiveTool() === 'field'
 						? cropGhost(dragStart, p)
 						: build(
 								shapeObject(
@@ -1375,6 +1425,29 @@ export default class PageCanvas extends Component {
 					cropPage(page.id, crop);
 					setActiveTool('select');
 				} else canvas.requestRenderAll();
+				return;
+			}
+			const doc = store.getSnapshot();
+			if (getActiveTool() === 'field' && doc) {
+				const field = newField(
+					getFieldDraft(),
+					{
+						x:
+							Math.min(start.x, p.x) -
+							slot.x,
+						y:
+							Math.min(start.y, p.y) -
+							slot.y,
+						width: Math.abs(p.x - start.x),
+						height: Math.abs(p.y - start.y),
+					},
+					takenNames(doc),
+				);
+				if (field) addObject(slot.id, field);
+				const f =
+					field && tracked.get(field.id)?.fabric;
+				if (f) canvas.setActiveObject(f);
+				canvas.requestRenderAll();
 				return;
 			}
 			const o = shapeObject(slot, start, p);
@@ -1695,6 +1768,18 @@ export default class PageCanvas extends Component {
 		canvas.on('selection:created', () => showHud(activeProxy()));
 		canvas.on('selection:updated', () => showHud(activeProxy()));
 		canvas.on('selection:cleared', () => showHud(null));
+		const reportField = () => {
+			const a = canvas.getActiveObjects();
+			const id = a.length === 1 ? idOf(a[0]!) : null;
+			setSelectedField(
+				id && tracked.get(id)?.doc.kind === 'field'
+					? id
+					: null,
+			);
+		};
+		canvas.on('selection:created', reportField);
+		canvas.on('selection:updated', reportField);
+		canvas.on('selection:cleared', reportField);
 		canvas.on('after:render', placeHud);
 
 		// later op indices first, so earlier ranges stay valid while the edits replay
@@ -2102,11 +2187,18 @@ export default class PageCanvas extends Component {
 					: interactive ||
 						(tool === 'text' &&
 							fabric instanceof
-								IText);
+								IText) ||
+						(tool === 'field' &&
+							doc.kind === 'field');
 				fabric.evented = fabric.selectable;
 			}
-			if (!interactive && tool !== 'text')
-				canvas.discardActiveObject();
+			const keep =
+				tool === 'text' ||
+				(tool === 'field' &&
+					canvas
+						.getActiveObjects()
+						.every((f) => f.selectable));
+			if (!interactive && !keep) canvas.discardActiveObject();
 			canvas.defaultCursor =
 				(interactive || content) && !redacting
 					? 'default'
