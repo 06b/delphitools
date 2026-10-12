@@ -1447,4 +1447,67 @@ await sleep(400);
 check('crop cancel', (await pagesNow()).every((p) => !p.crop) && !(await cropDraft()) && !(await page.$('.err-mode.is-open')));
 check('crop cancel removes draft', await page.evaluate(() => !window.__errataCanvas.getObjects().some((o) => o.type === 'rect' && o.strokeDashArray && o.selectable && o.evented !== false)));
 
+// escape out of crop drops the draft; c starts fresh
+const dashedDraft = () => page.evaluate(() => window.__errataCanvas.getObjects().some((o) => o.type === 'rect' && o.strokeDashArray && o.selectable && o.evented !== false));
+await openCell('Crop');
+const ecr = await page.evaluate((i) => window.__errata.pageRect(i), await page.evaluate(() => window.__errata.pageIndex()));
+await page.mouse.move(ecr.x + ecr.w * 0.3, ecr.y + ecr.h * 0.3);
+await page.mouse.down();
+await page.mouse.move(ecr.x + ecr.w * 0.7, ecr.y + ecr.h * 0.7, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+check('crop escape draft', await dashedDraft());
+await page.keyboard.press('Escape');
+await sleep(400);
+check('crop escape closes', !(await modeOpen('crop')) && !(await dashedDraft()));
+await page.keyboard.press('c');
+await sleep(400);
+check('crop key starts fresh', (await modeOpen('crop')) && !(await dashedDraft()));
+await page.keyboard.press('Escape');
+await sleep(400);
+
+// undo after a panel checkbox or slider
+const cropNow = async () => (await pagesNow())[await page.evaluate(() => window.__errata.pageIndex())].crop;
+for (const [cell, control] of [['Stamp', 'input[aria-label="Bold"]'], ['Watermark', 'input[type="range"][aria-label="Opacity"]']]) {
+	await page.evaluate(() => window.__errata.crop({ x: 0, y: 0, width: 100, height: 100 }));
+	await sleep(200);
+	await openCell(cell);
+	await page.click(`.err-mode.is-open ${control}`);
+	await sleep(100);
+	await undoStep();
+	check(`undo after ${cell.toLowerCase()} control`, !(await cropNow()));
+	await page.keyboard.press('Escape');
+	await sleep(400);
+}
+
+// closed panels take no focus; escape blurs a panel field first
+check('closed panels inert', await page.$$eval('.err-mode:not(.is-open)', (els) => els.length > 5 && els.every((e) => e.inert)));
+check('closed panel refuses focus', await page.evaluate(() => {
+	const b = document.querySelector('.err-mode:not(.is-open) button');
+	b.focus();
+	return document.activeElement !== b;
+}));
+await openCell('Watermark');
+await page.click('.err-mode.is-open input[aria-label="Text"]');
+await page.keyboard.press('Escape');
+await sleep(100);
+check('escape blurs a panel field', (await modeOpen('watermark')) && (await page.evaluate(() => document.activeElement === document.body)));
+await page.keyboard.press('Escape');
+await sleep(400);
+await page.keyboard.press('Tab');
+await page.keyboard.press('Tab');
+await sleep(200);
+check('shell stays unscrolled', await page.$eval('.sub-shell', (e) => e.scrollTop === 0));
+
+// switching stamp modes keeps only the open panel's preview
+for (const [m, want] of [['page-numbers', /^\d+ \/ \d+$/], ['watermark', /^DRAFT$/], ['stamp', /^(?!DRAFT$|\d+ \/ \d+$)/]]) {
+	await page.evaluate((id) => window.__errata.setMode(id), m);
+	await sleep(300);
+	const shown = await previews();
+	check(`${m} preview alone`, shown.length > 0 && shown.every((t) => want.test(t)), JSON.stringify(shown));
+}
+await page.evaluate(() => window.__errata.setMode(null));
+await sleep(300);
+check('previews cleared', (await previews()).length === 0);
+
 await finish(browser);

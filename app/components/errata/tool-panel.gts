@@ -49,6 +49,7 @@ const ToolPanel: TOC<ToolPanelSignature> = <template>
 	<div
 		class="err-mode pointer-events-auto {{if @open 'is-open'}}"
 		data-mode={{@mode}}
+		inert={{unless @open true}}
 		...attributes
 	>
 		<div class="err-mode-head">

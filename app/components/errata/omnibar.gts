@@ -397,6 +397,7 @@ export default class Omnibar extends Component {
 			<div
 				class="sub-omni-barrow is-align-end err-barrow
 					{{if this.barHidden 'is-hidden'}}"
+				inert={{if this.barHidden true}}
 			>
 				<div
 					class="sub-omni-box pointer-events-auto border shadow-lg"
@@ -650,6 +651,7 @@ export default class Omnibar extends Component {
 			<div
 				class="err-sheet pointer-events-auto border shadow-lg
 					{{if this.boxOpen.current 'is-open'}}"
+				inert={{unless this.boxOpen.current true}}
 				{{this.outsideClose this.boxOpen.current}}
 			>
 				<div class="err-sheet-head">

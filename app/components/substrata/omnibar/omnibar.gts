@@ -55,6 +55,7 @@ import {
 	type ToolSettings,
 } from 'delphitools-v2/lib/substrata/tool-settings';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import { isTextEntry } from 'delphitools-v2/lib/text-entry';
 
 // §8. four units: tools · tool settings (inline) · panels · colour. flush
 // full-height buttons, highlight touches bar edges (no padding halo). panel
@@ -638,14 +639,11 @@ export default class Omnibar extends Component {
 
 	shortcuts = modifier(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (e.metaKey || e.ctrlKey || e.altKey) return;
-			const t = e.target as HTMLElement | null;
 			if (
-				t &&
-				(t.isContentEditable ||
-					/^(INPUT|TEXTAREA|SELECT)$/.test(
-						t.tagName,
-					))
+				e.metaKey ||
+				e.ctrlKey ||
+				e.altKey ||
+				isTextEntry(e.target)
 			)
 				return;
 			for (const tool of TOOLS) {

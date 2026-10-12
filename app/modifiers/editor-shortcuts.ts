@@ -24,6 +24,7 @@ import { openModal } from 'delphitools-v2/lib/substrata/modal';
 import { getActiveTool } from 'delphitools-v2/lib/substrata/tool';
 import { getToolSettings } from 'delphitools-v2/lib/substrata/tool-settings';
 import { viewport } from 'delphitools-v2/lib/substrata/viewport';
+import { isTextEntry } from 'delphitools-v2/lib/text-entry';
 
 const ARROWS: Record<string, readonly [number, number]> = {
 	ArrowLeft: [-1, 0],
@@ -34,16 +35,7 @@ const ARROWS: Record<string, readonly [number, number]> = {
 
 export default modifier(() => {
 	const onKey = (e: KeyboardEvent) => {
-		const target = e.target as HTMLElement | null;
-		if (
-			target &&
-			(target.isContentEditable ||
-				target.tagName === 'INPUT' ||
-				target.tagName === 'TEXTAREA' ||
-				target.tagName === 'SELECT')
-		) {
-			return;
-		}
+		if (isTextEntry(e.target)) return;
 
 		if (
 			(e.key === 'Backspace' || e.key === 'Delete') &&
@@ -60,6 +52,8 @@ export default modifier(() => {
 		const arrow = ARROWS[e.key];
 		if (
 			arrow &&
+			// sliders take arrows
+			!(e.target instanceof HTMLInputElement) &&
 			!e.metaKey &&
 			!e.ctrlKey &&
 			!e.altKey &&

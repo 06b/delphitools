@@ -9,6 +9,7 @@ import {
 	boxMode,
 	closeMode,
 	deleteSelection,
+	dismissTop,
 	modal,
 	modeKey,
 	pickImageFile,
@@ -16,31 +17,29 @@ import {
 	toolbox,
 } from 'delphitools-v2/lib/errata/ui';
 import { viewport } from 'delphitools-v2/lib/substrata/viewport';
+import { isTextEntry } from 'delphitools-v2/lib/text-entry';
 
 export default modifier(() => {
 	const onKey = (e: KeyboardEvent) => {
-		const target = e.target as HTMLElement | null;
-		if (
-			target &&
-			(target.isContentEditable ||
-				target.tagName === 'INPUT' ||
-				target.tagName === 'TEXTAREA' ||
-				target.tagName === 'SELECT')
-		)
+		const mod = e.metaKey || e.ctrlKey;
+		const escape = e.key === 'Escape' && !mod && !e.altKey;
+		if (escape && dismissTop()) return;
+		if (isTextEntry(e.target)) {
+			if (escape) (e.target as HTMLElement).blur();
 			return;
+		}
 		if (modeKey(e)) {
 			e.preventDefault();
 			return;
 		}
 
-		const mod = e.metaKey || e.ctrlKey;
 		if (!mod && !e.altKey) {
 			if (e.key === 'Backspace' || e.key === 'Delete') {
 				e.preventDefault();
 				deleteSelection();
 				return;
 			}
-			if (e.key === 'Escape') {
+			if (escape) {
 				if (toolbox.get()) toolbox.set(false);
 				else if (boxMode.get()) closeMode();
 				else activeTool.set('select');

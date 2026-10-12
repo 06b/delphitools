@@ -142,6 +142,7 @@ export default class PreflightPanel extends Component<{
 		<div
 			class="err-preflight z-40 shadow-lg
 				{{if (and @open this.report) 'is-open'}}"
+			inert={{unless (and @open this.report) true}}
 		>
 			{{#each this.groups key="page" as |g|}}
 				<section class="err-preflight-group">

@@ -16,7 +16,11 @@ import {
 	removeObjects,
 	store,
 } from 'delphitools-v2/lib/errata/store';
-import { objectRect, openNote } from 'delphitools-v2/lib/errata/ui';
+import {
+	objectRect,
+	openNote,
+	pushDismiss,
+} from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 interface Open {
@@ -115,17 +119,12 @@ export default class CommentPopover extends Component {
 		const onDown = (e: PointerEvent) => {
 			if (!el.contains(e.target as Node)) this.close();
 		};
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key !== 'Escape') return;
-			e.stopPropagation();
-			this.close();
-		};
 		window.addEventListener('pointerdown', onDown, true);
-		window.addEventListener('keydown', onKey, true);
+		const undismiss = pushDismiss(this.close);
 		return () => {
 			stop();
 			window.removeEventListener('pointerdown', onDown, true);
-			window.removeEventListener('keydown', onKey, true);
+			undismiss();
 		};
 	});
 

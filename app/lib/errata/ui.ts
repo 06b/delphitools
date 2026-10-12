@@ -65,6 +65,24 @@ export function preview(items: Stamped[]): void {
 	actions?.preview(items);
 }
 
+const dismissers: (() => void)[] = [];
+
+/** escape: newest first */
+export function pushDismiss(dismiss: () => void): () => void {
+	dismissers.push(dismiss);
+	return () => {
+		const i = dismissers.lastIndexOf(dismiss);
+		if (i !== -1) dismissers.splice(i, 1);
+	};
+}
+
+/** false when empty */
+export function dismissTop(): boolean {
+	const dismiss = dismissers.pop();
+	dismiss?.();
+	return dismiss !== undefined;
+}
+
 const FLASH_MS = 4000;
 let clearFlash: (() => void) | null = null;
 
@@ -73,22 +91,16 @@ export function flashHighlight(index: number, boxes: Box[]): void {
 	clearFlash?.();
 	if (!actions || boxes.length === 0) return;
 	actions.highlight(index, boxes);
-	const onKey = (e: KeyboardEvent) => {
-		if (e.key !== 'Escape') return;
-		// escape clears before closing
-		e.stopPropagation();
-		off();
-	};
 	const off = () => {
 		clearFlash = null;
 		clearTimeout(timer);
 		window.removeEventListener('pointerdown', off, true);
-		window.removeEventListener('keydown', onKey, true);
+		undismiss();
 		actions?.highlight(index, []);
 	};
 	const timer = setTimeout(off, FLASH_MS);
 	window.addEventListener('pointerdown', off, true);
-	window.addEventListener('keydown', onKey, true);
+	const undismiss = pushDismiss(off);
 	clearFlash = off;
 }
 
