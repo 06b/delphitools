@@ -413,19 +413,27 @@ export default class StampPanel extends Component<{
 class ReplacePanel extends Component<Signature> {
 	@tracked busy = false;
 	@tracked failed = false;
+	#run = 0;
 
 	async replace(
 		transform: (
 			bytes: Uint8Array,
 		) => Promise<Uint8Array> | Uint8Array,
 	): Promise<boolean> {
+		const run = ++this.#run;
 		this.busy = true;
 		this.failed = false;
-		const ok = await replaceDocument(transform);
+		const ok = await replaceDocument(
+			transform,
+			() => run === this.#run,
+		);
 		this.busy = false;
+		if (run !== this.#run) return false;
 		this.failed = !ok;
 		return ok;
 	}
+
+	discard = () => this.#run++;
 }
 
 export class CompressPanel extends ReplacePanel {
@@ -443,6 +451,7 @@ export class CompressPanel extends ReplacePanel {
 			this.compressed = null;
 			this.failed = false;
 		},
+		exit: this.discard,
 	});
 
 	willDestroy() {
@@ -549,7 +558,10 @@ export class ImposePanel extends ReplacePanel {
 	@tracked rows = 2;
 	@tracked cols = 2;
 	@tracked flip: Flip = 'long-edge';
-	#off = onMode('impose', { enter: () => (this.failed = false) });
+	#off = onMode('impose', {
+		enter: () => (this.failed = false),
+		exit: this.discard,
+	});
 
 	willDestroy() {
 		super.willDestroy();
@@ -753,7 +765,10 @@ export class RedactPanel extends ReplacePanel {
 			this.#kept = redactIds(store.getSnapshot());
 			this.failed = false;
 		},
-		exit: () => dropRedactions(this.#kept),
+		exit: () => {
+			this.discard();
+			dropRedactions(this.#kept);
+		},
 	});
 
 	// ∑CG: redact mode bar hint chip, beside the mark count

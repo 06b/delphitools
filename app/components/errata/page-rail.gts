@@ -41,9 +41,14 @@ export function paintThumb(
 	const key = `${width}:${pageKey(page)}`;
 	if (painted.get(img) === key) return;
 	painted.set(img, key);
-	void renderThumb(page, width).then((url) => {
-		if (painted.get(img) === key) img.src = url;
-	});
+	void renderThumb(page, width).then(
+		(url) => {
+			if (painted.get(img) === key) img.src = url;
+		},
+		() => {
+			if (painted.get(img) === key) painted.delete(img);
+		},
+	);
 }
 
 const thumb = modifier(

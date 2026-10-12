@@ -3,7 +3,7 @@
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PDFDocument, PDFHexString, PDFName, PDFString, StandardFonts, beginText, decodePDFRawStream, degrees, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
+import { PDFDocument, PDFHexString, PDFName, PDFString, StandardFonts, beginText, decodePDFRawStream, degrees, endText, moveText, rgb, setFontAndSize, showText } from 'pdf-lib';
 import * as mupdf from 'mupdf';
 import { OPS, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { BASE, check, finish, launch, sleep } from './harness.mjs';
@@ -611,6 +611,39 @@ await clickIn('Cancel');
 await sleep(300);
 check('compress mode closed', !(await modeOpen('compress')));
 
+// closing mid-apply discards the replace
+const beforeAbort = await doc();
+await openCell('Impose');
+const abortBusy = await page.evaluate(() => new Promise((resolve) => {
+	const btn = (l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l);
+	const apply = btn('Apply');
+	let busy = false;
+	const done = (v) => {
+		seen.disconnect();
+		resolve(v);
+	};
+	const seen = new MutationObserver(() => {
+		if (apply.disabled) busy = true;
+		else if (busy) done(true);
+	});
+	seen.observe(apply, { attributes: true });
+	apply.click();
+	btn('Cancel').click();
+	setTimeout(() => done(busy), 30000);
+}));
+check('abort run was busy', abortBusy);
+await sleep(600);
+const afterAbort = await doc();
+check('abort keeps doc', !(await modeOpen('impose')) && afterAbort.source === beforeAbort.source && JSON.stringify(afterAbort.pages) === JSON.stringify(beforeAbort.pages));
+await page.keyboard.down('Meta');
+await page.keyboard.down('Shift');
+await page.keyboard.press('z');
+await page.keyboard.up('Shift');
+await page.keyboard.up('Meta');
+await sleep(600);
+check('abort adds no undo step', (await doc()).source === afterCompress.source);
+await undoStep();
+
 // impose replaces the document with sheets, undoably
 const beforeImpose = await doc();
 const sheetsOf = async () => {
@@ -972,6 +1005,8 @@ const rp = rd.addPage([400, 500]);
 rp.drawText('TOPSECRET', { x: 40, y: 440, size: 18, font: helv });
 rp.drawText('KEEPME', { x: 40, y: 200, size: 18, font: helv });
 rp.drawText('LINESECRET', { x: 40, y: 120, size: 18, font: helv });
+// crosses the mark edge
+rp.drawLine({ start: { x: 200, y: 430 }, end: { x: 390, y: 430 }, thickness: 4, color: rgb(1, 0, 0) });
 const greenPng = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 16; c.height = 16; const g = c.getContext('2d'); g.fillStyle = '#00c853'; g.fillRect(0, 0, 16, 16); return c.toDataURL().split(',')[1]; });
 rp.drawImage(await rd.embedPng(Buffer.from(greenPng, 'base64')), { x: 200, y: 400, width: 60, height: 60 });
 const rform = rd.getForm();
@@ -1100,6 +1135,14 @@ check('redact source text gone', !(await linesOf(0)).includes('TOPSECRET') && (a
 	const pix = new mupdf.PDFDocument(outBytes.slice()).loadPage(0).toPixmap(mupdf.Matrix.identity, mupdf.ColorSpace.DeviceRGB, false);
 	const at = (x, y) => [...pix.getPixels().slice((y * pix.getWidth() + x) * 3, (y * pix.getWidth() + x) * 3 + 3)];
 	check('redact black box', at(150, 50).every((v) => v < 10) && at(150, 300).every((v) => v > 245), JSON.stringify([at(150, 50), at(150, 300)]));
+	const redPixels = (b) => {
+		const px = new mupdf.PDFDocument(b.slice()).loadPage(0).toPixmap(mupdf.Matrix.identity, mupdf.ColorSpace.DeviceRGB, false).getPixels();
+		let n = 0;
+		for (let j = 0; j + 2 < px.length; j += 3) if (px[j] > 200 && px[j + 1] < 80 && px[j + 2] < 80) n++;
+		return n;
+	};
+	check('redact crossing path control', redPixels(rdBytes) > 0);
+	check('redact crossing path gone', redPixels(outBytes) === 0, String(redPixels(outBytes)));
 }
 await undoStep();
 check('redact undo restores marks', (await marks()).flat().length === 3 && (await doc()).source === beforeBurn.source);
@@ -1385,12 +1428,30 @@ const flipStream = (index) => {
 };
 check('export flip matrix', /-1 0 0 -1 400 500 cm/.test(flipStream(0)), flipStream(0).slice(0, 120).replace(/\s+/g, ' '));
 check('export flip keeps rotation', flipOut.getPage(0).getRotation().angle === 90);
-check('export flip page 2', /1 0 0 -1 0 200 cm/.test(flipStream(1)), flipStream(1).slice(0, 120).replace(/\s+/g, ' '));
+check('export flip blank page', !flipOut.getPage(1).node.Contents());
 const flipPdf = await getDocument({ data: new Uint8Array(await flipOut.save()), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
 const flipText = await (await flipPdf.getPage(1)).getTextContent();
 const flipItem = flipText.items.find((it) => it.str === 'MMMM');
 // both flips: the run starts near the source top-right corner, drawn mirrored
 check('export flip moves the text', !!flipItem && flipItem.transform[0] < 0 && flipItem.transform[3] < 0 && flipItem.transform[4] > 300 && flipItem.transform[5] < 100, JSON.stringify(flipItem?.transform));
+// turned and mirrored both ways: displayed (x, y) is source (399 - y, x)
+{
+	const raster = (b) => new mupdf.PDFDocument(b).loadPage(0).toPixmap(mupdf.Matrix.identity, mupdf.ColorSpace.DeviceGray, false);
+	const want = raster(await stripSrc.save());
+	const got = raster(await exportBytes());
+	const [w, h] = [got.getWidth(), got.getHeight()];
+	const a = got.getPixels();
+	const b = want.getPixels();
+	let off = 0;
+	let ink = 0;
+	for (let y = 0; y < h; y++)
+		for (let x = 0; x < w; x++) {
+			const v = b[x * want.getWidth() + 399 - y];
+			if (v < 128) ink++;
+			if (Math.abs(a[y * w + x] - v) > 64) off++;
+		}
+	check('export flip render matches', w === 500 && h === 400 && ink > 1000 && off < 50, JSON.stringify({ w, h, ink, off }));
+}
 
 await openCell('Insert page');
 check('insert strip', await modeOpen('insert'));

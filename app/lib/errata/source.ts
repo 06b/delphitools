@@ -162,9 +162,10 @@ export async function openPdf(file: File): Promise<void> {
 
 let replacing = false;
 
-/** undoable; false when unchanged */
+/** undoable; false when unchanged or no longer current */
 export async function replaceDocument(
 	transform: (bytes: Uint8Array) => Promise<Uint8Array> | Uint8Array,
+	isCurrent: () => boolean = () => true,
 ): Promise<boolean> {
 	const doc = store.getSnapshot();
 	if (!doc || replacing) return false;
@@ -174,7 +175,7 @@ export async function replaceDocument(
 			await exportPdf(doc, getSourceBytes()),
 		);
 		const read = await readSource(bytes);
-		if (store.getSnapshot() !== doc) {
+		if (store.getSnapshot() !== doc || !isCurrent()) {
 			void read.pdf.destroy();
 			return false;
 		}
@@ -286,15 +287,11 @@ async function contentCanvas(
 	const src = await pdf.getPage(page.sourceIndex + 1);
 	const viewport = src.getViewport({ scale, rotation: 0 });
 	const canvas = blank(viewport.width, viewport.height);
-	try {
-		await src.render({
-			canvasContext: canvas.getContext('2d')!,
-			viewport,
-			canvas,
-		}).promise;
-	} catch (error) {
-		if (!outgoing(error)) throw error;
-	}
+	await src.render({
+		canvasContext: canvas.getContext('2d')!,
+		viewport,
+		canvas,
+	}).promise;
 	return canvas;
 }
 
@@ -425,10 +422,14 @@ export function renderThumb(
 	const k = `${width}:${pageKey(page)}`;
 	let p = thumbCache.get(k);
 	if (!p) {
-		p = rasterise(page, width / pageSize(page).width).then((c) =>
-			c.toDataURL('image/png'),
+		const job = rasterise(page, width / pageSize(page).width).then(
+			(c) => c.toDataURL('image/png'),
 		);
-		thumbCache.set(k, p);
+		thumbCache.set(k, job);
+		job.catch(() => {
+			if (thumbCache.get(k) === job) thumbCache.delete(k);
+		});
+		p = job;
 	}
 	return p;
 }

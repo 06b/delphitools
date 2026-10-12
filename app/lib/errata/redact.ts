@@ -77,26 +77,6 @@ function dropField(widget: Mupdf.PDFObject): void {
 	}
 }
 
-// pdf-lib copies referenced pages
-function emptyStalePages(doc: Mupdf.PDFDocument): void {
-	const live = new Set<number>();
-	for (let i = 0; i < doc.countPages(); i++)
-		live.add(doc.findPage(i).asIndirect());
-	for (let n = 1; n < doc.countObjects(); n++) {
-		const o = doc.newIndirect(n);
-		if (live.has(n) || !o.isDictionary()) continue;
-		if (String(o.get('Type')) !== '/Page') continue;
-		for (const key of [
-			'Contents',
-			'Resources',
-			'Annots',
-			'Thumb',
-			'Parent',
-		])
-			o.delete(key);
-	}
-}
-
 // page i is pages[i]
 export async function redactPdf(
 	bytes: Uint8Array,
@@ -131,11 +111,10 @@ export async function redactPdf(
 			page.applyRedactions(
 				true,
 				PDFPage.REDACT_IMAGE_PIXELS,
-				PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED,
+				PDFPage.REDACT_LINE_ART_REMOVE_IF_TOUCHED,
 				PDFPage.REDACT_TEXT_REMOVE,
 			);
 		});
-		emptyStalePages(doc);
 		// drops orphaned originals
 		const buf = doc.saveToBuffer('garbage=compact,compress');
 		const out = buf.asUint8Array().slice();

@@ -3,9 +3,11 @@ import {
 	PDFArray,
 	PDFDict,
 	PDFDocument,
+	PDFHexString,
 	PDFName,
+	PDFRawStream,
 	decodePDFRawStream,
-	type PDFRawStream,
+	type PDFNumber,
 } from 'pdf-lib';
 import {
 	blankPage,
@@ -14,6 +16,7 @@ import {
 	withCrop,
 	withResize,
 } from 'delphitools-v2/lib/errata/doc-model';
+import { newComment } from 'delphitools-v2/lib/errata/comments';
 import { exportPdf } from 'delphitools-v2/lib/errata/export';
 
 module('Unit | errata | export', function () {
@@ -213,10 +216,27 @@ module('Unit | errata | export', function () {
 		);
 		assert.deepEqual([p2!.getWidth(), p2!.getHeight()], [100, 100]);
 	});
-
-	test('a flipped page draws its source through a mirror matrix', async function (assert) {
+	test('a flipped page mirrors its content and annotations', async function (assert) {
 		const source = await PDFDocument.create();
-		source.addPage([300, 400]).drawText('a', { x: 10, y: 10 });
+		const sp = source.addPage([300, 400]);
+		sp.drawText('a', { x: 10, y: 10 });
+		const field = source.getForm().createTextField('name');
+		field.setText('VAL');
+		field.addToPage(sp, { x: 10, y: 20, width: 100, height: 30 });
+		const r = field.acroField.getWidgets()[0]!.getRectangle();
+		sp.node.addAnnot(
+			source.context.register(
+				source.context.obj({
+					Type: 'Annot',
+					Subtype: 'Highlight',
+					Rect: [10, 300, 60, 320],
+					QuadPoints: [
+						10, 320, 60, 320, 10, 300, 60,
+						300,
+					],
+				}),
+			),
+		);
 		const bytes = await source.save();
 		const page = flipPage(
 			{ ...blankPage(300, 400), sourceIndex: 0 },
@@ -248,9 +268,159 @@ module('Unit | errata | export', function () {
 			)
 			.join('\n');
 		assert.ok(/-1 0 0 1 300 0 cm/.test(text), text);
-		assert.ok(
-			p0.node.Resources()?.lookup(PDFName.of('XObject')),
-			'embedded page xobject',
+		assert.strictEqual(
+			result.getForm().getTextField('name').getText(),
+			'VAL',
+		);
+		const [widget, highlight] = p0.node
+			.Annots()!
+			.asArray()
+			.map((r) => result.context.lookup(r, PDFDict));
+		const nums = (d: PDFDict | undefined, key: string) =>
+			d!
+				.lookup(PDFName.of(key), PDFArray)
+				.asArray()
+				.map((n) => (n as PDFNumber).asNumber());
+		assert.deepEqual(nums(widget, 'Rect'), [
+			300 - r.x - r.width,
+			r.y,
+			300 - r.x,
+			r.y + r.height,
+		]);
+		assert.deepEqual(nums(highlight, 'Rect'), [240, 300, 290, 320]);
+		assert.deepEqual(
+			nums(highlight, 'QuadPoints'),
+			[290, 320, 240, 320, 290, 300, 240, 300],
+		);
+	});
+
+	test('a duplicated page gets its own annotations', async function (assert) {
+		const source = await PDFDocument.create();
+		const sp = source.addPage([300, 400]);
+		sp.node.addAnnot(
+			source.context.register(
+				source.context.obj({
+					Type: 'Annot',
+					Subtype: 'Square',
+					Rect: [10, 10, 50, 50],
+					P: sp.ref,
+				}),
+			),
+		);
+		const bytes = await source.save();
+		const copy = (text: string) => ({
+			...blankPage(300, 400),
+			sourceIndex: 0,
+			objects: [{ ...newComment(100, 100, 'Ruby'), text }],
+		});
+		const result = await PDFDocument.load(
+			await exportPdf(
+				{
+					name: 'x',
+					pages: [copy('one'), copy('two')],
+				},
+				bytes,
+			),
+		);
+		const annots = result.getPages().map((p) =>
+			p.node
+				.Annots()!
+				.asArray()
+				.map((r) => ({
+					ref: r,
+					dict: result.context.lookup(r, PDFDict),
+				})),
+		);
+		const notes = annots.map((list) =>
+			list
+				.filter(
+					(a) =>
+						a.dict.get(
+							PDFName.of('Subtype'),
+						) === PDFName.of('Text'),
+				)
+				.map((a) =>
+					a.dict
+						.lookup(
+							PDFName.of('Contents'),
+							PDFHexString,
+						)
+						.decodeText(),
+				),
+		);
+		assert.deepEqual(notes, [['one'], ['two']]);
+		const squares = annots.map((list) =>
+			list.find(
+				(a) =>
+					a.dict.get(PDFName.of('Subtype')) ===
+					PDFName.of('Square'),
+			)!,
+		);
+		assert.notStrictEqual(squares[0]!.ref, squares[1]!.ref);
+		assert.deepEqual(
+			squares.map((s) => s.dict.get(PDFName.of('P'))),
+			result.getPages().map((p) => p.ref),
+		);
+	});
+
+	test('pages a kept page links to are not exported', async function (assert) {
+		const source = await PDFDocument.create();
+		const first = source.addPage([300, 400]);
+		const second = source.addPage([300, 400]);
+		first.drawText('KEEP', { x: 10, y: 10 });
+		second.drawText('GONE', { x: 10, y: 10 });
+		first.node.addAnnot(
+			source.context.register(
+				source.context.obj({
+					Type: 'Annot',
+					Subtype: 'Link',
+					Rect: [10, 10, 50, 50],
+					Dest: [second.ref, 'Fit'],
+				}),
+			),
+		);
+		const bytes = await source.save();
+		const result = await PDFDocument.load(
+			await exportPdf(
+				{
+					name: 'x',
+					pages: [
+						{
+							...blankPage(300, 400),
+							sourceIndex: 0,
+						},
+					],
+				},
+				bytes,
+			),
+		);
+		const objects = result.context.enumerateIndirectObjects();
+		const pages = objects.filter(
+			([, o]) =>
+				o instanceof PDFDict &&
+				o.get(PDFName.of('Type')) ===
+					PDFName.of('Page'),
+		);
+		assert.strictEqual(
+			pages.filter(([, o]) =>
+				(o as PDFDict).has(PDFName.of('Contents')),
+			).length,
+			1,
+		);
+		const streams = objects
+			.map(([, o]) => o)
+			.filter(
+				(o): o is PDFRawStream =>
+					o instanceof PDFRawStream,
+			)
+			.map((s) =>
+				new TextDecoder('latin1').decode(
+					decodePDFRawStream(s).decode(),
+				),
+			);
+		assert.false(
+			streams.some((s) => s.includes('474F4E45')),
+			'deleted page content dropped',
 		);
 	});
 });

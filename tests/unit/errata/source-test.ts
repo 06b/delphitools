@@ -110,4 +110,20 @@ module('Unit | errata | source versions', function (hooks) {
 			1,
 		);
 	});
+
+	test('replace gives up when no longer current', async function (assert) {
+		await openPdf(await fixture());
+		const opened = store.getSnapshot();
+		let current = true;
+		const ok = await replaceDocument(
+			(bytes) => {
+				current = false;
+				return bytes;
+			},
+			() => current,
+		);
+		assert.false(ok);
+		assert.strictEqual(store.getSnapshot(), opened);
+		assert.false(store.canUndo(), 'no undo step');
+	});
 });

@@ -151,12 +151,12 @@ export function widgetBox(rect: UserRect, rotate: Rotation, border: number) {
 	};
 }
 
-// resized/flipped pages drop widgets
+// resized pages drop widgets
 export function sourceRectToDisplayed(
 	page: ErrataPage,
 	rect: [number, number, number, number],
 ): UserRect | null {
-	if (page.resize || page.flipX || page.flipY) return null;
+	if (page.resize) return null;
 	return bounds(
 		[
 			[rect[0], rect[1]],
