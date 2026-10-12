@@ -898,6 +898,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Compose a cURL or HTTP request',
 				icon: 'terminal',
 				href: '/tools/request-builder',
+				canon: true,
 				new: true,
 			},
 			{

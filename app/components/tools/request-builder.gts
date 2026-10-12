@@ -1,45 +1,73 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import type Owner from '@ember/owner';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTextArea from 'delphicanon/components/canon-text-area';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
 import {
 	METHODS,
+	fullUrl,
 	toCurl,
 	toHttp,
-	type Pair,
 	type RequestSpec,
 } from 'delphitools-v2/lib/request-builder';
+import Pairs, {
+	PairRow,
+} from 'delphitools-v2/components/tools/request-builder/pairs';
+import Picture from 'delphitools-v2/components/tools/request-builder/picture';
+import './request-builder/request-builder.css';
 
-const COPIED_MS = 2000;
+const methods = [...METHODS];
 
-type PairList = 'params' | 'headers';
-type Output = 'curl' | 'http';
-
+/** The port of RequestBuilderViewController; nothing is sent. */
 export default class RequestBuilderTool extends Component {
-	@tracked method = 'GET';
+	@tracked method = 0;
 	@tracked url = '';
-	@tracked params: Pair[] = [];
-	@tracked headers: Pair[] = [];
+	@tracked params: PairRow[] = [];
+	@tracked headers: PairRow[] = [];
 	@tracked body = '';
-	@tracked copied: Output | '' = '';
 
-	#timer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#timer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?reqSample=1: the iOS -reqSample flag
+		if (
+			new URLSearchParams(window.location.search).get(
+				'reqSample',
+			)
+		) {
+			this.method = methods.indexOf('POST');
+			this.url = 'https://api.example.com/v1/notes?draft=1';
+			this.params = [new PairRow('tag', 'work & play')];
+			this.headers = [
+				new PairRow('Content-Type', 'application/json'),
+				new PairRow('Accept', 'application/json'),
+				new PairRow('Authorization', 'Bearer 3f9a0c…'),
+			];
+			this.body =
+				'{\n  "title": "Standup",\n  "pinned": true\n}';
+		}
 	}
 
 	get spec(): RequestSpec {
+		const pairs = (rows: PairRow[]) =>
+			rows.map((row) => ({ key: row.key, value: row.value }));
 		return {
-			method: this.method,
+			method: methods[this.method] ?? 'GET',
 			url: this.url,
-			params: this.params,
-			headers: this.headers,
+			params: pairs(this.params),
+			headers: pairs(this.headers),
 			body: this.body,
 		};
+	}
+
+	get target() {
+		return fullUrl(this.spec) || null;
 	}
 
 	get curl() {
@@ -50,334 +78,113 @@ export default class RequestBuilderTool extends Component {
 		return toHttp(this.spec);
 	}
 
-	selectMethod = (method: string) => {
-		this.method = method;
+	setMethod = (index: number) => {
+		this.method = index;
 	};
 
-	setUrl = (event: Event) => {
-		this.url = (event.target as HTMLInputElement).value;
+	setUrl = (value: string) => {
+		this.url = value;
 	};
 
-	setBody = (event: Event) => {
-		this.body = (event.target as HTMLTextAreaElement).value;
+	setParams = (rows: PairRow[]) => {
+		this.params = rows;
 	};
 
-	addPair = (list: PairList) => {
-		this[list] = [...this[list], { key: '', value: '' }];
+	setHeaders = (rows: PairRow[]) => {
+		this.headers = rows;
 	};
 
-	setPair = (
-		list: PairList,
-		index: number,
-		field: keyof Pair,
-		event: Event,
-	) => {
-		this[list] = this[list].map((pair, i) =>
-			i === index
-				? {
-						...pair,
-						[field]: (
-							event.target as HTMLInputElement
-						).value,
-					}
-				: pair,
-		);
-	};
-
-	removePair = (list: PairList, index: number) => {
-		this[list] = this[list].filter((_, i) => i !== index);
-	};
-
-	copy = (which: Output) => {
-		void navigator.clipboard.writeText(
-			which === 'curl' ? this.curl : this.http,
-		);
-		this.copied = which;
-		clearTimeout(this.#timer);
-		this.#timer = setTimeout(() => (this.copied = ''), COPIED_MS);
+	setBody = (value: string) => {
+		this.body = value;
 	};
 
 	<template>
-		<div class="dt-req-frame">
-			<div class="segmented dt-req-methods">
-				{{#each METHODS as |method|}}
-					<button
-						type="button"
-						class="dt-req-method
-							{{if
-								(eq
-									method
-									this.method
-								)
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.selectMethod
-								method
-							)
-						}}
-					>{{method}}</button>
-				{{/each}}
-			</div>
-
-			<input
-				type="url"
-				class="dt-req-url"
-				aria-label="URL"
-				placeholder="https://api.example.com/path"
-				value={{this.url}}
-				{{on "input" this.setUrl}}
-			/>
-
-			<div class="dt-req-sections">
-				<section class="dt-req-section is-query">
-					<div class="dt-req-section-head">
-						<span
-							class="dt-req-label"
-						>Query</span>
-						<button
-							type="button"
-							class="dt-req-add"
-							{{on
-								"click"
-								(fn
-									this.addPair
-									"params"
-								)
-							}}
-						>
-							<Icon @name="plus" />
-							Add
-						</button>
-					</div>
-					{{#each
-						this.params key="@index"
-						as |pair index|
-					}}
-						<div class="dt-req-row">
-							<input
-								class="dt-req-cell"
-								aria-label="Name"
-								placeholder="key"
-								value={{pair.key}}
-								{{on
-									"input"
-									(fn
-										this.setPair
-										"params"
-										index
-										"key"
-									)
-								}}
-							/>
-							<input
-								class="dt-req-cell"
-								aria-label="Value"
-								placeholder="value"
-								value={{pair.value}}
-								{{on
-									"input"
-									(fn
-										this.setPair
-										"params"
-										index
-										"value"
-									)
-								}}
-							/>
-							<button
-								type="button"
-								class="dt-req-remove"
-								aria-label="Remove"
-								{{on
-									"click"
-									(fn
-										this.removePair
-										"params"
-										index
-									)
-								}}
-							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-						</div>
-					{{/each}}
-				</section>
-
-				<section class="dt-req-section is-headers">
-					<div class="dt-req-section-head">
-						<span
-							class="dt-req-label"
-						>Headers</span>
-						<button
-							type="button"
-							class="dt-req-add"
-							{{on
-								"click"
-								(fn
-									this.addPair
-									"headers"
-								)
-							}}
-						>
-							<Icon @name="plus" />
-							Add
-						</button>
-					</div>
-					{{#each
-						this.headers key="@index"
-						as |pair index|
-					}}
-						<div class="dt-req-row">
-							<input
-								class="dt-req-cell"
-								aria-label="Name"
-								placeholder="Header"
-								value={{pair.key}}
-								{{on
-									"input"
-									(fn
-										this.setPair
-										"headers"
-										index
-										"key"
-									)
-								}}
-							/>
-							<input
-								class="dt-req-cell"
-								aria-label="Value"
-								placeholder="value"
-								value={{pair.value}}
-								{{on
-									"input"
-									(fn
-										this.setPair
-										"headers"
-										index
-										"value"
-									)
-								}}
-							/>
-							<button
-								type="button"
-								class="dt-req-remove"
-								aria-label="Remove"
-								{{on
-									"click"
-									(fn
-										this.removePair
-										"headers"
-										index
-									)
-								}}
-							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-						</div>
-					{{/each}}
-				</section>
-			</div>
-
-			<div class="dt-req-section-head is-body">
-				<span class="dt-req-label">Body</span>
-			</div>
-			<textarea
-				class="dt-req-body"
-				aria-label="Body"
-				value={{this.body}}
-				{{on "input" this.setBody}}
-			></textarea>
-
-			<div class="dt-req-outs">
-				<section class="dt-req-out is-curl">
-					<div class="dt-req-out-head">
-						<span
-							class="dt-req-label"
-						>cURL</span>
-						<button
-							type="button"
-							class="dt-req-copy"
-							{{on
-								"click"
-								(fn
-									this.copy
-									"curl"
-								)
-							}}
-						>
-							<Icon
-								@name={{if
-									(eq
-										this.copied
-										"curl"
-									)
-									"check"
-									"copy"
-								}}
-							/>
-							{{if
-								(eq
-									this.copied
-									"curl"
-								)
-								"Copied"
-								"Copy"
-							}}
-						</button>
-					</div>
-					<pre
-						class="dt-req-pre"
-					>{{this.curl}}</pre>
-				</section>
-
-				<section class="dt-req-out is-http">
-					<div class="dt-req-out-head">
-						<span
-							class="dt-req-label"
-						>HTTP</span>
-						<button
-							type="button"
-							class="dt-req-copy"
-							{{on
-								"click"
-								(fn
-									this.copy
-									"http"
-								)
-							}}
-						>
-							<Icon
-								@name={{if
-									(eq
-										this.copied
-										"http"
-									)
-									"check"
-									"copy"
-								}}
-							/>
-							{{if
-								(eq
-									this.copied
-									"http"
-								)
-								"Copied"
-								"Copy"
-							}}
-						</button>
-					</div>
-					<pre
-						class="dt-req-pre"
-					>{{this.http}}</pre>
-				</section>
-			</div>
-		</div>
+		<CanonSplit class="request-builder">
+			<:banner>
+				<CanonCanvas
+					@fitting={{true}}
+					@animated={{true}}
+				>
+					<Picture @message={{this.http}} />
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Method" />
+					<CanonSegmented
+						@items={{methods}}
+						@selected={{this.method}}
+						@columns={{4}}
+						@onChange={{this.setMethod}}
+						aria-label="Method"
+					/>
+					<CanonHeading @text="URL" />
+					<CanonTextCell
+						class="rq-url"
+						type="url"
+						autocomplete="off"
+						autocapitalize="off"
+						spellcheck="false"
+						@value={{this.url}}
+						@placeholder="https://api.example.com/path"
+						@onChange={{this.setUrl}}
+						aria-label="URL"
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Query" />
+					<Pairs
+						@rows={{this.params}}
+						@keyName="Name"
+						@label="Query"
+						@onChange={{this.setParams}}
+					/>
+					<CanonHeading @text="Headers" />
+					<Pairs
+						@rows={{this.headers}}
+						@keyName="Header"
+						@label="Headers"
+						@onChange={{this.setHeaders}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Body" />
+					<CanonTextArea
+						class="rq-body"
+						spellcheck="false"
+						@value={{this.body}}
+						@placeholder="{ }"
+						@height={{140}}
+						@onChange={{this.setBody}}
+						aria-label="Body"
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="URL" />
+					<CanonValueLine
+						class="rq-target"
+						@layout="wrapping"
+						@label={{this.spec.method}}
+						@value={{this.target}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="cURL" />
+					<CanonCodeBlock
+						class="rq-code"
+						@code={{this.curl}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="HTTP" />
+					<CanonCodeBlock
+						class="rq-code"
+						@code={{this.http}}
+					/>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

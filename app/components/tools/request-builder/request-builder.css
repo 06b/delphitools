@@ -1,0 +1,209 @@
+/* the banner: RequestWire */
+.rq-picture {
+	--rq-start: var(--canon-primary);
+	--rq-headers: var(--canon-foreground);
+	--rq-body: var(--canon-muted-foreground);
+
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	box-sizing: border-box;
+	margin: 0;
+	padding: calc(var(--canon-panel-padding) * 0.75)
+		var(--canon-panel-padding) var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.rq-part--start {
+	--rq-part: var(--rq-start);
+}
+
+.rq-part--headers {
+	--rq-part: var(--rq-headers);
+}
+
+.rq-part--body {
+	--rq-part: var(--rq-body);
+}
+
+.rq-head {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	min-inline-size: 0;
+}
+
+.rq-head-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-inline-size: 0;
+}
+
+.rq-version {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rq-host {
+	overflow: hidden;
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-medium);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.rq-host--none {
+	color: var(--canon-muted-foreground);
+}
+
+/* the parts: bars sized by their bytes, at least 84 px */
+.rq-bars {
+	display: flex;
+	gap: 8px;
+}
+
+.rq-bar {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	min-inline-size: min(84px, 30%);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rq-bar-fill {
+	box-sizing: border-box;
+	block-size: 10px;
+	margin-block-end: 6px;
+	background: var(--rq-part);
+}
+
+.rq-bar--empty .rq-bar-fill {
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	background: none;
+}
+
+.rq-bar--empty .rq-bar-name {
+	color: var(--canon-muted-foreground);
+}
+
+.rq-bar-name,
+.rq-bar-detail {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.rq-bar-detail {
+	color: var(--canon-muted-foreground);
+}
+
+/* the message on the wire */
+.rq-listing {
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	font-variant-ligatures: none;
+	line-height: 18px;
+}
+
+.rq-line {
+	display: flex;
+	align-items: baseline;
+	min-inline-size: 0;
+	padding-inline-start: 6px;
+	background: linear-gradient(var(--rq-part), var(--rq-part)) 0 2px / 2px
+		calc(100% - 4px) no-repeat;
+}
+
+.rq-offset {
+	flex: none;
+	inline-size: 4ch;
+	margin-inline-end: 10px;
+	color: var(--canon-muted-foreground);
+}
+
+.rq-text {
+	min-inline-size: 0;
+	overflow: hidden;
+	white-space: pre;
+	text-overflow: ellipsis;
+}
+
+.rq-ending {
+	flex: none;
+	margin-inline-start: 0.5ch;
+	color: var(--canon-muted-foreground);
+	font-size: 9px;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rq-line--more {
+	background: none;
+	color: var(--canon-muted-foreground);
+}
+
+.rq-run--method {
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rq-run--name {
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rq-run--muted {
+	color: var(--canon-muted-foreground);
+}
+
+/* the form */
+.canon-text-cell.rq-url {
+	inline-size: 100%;
+	font-family: var(--canon-mono-font);
+	font-variant-ligatures: none;
+}
+
+.rq-pairs {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+}
+
+.rq-pair {
+	display: flex;
+	gap: var(--canon-hairline);
+}
+
+.canon-text-cell.rq-pair-cell {
+	flex: 1 1 0;
+	inline-size: auto;
+	font-family: var(--canon-mono-font);
+	font-size: 14px;
+	font-variant-ligatures: none;
+}
+
+.canon-button.rq-pair-remove {
+	flex: none;
+	inline-size: var(--canon-control-height);
+}
+
+.canon-button.rq-pair-add {
+	justify-content: flex-start;
+	min-block-size: var(--canon-control-height);
+	padding-inline: var(--canon-panel-padding);
+}
+
+.canon-text-area.rq-body {
+	font-family: var(--canon-mono-font);
+	font-variant-ligatures: none;
+}
+
+/* the outputs read as code */
+.request-builder .rq-code,
+.request-builder .rq-target .canon-value-line-value {
+	font-family: var(--canon-mono-font);
+	font-variant-ligatures: none;
+}
