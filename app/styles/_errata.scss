@@ -396,6 +396,30 @@
 	}
 }
 
+// many controls: column grid
+.err-mode.is-tall {
+	grid-template-areas:
+		"head end"
+		"body body";
+	grid-template-columns: minmax(0, 1fr) auto;
+	inline-size: 680px;
+
+	.err-mode-head {
+		justify-self: start;
+	}
+
+	.err-mode-body {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		align-items: start;
+		padding-block: 0 12px;
+	}
+
+	.err-mode-field > .sub-tool-row-label:first-child {
+		inline-size: 72px;
+	}
+}
+
 // head, end: first row
 .err-mode-head,
 .err-mode-end {

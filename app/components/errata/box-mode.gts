@@ -10,7 +10,10 @@ import ToolPanel, {
 	PageScope,
 	Segmented,
 	Slider,
+	type SegmentedOption,
 } from 'delphitools-v2/components/errata/tool-panel';
+import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
+import Switch from 'delphitools-v2/components/ui/switch';
 import {
 	Select,
 	SelectContent,
@@ -22,7 +25,6 @@ import {
 	PresetRow,
 	type PresetOption,
 } from 'delphitools-v2/components/substrata/preset-row';
-import { exportCurrent } from 'delphitools-v2/lib/errata/export-file';
 import { replaceDocument } from 'delphitools-v2/lib/errata/source';
 import {
 	addStamped,
@@ -43,14 +45,18 @@ import {
 	getMode,
 	preview,
 	setMode,
+	subscribeUi,
 	type BoxMode as Mode,
 } from 'delphitools-v2/lib/errata/ui';
 import {
 	DEFAULT_IMPOSITION_CONFIG,
+	DUPLEX_AWARE_LAYOUTS,
+	GANG_RUN_GRIDS,
 	IMPOSITION_LAYOUTS,
-	PAPER_SIZES,
 	imposePdf,
+	type ImpositionConfig,
 } from 'delphitools-v2/lib/imposition';
+import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import {
 	ANCHORS,
 	ANCHOR_ICON,
@@ -82,9 +88,41 @@ const STAMP_SIZES = numbers([18, 24, 36]);
 const OPACITIES = numbers([10, 15, 25, 40]);
 const ANGLES = numbers([0, -30, -45], '°');
 
-const LAYOUTS = IMPOSITION_LAYOUTS.filter(
-	(l) => l.id !== 'gang-run' && l.id !== 'custom-nup',
+type Orientation = ImpositionConfig['orientation'];
+type Flip = NonNullable<ImpositionConfig['duplexFlip']>;
+
+// imposer.gts forces landscape
+const FOLD_LAYOUTS = new Set([
+	'saddle-stitch',
+	'perfect-bind',
+	'step-and-repeat',
+]);
+
+const ORIENTATIONS: SegmentedOption<Orientation>[] = [
+	{ value: 'portrait', label: 'Portrait' },
+	{ value: 'landscape', label: 'Landscape' },
+];
+
+const FLIPS: SegmentedOption<Flip>[] = [
+	{ value: 'long-edge', label: 'Long edge' },
+	{ value: 'short-edge', label: 'Short edge' },
+];
+
+const COPIES: SegmentedOption<number>[] = Object.keys(GANG_RUN_GRIDS).map(
+	(n) => ({ value: Number(n), label: n }),
 );
+
+const clampGrid = (event: Event) =>
+	Math.max(
+		1,
+		Math.min(
+			10,
+			parseInt(
+				(event.target as HTMLInputElement).value,
+				10,
+			) || 1,
+		),
+	);
 
 interface Signature {
 	Args: {
@@ -115,6 +153,15 @@ export default class BoxModeBar extends Component<Signature> {
 	@tracked maxEdge = 0;
 	@tracked layout = DEFAULT_IMPOSITION_CONFIG.layoutId;
 	@tracked paper = DEFAULT_IMPOSITION_CONFIG.paperSize.id;
+	@tracked orientation = DEFAULT_IMPOSITION_CONFIG.orientation;
+	@tracked margin = DEFAULT_IMPOSITION_CONFIG.marginMm;
+	@tracked gutter = DEFAULT_IMPOSITION_CONFIG.gutterMm;
+	@tracked creep = DEFAULT_IMPOSITION_CONFIG.creepMm;
+	@tracked cropMarks = DEFAULT_IMPOSITION_CONFIG.cropMarks;
+	@tracked copies = 4;
+	@tracked rows = 2;
+	@tracked cols = 2;
+	@tracked flip: Flip = 'long-edge';
 	@tracked busy = false;
 	@tracked failedMode: Mode | null = null;
 	@tracked compressed: {
@@ -140,6 +187,7 @@ export default class BoxModeBar extends Component<Signature> {
 		this.doc.unsubscribe();
 		this.pageIndex.unsubscribe();
 		this.widgets.unsubscribe();
+		this.#unsubscribeUi();
 		preview([]);
 	}
 
@@ -224,29 +272,37 @@ export default class BoxModeBar extends Component<Signature> {
 		return this.stamping ? this.items.length > 0 : true;
 	}
 
-	// cancel keeps earlier marks
+	// escape bypasses cancel
 	#kept = new Set<string>();
+	#lastMode = getMode();
+	#unsubscribeUi = subscribeUi(() => {
+		const mode = getMode();
+		const last = this.#lastMode;
+		if (mode === last) return;
+		this.#lastMode = mode;
+		if (mode === 'redact')
+			this.#kept = redactIds(store.getSnapshot());
+		else if (last === 'redact') dropRedactions(this.#kept);
+	});
+
 	#sessionMode: Mode | null | undefined;
-	// reruns on any ui change; snapshot on entry only
+	// results last one session
 	session = modifier(
 		(_el: HTMLElement, [mode]: [Mode | null | undefined]) => {
-			if (mode === 'redact' && this.#sessionMode !== 'redact')
-				this.#kept = redactIds(store.getSnapshot());
-			// results last one session
 			if (mode !== this.#sessionMode) this.compressed = null;
 			this.#sessionMode = mode;
 		},
 	);
 
 	get layoutName() {
-		return LAYOUTS.find((l) => l.id === this.layout)?.name ?? '';
+		return (
+			IMPOSITION_LAYOUTS.find((l) => l.id === this.layout)
+				?.name ?? ''
+		);
 	}
 
-	get paperSize() {
-		return (
-			PAPER_SIZES.find((p) => p.id === this.paper) ??
-			DEFAULT_IMPOSITION_CONFIG.paperSize
-		);
+	get duplexAware() {
+		return DUPLEX_AWARE_LAYOUTS.has(this.layout);
 	}
 
 	livePreview = modifier(
@@ -267,7 +323,6 @@ export default class BoxModeBar extends Component<Signature> {
 	cancel = () => {
 		this.failedMode = null;
 		this.compressed = null;
-		if (this.args.mode === 'redact') dropRedactions(this.#kept);
 		setMode(null);
 	};
 
@@ -287,12 +342,26 @@ export default class BoxModeBar extends Component<Signature> {
 		return out;
 	};
 
+	// layouts ignore foreign fields
 	impose = (bytes: Uint8Array) =>
 		imposePdf(bytes, {
 			...DEFAULT_IMPOSITION_CONFIG,
 			layoutId: this.layout,
-			paperSize: this.paperSize,
+			paperSize:
+				findPaperSize(this.paper) ??
+				DEFAULT_IMPOSITION_CONFIG.paperSize,
+			orientation: this.orientation,
+			marginMm: this.margin,
+			gutterMm: this.gutter,
+			creepMm: this.creep,
+			cropMarks: this.cropMarks,
+			nUp: this.copies,
+			customGrid: [this.rows, this.cols],
+			duplexFlip: this.flip,
 		});
+
+	// export burns marks in
+	burn = (bytes: Uint8Array) => bytes;
 
 	apply = async () => {
 		if (!this.canApply) return;
@@ -309,33 +378,36 @@ export default class BoxModeBar extends Component<Signature> {
 		const mode = this.args.mode;
 		this.busy = true;
 		this.failedMode = null;
-		if (mode === 'compress') {
-			const ok = await replaceDocument(this.compress);
-			this.busy = false;
-			const sizes = this.compressed;
-			this.compressed =
-				ok && sizes
-					? {
-							...sizes,
-							source: store.getSnapshot()
-								?.source,
-						}
-					: null;
-			if (!ok) this.failedMode = mode;
-			return;
-		}
-		// exportPdf applies redactions
-		const ok =
-			mode === 'redact'
-				? await exportCurrent(undefined, '-redacted')
-				: await exportCurrent(
-						this.impose,
-						`-imposed-${this.layout}`,
-					);
+		const ok = await replaceDocument(
+			mode === 'compress'
+				? this.compress
+				: mode === 'impose'
+					? this.impose
+					: this.burn,
+		);
 		this.busy = false;
-		if (!ok) this.failedMode = mode;
-		else if (getMode() === mode) setMode(null);
+		if (!ok) {
+			this.failedMode = mode;
+			this.compressed = null;
+		} else if (mode === 'compress') {
+			const sizes = this.compressed;
+			this.compressed = sizes && {
+				...sizes,
+				source: store.getSnapshot()?.source,
+			};
+		} else if (getMode() === mode) setMode(null);
 	};
+
+	setLayout = (id: string) => {
+		this.layout = id;
+		if (FOLD_LAYOUTS.has(id)) this.orientation = 'landscape';
+	};
+	setMargin = (mm: number) => (this.margin = mm);
+	setGutter = (mm: number) => (this.gutter = mm);
+	setCreep = (mm: number) => (this.creep = mm);
+	setCropMarks = (on: boolean) => (this.cropMarks = on);
+	setRows = (event: Event) => (this.rows = clampGrid(event));
+	setCols = (event: Event) => (this.cols = clampGrid(event));
 
 	setScope = (scope: Scope) => (this.scope = scope);
 	setRange = (range: string) => (this.range = range);
@@ -354,6 +426,7 @@ export default class BoxModeBar extends Component<Signature> {
 			@canApply={{this.canApply}}
 			@busy={{this.busy}}
 			@failed={{this.failed}}
+			class={{if (eq @mode "impose") "is-tall"}}
 			{{this.livePreview (if @open this.items)}}
 			{{this.session (if @open @mode)}}
 		>
@@ -518,10 +591,7 @@ export default class BoxModeBar extends Component<Signature> {
 				<Field @label="Layout">
 					<Select
 						@value={{this.layout}}
-						@onValueChange={{fn
-							this.pick
-							"layout"
-						}}
+						@onValueChange={{this.setLayout}}
 					>
 						<SelectTrigger
 							class="sub-font-trigger err-mode-select"
@@ -532,7 +602,8 @@ export default class BoxModeBar extends Component<Signature> {
 						</SelectTrigger>
 						<SelectContent>
 							{{#each
-								LAYOUTS key="id"
+								IMPOSITION_LAYOUTS
+								key="id"
 								as |l|
 							}}
 								<SelectItem
@@ -542,34 +613,116 @@ export default class BoxModeBar extends Component<Signature> {
 						</SelectContent>
 					</Select>
 				</Field>
+				{{#if (eq this.layout "gang-run")}}
+					<Field @label="Copies">
+						<Segmented
+							@options={{COPIES}}
+							@value={{this.copies}}
+							@onChange={{fn
+								this.pick
+								"copies"
+							}}
+						/>
+					</Field>
+				{{else if (eq this.layout "custom-nup")}}
+					<Field @label="Grid">
+						<input
+							type="number"
+							class="err-mode-input is-narrow"
+							aria-label="Rows"
+							min="1"
+							max="10"
+							value={{this.rows}}
+							{{on
+								"change"
+								this.setRows
+							}}
+						/>
+						<span
+							class="sub-tool-row-label"
+						>&times;</span>
+						<input
+							type="number"
+							class="err-mode-input is-narrow"
+							aria-label="Columns"
+							min="1"
+							max="10"
+							value={{this.cols}}
+							{{on
+								"change"
+								this.setCols
+							}}
+						/>
+					</Field>
+				{{/if}}
 				<Field @label="Sheet">
-					<Select
+					<PaperSizeCombobox
 						@value={{this.paper}}
 						@onValueChange={{fn
 							this.pick
 							"paper"
 						}}
-					>
-						<SelectTrigger
-							class="sub-font-trigger err-mode-select"
-							aria-label="Sheet"
-						>
-							<SelectValue
-							>{{this.paperSize.label}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each
-								PAPER_SIZES
-								key="id"
-								as |p|
-							}}
-								<SelectItem
-									@value={{p.id}}
-								>{{p.label}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
+						@triggerClass="sub-font-trigger err-mode-select"
+					/>
 				</Field>
+				<Field @label="Orientation">
+					<Segmented
+						@options={{ORIENTATIONS}}
+						@value={{this.orientation}}
+						@onChange={{fn
+							this.pick
+							"orientation"
+						}}
+					/>
+				</Field>
+				{{#if this.duplexAware}}
+					<Field @label="Duplex">
+						<Segmented
+							@options={{FLIPS}}
+							@value={{this.flip}}
+							@onChange={{fn
+								this.pick
+								"flip"
+							}}
+						/>
+					</Field>
+				{{/if}}
+				<Slider
+					@label="Margins"
+					@value={{this.margin}}
+					@min={{0}}
+					@max={{20}}
+					@unit="mm"
+					@onChange={{this.setMargin}}
+				/>
+				<Slider
+					@label="Gutter"
+					@value={{this.gutter}}
+					@min={{0}}
+					@max={{10}}
+					@unit="mm"
+					@onChange={{this.setGutter}}
+				/>
+				{{#if (eq this.layout "saddle-stitch")}}
+					<Slider
+						@label="Creep"
+						@value={{this.creep}}
+						@min={{0}}
+						@max={{2}}
+						@step={{0.1}}
+						@unit="mm"
+						@onChange={{this.setCreep}}
+					/>
+				{{/if}}
+				<label class="err-mode-field">
+					<span class="sub-tool-row-label">Crop
+						marks</span>
+					<Switch
+						@checked={{this.cropMarks}}
+						@onChange={{this.setCropMarks}}
+						@label="Crop marks"
+					/>
+				</label>
 			{{else if (eq @mode "redact")}}
 				<span
 					class="sub-omni-tag"

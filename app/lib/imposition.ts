@@ -452,7 +452,7 @@ function calculateFourUpBooklet(
 	return makeResult(sheets, totalSourcePages, totalPages);
 }
 
-const GANG_RUN_GRIDS: Record<number, [number, number]> = {
+export const GANG_RUN_GRIDS: Record<number, [number, number]> = {
 	2: [1, 2],
 	4: [2, 2],
 	6: [2, 3],
@@ -908,6 +908,8 @@ async function upright(
 			}[r],
 		);
 	}
+	// embeds are lazy
+	await flat.flush();
 	const slowForms = await out.embedPages(flat.getPages());
 	slow.forEach((i, k) => (embedded[i] = slowForms[k]!));
 	return embedded;

@@ -1,11 +1,11 @@
 // errata smoke: open, annotate, page ops, export
 
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PDFDocument, PDFHexString, PDFName, PDFString, StandardFonts, beginText, decodePDFRawStream, degrees, endText, moveText, setFontAndSize, showText } from 'pdf-lib';
 import * as mupdf from 'mupdf';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { OPS, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { BASE, check, finish, launch, sleep } from './harness.mjs';
 
 const { browser, page } = await launch();
@@ -461,14 +461,14 @@ check('export watermark opacity', gsOpacity.includes('0.15'), JSON.stringify(gsO
 const downloads = mkdtempSync(join(tmpdir(), 'errata-dl-'));
 const cdp = await page.createCDPSession();
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
-const waitFile = async (re) => {
-	for (let i = 0; i < 120; i++) {
-		const f = readdirSync(downloads).find((n) => re.test(n));
-		if (f) return join(downloads, f);
-		await sleep(250);
-	}
-	return null;
+const undoStep = async () => {
+	await page.keyboard.down('Meta');
+	await page.keyboard.press('z');
+	await page.keyboard.up('Meta');
+	await sleep(600);
 };
+const loadPdf = (b) => getDocument({ data: b.slice(), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
+const exportBytes = async () => new Uint8Array(await page.evaluate(() => window.__errata.export()));
 
 // compress replaces the document in place, undoably, without a download
 const beforeCompress = await doc();
@@ -509,17 +509,54 @@ await clickIn('Cancel');
 await sleep(300);
 check('compress mode closed', !(await modeOpen('compress')));
 
+// impose replaces the document with sheets, undoably
+const beforeImpose = await doc();
+const sheetsOf = async () => {
+	const out = await exportBytes();
+	const pdf = await PDFDocument.load(out);
+	const ops = (await (await (await loadPdf(out)).getPage(1)).getOperatorList()).fnArray;
+	// rotated pages nest forms
+	let dangling = 0;
+	const walk = (res) => res?.lookup(PDFName.of('XObject'))?.entries().forEach(([, ref]) => {
+		const x = pdf.context.lookup(ref);
+		if (!x?.dict) dangling++;
+		else walk(x.dict.lookup(PDFName.of('Resources')));
+	});
+	pdf.getPages().forEach((p) => walk(p.node.Resources()));
+	return { dangling, count: pdf.getPageCount(), w: Math.round(pdf.getPage(0).getWidth()), h: Math.round(pdf.getPage(0).getHeight()), paths: ops.filter((f) => f === OPS.constructPath).length };
+};
+const imposeApply = async () => {
+	await clickIn('Apply');
+	await page.waitForFunction(() => window.__errata.doc().pages.length === 2, { timeout: 30000 }).catch(() => {});
+	await sleep(600);
+};
 await openCell('Impose');
 check('impose mode bar', await modeOpen('impose'));
-await clickIn('Apply');
-const imposed = await waitFile(/-imposed-saddle-stitch\.pdf$/);
-check('impose downloads', !!imposed);
-if (imposed) {
-	const im = await PDFDocument.load(readFileSync(imposed));
-	const p0 = im.getPage(0);
-	// 3 pages pad to 4
-	check('impose sheets', im.getPageCount() === 2 && Math.round(p0.getWidth()) === 842 && Math.round(p0.getHeight()) === 595, `${im.getPageCount()} ${p0.getWidth()}x${p0.getHeight()}`);
-}
+check('impose tall panel', !!(await page.$('.err-mode.is-open.is-tall[data-mode="impose"]')));
+await imposeApply();
+const afterImpose = await doc();
+// 3 pages pad to 4
+const landscape = await sheetsOf();
+check('impose replaces source', afterImpose.source !== beforeImpose.source && afterImpose.pages.length === 2 && objectCount(afterImpose) === 0, `${afterImpose.pages.length}`);
+check('impose renders sheets', (await page.evaluate(() => window.__errata.activePdf()))?.pages === 2);
+check('impose sheets', landscape.count === 2 && landscape.w === 842 && landscape.h === 595, JSON.stringify(landscape));
+check('impose crop marks', landscape.paths > 0, JSON.stringify(landscape));
+check('impose forms resolve', landscape.dangling === 0, JSON.stringify(landscape));
+check('impose mode closed', !(await modeOpen('impose')));
+check('impose no download', !readdirSync(downloads).some((n) => /-imposed/.test(n)));
+await undoStep();
+const undoneImpose = await doc();
+check('impose undo restores', undoneImpose.source === beforeImpose.source && JSON.stringify(undoneImpose.pages) === JSON.stringify(beforeImpose.pages) && (await page.evaluate(() => window.__errata.activePdf()))?.pages === 2);
+await openCell('Impose');
+await clickIn('Portrait');
+await page.evaluate(() => document.querySelector('.err-mode.is-open input[aria-label="Crop marks"]').click());
+await sleep(200);
+await imposeApply();
+const portrait = await sheetsOf();
+check('impose portrait', portrait.count === 2 && portrait.w === 595 && portrait.h === 842, JSON.stringify(portrait));
+check('impose crop marks off', portrait.paths < landscape.paths, JSON.stringify([landscape.paths, portrait.paths]));
+await undoStep();
+check('impose undo again', (await doc()).source === beforeImpose.source && (await doc()).pages.length === 3);
 
 // organise page grid
 const orgCells = () => page.$$('.err-organise-cell');
@@ -798,6 +835,16 @@ await page.keyboard.press('z');
 await page.keyboard.up('Meta');
 await sleep(300);
 check('redact cancel one undo step', (await marks())[0].length === 2);
+await openCell('Redact');
+await page.mouse.move(rr.x + 250 * rz, rr.y + 300 * rz);
+await page.mouse.down();
+await page.mouse.move(rr.x + 380 * rz, rr.y + 350 * rz, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+check('redact escape setup', (await marks())[0].length === 3);
+await page.keyboard.press('Escape');
+await sleep(300);
+check('redact escape drops session marks', (await marks())[0].length === 2 && !(await modeOpen('redact')));
 
 await page.keyboard.press(']');
 await sleep(600);
@@ -808,15 +855,19 @@ rr = await pageRectR(1);
 await clickBox(rr, await lineBox(1, 'TOPSECRET'), 595.28);
 rm = await marks();
 check('redact form line marked', rm[1].length === 1, JSON.stringify(rm[1]));
+const beforeBurn = await doc();
 await clickIn('Apply');
-const redacted = await waitFile(/^redact-redacted\.pdf$/);
-check('redact downloads', !!redacted);
-await sleep(300);
-check('redact mode closed, marks kept', !(await modeOpen('redact')) && (await marks()).flat().length === 3);
-
-if (redacted) {
-	const outBytes = new Uint8Array(readFileSync(redacted));
-	const pdf = await getDocument({ data: outBytes.slice(), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
+await page.waitForFunction(() => !window.__errata.doc().pages.some((p) => p.objects.some((o) => o.kind === 'redact')), { timeout: 30000 }).catch(() => {});
+await sleep(800);
+const burnt = await doc();
+check('redact applied in place', burnt.source !== beforeBurn.source && (await marks()).flat().length === 0 && !(await modeOpen('redact')));
+check('redact no download', !readdirSync(downloads).some((n) => /-redacted/.test(n)));
+const linesOf = async (i) => (await page.evaluate(async (n) => (await window.__errata.content(n)).lines.map((l) => l.text), i)).join(' ');
+check('redact source text gone', !(await linesOf(0)).includes('TOPSECRET') && (await linesOf(0)).includes('KEEPME'), await linesOf(0));
+// export equals source now
+{
+	const outBytes = await exportBytes();
+	const pdf = await loadPdf(outBytes);
 	const textOf = async (n) => (await (await pdf.getPage(n)).getTextContent()).items.map((i) => i.str).join(' ');
 	const t1 = await textOf(1);
 	const t2 = await textOf(2);
@@ -853,6 +904,11 @@ if (redacted) {
 	const at = (x, y) => [...pix.getPixels().slice((y * pix.getWidth() + x) * 3, (y * pix.getWidth() + x) * 3 + 3)];
 	check('redact black box', at(150, 50).every((v) => v < 10) && at(150, 300).every((v) => v > 245), JSON.stringify([at(150, 50), at(150, 300)]));
 }
+await undoStep();
+check('redact undo restores marks', (await marks()).flat().length === 3 && (await doc()).source === beforeBurn.source);
+check('redact undo restores content', (await linesOf(0)).includes('TOPSECRET'), await linesOf(0));
+const pendingText = (await (await (await loadPdf(await exportBytes())).getPage(1)).getTextContent()).items.map((i) => i.str).join(' ');
+check('redact export burns pending marks', !pendingText.includes('TOPSECRET') && pendingText.includes('KEEPME'), pendingText);
 
 // a source form: a text field on page 1, a checkbox on a /Rotate 90 page 2
 const formSrc = await PDFDocument.create();
