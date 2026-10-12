@@ -990,6 +990,7 @@ export const toolCategories: ToolCategory[] = [
 					'Plot and visualise mathematical functions',
 				icon: 'line-chart',
 				href: '/tools/graph-calc',
+				canon: true,
 			},
 			{
 				id: 'sci-calc',
