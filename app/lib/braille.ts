@@ -83,68 +83,98 @@ export function toBraille(text: string): string {
 	return out;
 }
 
-export function fromBraille(cells: string): string {
+/** One step of reading braille: the cells taken and the text they give. An indicator gives no text. */
+export interface Reading {
+	cells: string;
+	text: string;
+	kind: 'letter' | 'indicator' | 'other';
+}
+
+export function read(cells: string): Reading[] {
 	const chars = [...cells];
+	const readings: Reading[] = [];
 	let out = '';
 	let numeric = false;
 	let capsWord = false;
 	let capsNext = false;
-	for (let i = 0; i < chars.length; i++) {
+	let i = 0;
+	const emit = (count: number, text: string, kind: Reading['kind']) => {
+		readings.push({
+			cells: chars.slice(i, i + count).join(''),
+			text,
+			kind,
+		});
+		out += text;
+		i += count;
+	};
+	while (i < chars.length) {
 		const c = chars[i]!;
 		if (c === CAPITAL) {
 			if (chars[i + 1] === CAPITAL) {
 				capsWord = true;
-				i++;
-			} else capsNext = true;
+				emit(2, '', 'indicator');
+			} else {
+				capsNext = true;
+				emit(1, '', 'indicator');
+			}
 			continue;
 		}
 		if (c === NUMBER) {
 			numeric = true;
+			emit(1, '', 'indicator');
 			continue;
 		}
 		if (c === GRADE1) {
 			numeric = false;
+			emit(1, '', 'indicator');
 			continue;
 		}
 		const letter = LETTER_OF.get(c);
 		if (letter) {
 			const index = LETTERS.indexOf(letter);
 			if (numeric && index < 10) {
-				out += DIGITS[index]!;
+				emit(1, DIGITS[index]!, 'letter');
 				continue;
 			}
 			numeric = false;
-			out +=
+			const text =
 				capsNext || capsWord
 					? letter.toUpperCase()
 					: letter;
 			capsNext = false;
+			emit(1, text, 'letter');
 			continue;
 		}
 		capsWord = false;
 		const pair = PUNCT_OF.get(c + (chars[i + 1] ?? ''));
 		if (pair) {
-			out += pair;
-			i++;
 			numeric = false;
+			// the last cell is a one-cell key
+			emit(Math.min(2, chars.length - i), pair, 'letter');
 			continue;
 		}
 		if (c === OPEN_QUOTE) {
-			out += atWordStart(out) ? '"' : '?';
 			numeric = false;
+			emit(1, atWordStart(out) ? '"' : '?', 'letter');
 			continue;
 		}
 		if (c === CLOSE_QUOTE) {
-			out += '"';
 			numeric = false;
+			emit(1, '"', 'letter');
 			continue;
 		}
-		const punct = PUNCT_OF.get(c) ?? c;
-		numeric = numeric && (punct === '.' || punct === ',');
-		out += punct;
+		const punct = PUNCT_OF.get(c);
+		const text = punct ?? c;
+		numeric = numeric && (text === '.' || text === ',');
+		emit(1, text, punct === undefined ? 'other' : 'letter');
 	}
-	return out;
+	return readings;
 }
+
+export const fromBraille = (cells: string) =>
+	read(cells)
+		.map((reading) => reading.text)
+		.join('');
 
 export const looksLikeBraille = (text: string) => /[\u2800-\u28ff]/.test(text);
 

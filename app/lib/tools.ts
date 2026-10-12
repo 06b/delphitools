@@ -1062,6 +1062,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/braille-converter',
 				produces: ['text/plain'],
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'ipa-transcriber',

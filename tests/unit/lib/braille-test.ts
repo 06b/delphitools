@@ -3,6 +3,7 @@ import {
 	dots,
 	fromBraille,
 	looksLikeBraille,
+	read,
 	toBraille,
 } from 'delphitools-v2/lib/braille';
 
@@ -70,5 +71,17 @@ module('Unit | lib | braille', function () {
 		assert.true(looksLikeBraille('hi ⠓'));
 		assert.false(looksLikeBraille('hi'));
 		assert.false(looksLikeBraille(''));
+	});
+
+	test('read: the steps of a reading', function (assert) {
+		const readings = read(toBraille('Hi 1'));
+		assert.deepEqual(
+			readings.map((r) => r.text),
+			['', 'H', 'i', ' ', '', '1'],
+		);
+		assert.strictEqual(readings[0]?.kind, 'indicator');
+		assert.strictEqual(readings[3]?.kind, 'other');
+		assert.strictEqual(read(toBraille('(a)'))[0]?.cells.length, 2);
+		assert.strictEqual(read('⠠⠠⠝⠁')[0]?.cells, '⠠⠠');
 	});
 });

@@ -1,99 +1,116 @@
-// braille-converter behavioural rig
-// headless chrome grants clipboard after overridePermissions below
+// braille-converter: the canon port
 //
 // Usage: npm start, then node scripts/verify/braille-converter.mjs
 
+import { launch, visit, check, finish, sleep } from './harness.mjs';
 import {
-	launch,
-	visit,
-	check,
-	finish,
-	sleep,
-	captureObjectUrl,
-	BASE,
-} from './harness.mjs';
+	checkActions,
+	checkLayout,
+	checkNarrow,
+	checkPaste,
+	grantClipboard,
+	headings,
+	result,
+	setSource,
+	typeSource,
+} from './text-tool.mjs';
 
 const { browser, page } = await launch();
-await browser
-	.defaultBrowserContext()
-	.overridePermissions(BASE, [
-		'clipboard-read',
-		'clipboard-write',
-		'clipboard-sanitized-write',
-	]);
+await grantClipboard(page);
 
 await visit(page, '/tools/braille-converter');
-
-const output = () => page.$eval('.dt-brl-output', (el) => el.textContent);
-const clear = () =>
-	page.$eval('.dt-brl-input', (el) => {
-		el.value = '';
-		el.dispatchEvent(new Event('input', { bubbles: true }));
-	});
-const clickMode = (label) =>
-	page.$$eval(
-		'.dt-brl-mode',
-		(buttons, text) => buttons.find((b) => b.textContent.trim() === text)?.click(),
-		label,
-	);
-
-await page.type('.dt-brl-input', 'Hello 42');
-await sleep(100);
+await checkLayout(page, '.braille-converter');
 check(
-	'text becomes cells with capital and numeric indicators',
-	(await output()) === '⠠⠓⠑⠇⠇⠕ ⠼⠙⠃',
-	await output(),
+	'an empty source shows the blank cells',
+	!!(await page.$('.brl-blank')),
+);
+
+const banner = () =>
+	page.evaluate(() => ({
+		cells: document.querySelectorAll(
+			'.brl-glyph--cell, .brl-glyph--indicator',
+		).length,
+		indicators: document.querySelectorAll('.brl-glyph--indicator').length,
+		labels: [...document.querySelectorAll('.brl-label')]
+			.map((l) => l.textContent)
+			.join(''),
+		raised: document.querySelectorAll('.brl-dot').length,
+		name: document
+			.querySelector('.brl-embossing')
+			.getAttribute('aria-label'),
+	}));
+
+await typeSource(page, 'Hello 42');
+check(
+	'text becomes cells with capital and numeric indicators, live',
+	(await result(page)) === '⠠⠓⠑⠇⠇⠕ ⠼⠙⠃',
+	await result(page),
 );
 check(
-	'the first cell is titled with its dot numbers',
-	(await page.$eval('.dt-brl-cell', (el) => el.title)) === '6',
+	'the direction reads Text to Braille',
+	(await headings(page)).join(' > ') === 'Text > Braille',
+	(await headings(page)).join(' > '),
+);
+check(
+	'the first result cell is titled with its dot numbers',
+	(await page.$eval('.brl-result-cell', (el) => el.title)) === '6',
 );
 check(
 	'the space is not wrapped as a cell',
-	(await page.$$eval('.dt-brl-cell', (els) => els.length)) === 9,
+	(await page.$$eval('.brl-result-cell', (els) => els.length)) === 9,
 );
-
-await clear();
-await page.type('.dt-brl-input', '⠠⠓⠑⠇⠇⠕');
-await sleep(100);
-check('Auto reads cells back to text', (await output()) === 'Hello', await output());
-check(
-	'and the output pane drops the braille sizing',
-	!!(await page.$('.dt-brl-output.is-text')),
+let b = await banner();
+check('the banner embosses nine cells', b.cells === 9, `${b.cells}`);
+check('two of them indicators', b.indicators === 2, `${b.indicators}`);
+check('each labelled with what it reads', b.labels === '⇧Hello#42', b.labels);
+check('and the banner is named by the text', b.name === 'Hello 42', b.name);
+const tiles = await page.$$eval('.canon-tiles-value', (els) =>
+	els.map((e) => e.textContent.trim()).join(','),
 );
+// a space is a blank cell on the page
+check('page tiles count cells, lines and pages', tiles === '10,1,1', tiles);
 
-await clickMode('To braille');
-await clear();
-await page.type('.dt-brl-input', 'NASA');
-await sleep(100);
+await typeSource(page, '⠠⠓⠑⠇⠇⠕');
+check('Auto reads cells back to text', (await result(page)) === 'Hello', await result(page));
 check(
-	'To braille is the active segment',
-	(await page.$eval('.dt-brl-mode.is-active', (el) => el.textContent.trim())) ===
-		'To braille',
+	'and the headings swap to Braille > Text',
+	(await headings(page)).join(' > ') === 'Braille > Text',
+	(await headings(page)).join(' > '),
+);
+b = await banner();
+check('the banner shows the typed cells', b.cells === 6, `${b.cells}`);
+
+await page.$$eval('.canon-segmented button', (buttons) =>
+	buttons.find((x) => x.textContent.trim() === 'To braille')?.click(),
+);
+await setSource(page, 'NASA');
+check(
+	'To braille is the checked segment',
+	(await page.$eval('.canon-segmented [aria-checked="true"]', (el) =>
+		el.textContent.trim(),
+	)) === 'To braille',
 );
 check(
 	'an all-caps word takes the caps-word indicator',
-	(await output()) === '⠠⠠⠝⠁⠎⠁',
-	await output(),
+	(await result(page)) === '⠠⠠⠝⠁⠎⠁',
+	await result(page),
 );
 
-await page.click('.dt-brl-copy');
-await sleep(100);
+await checkActions(page, '⠠⠠⠝⠁⠎⠁', 'braille.txt');
+await checkPaste(page, 'Paste 1');
+check('the pasted text converts', (await result(page)) === '⠠⠏⠁⠎⠞⠑ ⠼⠁');
+
+await visit(page, '/tools/braille-converter?brailleText=%E2%A3%BF&brailleMode=2');
 check(
-	'Copy reports Copied',
-	(await page.$eval('.dt-brl-copy', (el) => el.textContent.trim())) === 'Copied',
+	'?brailleMode=2 reads cells',
+	(await headings(page))[1] === 'Text',
 );
 check(
-	'and the cells land on the clipboard',
-	(await page.evaluate(() => navigator.clipboard.readText())) === '⠠⠠⠝⠁⠎⠁',
+	'an eight-dot cell draws four rows',
+	(await page.$$eval('.brl-glyph--cell circle', (els) => els.length)) === 8,
 );
 
-await captureObjectUrl(page);
-await page.click('.dt-brl-download');
-await sleep(200);
-check(
-	'Download saves the cells as text',
-	(await page.evaluate(() => window.__result?.text())) === '⠠⠠⠝⠁⠎⠁',
-);
+await checkNarrow(page, '/tools/braille-converter?brailleText=Hello%20World');
+await sleep(50);
 
 await finish(browser);
