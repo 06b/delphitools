@@ -12,6 +12,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { allTools } = await import('../app/lib/tools.ts');
 const { FX_ICONS, FX_ICON_FALLBACK } =
 	await import('../app/lib/substrata/fx-icons.ts');
+const { TOOL_ORDER } = await import('../app/lib/errata/tool.ts');
 
 // runtime icon names
 const EXTRA = [
@@ -36,6 +37,7 @@ const EXTRA = [
 	'list-checks',
 	'settings-2',
 	...Object.values(FX_ICONS),
+	...TOOL_ORDER.map((t) => t.icon),
 	FX_ICON_FALLBACK,
 ];
 

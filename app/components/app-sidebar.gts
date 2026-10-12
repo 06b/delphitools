@@ -219,6 +219,22 @@ export default class AppSidebar extends Component {
 							</LinkTo>
 						</NavTip>
 						<NavTip
+							@label="Errata"
+							@show={{this.collapsed}}
+						>
+							<LinkTo
+								@route="errata"
+								class="dt-nav-link"
+							>
+								<Icon
+									@name="signature"
+								/>
+								<span
+									class="dt-nav-label"
+								>Errata</span>
+							</LinkTo>
+						</NavTip>
+						<NavTip
 							@label="Workflows"
 							@show={{this.collapsed}}
 						>

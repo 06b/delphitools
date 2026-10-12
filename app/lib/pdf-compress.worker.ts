@@ -5,69 +5,11 @@ import {
 	STRUCTURAL_OPTIONS,
 	type CompressOptions,
 } from './pdf-compress-core';
-import { rawImport } from 'delphitools-v2/lib/raw-import';
-
-interface MupdfBuffer {
-	asUint8Array(): Uint8Array;
-	getLength(): number;
-	destroy(): void;
-}
-
-interface MupdfPixmap {
-	getWidth(): number;
-	getHeight(): number;
-	getNumberOfComponents(): number;
-	warp(points: number[][], width: number, height: number): MupdfPixmap;
-	asJPEG(quality: number, invertCmyk: boolean): Uint8Array;
-	destroy(): void;
-}
-
-interface MupdfImage {
-	toPixmap(): MupdfPixmap;
-	destroy(): void;
-}
-
-interface MupdfObject {
-	isStream(): boolean;
-	isName(): boolean;
-	isNull(): boolean;
-	isBoolean(): boolean;
-	asName(): string;
-	asBoolean(): boolean;
-	get(key: string): MupdfObject;
-	put(key: string, value: unknown): void;
-	delete(key: string): void;
-	readRawStream(): MupdfBuffer;
-	writeRawStream(buf: Uint8Array): void;
-}
-
-interface MupdfPdfDocument {
-	countObjects(): number;
-	countPages(): number;
-	newIndirect(num: number): MupdfObject;
-	newName(name: string): MupdfObject;
-	loadImage(ref: MupdfObject): MupdfImage;
-	subsetFonts(): void;
-	saveToBuffer(options: Record<string, unknown>): MupdfBuffer;
-	destroy(): void;
-}
-
-interface MupdfModule {
-	PDFDocument: new (data: Uint8Array) => MupdfPdfDocument;
-}
-
-const MODULE_URL = '/mupdf/mupdf.js';
-
-let modulePromise: Promise<MupdfModule> | null = null;
-
-// loads mupdf outside bundling
-function getMupdf(): Promise<MupdfModule> {
-	modulePromise ??= rawImport<MupdfModule>(MODULE_URL);
-	return modulePromise;
-}
+import type * as Mupdf from 'mupdf';
+import { getMupdf } from 'delphitools-v2/lib/mupdf';
 
 function recompressImages(
-	doc: MupdfPdfDocument,
+	doc: Mupdf.PDFDocument,
 	quality: number,
 	maxEdge: number,
 ): number {
@@ -82,9 +24,9 @@ function recompressImages(
 		if (imageMask.isBoolean() && imageMask.asBoolean()) continue;
 		if (!ref.get('SMask').isNull()) continue;
 
-		let image: MupdfImage | null = null;
-		let pix: MupdfPixmap | null = null;
-		let scaled: MupdfPixmap | null = null;
+		let image: Mupdf.Image | null = null;
+		let pix: Mupdf.Pixmap | null = null;
+		let scaled: Mupdf.Pixmap | null = null;
 		try {
 			image = doc.loadImage(ref);
 			pix = image.toPixmap();
@@ -175,7 +117,7 @@ async function handleMessage(msg: InMessage): Promise<void> {
 	try {
 		const { PDFDocument } = await getMupdf();
 		const doc = new PDFDocument(new Uint8Array(msg.bytes));
-		let buffer: MupdfBuffer | null = null;
+		let buffer: Mupdf.Buffer | null = null;
 		try {
 			const imagesTouched = msg.options.recompressImages
 				? recompressImages(

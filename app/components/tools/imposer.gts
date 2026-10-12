@@ -8,7 +8,6 @@ import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 
 import type { TOC } from '@ember/component/template-only';
-import type { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import DownloadLabel from 'delphitools-v2/components/download-label';
@@ -29,12 +28,15 @@ import {
 } from 'delphitools-v2/components/ui/select';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import {
+	DEFAULT_IMPOSITION_CONFIG,
 	DUPLEX_AWARE_LAYOUTS,
 	IMPOSITION_LAYOUTS,
-	MM_TO_POINTS,
 	PAPER_SIZES,
+	effectiveSheetH,
+	effectiveSheetW,
 	getLayoutById,
 	getOuterEdges,
+	imposePdf,
 	type ImpositionConfig,
 	type ImpositionResult,
 	type PagePlacement,
@@ -43,10 +45,6 @@ import {
 import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import { loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
-
-type EmbeddedPage = Awaited<ReturnType<PDFDocument['embedPages']>>[number];
-type PdfPage = ReturnType<PDFDocument['addPage']>;
-type Degrees = typeof import('pdf-lib').degrees;
 
 const GANG_RUN_OPTIONS = [2, 4, 6, 8, 9];
 
@@ -87,24 +85,6 @@ function clampGrid(raw: string): number {
 	return Math.max(1, Math.min(10, parseInt(raw, 10) || 1));
 }
 
-function effectiveSheetW(
-	paperSize: PaperSize,
-	orientation: 'portrait' | 'landscape',
-): number {
-	return orientation === 'landscape'
-		? Math.max(paperSize.widthMm, paperSize.heightMm)
-		: Math.min(paperSize.widthMm, paperSize.heightMm);
-}
-
-function effectiveSheetH(
-	paperSize: PaperSize,
-	orientation: 'portrait' | 'landscape',
-): number {
-	return orientation === 'landscape'
-		? Math.min(paperSize.widthMm, paperSize.heightMm)
-		: Math.max(paperSize.widthMm, paperSize.heightMm);
-}
-
 function drawCropMarkArms(
 	ctx: CanvasRenderingContext2D,
 	x: number,
@@ -128,121 +108,6 @@ function drawCropMarkArms(
 		ctx.lineTo(x, y);
 	}
 	ctx.stroke();
-}
-
-function drawPlacementsOnPage(
-	page: PdfPage,
-	placements: PagePlacement[],
-	embeddedPages: EmbeddedPage[],
-	sheetHPt: number,
-	degrees: Degrees,
-) {
-	for (const p of placements) {
-		if (p.pageNumber === 0) continue;
-		const embedded = embeddedPages[p.pageNumber - 1];
-		if (!embedded) continue;
-
-		const xPt = p.x * MM_TO_POINTS;
-		const wPt = p.width * MM_TO_POINTS;
-		const hPt = p.height * MM_TO_POINTS;
-		const yPt = sheetHPt - (p.y * MM_TO_POINTS + hPt);
-
-		if (p.rotation === 0) {
-			page.drawPage(embedded, {
-				x: xPt,
-				y: yPt,
-				width: wPt,
-				height: hPt,
-			});
-		} else if (p.rotation === 180) {
-			page.drawPage(embedded, {
-				x: xPt + wPt,
-				y: yPt + hPt,
-				width: wPt,
-				height: hPt,
-				rotate: degrees(180),
-			});
-		} else if (p.rotation === 90) {
-			page.drawPage(embedded, {
-				x: xPt + wPt,
-				y: yPt,
-				width: hPt,
-				height: wPt,
-				rotate: degrees(90),
-			});
-		} else if (p.rotation === 270) {
-			page.drawPage(embedded, {
-				x: xPt,
-				y: yPt + hPt,
-				width: hPt,
-				height: wPt,
-				rotate: degrees(270),
-			});
-		}
-	}
-}
-
-function drawPdfMarkH(
-	page: PdfPage,
-	x: number,
-	y: number,
-	dir: number,
-	offset: number,
-	len: number,
-) {
-	page.drawLine({
-		start: { x: x + dir * offset, y },
-		end: { x: x + dir * (offset + len), y },
-		thickness: 0.25,
-	});
-}
-
-function drawPdfMarkV(
-	page: PdfPage,
-	x: number,
-	y: number,
-	dir: number,
-	offset: number,
-	len: number,
-) {
-	page.drawLine({
-		start: { x, y: y + dir * offset },
-		end: { x, y: y + dir * (offset + len) },
-		thickness: 0.25,
-	});
-}
-
-function drawCropMarksOnPdfPage(
-	page: PdfPage,
-	placements: PagePlacement[],
-	sheetHPt: number,
-) {
-	// 18pt trim marks
-	const markLen = 18;
-	const offset = 3;
-
-	const edges = getOuterEdges(placements);
-
-	placements.forEach((p, i) => {
-		const e = edges[i];
-		if (!e) return;
-
-		const x1 = p.x * MM_TO_POINTS;
-		const x2 = (p.x + p.width) * MM_TO_POINTS;
-		const y1Pdf = sheetHPt - p.y * MM_TO_POINTS;
-		const y2Pdf = sheetHPt - (p.y + p.height) * MM_TO_POINTS;
-
-		if (e.left) drawPdfMarkH(page, x1, y1Pdf, -1, offset, markLen);
-		if (e.top) drawPdfMarkV(page, x1, y1Pdf, 1, offset, markLen);
-		if (e.right) drawPdfMarkH(page, x2, y1Pdf, 1, offset, markLen);
-		if (e.top) drawPdfMarkV(page, x2, y1Pdf, 1, offset, markLen);
-		if (e.left) drawPdfMarkH(page, x1, y2Pdf, -1, offset, markLen);
-		if (e.bottom)
-			drawPdfMarkV(page, x1, y2Pdf, -1, offset, markLen);
-		if (e.right) drawPdfMarkH(page, x2, y2Pdf, 1, offset, markLen);
-		if (e.bottom)
-			drawPdfMarkV(page, x2, y2Pdf, -1, offset, markLen);
-	});
 }
 
 interface MarkLine {
@@ -458,15 +323,15 @@ export default class ImposerTool extends Component {
 	@tracked pdfPageCount = 0;
 	@tracked pdfDoc: PDFDocumentProxy | null = null;
 
-	@tracked layoutId = 'saddle-stitch';
-	@tracked paperSizeId = 'a4';
-	@tracked orientation: 'portrait' | 'landscape' = 'landscape';
-	@tracked marginMm = 5;
-	@tracked gutterMm = 2;
-	@tracked creepMm = 0;
-	@tracked scaling: 'fit' | 'fill' | 'actual' = 'fit';
-	@tracked blankHandling: 'auto' | 'leave-empty' = 'auto';
-	@tracked cropMarks = true;
+	@tracked layoutId = DEFAULT_IMPOSITION_CONFIG.layoutId;
+	@tracked paperSizeId = DEFAULT_IMPOSITION_CONFIG.paperSize.id;
+	@tracked orientation = DEFAULT_IMPOSITION_CONFIG.orientation;
+	@tracked marginMm = DEFAULT_IMPOSITION_CONFIG.marginMm;
+	@tracked gutterMm = DEFAULT_IMPOSITION_CONFIG.gutterMm;
+	@tracked creepMm = DEFAULT_IMPOSITION_CONFIG.creepMm;
+	@tracked scaling = DEFAULT_IMPOSITION_CONFIG.scaling;
+	@tracked blankHandling = DEFAULT_IMPOSITION_CONFIG.blankHandling;
+	@tracked cropMarks = DEFAULT_IMPOSITION_CONFIG.cropMarks;
 	@tracked nUp = 4;
 	@tracked customRows = 2;
 	@tracked customCols = 2;
@@ -480,7 +345,6 @@ export default class ImposerTool extends Component {
 	} | null = null;
 
 	@tracked isGenerating = false;
-	@tracked generateProgress = '';
 	@tracked printGuideOpen = false;
 	@tracked layoutOpen = false;
 
@@ -1195,64 +1059,15 @@ export default class ImposerTool extends Component {
 
 	generateImposedPdf = async () => {
 		const bytes = this.pdfBytes;
-		const result = this.result;
-		if (!bytes || !result) return;
+		if (!bytes) return;
 
 		this.isGenerating = true;
-		this.generateProgress = 'Loading source PDF...';
-
 		try {
-			const { PDFDocument, degrees } =
-				await import('pdf-lib');
-			const srcDoc = await PDFDocument.load(bytes);
-			const outputDoc = await PDFDocument.create();
-
-			const paperSize = this.paperSize;
-			const sheetWPt =
-				effectiveSheetW(paperSize, this.orientation) *
-				MM_TO_POINTS;
-			const sheetHPt =
-				effectiveSheetH(paperSize, this.orientation) *
-				MM_TO_POINTS;
-
-			this.generateProgress = 'Embedding source pages...';
-			const embeddedPages = await outputDoc.embedPages(
-				srcDoc.getPages(),
-			);
-
-			const withMarks = this.cropMarks;
-
-			result.sheets.forEach((sheet, si) => {
-				this.generateProgress = `Generating sheet ${si + 1} of ${result.sheets.length}...`;
-
-				for (const side of [sheet.front, sheet.back]) {
-					const page = outputDoc.addPage([
-						sheetWPt,
-						sheetHPt,
-					]);
-					drawPlacementsOnPage(
-						page,
-						side,
-						embeddedPages,
-						sheetHPt,
-						degrees,
-					);
-					if (withMarks)
-						drawCropMarksOnPdfPage(
-							page,
-							side,
-							sheetHPt,
-						);
-				}
-			});
-
-			this.generateProgress = 'Saving PDF...';
-
+			const out = await imposePdf(bytes, this.config);
 			// blobpart requires arraybuffer
-			const blob = new Blob(
-				[new Uint8Array(await outputDoc.save())],
-				{ type: 'application/pdf' },
-			);
+			const blob = new Blob([new Uint8Array(out)], {
+				type: 'application/pdf',
+			});
 			downloadBlob(
 				blob,
 				`imposed-${this.layoutId}-${this.paperSizeId}.pdf`,
@@ -1264,7 +1079,6 @@ export default class ImposerTool extends Component {
 			);
 		} finally {
 			this.isGenerating = false;
-			this.generateProgress = '';
 		}
 	};
 
@@ -2162,11 +1976,7 @@ export default class ImposerTool extends Component {
 				>
 					{{#if this.isGenerating}}
 						<NdsLoader />
-						{{#if this.generateProgress}}
-							{{this.generateProgress}}
-						{{else}}
-							Generating...
-						{{/if}}
+						Generating...
 					{{else}}
 						<DownloadLabel
 							@label="Download Imposed PDF"

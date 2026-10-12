@@ -8,6 +8,14 @@ export type { CompressOptions, CompressResult } from './pdf-compress-core';
 
 import type { CompressOptions, CompressResult } from './pdf-compress-core';
 
+// 0 = full resolution
+export const MAX_SIZES: { value: number; label: string }[] = [
+	{ value: 0, label: 'Full' },
+	{ value: 2400, label: '2400' },
+	{ value: 1600, label: '1600' },
+	{ value: 1000, label: '1000' },
+];
+
 interface WorkerResult {
 	id: number;
 	ok: boolean;

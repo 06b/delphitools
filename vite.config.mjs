@@ -32,6 +32,12 @@ const PDFJS_WASM_DIR = join(
 	'wasm',
 );
 const PDFJS_WASM_ROUTE = '/pdfjs-wasm/';
+// non-embedded standard 14 fonts render from pdf.js's own files instead of whatever the system has
+const PDFJS_FONTS_DIR = join(
+	dirname(wasmRequire.resolve('pdfjs-dist/package.json')),
+	'standard_fonts',
+);
+const PDFJS_FONTS_ROUTE = '/pdfjs-fonts/';
 
 function pdfjsWasm() {
 	const contentType = (name) => {
@@ -45,16 +51,23 @@ function pdfjsWasm() {
 		configureServer(server) {
 			server.middlewares.use((req, res, next) => {
 				const url = req.url ?? '';
-				if (!url.startsWith(PDFJS_WASM_ROUTE))
-					return next();
+				const route = url.startsWith(PDFJS_WASM_ROUTE)
+					? [PDFJS_WASM_ROUTE, PDFJS_WASM_DIR]
+					: url.startsWith(PDFJS_FONTS_ROUTE)
+						? [
+								PDFJS_FONTS_ROUTE,
+								PDFJS_FONTS_DIR,
+							]
+						: null;
+				if (!route) return next();
 				const name = url
-					.slice(PDFJS_WASM_ROUTE.length)
+					.slice(route[0].length)
 					.split(/[?#]/)[0];
 				if (!name || name.includes('/')) return next();
 				let body;
 				try {
 					body = readFileSync(
-						join(PDFJS_WASM_DIR, name),
+						join(route[1], name),
 					);
 				} catch {
 					return next();
@@ -67,15 +80,19 @@ function pdfjsWasm() {
 			});
 		},
 		generateBundle() {
-			for (const name of readdirSync(PDFJS_WASM_DIR)) {
-				this.emitFile({
-					type: 'asset',
-					fileName: `pdfjs-wasm/${name}`,
-					source: readFileSync(
-						join(PDFJS_WASM_DIR, name),
-					),
-				});
-			}
+			for (const [dir, prefix] of [
+				[PDFJS_WASM_DIR, 'pdfjs-wasm'],
+				[PDFJS_FONTS_DIR, 'pdfjs-fonts'],
+			])
+				for (const name of readdirSync(dir)) {
+					this.emitFile({
+						type: 'asset',
+						fileName: `${prefix}/${name}`,
+						source: readFileSync(
+							join(dir, name),
+						),
+					});
+				}
 		},
 	};
 }

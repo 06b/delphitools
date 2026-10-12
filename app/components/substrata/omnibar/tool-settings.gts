@@ -71,7 +71,7 @@ interface SubSignature {
 	Args: { sub?: string };
 }
 
-const Row: TOC<{
+export const Row: TOC<{
 	Element: HTMLDivElement;
 	Args: { label: string };
 	Blocks: { default: [] };
@@ -82,7 +82,7 @@ const Row: TOC<{
 	</div>
 </template>;
 
-const ColourCell: TOC<{
+export const ColourCell: TOC<{
 	Args: {
 		colour: string;
 		onChange: (hex: string) => void;
@@ -201,7 +201,7 @@ class AdjustSettings extends Component {
 
 	<template>
 		<div class="sub-tool-pane is-w224">
-					<div class="sub-tool-note is-lead">Quickly add an
+			<div class="sub-tool-note is-lead">Quickly add an
 				adjustment. Fine-adjust in the
 				<Icon
 					@name="sparkles"
@@ -276,7 +276,7 @@ class MoveSettings extends Component {
 
 	<template>
 		<div class="sub-tool-pane is-w200">
-					<Row @label="Transform">
+			<Row @label="Transform">
 				<span class="segmented sub-seg-2">
 					<button
 						type="button"
@@ -310,7 +310,7 @@ class MoveSettings extends Component {
 					>Separate</button>
 				</span>
 			</Row>
-					<Row @label="Snap">
+			<Row @label="Snap">
 				<Switch
 					@checked={{this.guides.current.snap}}
 					@onChange={{this.toggleSnap}}

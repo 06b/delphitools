@@ -115,6 +115,8 @@
 @use "substrata/shared";
 @use "substrata/shell";
 @use "substrata/top-bar";
+@use "errata";
+@use "errata-organise";
 
 // weight axis 400–700, self-hosted
 @font-face {

@@ -1,5 +1,8 @@
 import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
 
+// avoids import cycle
+export { normaliseRotation } from 'delphitools-v2/lib/imposition';
+
 export type FitMode = 'contain' | 'cover' | 'stretch';
 export type PageOrientation = 'auto' | 'portrait' | 'landscape';
 
@@ -49,10 +52,6 @@ export function parsePageRanges(spec: string, pageCount: number): number[][] {
 
 export function everyPageAlone(pageCount: number): number[][] {
 	return Array.from({ length: pageCount }, (_, index) => [index]);
-}
-
-export function normaliseRotation(degrees: number): number {
-	return (((Math.round(degrees / 90) * 90) % 360) + 360) % 360;
 }
 
 export function fitPlacement(

@@ -42,10 +42,10 @@ for (const path of walk(join(root, 'app/components'))) {
 	if (!path.endsWith('.gts')) continue;
 	const source = readFileSync(path, 'utf8');
 	const used = new Set();
-	// else dt-sub-frame reads sub-
+	// else dt-sub-frame reads sub-; err- is errata
 	for (const attr of source.matchAll(/class="([^"]*)"/g))
 		for (const cls of attr[1].matchAll(
-			/(?<![\w-])(?:dt|sub)-[a-z0-9-]+\b/g,
+			/(?<![\w-])(?:dt|sub|err)-[a-z0-9-]+\b/g,
 		))
 			used.add(cls[0]);
 

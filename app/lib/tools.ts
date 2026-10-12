@@ -237,6 +237,17 @@ export const toolCategories: ToolCategory[] = [
 				highlight: true,
 			},
 			{
+				id: 'errata',
+				name: 'Errata',
+				description:
+					'Edit PDFs in your browser. Yeah. For real.',
+				icon: 'signature',
+				href: '/errata',
+				route: 'errata',
+				accepts: ['application/pdf', 'image/*'],
+				beta: true,
+			},
+			{
 				id: 'artwork-enhancer',
 				name: 'Artwork Enhancer',
 				description:
