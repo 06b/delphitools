@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { hash } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { LinkTo } from '@ember/routing';
@@ -13,7 +12,6 @@ import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
-import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import Icon from 'delphitools-v2/components/icon';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
@@ -45,7 +43,7 @@ const sizeTitles = ['Any size', ...sizes.map((n) => `${n} colours`)];
 
 /**
  * The iOS launch arguments as query flags: ?collectionCategory=<key or
- * label> ?collectionPalette=<id> ?collectionSearch=<text>.
+ * label> ?collectionPalette=<id>.
  */
 function launchFlags(search: string) {
 	const query = new URLSearchParams(search);
@@ -65,7 +63,6 @@ function launchFlags(search: string) {
 	return {
 		shelf: Math.max(shelf, 0),
 		palette: found ? byCategory[found.category].indexOf(found) : 0,
-		search: query.get('collectionSearch') ?? '',
 	};
 }
 
@@ -75,7 +72,6 @@ export default class PaletteCollection extends Component {
 
 	@tracked shelf: number;
 	@tracked selected: number;
-	@tracked query: string;
 	@tracked size = 0;
 
 	constructor(owner: Owner, args: object) {
@@ -83,47 +79,18 @@ export default class PaletteCollection extends Component {
 		const flags = launchFlags(window.location.search);
 		this.shelf = flags.shelf;
 		this.selected = flags.palette;
-		this.query = flags.search;
-	}
-
-	get searching() {
-		return this.query.trim() !== '';
 	}
 
 	#fits = (palette: CuratedPalette) =>
 		this.size === 0 ||
 		palette.colors.length === sizes[this.size - 1];
 
-	// match displayed notation too
-	#matches = (palette: CuratedPalette) => {
-		const query = this.query.trim().toLowerCase();
-		return (
-			palette.name.toLowerCase().includes(query) ||
-			COLLECTION_CATEGORIES[palette.category].label
-				.toLowerCase()
-				.includes(query) ||
-			palette.colors.some(
-				(c) =>
-					c.toLowerCase().includes(query) ||
-					this.colourNotation
-						.format(c)
-						.toLowerCase()
-						.includes(query),
-			)
-		);
-	};
-
 	shelfPalettes = (index: number) =>
 		byCategory[shelves[index]!].filter(this.#fits);
 
-	/** Palettes on the second wheel: the shelf's, or every match for the search. */
 	@cached
 	get shown(): CuratedPalette[] {
-		return this.searching
-			? CURATED_PALETTES.filter(this.#fits).filter(
-					this.#matches,
-				)
-			: this.shelfPalettes(this.shelf);
+		return this.shelfPalettes(this.shelf);
 	}
 
 	get palette(): CuratedPalette | undefined {
@@ -158,17 +125,6 @@ export default class PaletteCollection extends Component {
 
 	get category() {
 		return COLLECTION_CATEGORIES[shelves[this.shelf]!];
-	}
-
-	get emptyTitle() {
-		return this.searching ? this.query : this.category.label;
-	}
-
-	get countLabel() {
-		if (!this.searching && this.size === 0)
-			return `${CURATED_PALETTES.length} palettes`;
-		const found = this.shown.length;
-		return `${found} ${found === 1 ? 'result' : 'results'}`;
 	}
 
 	get colorsQuery() {
@@ -216,11 +172,6 @@ export default class PaletteCollection extends Component {
 		this.selected = 0;
 	};
 
-	search = (event: Event) => {
-		this.query = (event.target as HTMLInputElement).value;
-		this.selected = 0;
-	};
-
 	<template>
 		<CanonSplit
 			class="palette-collection"
@@ -236,7 +187,7 @@ export default class PaletteCollection extends Component {
 					<Deck
 						@palette={{this.palette}}
 						@detail={{this.detail}}
-						@emptyTitle={{this.emptyTitle}}
+						@emptyTitle={{this.category.label}}
 						@format={{this.colourNotation.format}}
 					/>
 				</CanonCanvas>
@@ -248,11 +199,7 @@ export default class PaletteCollection extends Component {
 				>
 					<div
 						style={{wheelStyle}}
-						class="pc-wheels
-							{{if
-								this.searching
-								'pc-wheels--searching'
-							}}"
+						class="pc-wheels"
 					>
 						<span
 							class="pc-window"
@@ -328,24 +275,6 @@ export default class PaletteCollection extends Component {
 					</div>
 				</CanonCanvas>
 				<CanonRows @framed={{true}}>
-					<label class="pc-search">
-						<Icon @name="search" />
-						<CanonTextCell
-							class="pc-search-field"
-							@value={{this.query}}
-							@placeholder="Search palettes…"
-							aria-label="Search palettes"
-							spellcheck="false"
-							autocomplete="off"
-							{{on
-								"input"
-								this.search
-							}}
-						/>
-						<span
-							class="pc-count"
-						>{{this.countLabel}}</span>
-					</label>
 					<CanonRow
 						@title="Colours"
 						@form="stacked"
@@ -357,12 +286,10 @@ export default class PaletteCollection extends Component {
 							@onChange={{this.pickSize}}
 						/>
 					</CanonRow>
-					{{#unless this.searching}}
-						<p
-							class="pc-description"
-						>{{this.category.label}}:
-							{{this.category.description}}</p>
-					{{/unless}}
+					<p
+						class="pc-description"
+					>{{this.category.label}}:
+						{{this.category.description}}</p>
 				</CanonRows>
 				{{#if this.palette}}
 					<CanonRows @framed={{true}}>

@@ -30,11 +30,9 @@ const state = () =>
 			),
 			heading: text('.palette-collection .canon-split-main .canon-rows:last-child .canon-heading'),
 			cards: document.querySelectorAll('.canon-colour-card--row').length,
-			count: text('.pc-count'),
 			description: text('.pc-description'),
 			empty: text('.pc-empty'),
 			open: document.querySelector('.pc-open')?.getAttribute('href') ?? '',
-			searching: !!document.querySelector('.pc-wheels--searching'),
 		};
 	});
 
@@ -53,7 +51,7 @@ let s = await state();
 check('starts on Classic, first palette', s.shelf.text === 'Classic' && s.palette.now === '0', `${s.shelf.text} ${s.palette.text}`);
 check('the deck and the details show it', s.cover === s.palette.text && s.heading === s.palette.text, `${s.cover} ${s.heading}`);
 check('a chip and a card per colour', s.chips.length > 0 && s.cards === s.chips.length, `${s.chips.length} ${s.cards}`);
-check('the web count and description', s.count === '284 palettes' && s.description.startsWith('Classic:'), `${s.count} | ${s.description}`);
+check('the category description', s.description.startsWith('Classic:'), s.description);
 check(
 	'the open link carries the colours',
 	s.open.includes('/tools/palette-genny') && decodeURIComponent(s.open).includes(s.chips[0].toLowerCase()),
@@ -81,7 +79,6 @@ await page.evaluate(() =>
 await sleep(300);
 s = await state();
 check('the size filter narrows the shelf', s.chips.length === 4 || s.empty !== '', `${s.chips.length} ${s.empty}`);
-check('and counts results', /results?$/.test(s.count), s.count);
 await page.evaluate(() =>
 	[...document.querySelectorAll('.palette-collection [role="radio"]')]
 		.find((b) => b.textContent.trim() === 'Any size')
@@ -89,35 +86,16 @@ await page.evaluate(() =>
 );
 await sleep(300);
 
-const search = await page.$('.pc-search-field');
-await search.type('mayfair');
-await sleep(400);
-s = await state();
-check('search looks across every shelf', s.searching && s.palette.text === 'Mayfair' && s.count === '1 result', `${s.palette.text} ${s.count}`);
-await search.evaluate((el) => el.select());
-await search.type('zzzz');
-await sleep(400);
-s = await state();
-check('no match says so', s.empty === 'No palettes found matching your filters.' && s.cards === 0, s.empty);
-await search.evaluate((el) => el.select());
-await page.keyboard.press('Backspace');
-await sleep(400);
-s = await state();
-check('clearing the search returns to the shelf', !s.searching && s.shelf.text === 'Nature', s.shelf.text);
-
 await page.evaluate(() => document.querySelector('.pc-chip[data-hex]').click());
 await sleep(200);
 const copied = await page.evaluate(() => navigator.clipboard.readText());
 s = await state();
-check('a chip copies its hex', copied === s.chips[0], copied);
+check('a chip copies its value', copied === s.chips[0], copied);
 check('and the toast shows', await page.$eval('.canon-toast', (t) => t.style.opacity === '1'));
 
 await visit(page, '/tools/palette-collection?collectionPalette=tromso');
 s = await state();
 check('launch flags: a palette by id', s.palette.text === 'Tromsø' || s.cover.startsWith('Troms'), `${s.shelf.text} ${s.palette.text}`);
-await visit(page, '/tools/palette-collection?collectionSearch=keycap');
-s = await state();
-check('launch flags: a search', s.searching && Number(s.palette.max) > 0, s.count);
 
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/palette-collection');
