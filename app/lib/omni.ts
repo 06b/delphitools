@@ -130,7 +130,7 @@ async function unitAnswers(input: string): Promise<OmniAnswer[]> {
 		const unit = typoMatch[2]!.toLowerCase();
 
 		const { UNITS } =
-			await import('delphitools-v2/components/tools/typo-calc');
+			await import('delphitools-v2/components/tools/typo-calc/units');
 		const info = UNITS[unit as keyof typeof UNITS];
 		if (!info) return [];
 		const px = info.toPx(value, 16);

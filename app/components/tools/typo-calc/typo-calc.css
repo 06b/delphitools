@@ -1,0 +1,152 @@
+/* the line gauge */
+.typo-gauge {
+	position: absolute;
+	inset: 0;
+	background: var(--canon-card);
+}
+
+.typo-gauge-svg {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	font-family: var(--canon-mono-font);
+}
+
+.typo-gauge-shade {
+	fill: color-mix(in srgb, var(--canon-primary) 10%, transparent);
+}
+
+.typo-gauge-rule {
+	fill: var(--canon-border);
+}
+
+.typo-gauge-plate {
+	fill: var(--canon-muted);
+}
+
+.typo-gauge-symbol {
+	fill: var(--canon-muted-foreground);
+	font-size: 11px;
+	font-weight: var(--canon-weight-bold);
+	text-anchor: middle;
+	dominant-baseline: central;
+}
+
+.typo-gauge-ticks {
+	stroke: var(--canon-muted-foreground);
+	stroke-width: 1;
+}
+
+.typo-gauge-number {
+	fill: var(--canon-muted-foreground);
+	font-size: 9px;
+}
+
+.typo-gauge-row--input .typo-gauge-plate {
+	fill: var(--canon-primary);
+}
+
+.typo-gauge-row--input .typo-gauge-symbol {
+	fill: var(--canon-primary-foreground);
+}
+
+.typo-gauge-row--input .typo-gauge-ticks {
+	stroke: var(--canon-foreground);
+}
+
+.typo-gauge-row--input .typo-gauge-number {
+	fill: var(--canon-foreground);
+}
+
+.typo-gauge-box {
+	fill: var(--canon-card);
+}
+
+.typo-gauge-reading {
+	fill: var(--canon-primary);
+	font-size: 12px;
+	font-weight: var(--canon-weight-semibold);
+	dominant-baseline: central;
+}
+
+.typo-gauge-cursor {
+	fill: var(--canon-primary);
+}
+
+/* converted values: symbol, names, value */
+.typo-row {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	box-sizing: border-box;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 8px var(--canon-panel-padding) 8px 8px;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.typo-row[aria-current="true"] {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	.typo-row:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.typo-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.typo-row-symbol {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+	text-align: center;
+}
+
+.typo-row-names {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-inline-size: 0;
+}
+
+.typo-row-name {
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.typo-row-detail {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.typo-row-value {
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.typo-row[aria-current="true"] .typo-row-symbol,
+.typo-row[aria-current="true"] .typo-row-value {
+	color: var(--canon-primary);
+}

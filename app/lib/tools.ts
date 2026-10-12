@@ -733,6 +733,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between typographic units',
 				icon: 'hash',
 				href: '/tools/typo-calc',
+				canon: true,
 			},
 			{
 				id: 'word-counter',
