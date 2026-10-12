@@ -1,16 +1,39 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Picture, {
+	standIn,
+	type Shares,
+} from 'delphitools-v2/components/tools/font-explorer/picture';
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
+	chartRange,
+	readFont,
+	signed,
+	specimen,
+	tableDescriptions,
+	unwrap,
+	type FontFacts,
+} from 'delphitools-v2/components/tools/font-explorer/sfnt';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import './font-explorer/font-explorer.css';
 
 const FONT_EXTENSION = /\.(ttf|otf|woff2?)$/i;
 
@@ -34,25 +57,26 @@ export function fontFormat(fileName: string): string {
 	return 'truetype';
 }
 
-export function cssUsage(fileName: string): string {
-	const name = baseName(fileName);
+export function cssUsage(fileName: string, family = baseName(fileName)) {
 	return `@font-face {
-  font-family: '${name}';
+  font-family: '${family}';
   src: url('${fileName}') format('${fontFormat(fileName)}');
   font-weight: normal;
   font-style: normal;
 }
 
 .my-text {
-  font-family: '${name}', sans-serif;
+  font-family: '${family}', sans-serif;
 }`;
 }
 
 const ACCEPT = '.ttf,.otf,.woff,.woff2';
-
-const PREVIEW_SIZES = [12, 14, 16, 18, 24, 32, 48, 64, 72, 96];
-const WATERFALL_SIZES = [12, 14, 16, 18, 24, 32, 48, 64];
-
+const DEFAULT_PREVIEW = 'The quick brown fox jumps over the lazy dog';
+const NOT_A_FONT = 'Please upload a font file (.ttf, .otf, .woff, .woff2)';
+const LOAD_FAILED =
+	'Failed to load font. The file may be corrupted or invalid.';
+/** The web preview's sizes, so the waterfall still reaches 72 and 96. */
+const WATERFALL_SIZES = [12, 14, 16, 18, 24, 32, 48, 64, 72, 96];
 const SAMPLE_TEXTS = [
 	'The quick brown fox jumps over the lazy dog',
 	'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -62,108 +86,214 @@ const SAMPLE_TEXTS = [
 	'Sphinx of black quartz, judge my vow',
 	'Pack my box with five dozen liquor jugs',
 ];
-const WATERFALL_TEXT = 'Aa Bb Cc Dd Ee Ff Gg';
-const DEFAULT_PREVIEW = 'The quick brown fox jumps over the lazy dog';
-const PREVIEW_PLACEHOLDER = 'Type to preview…';
-const PREVIEW_EMPTY = 'Type something to preview…';
-const NOT_A_FONT = 'Please upload a font file (.ttf, .otf, .woff, .woff2)';
-const LOAD_FAILED =
-	'Failed to load font. The file may be corrupted or invalid.';
-const METADATA_NOTE =
-	'Note: Full font metadata extraction requires specialised font parsing libraries. This tool provides basic font preview functionality.';
+const rowPadding = 20;
+
+const FontIcon = <template><IconSvg @name="file-type" /></template>;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
 
 let familySeq = 0;
 
+/** Shares measured from the loaded face when the file's tables cannot be read (WOFF2). */
+function measured(family: string): Shares {
+	const context = document.createElement('canvas').getContext('2d');
+	if (!context) return standIn;
+	context.font = `1000px ${family}`;
+	const box = context.measureText('Hxdp');
+	const share = (text: string) =>
+		context.measureText(text).actualBoundingBoxAscent / 1000;
+	return {
+		ascent: box.fontBoundingBoxAscent / 1000,
+		descent: box.fontBoundingBoxDescent / 1000,
+		capHeight: share('H'),
+		xHeight: share('x'),
+		unitsPerEm: 1000,
+	};
+}
+
+interface Loaded {
+	fileName: string;
+	family: string;
+	facts?: FontFacts;
+	shares: Shares;
+}
+
+/** The port of FontExplorerViewController. */
 export default class FontExplorerTool extends Component {
-	@tracked fileName = '';
-	@tracked family: string | null = null;
+	@service('canon-toast') declare toast: CanonToastService;
+
+	@tracked loaded?: Loaded;
 	@tracked error: string | null = null;
 	@tracked previewText = DEFAULT_PREVIEW;
-	@tracked previewSize = 48;
 
 	#objectUrl: string | null = null;
 	#fontFace: FontFace | null = null;
 	// ignore stale font loads
 	#runId = 0;
 
+	// ?fxText=: the iOS -fxText flag
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const text = new URLSearchParams(window.location.search).get(
+			'fxText',
+		);
+		if (text !== null) this.previewText = text;
+	}
+
 	willDestroy() {
 		super.willDestroy();
 		this.#release();
 	}
 
-	get accept() {
-		return ACCEPT;
+	get text() {
+		return this.previewText || DEFAULT_PREVIEW;
 	}
 
-	get hasFont() {
-		return this.family !== null;
+	get facts() {
+		return this.loaded?.facts;
 	}
 
-	get fullName() {
-		return baseName(this.fileName);
+	get specimen() {
+		const covers = this.facts?.covers;
+		return covers ? specimen(covers) : 'Hxdp';
 	}
 
-	get postScript() {
-		return postScriptName(this.fileName);
+	get pictureFamily() {
+		return this.loaded?.family ?? 'system-ui, sans-serif';
+	}
+
+	get caption() {
+		const { loaded } = this;
+		if (!loaded) return 'Font';
+		return loaded.facts?.fullName || baseName(loaded.fileName);
+	}
+
+	get figure() {
+		return this.facts ? String(this.facts.unitsPerEm) : '—';
+	}
+
+	get overview() {
+		const { loaded, facts } = this;
+		if (!loaded) return [];
+		return [
+			{ label: 'Family', value: facts?.family },
+			{ label: 'Style', value: facts?.style },
+			{
+				label: 'Full Name',
+				value:
+					facts?.fullName ??
+					baseName(loaded.fileName),
+			},
+			{
+				label: 'PostScript Name',
+				value:
+					facts?.postScriptName ??
+					postScriptName(loaded.fileName),
+			},
+			{ label: 'File Name', value: loaded.fileName },
+		];
+	}
+
+	get metrics() {
+		const facts = this.facts;
+		if (!facts) return [];
+		const optional = (value?: number) =>
+			value === undefined ? '—' : signed(value);
+		return [
+			{
+				label: 'Units per Em',
+				value: String(facts.unitsPerEm),
+			},
+			{
+				label: 'Glyph Count',
+				value: facts.glyphCount.toLocaleString('en'),
+			},
+			{ label: 'Ascent', value: signed(facts.ascent) },
+			{ label: 'Descent', value: signed(-facts.descent) },
+			{ label: 'Line Gap', value: signed(facts.lineGap) },
+			{
+				label: 'Cap Height',
+				value: optional(facts.capHeight),
+			},
+			{ label: 'x-Height', value: optional(facts.xHeight) },
+			{
+				label: 'Italic Angle',
+				value: `${signed(Math.round(facts.italicAngle))}°`,
+			},
+			{
+				label: 'Bounding Box',
+				value: `${facts.box.width} × ${facts.box.height}`,
+			},
+		];
+	}
+
+	get tables() {
+		return (this.facts?.tables ?? []).map((tag) => ({
+			tag,
+			description: tableDescriptions[tag] ?? '—',
+		}));
+	}
+
+	get rowDepth() {
+		const { shares } = this.loaded ?? { shares: standIn };
+		return shares.ascent + shares.descent;
+	}
+
+	get waterfall() {
+		const family = this.loaded?.family ?? 'inherit';
+		return WATERFALL_SIZES.map((size) => ({
+			size,
+			style: htmlSafe(
+				`font-family: ${family}; font-size: ${size}px; min-block-size: ${Math.max(44, Math.ceil(this.rowDepth * size) + rowPadding)}px`,
+			),
+		}));
+	}
+
+	get samples() {
+		const family = this.loaded?.family ?? 'inherit';
+		return SAMPLE_TEXTS.map((text, index) => ({
+			text,
+			style: htmlSafe(
+				`font-family: ${family}; font-size: ${index < 2 ? 24 : 18}px`,
+			),
+		}));
+	}
+
+	get chart() {
+		const facts = this.facts;
+		if (!facts) return undefined;
+		const [start, end] = chartRange(facts.covers);
+		const codes: number[] = [];
+		for (let code = start; code <= end; code++)
+			if (facts.covers(code)) codes.push(code);
+		const hex = (n: number) =>
+			n.toString(16).toUpperCase().padStart(4, '0');
+		return {
+			title: `Glyphs · U+${hex(start)}–${hex(end)}`,
+			cells: codes.map((code) => ({
+				code,
+				char: String.fromCodePoint(code),
+				label: `U+${hex(code)}`,
+			})),
+		};
+	}
+
+	get chartStyle() {
+		return htmlSafe(
+			`font-family: ${this.loaded?.family ?? 'inherit'}`,
+		);
 	}
 
 	get css() {
-		return cssUsage(this.fileName);
-	}
-
-	get placeholder() {
-		return PREVIEW_PLACEHOLDER;
-	}
-
-	get metadataNote() {
-		return METADATA_NOTE;
-	}
-
-	get sizes() {
-		return PREVIEW_SIZES;
-	}
-
-	get sizeLabel() {
-		return `${this.previewSize}px`;
-	}
-
-	get previewValue() {
-		return String(this.previewSize);
-	}
-
-	get previewBody() {
-		return this.previewText || PREVIEW_EMPTY;
-	}
-
-	get previewStyle() {
-		return this.#fontStyle(this.previewSize, 1.4);
-	}
-
-	get sampleRows() {
-		return SAMPLE_TEXTS.map((text, index) => ({
-			text,
-			style: this.#fontStyle(index < 2 ? 24 : 18),
-		}));
-	}
-
-	get waterfallRows() {
-		return WATERFALL_SIZES.map((size) => ({
-			size,
-			label: `${size}px`,
-			text: WATERFALL_TEXT,
-			style: this.#fontStyle(size, size > 40 ? 1.2 : 1.5),
-		}));
-	}
-
-	#fontStyle(size: number, lineHeight?: number) {
-		const family = this.family ?? 'inherit';
-		const line =
-			lineHeight === undefined
-				? ''
-				: `; line-height: ${lineHeight}`;
-		return htmlSafe(
-			`font-family: ${family}; font-size: ${size}px${line}`,
-		);
+		const { loaded } = this;
+		return loaded
+			? cssUsage(
+					loaded.fileName,
+					this.facts?.family || undefined,
+				)
+			: '';
 	}
 
 	#release() {
@@ -178,271 +308,318 @@ export default class FontExplorerTool extends Component {
 			this.error = NOT_A_FONT;
 			return;
 		}
-
 		const runId = ++this.#runId;
 		this.#release();
 		this.error = null;
-		this.family = null;
-		this.fileName = file.name;
+		this.loaded = undefined;
 
 		const url = URL.createObjectURL(file);
 		this.#objectUrl = url;
-
 		const family = `preview-${familySeq++}`;
 		const fontFace = new FontFace(family, `url(${url})`);
 
 		try {
-			await fontFace.load();
+			const [facts] = await Promise.all([
+				file
+					.arrayBuffer()
+					.then(unwrap)
+					.then(readFont)
+					.catch(() => undefined),
+				fontFace.load(),
+			]);
 			if (runId !== this.#runId) {
 				URL.revokeObjectURL(url);
 				return;
 			}
 			document.fonts.add(fontFace);
 			this.#fontFace = fontFace;
-			this.family = family;
+			const shares = facts
+				? {
+						ascent:
+							facts.ascent /
+							facts.unitsPerEm,
+						descent:
+							facts.descent /
+							facts.unitsPerEm,
+						capHeight:
+							(facts.capHeight ??
+								measured(family)
+									.capHeight *
+									facts.unitsPerEm) /
+							facts.unitsPerEm,
+						xHeight:
+							(facts.xHeight ??
+								measured(family)
+									.xHeight *
+									facts.unitsPerEm) /
+							facts.unitsPerEm,
+						unitsPerEm: facts.unitsPerEm,
+					}
+				: measured(family);
+			this.loaded = {
+				fileName: file.name,
+				family,
+				facts,
+				shares,
+			};
 		} catch (loadError) {
 			if (runId !== this.#runId) return;
 			console.error('Font load failed:', loadError);
 			this.#release();
-			this.fileName = '';
 			this.error = LOAD_FAILED;
 		}
 	};
 
-	chooseFile = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
+	loadFiles = (files: File[]) => {
+		const file = files[0];
 		if (file) void this.readFile(file);
-		// allow file reselection
-		input.value = '';
 	};
 
-	handleDrop = (event: DragEvent) => {
+	allowDrop = (event: DragEvent) => event.preventDefault();
+
+	// a drop anywhere in the tool loads the font; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
 		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, ACCEPT),
+		);
 		if (file) void this.readFile(file);
 		else this.error = NOT_A_FONT;
 	};
 
-	// prevent dropped-file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
+	setPreviewText = (text: string) => (this.previewText = text);
 
-	setPreviewText = (event: Event) => {
-		this.previewText = (event.target as HTMLInputElement).value;
-	};
-
-	setPreviewSize = (value: string) => {
-		this.previewSize = Number.parseInt(value, 10);
-	};
+	copyGlyph = (char: string) => void this.toast.copy(char);
 
 	clear = () => {
 		this.#runId++;
 		this.#release();
-		this.fileName = '';
-		this.family = null;
+		this.loaded = undefined;
 		this.error = null;
 	};
 
 	<template>
-		<div class="dt-fx" {{filePaste this.readFile accept=ACCEPT}}>
-			{{#if this.hasFont}}
-				<div class="dt-fx-panel">
-					<div class="dt-fx-head">
-						<span class="dt-fx-head-names">
+		<CanonSplit
+			class="font-explorer"
+			{{filePaste this.readFile accept=ACCEPT}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
+		>
+			<:banner>
+				<CanonCanvas @height={{260}}>
+					<Picture
+						@text={{this.specimen}}
+						@family={{this.pictureFamily}}
+						@shares={{if
+							this.loaded
+							this.loaded.shares
+							standIn
+						}}
+						@values={{if
+							this.facts
+							true
+							false
+						}}
+						@caption={{this.caption}}
+						@detail={{this.loaded.fileName}}
+						@figure={{this.figure}}
+						@figureUnit={{if
+							this.facts
+							"UPM"
+						}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					{{#if this.loaded}}
+						<CanonHeading @text="Font" />
+						<div class="fx-file">
 							<span
-								class="dt-fx-title"
-							>{{this.fullName}}</span>
-							<span
-								class="dt-fx-file"
-							>{{this.fileName}}</span>
-						</span>
-						<button
-							type="button"
-							class="dt-fx-clear"
-							aria-label="Clear font"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-						</button>
-					</div>
-
-					<div class="dt-fx-preview">
-						<div class="dt-fx-preview-bar">
-							{{! wording carried over from the Next app }}
-							<label
-								class="dt-fx-preview-label"
-								for="dt-fx-preview-text"
-							>Preview</label>
-							<input
-								id="dt-fx-preview-text"
-								type="text"
-								class="dt-fx-preview-input"
-								placeholder={{this.placeholder}}
-								value={{this.previewText}}
-								{{on
-									"input"
-									this.setPreviewText
-								}}
-							/>
-							<span
-								class="dt-fx-size"
+								class="fx-file-names"
 							>
-								<Select
-									@value={{this.previewValue}}
-									@onValueChange={{this.setPreviewSize}}
-								>
-									<SelectTrigger
-									>
-										<SelectValue
-										>{{this.sizeLabel}}</SelectValue>
-									</SelectTrigger>
-									<SelectContent
-									>
-										{{#each
-											this.sizes
-											key="@index"
-											as |size|
-										}}
-											<SelectItem
-												@value="{{size}}"
-											>{{size}}px</SelectItem>
-										{{/each}}
-									</SelectContent>
-								</Select>
+								<span
+									class="fx-file-title"
+								>{{this.caption}}</span>
+								<span
+									class="fx-file-name"
+								>{{this.loaded.fileName}}</span>
 							</span>
+							<CanonButton
+								@kind="cell"
+								@label="Clear font"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
 						</div>
-
-						<div
-							class="dt-fx-canvas"
-							style={{this.previewStyle}}
-						>{{this.previewBody}}</div>
-					</div>
-
-					<div class="dt-fx-block">
-						<div class="dt-fx-block-head">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-fx-block-label"
-							>Sample Texts</span>
-						</div>
+						<CanonHeading @text="Preview" />
+						<CanonTextCell
+							class="fx-preview"
+							@value={{this.previewText}}
+							@placeholder="Type to preview…"
+							@onChange={{this.setPreviewText}}
+							aria-label="Preview"
+						/>
+					{{else}}
+						<CanonDropZone
+							@prompt="Drop font file here"
+							@icon={{FontIcon}}
+							@accept={{ACCEPT}}
+							@paste={{false}}
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
+						/>
+					{{/if}}
+					{{#if this.error}}
+						<CanonStatus
+							@text={{this.error}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+				{{#if this.loaded}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Overview"
+						/>
 						{{#each
-							this.sampleRows
-							key="text"
+							this.overview
+							key="label"
+							as |line|
+						}}
+							<CanonValueLine
+								@label={{line.label}}
+								@value={{line.value}}
+								@labelWidth={{112}}
+							/>
+						{{/each}}
+					</CanonRows>
+					{{#if this.facts}}
+						<CanonRows @framed={{true}}>
+							<CanonHeading
+								@text="Metrics"
+							/>
+							<CanonTiles
+								@items={{this.metrics}}
+							/>
+						</CanonRows>
+						<CanonRows @framed={{true}}>
+							<CanonHeading
+								@text="Tables"
+							/>
+							{{#each
+								this.tables
+								key="tag"
+								as |table|
+							}}
+								<div
+									class="fx-table"
+								>
+									<span
+										class="fx-table-tag"
+									>{{table.tag}}</span>
+									<span
+										class="fx-table-detail"
+									>{{table.description}}</span>
+								</div>
+							{{/each}}
+						</CanonRows>
+					{{/if}}
+				{{/if}}
+			</:sidebar>
+			<:main>
+				{{#if this.loaded}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Waterfall"
+						/>
+						<div
+							class="fx-waterfall"
+							role="img"
+							aria-label={{this.text}}
+						>
+							{{#each
+								this.waterfall
+								key="size"
+								as |row|
+							}}
+								<div
+									class="fx-step"
+								>
+									<span
+										class="fx-step-size"
+										aria-hidden="true"
+									>{{row.size}}</span>
+									<span
+										class="fx-step-text"
+										style={{row.style}}
+										aria-hidden="true"
+									>{{this.text}}</span>
+								</div>
+							{{/each}}
+						</div>
+					</CanonRows>
+					<CanonRows @framed={{true}}>
+						{{! wording carried over from the Next app }}
+						<CanonHeading
+							@text="Sample Texts"
+						/>
+						{{#each
+							this.samples key="text"
 							as |row|
 						}}
 							<div
-								class="dt-fx-sample"
+								class="fx-sample"
 								style={{row.style}}
 							>{{row.text}}</div>
 						{{/each}}
-					</div>
-
-					<div class="dt-fx-block">
-						<div class="dt-fx-block-head">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-fx-block-label"
-							>Size Waterfall</span>
-						</div>
-						{{#each
-							this.waterfallRows
-							key="size"
-							as |row|
-						}}
-							<div class="dt-fx-step">
-								<span
-									class="dt-fx-step-size"
-								>{{row.label}}</span>
-								<span
-									class="dt-fx-step-text"
-									style={{row.style}}
-								>{{row.text}}</span>
+					</CanonRows>
+					{{#if this.chart}}
+						<CanonRows @framed={{true}}>
+							<CanonHeading
+								@text={{this.chart.title}}
+							/>
+							<div
+								class="fx-glyphs"
+								style={{this.chartStyle}}
+							>
+								{{#each
+									this.chart.cells
+									key="code"
+									as |cell|
+								}}
+									<button
+										type="button"
+										class="fx-glyph"
+										aria-label={{cell.label}}
+										{{on
+											"click"
+											(fn
+												this.copyGlyph
+												cell.char
+											)
+										}}
+									>{{cell.char}}</button>
+								{{/each}}
 							</div>
-						{{/each}}
-					</div>
-
-					<div class="dt-fx-block">
-						<div class="dt-fx-block-head">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-fx-block-label"
-							>Font Information</span>
-						</div>
-						<div class="dt-fx-info">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-fx-info-key"
-							>File Name</span>
-							<span
-								class="dt-fx-info-value"
-							>{{this.fileName}}</span>
-						</div>
-						<div class="dt-fx-info">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-fx-info-key"
-							>PostScript Name</span>
-							<span
-								class="dt-fx-info-value"
-							>{{this.postScript}}</span>
-						</div>
-						{{! wording carried over from the Next app }}
-						<p
-							class="dt-fx-note"
-						>{{this.metadataNote}}</p>
-					</div>
-
-					<div class="dt-fx-block is-last">
-						<div class="dt-fx-block-head">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-fx-block-label"
-							>CSS Usage</span>
-						</div>
-						<pre
-							class="dt-fx-css"
-						>{{this.css}}</pre>
-					</div>
-				</div>
-			{{else}}
-				<div class="dt-fx-panel">
-					{{#if this.error}}
-						<p
-							class="dt-fx-error"
-						>{{this.error}}</p>
+						</CanonRows>
 					{{/if}}
-					<label
-						class="dt-fx-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							class="dt-sr-only"
-							accept={{this.accept}}
-							{{on
-								"change"
-								this.chooseFile
-							}}
+					<CanonRows @framed={{true}}>
+						<CanonCodeBlock
+							@code={{this.css}}
+							@language="CSS"
 						/>
-						<Icon @name="upload" />
-						{{! wording carried over from the Next app }}
-						<span
-							class="dt-fx-drop-title"
-						>Drop font file here</span>
-						{{! wording carried over from the Next app }}
-						<span
-							class="dt-fx-drop-hint"
-						>TTF, OTF, WOFF, or WOFF2, or
-							paste</span>
-					</label>
-				</div>
-			{{/if}}
-		</div>
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonEmptyRow
+							@text="Load a .otf or .ttf file to inspect its metadata, metrics, glyphs, and OpenType tables."
+						/>
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }
