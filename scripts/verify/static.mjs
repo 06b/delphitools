@@ -43,13 +43,13 @@ if (!existsSync(join(dist, 'index.html'))) {
 	for (const route of ROUTES) {
 		await visit(route.path);
 		const seen = await page.evaluate(() => ({
-			booted: !!document.querySelector('.dt-sidebar'),
+			booted: !!document.querySelector('.canon-sidebar'),
 			header: document
-				.querySelector('.dt-header-title h1')
+				.querySelector('.dt-bar-title')
 				?.textContent.trim(),
-			navLinks: document.querySelectorAll('.dt-nav-link')
+			navLinks: document.querySelectorAll('.canon-sidebar-row')
 				.length,
-			headers: document.querySelectorAll('.dt-header').length,
+			headers: document.querySelectorAll('.dt-frame').length,
 			title: document.title,
 			og: document
 				.querySelector('meta[property="og:image"]')
@@ -112,14 +112,14 @@ if (!existsSync(join(dist, 'index.html'))) {
 	await visit('/tools/px-to-rem');
 	await page.evaluate(() => {
 		document.querySelector(
-			'.dt-nav-link[href="/tools/colour-converter"]',
+			'.canon-sidebar-row[href="/tools/colour-converter"]',
 		)?.click();
 	});
 	await sleep(800);
 	const navigated = await page.evaluate(() => ({
 		path: location.pathname,
 		header: document
-			.querySelector('.dt-header-title h1')
+			.querySelector('.dt-bar-title')
 			?.textContent.trim(),
 		rows: document.querySelectorAll('.dt-cc-row').length,
 	}));

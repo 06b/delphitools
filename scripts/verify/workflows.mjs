@@ -107,7 +107,7 @@ check(
 	await page.evaluate(
 		() =>
 			document.querySelectorAll('.dt-wf-row').length >= 15 &&
-			document.querySelector('.dt-header h1')?.textContent?.trim() === 'Workflows' &&
+			document.querySelector('.dt-bar-title')?.textContent?.trim() === 'Workflows' &&
 			[...document.querySelectorAll('.dt-wf-th')].map((h) => h.textContent?.trim()).join() ===
 				'Workflow,First,,Then...,Finally,,' &&
 			document.querySelectorAll('.dt-wf-row').length >= 15 &&

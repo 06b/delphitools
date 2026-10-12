@@ -135,7 +135,7 @@ for (const route of routes) {
 		route.url,
 		() =>
 			document
-				.querySelector('.dt-header-title h1')
+				.querySelector('.dt-bar-title')
 				?.textContent?.trim() ?? '',
 	);
 

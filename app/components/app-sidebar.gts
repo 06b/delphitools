@@ -1,16 +1,15 @@
 import Component from '@glimmer/component';
-import type { TOC } from '@ember/component/template-only';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+import { modifier } from 'ember-modifier';
 import { LinkTo } from '@ember/routing';
+import type RouterService from '@ember/routing/router-service';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonSidebar from 'delphicanon/components/canon-sidebar';
+import CanonSidebarRow from 'delphicanon/components/canon-sidebar-row';
 import Dialog from 'delphitools-v2/components/ui/dialog';
-import {
-	Tooltip,
-	TooltipTrigger,
-	TooltipContent,
-} from 'delphitools-v2/components/ui/tooltip';
-import Icon from 'delphitools-v2/components/icon';
+import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import AboutDelphitoolsBody from 'delphitools-v2/components/about-delphitools';
 import { toolCategories, featuredTools } from 'delphitools-v2/lib/tools';
 import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
@@ -18,19 +17,13 @@ import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
 import type SidebarService from 'delphitools-v2/services/sidebar';
 
-const NavTip: TOC<{
-	Args: { label: string; show: boolean };
-	Blocks: { default: [] };
-}> = <template>
-	<Tooltip>
-		<TooltipTrigger>{{yield}}</TooltipTrigger>
-		{{#if @show}}
-			<TooltipContent
-				@side="right"
-			>{{@label}}</TooltipContent>
-		{{/if}}
-	</Tooltip>
-</template>;
+const PAGES = [
+	{ name: 'Home', icon: 'home', href: '/' },
+	{ name: 'Substrata', icon: 'brush', href: '/editor' },
+	{ name: 'Errata', icon: 'signature', href: '/errata' },
+	{ name: 'Workflows', icon: 'workflow', href: '/workflows' },
+	{ name: 'Experiments', icon: 'flask-conical', href: '/experiments' },
+];
 
 const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 	...cat,
@@ -43,6 +36,53 @@ const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 		),
 }));
 
+interface NavRowSignature {
+	Args: { name: string; icon: string; href: string; external?: boolean };
+}
+
+class NavRow extends Component<NavRowSignature> {
+	@service declare router: RouterService;
+
+	get selected() {
+		return this.router.currentURL?.split('?')[0] === this.args.href;
+	}
+
+	// canon rows are plain links
+	go = (event: MouseEvent) => {
+		if (
+			this.args.external ||
+			event.button !== 0 ||
+			event.metaKey ||
+			event.ctrlKey ||
+			event.shiftKey ||
+			event.altKey
+		)
+			return;
+		event.preventDefault();
+		void this.router.transitionTo(this.args.href);
+	};
+
+	<template>
+		{{#if @external}}
+			<CanonSidebarRow
+				@title={{@name}}
+				@icon={{component IconSvg name=@icon}}
+				@href={{@href}}
+				target="_blank"
+				rel="noopener noreferrer"
+			/>
+		{{else}}
+			<CanonSidebarRow
+				@title={{@name}}
+				@icon={{component IconSvg name=@icon}}
+				@href={{@href}}
+				@selected={{this.selected}}
+				@onClick={{this.go}}
+			/>
+		{{/if}}
+	</template>
+}
+
 export default class AppSidebar extends Component {
 	@service declare sidebar: SidebarService;
 
@@ -50,13 +90,7 @@ export default class AppSidebar extends Component {
 
 	pride = PRIDE;
 	commitSha = COMMIT_SHA;
-
-	get collapsed() {
-		return (
-			this.sidebar.state === 'collapsed' &&
-			!this.sidebar.isMobile
-		);
-	}
+	pages = PAGES;
 
 	get query() {
 		return this.search.toLowerCase();
@@ -84,6 +118,8 @@ export default class AppSidebar extends Component {
 		);
 	}
 
+	shortcut = navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K';
+
 	onSearch = (event: Event) => {
 		this.search = (event.target as HTMLInputElement).value;
 	};
@@ -92,181 +128,130 @@ export default class AppSidebar extends Component {
 		this.search = '';
 	};
 
-	<template>
-		{{#if this.sidebar.openMobile}}
-			<button
-				type="button"
-				class="dt-sidebar-scrim"
-				aria-label="Close navigation"
-				{{on "click" this.sidebar.closeMobile}}
-			></button>
-		{{/if}}
+	// the home omnibox claims the key first and prevents default
+	searchKey = modifier((input: HTMLInputElement) => {
+		const keydown = (event: KeyboardEvent) => {
+			if (
+				event.defaultPrevented ||
+				!(event.metaKey || event.ctrlKey) ||
+				event.key.toLowerCase() !== 'k'
+			)
+				return;
+			event.preventDefault();
+			this.sidebar.setOpen(true);
+			// the drawer leaves inert on the next render
+			requestAnimationFrame(() => {
+				input.focus();
+				input.select();
+			});
+		};
+		window.addEventListener('keydown', keydown);
+		return () => window.removeEventListener('keydown', keydown);
+	});
 
-		<aside
+	<template>
+		<CanonSidebar
 			class="dt-sidebar"
-			data-state={{this.sidebar.state}}
-			data-mobile={{if this.sidebar.isMobile "true" "false"}}
-			data-open-mobile={{if
-				this.sidebar.openMobile
-				"true"
-				"false"
-			}}
+			@compact={{true}}
+			@collapsed={{false}}
+			aria-label="Main"
 		>
-			<div class="dt-sidebar-header">
-				<LinkTo @route="index" class="dt-brand">
-					<img
-						src="/delphi-lowlod.png"
-						width="64"
-						height="64"
-						alt=""
-						class="dt-brand-logo
-							{{if
-								this.pride
-								'pride-ring'
-							}}"
-					/>
-					<span class="dt-brand-text">
-						<span
-							class="dt-brand-name
+			<:hero>
+				<div class="dt-sidebar-hero">
+					<LinkTo @route="index" class="dt-brand">
+						<img
+							src="/delphi-lowlod.png"
+							width="64"
+							height="64"
+							alt=""
+							class="dt-brand-logo
 								{{if
 									this.pride
-									'pride-wordmark'
+									'pride-ring'
 								}}"
-						>
-							delphitools
-						</span>
-						<span class="dt-brand-sub">
+						/>
+						<span class="dt-brand-text">
 							<span
-								class="dt-brand-tagline
+								class="dt-brand-name
 									{{if
 										this.pride
-										'pride-tagline'
+										'pride-wordmark'
 									}}"
 							>
-								{{#if
-									this.pride
-								}}trans rights{{else}}indie
-									tools{{/if}}
+								delphitools
 							</span>
 							<span
-								class="dt-brand-sha"
-								title="Build commit"
+								class="dt-brand-sub"
 							>
-								v{{VERSION}}
-								·
-								{{this.commitSha}}
+								<span
+									class="dt-brand-tagline
+										{{if
+											this.pride
+											'pride-tagline'
+										}}"
+								>
+									{{#if
+										this.pride
+									}}trans
+										rights{{else}}indie
+										tools{{/if}}
+								</span>
+								<span
+									class="dt-brand-sha"
+									title="Build commit"
+								>
+									v{{VERSION}}
+									Â·
+									{{this.commitSha}}
+								</span>
 							</span>
 						</span>
-					</span>
-				</LinkTo>
-			</div>
-
-			<div class="dt-sidebar-search">
-				<Icon @name="search" class="dt-search-icon" />
-				<input
-					type="text"
-					class="dt-search-input"
-					placeholder="Search tools..."
-					aria-label="Search tools"
-					value={{this.search}}
-					{{on "input" this.onSearch}}
-				/>
-				{{#if this.search}}
-					<button
-						type="button"
-						class="dt-search-clear"
-						aria-label="Clear search"
-						{{on "click" this.clearSearch}}
-					>
-						<Icon @name="x" />
-					</button>
-				{{/if}}
-			</div>
-
-			<nav aria-label="Main" class="dt-sidebar-nav">
-				{{#unless this.query}}
-					<div class="dt-nav-group">
-						<NavTip
-							@label="Home"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="index"
-								class="dt-nav-link"
+					</LinkTo>
+					<div class="dt-search">
+						<IconSvg @name="search" />
+						<input
+							type="search"
+							class="dt-search-input"
+							placeholder="Search tools..."
+							aria-label="Search tools"
+							value={{this.search}}
+							{{on
+								"input"
+								this.onSearch
+							}}
+							{{this.searchKey}}
+						/>
+						{{#if this.search}}
+							<button
+								type="button"
+								class="dt-search-clear"
+								aria-label="Clear search"
+								{{on
+									"click"
+									this.clearSearch
+								}}
 							>
-								<Icon
-									@name="home"
+								<IconSvg
+									@name="x"
 								/>
-								<span
-									class="dt-nav-label"
-								>Home</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Substrata"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="editor"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="brush"
-								/>
-								<span
-									class="dt-nav-label"
-								>Substrata</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Errata"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="errata"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="signature"
-								/>
-								<span
-									class="dt-nav-label"
-								>Errata</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Workflows"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="workflows"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="workflow"
-								/>
-								<span
-									class="dt-nav-label"
-								>Workflows</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Experiments"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="experiments"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="flask-conical"
-								/>
-								<span
-									class="dt-nav-label"
-								>Experiments</span>
-							</LinkTo>
-						</NavTip>
+							</button>
+						{{else}}
+							<kbd
+								class="dt-search-key"
+							>{{this.shortcut}}</kbd>
+						{{/if}}
 					</div>
+				</div>
+			</:hero>
+			<:default>
+				{{#unless this.query}}
+					{{#each this.pages as |page|}}
+						<NavRow
+							@name={{page.name}}
+							@icon={{page.icon}}
+							@href={{page.href}}
+						/>
+					{{/each}}
 				{{/unless}}
 
 				{{#if this.empty}}
@@ -277,172 +262,70 @@ export default class AppSidebar extends Component {
 				{{/if}}
 
 				{{#if this.featured.length}}
-					<div class="dt-nav-group">
-						<h2 class="dt-nav-group-label">
-							<Icon
-								@name="star"
-								class="dt-star"
-							/>
-							Greatest Hits
-						</h2>
-						{{#each
-							this.featured
-							as |tool|
-						}}
-							<NavTip
-								@label={{tool.name}}
-								@show={{this.collapsed}}
-							>
-								{{#if
-									tool.route
-								}}
-									<LinkTo
-										@route={{tool.route}}
-										class="dt-nav-link dt-nav-link--featured"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</LinkTo>
-								{{else}}
-									<LinkTo
-										@route="tools.tool"
-										@model={{tool.id}}
-										class="dt-nav-link dt-nav-link--featured"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</LinkTo>
-								{{/if}}
-							</NavTip>
-						{{/each}}
-					</div>
+					<CanonHeading @text="Greatest Hits" />
+					{{#each this.featured as |tool|}}
+						<NavRow
+							@name={{tool.name}}
+							@icon={{tool.icon}}
+							@href={{tool.href}}
+						/>
+					{{/each}}
 				{{/if}}
 
 				{{#each this.categories as |category|}}
-					<div class="dt-nav-group">
-						<h2
-							class="dt-nav-group-label"
-						>{{category.name}}</h2>
-						{{#each
-							category.tools
-							as |tool|
-						}}
-							<NavTip
-								@label={{tool.name}}
-								@show={{this.collapsed}}
-							>
-								{{#if
-									tool.external
-								}}
-									<a
-										href={{tool.href}}
-										class="dt-nav-link"
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</a>
-								{{else}}
-									<LinkTo
-										@route="tools.tool"
-										@model={{tool.id}}
-										class="dt-nav-link
-											{{if
-												tool.atlas
-												'dt-nav-link--atlas'
-											}}"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</LinkTo>
-								{{/if}}
-							</NavTip>
-						{{/each}}
-					</div>
-				{{/each}}
-			</nav>
-
-			<div class="dt-sidebar-footer">
-				<Dialog as |d|>
-					<button
-						type="button"
-						class="dt-about"
-						{{d.focusOnClose}}
-						{{on "click" d.open}}
-					>
-						<span class="dt-about-text">
-							<span>No logins. No
-								tracking.</span>
-							<span>Long live the
-								handmade web.</span>
-						</span>
-						<Icon
-							@name="info"
-							class="dt-about-icon"
+					<CanonHeading @text={{category.name}} />
+					{{#each category.tools as |tool|}}
+						<NavRow
+							@name={{tool.name}}
+							@icon={{tool.icon}}
+							@href={{tool.href}}
+							@external={{tool.external}}
 						/>
-						<span class="dt-sr-only">About
-							delphitools</span>
-					</button>
+					{{/each}}
+				{{/each}}
 
-					<d.Content class="dt-dialog">
-						<header class="dt-dialog-head">
-							<h2>About delphitools</h2>
-							<button
-								type="button"
-								class="dt-dialog-close"
-								aria-label="Close"
-								{{on
-									"click"
-									d.close
-								}}
+				{{#unless this.query}}
+					<CanonHeading @text="delphitools" />
+					<Dialog as |d|>
+						<CanonSidebarRow
+							@title="About"
+							@icon={{component
+								IconSvg
+								name="info"
+							}}
+							@onClick={{d.open}}
+							{{d.focusOnClose}}
+						/>
+						<d.Content class="dt-dialog">
+							<header
+								class="dt-dialog-head"
 							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-						</header>
-						<AboutDelphitoolsBody />
-					</d.Content>
-				</Dialog>
-				<LinkTo
-					@route="privacy"
-					class="dt-about"
-					aria-label="Privacy"
-				>
-					<span
-						class="dt-about-text"
-					>Privacy</span>
-					<Icon
-						@name="shield-check"
-						class="dt-about-icon"
+								<h2>About
+									delphitools</h2>
+								<button
+									type="button"
+									class="dt-dialog-close"
+									aria-label="Close"
+									{{on
+										"click"
+										d.close
+									}}
+								>
+									<Icon
+										@name="x"
+									/>
+								</button>
+							</header>
+							<AboutDelphitoolsBody />
+						</d.Content>
+					</Dialog>
+					<NavRow
+						@name="Privacy"
+						@icon="shield-check"
+						@href="/privacy"
 					/>
-				</LinkTo>
-			</div>
-
-			<button
-				type="button"
-				class="dt-sidebar-rail"
-				aria-label="Toggle sidebar"
-				tabindex="-1"
-				{{on "click" this.sidebar.toggle}}
-			></button>
-		</aside>
+				{{/unless}}
+			</:default>
+		</CanonSidebar>
 	</template>
 }

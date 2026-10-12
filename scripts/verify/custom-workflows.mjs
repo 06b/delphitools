@@ -127,7 +127,7 @@ const pass = await page.evaluate(() => {
 			el.textContent.replace(/\s+/g, ' ').trim(),
 		),
 		go: document.querySelector('.dt-pass-go')?.textContent?.replace(/\s+/g, ' ').trim(),
-		bare: !document.querySelector('.dt-shell') && !document.querySelector('.dt-header'),
+		bare: !document.querySelector('.dt-frame'),
 		offCentre: Math.abs(box.left + box.width / 2 - innerWidth / 2),
 	};
 });

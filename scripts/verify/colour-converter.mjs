@@ -189,7 +189,7 @@ await page.click(trigger);
 await sleep(150);
 await page.evaluate(() => {
 	document.querySelector(
-		'.dt-nav-link[href="/tools/palette-genny"]',
+		'.canon-sidebar-row[href="/tools/palette-genny"]',
 	)?.click();
 });
 await sleep(600);

@@ -55,7 +55,7 @@ check(
 
 await page.evaluate(() => {
 	document.querySelector(
-		'.dt-nav-link[href="/tools/colour-converter"]',
+		'.canon-sidebar-row[href="/tools/colour-converter"]',
 	)?.click();
 });
 await sleep(600);
@@ -67,7 +67,7 @@ check(
 
 await page.evaluate(() => {
 	document.querySelector(
-		'.dt-nav-link[href="/tools/favicon-genny"]',
+		'.canon-sidebar-row[href="/tools/favicon-genny"]',
 	)?.click();
 });
 await sleep(600);

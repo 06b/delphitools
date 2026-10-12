@@ -15,6 +15,7 @@ export default class ThemeService extends Service {
 	toggle = () => {
 		this.dark = !this.dark;
 		document.documentElement.classList.toggle('dark', this.dark);
+		document.documentElement.classList.toggle('light', !this.dark);
 		localStorage.setItem('theme', this.dark ? 'dark' : 'light');
 	};
 }

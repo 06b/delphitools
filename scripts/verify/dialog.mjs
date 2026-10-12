@@ -20,7 +20,7 @@ const before = await state();
 check('the dialog element is in the DOM from the start', before.exists);
 check('but closed', !before.open);
 
-await page.click('.dt-about');
+await (await page.$('xpath///button[contains(@class,"canon-sidebar-row")][contains(., "About")]')).click();
 await sleep(500);
 const opened = await state();
 check('the trigger opens it', opened.open);
@@ -58,7 +58,7 @@ check(
 check(
 	'a click behind it cannot reach the page',
 	await page.evaluate(() => {
-		const link = document.querySelector('.dt-nav-link');
+		const link = document.querySelector('.canon-sidebar-row');
 		const rect = link.getBoundingClientRect();
 		const hit = document.elementFromPoint(rect.x + 4, rect.y + 4);
 		return hit !== link && !link.contains(hit);
@@ -71,27 +71,27 @@ const afterEscape = await state();
 check('Escape closes it', !afterEscape.open);
 check(
 	'and focus returns to the trigger',
-	afterEscape.focused?.includes('dt-about'),
+	afterEscape.focused?.includes('canon-sidebar-row'),
 	afterEscape.focused,
 );
 
-await page.click('.dt-about');
+await (await page.$('xpath///button[contains(@class,"canon-sidebar-row")][contains(., "About")]')).click();
 await sleep(400);
 await page.click('.dt-dialog-close');
 await sleep(400);
 check('the close button closes it too', !(await state()).open);
 check(
 	'and also returns focus',
-	(await state()).focused?.includes('dt-about'),
+	(await state()).focused?.includes('canon-sidebar-row'),
 	(await state()).focused,
 );
 
 // route-leave teardown
-await page.click('.dt-about');
+await (await page.$('xpath///button[contains(@class,"canon-sidebar-row")][contains(., "About")]')).click();
 await sleep(300);
 await page.evaluate(() => {
 	document.querySelector(
-		'.dt-nav-link[href="/tools/palette-genny"]',
+		'.canon-sidebar-row[href="/tools/palette-genny"]',
 	)?.click();
 });
 await sleep(700);

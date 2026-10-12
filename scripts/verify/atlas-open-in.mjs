@@ -77,16 +77,16 @@ await dropFile('.dt-aa-frame', 'take.mp3', 'audio/mpeg');
 check('audio-atlas: open-in lists audio tools', (await openInIds()).includes('audio-trimmer'));
 
 const nav = await page.evaluate(() => {
-	const groups = [...document.querySelectorAll('.dt-nav-group')];
-	const links = (needle) =>
-		[...(groups.find((g) => g.querySelector('.dt-nav-group-label')?.textContent.includes(needle))?.querySelectorAll('.dt-nav-link') ?? [])];
-	const first = (needle, n) =>
-		links(needle).slice(0, n).map((a) => ({ name: a.textContent.trim(), atlas: a.classList.contains('dt-nav-link--atlas') }));
+	const rows = [...document.querySelectorAll('.canon-sidebar-rows > *')];
+	const first = (needle, n) => {
+		const start = rows.findIndex((el) => el.matches('.canon-heading') && el.textContent.includes(needle));
+		const end = rows.findIndex((el, i) => i > start && el.matches('.canon-heading'));
+		return rows.slice(start + 1, end).slice(0, n).map((a) => a.textContent.trim());
+	};
 	return { images: first('Image', 2), av: first('Audio', 3), colour: first('Colour', 2) };
 });
-check('sidebar: Image Atlas leads its category', nav.images[0]?.name === 'Image Atlas' && nav.images[0].atlas);
-check('sidebar: Audio and Video Atlas lead theirs', nav.av[0]?.name === 'Audio Atlas' && nav.av[1]?.name === 'Video Atlas' && nav.av[1].atlas);
-check('sidebar: Colour Atlas leads its category', nav.colour[0]?.name === 'Colour Atlas' && nav.colour[0].atlas);
-check('sidebar: non-atlas tools are not tinted', nav.images[1] && !nav.images[1].atlas);
+check('sidebar: Image Atlas leads its category', nav.images[0] === 'Image Atlas');
+check('sidebar: Audio and Video Atlas lead theirs', nav.av[0] === 'Audio Atlas' && nav.av[1] === 'Video Atlas');
+check('sidebar: Colour Atlas leads its category', nav.colour[0] === 'Colour Atlas');
 
 await finish(browser);

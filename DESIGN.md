@@ -38,6 +38,15 @@ deliberate act: verify it in the browser before you call it done (section 15).
 - **Shared chrome and utilities**: `app/styles/app.scss` (`.segmented`,
   `.dt-tabs-*`, `.dt-sr-only`, the theme token `:root`/`.dark` blocks, the
   `@font-face` pair).
+- **Shell**: `app/templates/application.gts` is `.dt-frame`: the drawer
+  (`app/components/app-sidebar.gts`, a flattened `CanonSidebar` from
+  `delphicanon`, linked with `link:`), 56 px wide when closed, and the sheet
+  (title bar over `.dt-main`). The sheet's folder tab (`app-tab.gts`, after
+  the iOS `FanItemView`) hangs over the drawer's edge, shows the current page
+  and slides the drawer on a click or a drag. The frame is one viewport tall
+  and `.dt-main` scrolls inside it; the document does not scroll. The kit's
+  CSS loads after `app.scss`, so an override of a kit rule needs a higher
+  specificity (`.dt-drawer .canon-sidebar-row`, `html:root`).
 - **Registry / metadata**: `app/lib/tools.ts`.
 - **Icons**: `app/lib/icons.ts`, added with `node scripts/gen-icons.mjs`.
 

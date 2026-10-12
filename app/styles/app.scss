@@ -136,6 +136,19 @@
 	font-display: swap;
 }
 
+// beats the kit's later :root; iOS sizes, kit scaled them for quattro
+html:root {
+	--canon-font: "Open Sans Condensed", system-ui, sans-serif;
+	--canon-text-title2: 22px;
+	--canon-text-title3: 20px;
+	--canon-text-body: 17px;
+	--canon-text-callout: 16px;
+	--canon-text-subheadline: 15px;
+	--canon-text-footnote: 13px;
+	--canon-text-caption: 12px;
+	--canon-text-big-number: 36px;
+}
+
 // subtitle burn-in and recipe export
 @font-face {
 	font-family: "iA Writer Quattro";
@@ -830,13 +843,6 @@ body {
 	transition: opacity 0.2s ease;
 }
 
-// sass can't toggle .dark; keep css props
-
-$sidebar-width: 16rem;
-$sidebar-width-icon: 3rem;
-$sidebar-width-mobile: 18rem;
-$header-height: crayon.size(14);
-
 // crayon.sr-only uses deprecated clip
 .dt-sr-only {
 	position: absolute;
@@ -881,80 +887,225 @@ $header-height: crayon.size(14);
 	}
 }
 
-.dt-shell {
+// drawer | sheet; the sheet's tab hangs over the drawer
+.dt-frame {
+	--dt-drawer-open: 184px;
+	--dt-band: 56px;
+	--dt-rule-width: 1px;
+	--dt-rule: color-mix(
+		in srgb,
+		var(--canon-foreground) 22%,
+		var(--canon-background)
+	);
+
 	display: flex;
-	min-height: 100dvh;
+	block-size: 100dvh;
+	overflow: hidden;
+	container-type: inline-size;
+	background: var(--canon-muted);
+
+	&.is-open {
+		--dt-drawer: var(--dt-drawer-open);
+	}
 }
 
-.dt-inset {
+// closed, the drawer is the band the tab hangs into; open, it runs under the tab
+.dt-drawer {
+	flex: none;
+	box-sizing: border-box;
+	inline-size: calc(var(--dt-drawer, 0px) + var(--dt-band));
+	overflow: hidden;
+	border-inline-end: var(--dt-rule-width) solid var(--dt-rule);
+	transition: inline-size 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+	> * {
+		transition: opacity 160ms ease-out;
+
+		.dt-frame:not(.is-open, .is-dragging) & {
+			opacity: 0;
+		}
+	}
+
+	.dt-frame.is-dragging & {
+		transition: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}
+
+.dt-sheet {
+	position: relative;
 	display: flex;
 	flex: 1;
-	min-width: 0;
 	flex-direction: column;
+	min-inline-size: 0;
+	background: var(--canon-background);
+	color: var(--canon-foreground);
+}
+
+// the open drawer pushes the page aside instead of squeezing it
+@container (width < 640px) {
+	.dt-sheet {
+		flex: none;
+		inline-size: calc(100cqi - var(--dt-band));
+	}
+}
+
+.dt-bar {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--canon-panel-spacing);
+	min-block-size: var(--canon-row-height);
+	padding-inline: var(--canon-panel-padding) 4px;
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.dt-bar-title {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+// FanItemView: 16 corners, 12 concave fillets where it meets the page
+.dt-tab {
+	position: absolute;
+	z-index: 2;
+	inset-block-end: 16px;
+	inset-inline-end: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	inline-size: 44px;
+	max-block-size: 50%;
+	padding: 12px 0 14px;
+	border: var(--dt-rule-width) solid var(--dt-rule);
+	border-inline-end: 0;
+	border-start-start-radius: 16px;
+	border-end-start-radius: 16px;
+	background: var(--canon-background);
+	color: var(--canon-foreground);
+	font: inherit;
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+
+	&::before,
+	&::after {
+		--dt-fillet:
+			transparent 11.75px, var(--dt-rule) 12.25px,
+			var(--dt-rule) calc(11.75px + var(--dt-rule-width)),
+			var(--canon-background)
+				calc(12.25px + var(--dt-rule-width));
+
+		content: "";
+		position: absolute;
+		inset-inline-end: 0;
+		inline-size: calc(12px + var(--dt-rule-width));
+		// also covers the border under the fillet
+		block-size: calc(12px + 2 * var(--dt-rule-width));
+	}
+
+	&::before {
+		inset-block-end: calc(100% - var(--dt-rule-width));
+		background: radial-gradient(circle at 0 0, var(--dt-fillet));
+	}
+
+	&::after {
+		inset-block-start: calc(100% - var(--dt-rule-width));
+		background: radial-gradient(circle at 0 100%, var(--dt-fillet));
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--canon-primary);
+		outline-offset: -4px;
+	}
+
+	.dt-frame.is-dragging & {
+		cursor: grabbing;
+	}
+}
+
+.dt-tab-icon {
+	display: flex;
+	flex: none;
+	color: var(--canon-primary);
+
+	svg {
+		width: 20px;
+		height: 20px;
+		stroke-width: 2.25;
+	}
+}
+
+// baseline faces the window edge, as on iOS
+.dt-tab-name {
+	min-block-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	writing-mode: vertical-rl;
+}
+
+// kit sidebar, flattened: no cell grid, plain headings
+.dt-drawer .canon-sidebar {
+	inline-size: calc(
+		var(--dt-drawer-open) + var(--dt-band) - var(--dt-rule-width)
+	);
+	border-inline-end: 0;
+	background: transparent;
+}
+
+.dt-drawer .canon-sidebar-rows {
+	gap: 0;
+	background: transparent;
+}
+
+.dt-drawer .canon-sidebar-row {
+	--canon-sidebar-cell: transparent;
+
+	gap: 0;
+}
+
+.dt-drawer .canon-heading {
+	padding-block: 16px 4px;
+	background: transparent;
 }
 
 .dt-main {
 	flex: 1;
+	min-height: 0;
 	overflow: auto;
+	transition:
+		opacity 240ms ease-out,
+		filter 240ms ease-out;
 }
 
-.dt-sidebar {
-	display: flex;
-	flex-direction: column;
-	flex-shrink: 0;
-	width: $sidebar-width;
-	height: 100dvh;
+.dt-sidebar-hero {
+	@include crayon.vstack(2);
 
-	// also anchors .dt-sidebar-rail
-	position: sticky;
-	top: 0;
-	background: var(--sidebar);
-	color: var(--sidebar-foreground);
-	border-right: 1px solid var(--sidebar-border);
-	transition: width 0.2s ease;
-
-	&[data-state="collapsed"] {
-		width: $sidebar-width-icon;
-	}
-
-	// rail collapse desktop only
-	&[data-mobile="true"] {
-		position: fixed;
-		z-index: 60;
-		width: $sidebar-width-mobile;
-		transform: translateX(-100%);
-		transition: transform 0.2s ease;
-
-		&[data-open-mobile="true"] {
-			transform: translateX(0);
-		}
-	}
-}
-
-.dt-sidebar-scrim {
-	position: fixed;
-	inset: 0;
-	z-index: 55;
-	border: 0;
-	padding: 0;
-	background: rgb(0 0 0 / 50%);
-}
-
-.dt-sidebar-header {
-	padding: crayon.size(2);
-	border-bottom: 1px solid var(--sidebar-border);
+	width: 100%;
 }
 
 .dt-brand {
 	@include crayon.hstack(2);
 
 	align-items: center;
-	padding: crayon.size(2);
 	color: inherit;
 	text-decoration: none;
 
-	@include crayon.hover {
-		background: var(--sidebar-accent);
+	&:focus-visible {
+		outline: 2px solid var(--canon-primary);
+		outline-offset: 2px;
 	}
 }
 
@@ -962,7 +1113,7 @@ $header-height: crayon.size(14);
 	flex-shrink: 0;
 	width: crayon.size(10);
 	height: crayon.size(10);
-	border: 2px solid oklch(37% 0.09 145deg);
+	border: var(--canon-frame) solid var(--canon-primary);
 }
 
 .dt-brand-text {
@@ -974,12 +1125,12 @@ $header-height: crayon.size(14);
 }
 
 .dt-brand-name {
-	font-weight: crayon.font-weight("semibold");
+	font-weight: var(--canon-weight-semibold);
 }
 
 .dt-brand-sub {
-	font-size: crayon.font-size("xs");
-	color: var(--muted-foreground);
+	font-size: var(--canon-text-caption);
+	color: var(--canon-muted-foreground);
 }
 
 .dt-brand-sha {
@@ -996,295 +1147,84 @@ $header-height: crayon.size(14);
 	}
 }
 
-.dt-sidebar-search {
-	position: relative;
-	padding: crayon.size(2);
-	border-bottom: 1px solid var(--sidebar-border);
-}
+.dt-search {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-block-size: var(--canon-sidebar-row-compact);
+	padding-inline: 8px;
+	background: color-mix(
+		in srgb,
+		var(--canon-background) 60%,
+		transparent
+	);
+	color: var(--canon-muted-foreground);
 
-.dt-search-icon {
-	position: absolute;
-	top: 50%;
-	left: crayon.size(4);
-	width: crayon.size(3.5);
-	height: crayon.size(3.5);
-	transform: translateY(-50%);
-	color: var(--muted-foreground);
-	pointer-events: none;
+	&:focus-within {
+		outline: 2px solid var(--canon-primary);
+		outline-offset: -2px;
+		background: var(--canon-background);
+	}
+
+	svg {
+		flex: none;
+		width: 16px;
+		height: 16px;
+	}
 }
 
 .dt-search-input {
-	width: 100%;
-	height: crayon.size(8);
-	padding-inline: crayon.size(8);
-	background: var(--background);
-	color: var(--foreground);
-	border: 1px solid var(--border);
-	font-size: crayon.font-size("sm");
+	flex: 1;
+	min-inline-size: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	font: inherit;
+	font-size: var(--canon-text-subheadline);
+	outline: none;
+	appearance: none;
 
-	&:focus-visible {
-		outline: 2px solid var(--ring);
-		outline-offset: -1px;
+	&::placeholder {
+		color: var(--canon-muted-foreground);
+	}
+
+	&::-webkit-search-cancel-button {
+		appearance: none;
 	}
 }
 
 .dt-search-clear {
-	position: absolute;
-	top: 50%;
-	right: crayon.size(4);
-	width: crayon.size(3.5);
-	height: crayon.size(3.5);
+	display: flex;
 	padding: 0;
 	border: 0;
 	background: none;
-	color: var(--muted-foreground);
-	transform: translateY(-50%);
+	color: inherit;
 	cursor: pointer;
 
 	@include crayon.hover {
-		color: var(--foreground);
+		color: var(--canon-foreground);
 	}
 }
 
-.dt-sidebar-nav {
-	display: flex;
-	min-height: 0;
-	flex: 1;
-	flex-direction: column;
-	overflow-y: auto;
-	padding: crayon.size(2);
-	gap: crayon.size(4);
-}
-
-.dt-nav-group {
-	@include crayon.vstack(0.5);
-}
-
-// navtip is inline-block; must fill row
-.dt-nav-group .dt-tooltip-trigger {
-	display: block;
-}
-
-.dt-nav-group-label {
-	@include crayon.hstack(1.5);
-
-	align-items: center;
-	padding: crayon.size(2) crayon.size(2) crayon.size(1);
-	font-size: crayon.font-size("xs");
-	font-weight: crayon.font-weight("medium");
-	color: var(--muted-foreground);
-}
-
-.dt-star {
-	width: crayon.size(3);
-	height: crayon.size(3);
-	color: oklch(76% 0.16 70deg);
-
-	svg {
-		fill: currentcolor;
-	}
-}
-
-.dt-nav-link {
-	@include crayon.hstack(2);
-
-	align-items: center;
-	padding: crayon.size(1.5) crayon.size(2);
-	color: inherit;
-	font-size: crayon.font-size("sm");
-	text-decoration: none;
-	white-space: nowrap;
-
-	.dt-icon {
-		flex-shrink: 0;
-		width: crayon.size(4);
-		height: crayon.size(4);
-	}
-
-	@include crayon.hover {
-		background: var(--sidebar-accent);
-		color: var(--sidebar-accent-foreground);
-	}
-
-	&:focus-visible {
-		outline: 2px solid var(--sidebar-ring);
-		outline-offset: -2px;
-	}
-
-	&.active {
-		background: var(--sidebar-accent);
-		color: var(--sidebar-accent-foreground);
-		font-weight: crayon.font-weight("medium");
-	}
-}
-
-.dt-nav-link--featured {
-	color: oklch(52% 0.13 70deg);
-
-	@include crayon.dark {
-		color: oklch(80% 0.12 80deg);
-	}
-}
-
-.dt-nav-link--atlas {
-	color: var(--primary);
-}
-
-.dt-nav-label {
-	overflow: hidden;
-	text-overflow: ellipsis;
+.dt-search-key {
+	padding-inline: 4px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	font: inherit;
+	font-size: var(--canon-text-caption);
 }
 
 .dt-nav-empty {
 	display: block;
 	padding: crayon.size(8) crayon.size(4);
+	background: var(--canon-muted);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-subheadline);
 	text-align: center;
-	font-size: crayon.font-size("sm");
-	color: var(--muted-foreground);
-}
-
-.dt-sidebar-footer {
-	padding: crayon.size(2);
-	border-top: 1px solid var(--sidebar-border);
-}
-
-.dt-about {
-	display: block;
-	width: 100%;
-	padding: crayon.size(2);
-	border: 0;
-	background: none;
-	color: var(--muted-foreground);
-	font: inherit;
-	font-size: crayon.font-size("xs");
-	text-align: left;
-	text-decoration: none;
-	cursor: pointer;
-
-	@include crayon.hover {
-		background: var(--sidebar-accent);
-	}
-}
-
-.dt-about-text {
-	@include crayon.vstack(1);
-}
-
-.dt-about-icon {
-	display: none;
-	width: crayon.size(4);
-	height: crayon.size(4);
-	margin-inline: auto;
-}
-
-.dt-sidebar[data-state="collapsed"][data-mobile="false"] {
-	.dt-sidebar-search,
-	.dt-nav-group-label,
-	.dt-nav-label,
-	.dt-brand-text,
-	.dt-about-text {
-		display: none;
-	}
-
-	.dt-about-icon {
-		display: block;
-	}
-
-	.dt-nav-link {
-		justify-content: center;
-	}
-
-	.dt-brand {
-		justify-content: center;
-		padding: 0;
-	}
-
-	.dt-brand-logo {
-		width: crayon.size(8);
-		height: crayon.size(8);
-	}
-}
-
-// as shadcn SidebarRail
-.dt-sidebar-rail {
-	position: absolute;
-	inset-block: 0;
-	right: -8px;
-	width: 16px;
-	border: 0;
-	background: transparent;
-	cursor: ew-resize;
-
-	@include crayon.hover {
-		background: linear-gradient(
-			to right,
-			transparent,
-			var(--sidebar-border),
-			transparent
-		);
-	}
-}
-
-.dt-sidebar[data-mobile="true"] .dt-sidebar-rail {
-	display: none;
-}
-
-.dt-header {
-	@include crayon.hstack(2);
-
-	position: sticky;
-	z-index: 50;
-	top: 0;
-	align-items: center;
-	height: $header-height;
-	flex-shrink: 0;
-	padding-inline: crayon.size(4);
-	border-bottom: 1px solid var(--border);
-	background: color-mix(in oklch, var(--background) 95%, transparent);
-	backdrop-filter: blur(8px);
-}
-
-.dt-header-sep {
-	width: 1px;
-	height: crayon.size(4);
-	margin-right: crayon.size(2);
-	background: var(--border);
-}
-
-.dt-header-title {
-	@include crayon.hstack(2);
-
-	align-items: center;
-	min-width: 0;
-
-	h1 {
-		font-size: crayon.font-size("lg");
-		font-weight: crayon.font-weight("semibold");
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-}
-
-.dt-header-icon {
-	width: crayon.size(5);
-	height: crayon.size(5);
-	flex-shrink: 0;
-	color: var(--muted-foreground);
-}
-
-.dt-header-actions {
-	@include crayon.hstack(1);
-
-	margin-left: auto;
-	align-items: center;
 }
 
 // design.md §10 action bar
 .dt-flow {
-	position: sticky;
-	z-index: 49;
-	top: $header-height;
 	display: flex;
 	min-height: crayon.size(12);
 	flex-wrap: wrap;
@@ -1302,12 +1242,6 @@ $header-height: crayon.size(14);
 	opacity: 0.5;
 	filter: blur(4px);
 	pointer-events: none;
-}
-
-.dt-main {
-	transition:
-		opacity 240ms ease-out,
-		filter 240ms ease-out;
 }
 
 .dt-flow-name {

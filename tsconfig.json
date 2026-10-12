@@ -7,6 +7,10 @@
 		"paths": {
 			"delphitools-v2/tests/*": ["./tests/*"],
 			"delphitools-v2/*": ["./app/*"],
+			"@glint/template": ["./node_modules/@glint/template"],
+			"@glint/template/*": [
+				"./node_modules/@glint/template/*"
+			],
 			"*": ["./types/*"]
 		},
 		"types": [
