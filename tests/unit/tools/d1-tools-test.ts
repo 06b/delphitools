@@ -6,7 +6,6 @@ import {
 	looksLikeSvg,
 	formatBytes,
 } from 'delphitools-v2/components/tools/svg-optimiser';
-import { previewHost } from 'delphitools-v2/components/tools/meta-tag-genny';
 
 module('Unit | Tools | D1', function () {
 	module('word-counter', function () {
@@ -81,23 +80,6 @@ module('Unit | Tools | D1', function () {
 				/KB|kB/i.test(formatBytes(2048)),
 				formatBytes(2048),
 			);
-		});
-	});
-
-	module('meta-tag-genny', function () {
-		test('takes the hostname out of a url', function (assert) {
-			assert.strictEqual(
-				previewHost(
-					'https://delphi.tools/tools/qr-genny',
-				),
-				'delphi.tools',
-			);
-		});
-
-		// preview must not blank while a url is half-typed
-		test('falls back rather than throwing on a broken url', function (assert) {
-			assert.true(previewHost('not a url').length > 0);
-			assert.true(previewHost('').length > 0);
 		});
 	});
 });

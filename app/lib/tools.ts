@@ -882,6 +882,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Generate HTML meta tags',
 				icon: 'tag',
 				href: '/tools/meta-tag-genny',
+				canon: true,
 			},
 			{
 				id: 'regex-tester',
