@@ -1126,6 +1126,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between bananas, Waleses and Warhols',
 				icon: 'banana',
 				href: '/tools/stupid-units',
+				canon: true,
 			},
 			{
 				id: 'recipe-table',

@@ -1,0 +1,100 @@
+.stupid-units {
+	/* the kit has no monospaced token */
+	--su-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
+}
+
+/* figures in the same type as the rows */
+.stupid-units .stupid-units-value .canon-big-number-field-input {
+	font-family: var(--su-mono);
+}
+
+/* a unit: name over its base size, the log size bar, the amount */
+.stupid-units-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 4px 16px;
+	align-items: center;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 8px var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	appearance: none;
+}
+
+@container (min-width: 520px) {
+	.stupid-units-row {
+		/* the amount column fits 999,900,000,000, the widest formatStupid writes */
+		grid-template-columns: minmax(0, 13rem) minmax(0, 1fr) 9.5rem;
+	}
+}
+
+.stupid-units-row--lit {
+	background: var(--canon-accent-bg);
+}
+
+.stupid-units-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+@media (hover: hover) {
+	.stupid-units-row:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.stupid-units-name {
+	display: flex;
+	flex-direction: column;
+	min-inline-size: 0;
+	line-height: 1.25;
+}
+
+.stupid-units-unit {
+	overflow: hidden;
+	font-size: var(--canon-text-body);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.stupid-units-row--lit .stupid-units-unit {
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.stupid-units-base {
+	color: var(--canon-muted-foreground);
+	font-family: var(--su-mono);
+	font-size: var(--canon-text-caption);
+}
+
+/* narrow: the bar runs under the row */
+.stupid-units .stupid-units-bar {
+	grid-column: 1 / -1;
+	grid-row: 2;
+	block-size: 4px;
+}
+
+@container (min-width: 520px) {
+	.stupid-units .stupid-units-bar {
+		grid-column: 2;
+		grid-row: 1;
+		block-size: 8px;
+	}
+}
+
+.stupid-units-amount {
+	font-family: var(--su-mono);
+	font-size: var(--canon-text-subheadline);
+	font-variant-numeric: tabular-nums;
+	text-align: end;
+	white-space: nowrap;
+}
