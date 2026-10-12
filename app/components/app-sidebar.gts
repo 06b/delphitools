@@ -37,7 +37,13 @@ const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 }));
 
 interface NavRowSignature {
-	Args: { name: string; icon: string; href: string; external?: boolean };
+	Args: {
+		name: string;
+		icon: string;
+		href: string;
+		external?: boolean;
+		canon?: boolean;
+	};
 }
 
 class NavRow extends Component<NavRowSignature> {
@@ -78,6 +84,7 @@ class NavRow extends Component<NavRowSignature> {
 				@href={{@href}}
 				@selected={{this.selected}}
 				@onClick={{this.go}}
+				data-canon={{if @canon "true"}}
 			/>
 		{{/if}}
 	</template>
@@ -268,6 +275,7 @@ export default class AppSidebar extends Component {
 							@name={{tool.name}}
 							@icon={{tool.icon}}
 							@href={{tool.href}}
+							@canon={{tool.canon}}
 						/>
 					{{/each}}
 				{{/if}}
@@ -280,6 +288,7 @@ export default class AppSidebar extends Component {
 							@icon={{tool.icon}}
 							@href={{tool.href}}
 							@external={{tool.external}}
+							@canon={{tool.canon}}
 						/>
 					{{/each}}
 				{{/each}}
