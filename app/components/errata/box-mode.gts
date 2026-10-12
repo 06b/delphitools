@@ -9,6 +9,7 @@ import { htmlSafe } from '@ember/template';
 import ToolPanel, {
 	AnchorPicker,
 	Field,
+	InputField,
 	PageScope,
 	Segmented,
 	Slider,
@@ -434,361 +435,377 @@ export default class BoxModeBar extends Component<Signature> {
 			@canApply={{this.canApply}}
 			@busy={{this.busy}}
 			@failed={{this.failed}}
-			class={{if (eq @mode "impose") "is-tall"}}
 			{{this.livePreview (if @open this.items)}}
 			{{this.session (if @open @mode)}}
 		>
-			{{#if (eq @mode "page-numbers")}}
-				<label class="err-mode-field">
+			<:status>
+				{{#if (eq @mode "redact")}}
 					<span
-						class="sub-tool-row-label"
-					>Format</span>
-					<input
-						class="err-mode-input"
-						value={{this.numberFormat}}
-						{{on
-							"input"
-							(fn
-								this.setText
-								"numberFormat"
-							)
-						}}
-					/>
-				</label>
-				<AnchorPicker
-					@value={{this.numberAnchor}}
-					@onChange={{fn
-						this.pick
-						"numberAnchor"
-					}}
-				/>
-				<Field @label="Size">
-					<PresetRow
-						@options={{NUMBER_SIZES}}
-						@value={{this.numberSize}}
-						@onChange={{fn
-							this.pick
-							"numberSize"
-						}}
-						@min={{4}}
-						@max={{72}}
-						@unit="pt"
-					/>
-				</Field>
-			{{else if (eq @mode "watermark")}}
-				<label class="err-mode-field">
+						class="sub-omni-tag"
+					>{{this.redactHint}}</span>
 					<span
-						class="sub-tool-row-label"
-					>Text</span>
-					<input
-						class="err-mode-input"
-						value={{this.watermark}}
-						{{on
-							"input"
-							(fn
-								this.setText
-								"watermark"
-							)
-						}}
-					/>
-				</label>
-				<Slider
-					@label="Opacity"
-					@value={{this.opacity}}
-					@min={{5}}
-					@max={{100}}
-					@unit="%"
-					@onChange={{fn this.pick "opacity"}}
-				/>
-				<Slider
-					@label="Angle"
-					@value={{this.angle}}
-					@min={{-90}}
-					@max={{90}}
-					@unit="°"
-					@onChange={{fn this.pick "angle"}}
-				/>
-			{{else if (eq @mode "stamp")}}
-				<Field @label="Label">
-					<Select
-						@value={{this.stamp}}
-						@onValueChange={{fn
-							this.pick
-							"stamp"
-						}}
-					>
-						<SelectTrigger
-							class="sub-font-trigger err-mode-select"
-							aria-label="Label"
-						>
-							<SelectValue
-							>{{this.stamp}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each STAMPS as |s|}}
-								<SelectItem
-									@value={{s}}
-								>{{s}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
-					{{#if (eq this.stamp CUSTOM)}}
-						<input
-							class="err-mode-input"
-							aria-label="Custom label"
-							value={{this.stampText}}
-							{{on
-								"input"
-								(fn
-									this.setText
-									"stampText"
-								)
-							}}
-						/>
-					{{/if}}
-				</Field>
-				<Field @label="Bold">
-					<Switch
-						@checked={{this.stampBold}}
-						@onChange={{fn
-							this.pick
-							"stampBold"
-						}}
-						@label="Bold"
-					/>
-				</Field>
-				<Field @label="Colour">
-					<span class="err-swatches">
-						{{#each STAMP_COLOURS as |c|}}
-							<button
-								type="button"
-								class="err-swatch
-									{{if
-										(eq
-											this.stampColour
-											c.value
-										)
-										'is-active'
-									}}"
-								style={{c.style}}
-								aria-label={{c.label}}
-								aria-pressed={{if
-									(eq
-										this.stampColour
-										c.value
-									)
-									"true"
-									"false"
-								}}
-								title={{c.label}}
-								{{on
-									"click"
-									(fn
-										this.pick
-										"stampColour"
-										c.value
-									)
-								}}
-							></button>
-						{{/each}}
-					</span>
-				</Field>
-				<AnchorPicker
-					@value={{this.stampAnchor}}
-					@onChange={{fn this.pick "stampAnchor"}}
-				/>
-				<Field @label="Size">
-					<PresetRow
-						@options={{STAMP_SIZES}}
-						@value={{this.stampSize}}
-						@onChange={{fn
-							this.pick
-							"stampSize"
-						}}
-						@min={{6}}
-						@max={{144}}
-						@unit="pt"
-					/>
-				</Field>
-			{{else if (eq @mode "compress")}}
-				<Slider
-					@label="Quality"
-					@value={{this.quality}}
-					@min={{10}}
-					@max={{100}}
-					@onChange={{this.setQuality}}
-				/>
-				<Field @label="Images">
-					<Segmented
-						@options={{MAX_SIZES}}
-						@value={{this.maxEdge}}
-						@onChange={{fn
-							this.pick
-							"maxEdge"
-						}}
-					/>
-				</Field>
-				{{#if this.compressResult}}
+						class="sub-omni-tag"
+					>{{this.marks}}
+						marked</span>
+				{{else if this.compressResult}}
 					<span
 						class="sub-omni-tag"
 						data-compress-result
 					>{{this.compressResult}}</span>
 				{{/if}}
-			{{else if (eq @mode "form")}}
-				<FormFields @open={{@open}} />
-			{{else if (eq @mode "impose")}}
-				<Field @label="Layout">
-					<Select
-						@value={{this.layout}}
-						@onValueChange={{this.setLayout}}
-					>
-						<SelectTrigger
-							class="sub-font-trigger err-mode-select"
-							aria-label="Layout"
-						>
-							<SelectValue
-							>{{this.layoutName}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each
-								IMPOSITION_LAYOUTS
-								key="id"
-								as |l|
-							}}
-								<SelectItem
-									@value={{l.id}}
-								>{{l.name}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
-				</Field>
-				{{#if (eq this.layout "gang-run")}}
-					<Field @label="Copies">
-						<Segmented
-							@options={{COPIES}}
-							@value={{this.copies}}
-							@onChange={{fn
-								this.pick
-								"copies"
-							}}
-						/>
-					</Field>
-				{{else if (eq this.layout "custom-nup")}}
-					<Field @label="Grid">
+			</:status>
+			<:default>
+				{{#if (eq @mode "page-numbers")}}
+					<InputField @label="Format">
 						<input
-							type="number"
-							class="err-mode-input is-narrow"
-							aria-label="Rows"
-							min="1"
-							max="10"
-							value={{this.rows}}
+							class="err-mode-input"
+							aria-label="Format"
+							value={{this.numberFormat}}
 							{{on
-								"change"
-								this.setRows
+								"input"
+								(fn
+									this.setText
+									"numberFormat"
+								)
 							}}
 						/>
-						<span
-							class="sub-tool-row-label"
-						>&times;</span>
-						<input
-							type="number"
-							class="err-mode-input is-narrow"
-							aria-label="Columns"
-							min="1"
-							max="10"
-							value={{this.cols}}
-							{{on
-								"change"
-								this.setCols
-							}}
-						/>
-					</Field>
-				{{/if}}
-				<Field @label="Sheet">
-					<PaperSizeCombobox
-						@value={{this.paper}}
-						@onValueChange={{fn
-							this.pick
-							"paper"
-						}}
-						@triggerClass="sub-font-trigger err-mode-select"
-					/>
-				</Field>
-				<Field @label="Orientation">
-					<Segmented
-						@options={{ORIENTATIONS}}
-						@value={{this.orientation}}
+					</InputField>
+					<AnchorPicker
+						@value={{this.numberAnchor}}
 						@onChange={{fn
 							this.pick
-							"orientation"
+							"numberAnchor"
 						}}
 					/>
-				</Field>
-				{{#if this.duplexAware}}
-					<Field @label="Duplex">
-						<Segmented
-							@options={{FLIPS}}
-							@value={{this.flip}}
+					<Field @label="Size">
+						<PresetRow
+							@options={{NUMBER_SIZES}}
+							@value={{this.numberSize}}
 							@onChange={{fn
 								this.pick
-								"flip"
+								"numberSize"
+							}}
+							@min={{4}}
+							@max={{72}}
+							@unit="pt"
+						/>
+					</Field>
+				{{else if (eq @mode "watermark")}}
+					<InputField @label="Text">
+						<input
+							class="err-mode-input"
+							aria-label="Text"
+							value={{this.watermark}}
+							{{on
+								"input"
+								(fn
+									this.setText
+									"watermark"
+								)
+							}}
+						/>
+					</InputField>
+					<Slider
+						@label="Opacity"
+						@value={{this.opacity}}
+						@min={{5}}
+						@max={{100}}
+						@unit="%"
+						@onChange={{fn
+							this.pick
+							"opacity"
+						}}
+					/>
+					<Slider
+						@label="Angle"
+						@value={{this.angle}}
+						@min={{-90}}
+						@max={{90}}
+						@unit="°"
+						@onChange={{fn
+							this.pick
+							"angle"
+						}}
+					/>
+				{{else if (eq @mode "stamp")}}
+					<Field @label="Label">
+						<Select
+							@value={{this.stamp}}
+							@onValueChange={{fn
+								this.pick
+								"stamp"
+							}}
+						>
+							<SelectTrigger
+								aria-label="Label"
+							>
+								<SelectValue
+								>{{this.stamp}}</SelectValue>
+							</SelectTrigger>
+							<SelectContent>
+								{{#each
+									STAMPS
+									as |s|
+								}}
+									<SelectItem
+										@value={{s}}
+									>{{s}}</SelectItem>
+								{{/each}}
+							</SelectContent>
+						</Select>
+						{{#if (eq this.stamp CUSTOM)}}
+							<input
+								class="err-mode-input"
+								aria-label="Custom label"
+								value={{this.stampText}}
+								{{on
+									"input"
+									(fn
+										this.setText
+										"stampText"
+									)
+								}}
+							/>
+						{{/if}}
+					</Field>
+					<AnchorPicker
+						@value={{this.stampAnchor}}
+						@onChange={{fn
+							this.pick
+							"stampAnchor"
+						}}
+					/>
+					<Field @label="Colour">
+						<span
+							class="segmented err-swatches"
+						>
+							{{#each
+								STAMP_COLOURS
+								as |c|
+							}}
+								<button
+									type="button"
+									class="err-swatch
+										{{if
+											(eq
+												this.stampColour
+												c.value
+											)
+											'is-active'
+										}}"
+									style={{c.style}}
+									aria-label={{c.label}}
+									aria-pressed={{if
+										(eq
+											this.stampColour
+											c.value
+										)
+										"true"
+										"false"
+									}}
+									title={{c.label}}
+									{{on
+										"click"
+										(fn
+											this.pick
+											"stampColour"
+											c.value
+										)
+									}}
+								></button>
+							{{/each}}
+						</span>
+					</Field>
+					<Field @label="Size">
+						<PresetRow
+							@options={{STAMP_SIZES}}
+							@value={{this.stampSize}}
+							@onChange={{fn
+								this.pick
+								"stampSize"
+							}}
+							@min={{6}}
+							@max={{144}}
+							@unit="pt"
+						/>
+					</Field>
+					<InputField @label="Bold">
+						<Switch
+							@checked={{this.stampBold}}
+							@onChange={{fn
+								this.pick
+								"stampBold"
+							}}
+							@label="Bold"
+						/>
+					</InputField>
+				{{else if (eq @mode "compress")}}
+					<Slider
+						@label="Quality"
+						@value={{this.quality}}
+						@min={{10}}
+						@max={{100}}
+						@onChange={{this.setQuality}}
+					/>
+					<Field @label="Images">
+						<Segmented
+							@options={{MAX_SIZES}}
+							@value={{this.maxEdge}}
+							@onChange={{fn
+								this.pick
+								"maxEdge"
 							}}
 						/>
 					</Field>
-				{{/if}}
-				<Slider
-					@label="Margins"
-					@value={{this.margin}}
-					@min={{0}}
-					@max={{20}}
-					@unit="mm"
-					@onChange={{this.setMargin}}
-				/>
-				<Slider
-					@label="Gutter"
-					@value={{this.gutter}}
-					@min={{0}}
-					@max={{10}}
-					@unit="mm"
-					@onChange={{this.setGutter}}
-				/>
-				{{#if (eq this.layout "saddle-stitch")}}
+				{{else if (eq @mode "form")}}
+					<FormFields @open={{@open}} />
+				{{else if (eq @mode "impose")}}
+					<Field @label="Layout">
+						<Select
+							@value={{this.layout}}
+							@onValueChange={{this.setLayout}}
+						>
+							<SelectTrigger
+								aria-label="Layout"
+							>
+								<SelectValue
+								>{{this.layoutName}}</SelectValue>
+							</SelectTrigger>
+							<SelectContent>
+								{{#each
+									IMPOSITION_LAYOUTS
+									key="id"
+									as |l|
+								}}
+									<SelectItem
+										@value={{l.id}}
+									>{{l.name}}</SelectItem>
+								{{/each}}
+							</SelectContent>
+						</Select>
+					</Field>
+					<Field @label="Sheet">
+						<PaperSizeCombobox
+							@value={{this.paper}}
+							@onValueChange={{fn
+								this.pick
+								"paper"
+							}}
+							@caret="chevron-down"
+						/>
+					</Field>
+					{{#if (eq this.layout "gang-run")}}
+						<Field @label="Copies">
+							<Segmented
+								@options={{COPIES}}
+								@value={{this.copies}}
+								@onChange={{fn
+									this.pick
+									"copies"
+								}}
+							/>
+						</Field>
+					{{else if
+						(eq this.layout "custom-nup")
+					}}
+						<Field @label="Grid">
+							<input
+								type="number"
+								class="err-mode-input is-narrow"
+								aria-label="Rows"
+								min="1"
+								max="10"
+								value={{this.rows}}
+								{{on
+									"change"
+									this.setRows
+								}}
+							/>
+							<span
+								class="sub-tool-row-label"
+							>&times;</span>
+							<input
+								type="number"
+								class="err-mode-input is-narrow"
+								aria-label="Columns"
+								min="1"
+								max="10"
+								value={{this.cols}}
+								{{on
+									"change"
+									this.setCols
+								}}
+							/>
+						</Field>
+					{{/if}}
+					<Field @label="Orientation">
+						<Segmented
+							@options={{ORIENTATIONS}}
+							@value={{this.orientation}}
+							@onChange={{fn
+								this.pick
+								"orientation"
+							}}
+						/>
+					</Field>
+					{{#if this.duplexAware}}
+						<Field @label="Duplex">
+							<Segmented
+								@options={{FLIPS}}
+								@value={{this.flip}}
+								@onChange={{fn
+									this.pick
+									"flip"
+								}}
+							/>
+						</Field>
+					{{/if}}
 					<Slider
-						@label="Creep"
-						@value={{this.creep}}
+						@label="Margins"
+						@value={{this.margin}}
 						@min={{0}}
-						@max={{2}}
-						@step={{0.1}}
+						@max={{20}}
 						@unit="mm"
-						@onChange={{this.setCreep}}
+						@onChange={{this.setMargin}}
+					/>
+					<Slider
+						@label="Gutter"
+						@value={{this.gutter}}
+						@min={{0}}
+						@max={{10}}
+						@unit="mm"
+						@onChange={{this.setGutter}}
+					/>
+					{{#if (eq this.layout "saddle-stitch")}}
+						<Slider
+							@label="Creep"
+							@value={{this.creep}}
+							@min={{0}}
+							@max={{2}}
+							@step={{0.1}}
+							@unit="mm"
+							@onChange={{this.setCreep}}
+						/>
+					{{/if}}
+					<InputField @label="Crop marks">
+						<Switch
+							@checked={{this.cropMarks}}
+							@onChange={{this.setCropMarks}}
+							@label="Crop marks"
+						/>
+					</InputField>
+				{{/if}}
+
+				{{#if this.stamping}}
+					<PageScope
+						@scope={{this.scope}}
+						@range={{this.range}}
+						@invalid={{this.rangeInvalid}}
+						@onScope={{this.setScope}}
+						@onRange={{this.setRange}}
 					/>
 				{{/if}}
-				<label class="err-mode-field">
-					<span class="sub-tool-row-label">Crop
-						marks</span>
-					<Switch
-						@checked={{this.cropMarks}}
-						@onChange={{this.setCropMarks}}
-						@label="Crop marks"
-					/>
-				</label>
-			{{else if (eq @mode "redact")}}
-				<span
-					class="sub-omni-tag"
-				>{{this.redactHint}}</span>
-				<span class="sub-omni-tag">{{this.marks}}
-					marked</span>
-			{{/if}}
-
-			{{#if this.stamping}}
-				<PageScope
-					@scope={{this.scope}}
-					@range={{this.range}}
-					@invalid={{this.rangeInvalid}}
-					@onScope={{this.setScope}}
-					@onRange={{this.setRange}}
-				/>
-			{{/if}}
+			</:default>
 		</ToolPanel>
 	</template>
 }

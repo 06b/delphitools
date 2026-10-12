@@ -791,9 +791,11 @@ export default class Omnibar extends Component {
 					false
 				}}
 			>
-				<span
-					class="sub-omni-tag"
-				>{{this.cropHint}}</span>
+				<:status>
+					<span
+						class="sub-omni-tag"
+					>{{this.cropHint}}</span>
+				</:status>
 			</ToolPanel>
 
 			<BoxModeBar

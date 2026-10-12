@@ -232,59 +232,73 @@ export class InsertPanel extends Component {
 			@onCancel={{close}}
 			@cancelLabel="Close"
 		>
-			<span class="segmented err-mode-seg">
-				<button
-					type="button"
-					class="sub-seg-cell err-strip-cell"
-					{{on "click" (fn this.insert "blank")}}
-				>
-					<Icon @name="file-plus" />
-					Blank
-				</button>
-				<button
-					type="button"
-					class="sub-seg-cell err-strip-cell"
-					{{on
-						"click"
-						(fn this.insert "duplicate")
-					}}
-				>
-					<Icon @name="copy" />
-					Duplicate
-				</button>
-				<button
-					type="button"
-					class="sub-seg-cell err-strip-cell"
-					{{on "click" (fn this.insert "black")}}
-				>
-					<Icon @name="square" />
-					Black
-				</button>
-				<button
-					type="button"
-					class="sub-seg-cell err-strip-cell"
-					{{on "click" (fn this.insert "text")}}
-				>
-					<Icon @name="type" />
-					Text
-				</button>
-				<button
-					type="button"
-					class="sub-seg-cell err-strip-cell"
-					{{on "click" this.pickImage}}
-				>
-					<Icon @name="file-image" />
-					Image
-				</button>
-			</span>
-			<input
-				type="file"
-				accept="image/*"
-				class="sub-topbar-file-input"
-				aria-label="Image page"
-				{{this.bindInput}}
-				{{on "change" this.onImage}}
-			/>
+			<Field @label="Page">
+				<span class="segmented err-mode-seg">
+					<button
+						type="button"
+						class="sub-seg-cell err-strip-cell"
+						{{on
+							"click"
+							(fn this.insert "blank")
+						}}
+					>
+						<Icon @name="file-plus" />
+						Blank
+					</button>
+					<button
+						type="button"
+						class="sub-seg-cell err-strip-cell"
+						{{on
+							"click"
+							(fn
+								this.insert
+								"duplicate"
+							)
+						}}
+					>
+						<Icon @name="copy" />
+						Duplicate
+					</button>
+					<button
+						type="button"
+						class="sub-seg-cell err-strip-cell"
+						{{on
+							"click"
+							(fn this.insert "black")
+						}}
+					>
+						<Icon @name="square" />
+						Black
+					</button>
+					<button
+						type="button"
+						class="sub-seg-cell err-strip-cell"
+						{{on
+							"click"
+							(fn this.insert "text")
+						}}
+					>
+						<Icon @name="type" />
+						Text
+					</button>
+					<button
+						type="button"
+						class="sub-seg-cell err-strip-cell"
+						{{on "click" this.pickImage}}
+					>
+						<Icon @name="file-image" />
+						Image
+					</button>
+				</span>
+				<input
+					type="file"
+					accept="image/*"
+					class="sub-topbar-file-input"
+					aria-label="Image page"
+					{{this.bindInput}}
+					{{on "change" this.onImage}}
+				/>
+			</Field>
 		</ToolPanel>
 	</template>
 }

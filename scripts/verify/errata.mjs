@@ -429,12 +429,15 @@ const texts = async () => (await doc()).pages.map((p) => p.objects.filter((o) =>
 
 await openCell('Page numbers');
 check('numbers mode bar', await modeOpen('page-numbers'));
+// field columns: distinct label x positions in the body grid
+const fieldColumns = (sel = '.err-mode.is-open') => page.$$eval(`${sel} .err-mode-body > .err-mode-field > .sub-tool-row-label`, (ls) => new Set(ls.map((l) => Math.round(l.getBoundingClientRect().left))).size);
 const panelBox = () => page.$eval('.err-mode.is-open', (e) => {
 	const r = e.getBoundingClientRect();
 	return { left: r.left, right: r.right, h: r.height, vw: innerWidth };
 });
 const wide = await panelBox();
-check('numbers panel one row', wide.h < 120, JSON.stringify(wide));
+const wideColumns = await fieldColumns();
+check('numbers panel columns', wide.h < 180 && wideColumns >= 2, JSON.stringify({ ...wide, wideColumns }));
 const anchorCells = (sel = '.err-mode.is-open') => page.$$eval(`${sel} .err-anchor-cell`, (cs) => cs.map((c) => `${c.dataset.anchor}:${c.getAttribute('aria-checked')}`));
 const numberCells = await anchorCells();
 check('numbers position picker', numberCells.length === 9 && numberCells.filter((c) => c.endsWith(':true')).join() === 'bottom-center:true', JSON.stringify(numberCells));
@@ -449,7 +452,8 @@ await sleep(200);
 await page.setViewport({ width: 640, height: 1000 });
 await sleep(400);
 const narrow = await panelBox();
-check('numbers panel wraps when narrow', narrow.h > wide.h && narrow.left >= 0 && narrow.right <= narrow.vw, JSON.stringify(narrow));
+const narrowColumns = await fieldColumns();
+check('numbers panel one column when narrow', narrow.h > wide.h && narrowColumns === 1 && narrow.left >= 0 && narrow.right <= narrow.vw, JSON.stringify({ ...narrow, narrowColumns }));
 await page.setViewport({ width: 1400, height: 1000 });
 await sleep(400);
 check('numbers markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
@@ -630,7 +634,7 @@ const imposeApply = async () => {
 };
 await openCell('Impose');
 check('impose mode bar', await modeOpen('impose'));
-check('impose tall panel', !!(await page.$('.err-mode.is-open.is-tall[data-mode="impose"]')));
+check('impose form grid', (await fieldColumns('.err-mode.is-open[data-mode="impose"]')) >= 2);
 await imposeApply();
 const afterImpose = await doc();
 // 3 pages pad to 4
@@ -887,7 +891,7 @@ pop = await popover();
 check('comment popover switches note', pop?.text === 'Imported note\nline two' && pop.author === 'Ann' && (await comments()).length === 2, JSON.stringify(pop));
 await page.keyboard.press('Escape');
 await sleep(200);
-await page.click(`${bar} .err-mode-select`);
+await page.click(`${bar} .dt-select-trigger`);
 await sleep(300);
 const options = await page.$$eval('.dt-select-item', (els) => els.map((e) => e.textContent.trim()));
 check('comment list', options.length === 2 && options[0] === '1 · Imported note line two' && options[1] === '1 · Fresh note second line', JSON.stringify(options));

@@ -51,6 +51,8 @@ export interface PaperSizeComboboxSignature {
 		contentClass?: string;
 		// trigger text while value is 'custom'
 		customLabel?: string;
+		/** default chevrons-up-down */
+		caret?: string;
 	};
 }
 
@@ -102,7 +104,11 @@ export default class PaperSizeCombobox extends Component<PaperSizeComboboxSignat
 						class="dt-paper-combo-value"
 					>{{this.displayLabel}}</span>
 					<Icon
-						@name="chevrons-up-down"
+						@name={{if
+							@caret
+							@caret
+							"chevrons-up-down"
+						}}
 						class="dt-paper-combo-caret"
 					/>
 				</button>

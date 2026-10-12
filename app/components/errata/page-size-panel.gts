@@ -1,12 +1,14 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
-import { fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import ToolPanel, {
+	AnchorPicker,
 	Field,
+	Group,
+	InputField,
 	PageScope,
 	Segmented,
 } from 'delphitools-v2/components/errata/tool-panel';
@@ -36,22 +38,9 @@ import {
 import { getMode, setMode, subscribeUi } from 'delphitools-v2/lib/errata/ui';
 import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
 import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
-import { ANCHORS } from 'delphitools-v2/lib/pdf-stamp';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 // mm shown, points stored
-
-const ANCHOR_ICONS: Record<Anchor, string> = {
-	'top-left': 'arrow-up-left',
-	'top-center': 'arrow-up',
-	'top-right': 'arrow-up-right',
-	'middle-left': 'arrow-left',
-	'middle-center': 'dot',
-	'middle-right': 'arrow-right',
-	'bottom-left': 'arrow-down-left',
-	'bottom-center': 'arrow-down',
-	'bottom-right': 'arrow-down-right',
-};
 
 const PRESET_IDS = ['a4', 'a3', 'sra4', 'letter', 'legal', 'tabloid'];
 const PRESETS = PRESET_IDS.map((id) => {
@@ -93,8 +82,6 @@ export default class PageSizePanel extends Component {
 	@tracked otherId = 'custom';
 	@tracked scope: Scope = 'current';
 	@tracked range = '';
-	anchors = ANCHORS;
-	icons = ANCHOR_ICONS;
 
 	willDestroy() {
 		super.willDestroy();
@@ -279,123 +266,122 @@ export default class PageSizePanel extends Component {
 			@canApply={{this.valid}}
 			{{this.seedOnOpen this.open}}
 		>
-			<Field @label="Preset">
-				<Segmented
-					@options={{PRESETS}}
-					@value={{this.activePreset}}
-					@onChange={{this.preset}}
-				/>
-				<PaperSizeCombobox
-					@value={{this.otherId}}
-					@onValueChange={{this.pickOther}}
-					@customLabel="Other…"
-					@triggerClass="sub-font-trigger err-mode-select"
-				/>
-			</Field>
-			<Field @label="Size">
-				<input
-					class="err-mode-input is-narrow"
-					inputmode="decimal"
-					aria-label="Width"
-					value={{this.width}}
-					{{on
-						"input"
-						(this.readInput this.setWidth)
-					}}
-				/>
-				<span class="segmented err-mode-seg">
-					<button
-						type="button"
-						class="sub-seg-cell"
-						aria-label="Swap"
-						title="Swap"
-						{{on "click" this.swap}}
-					>
-						<Icon
-							@name="arrow-left-right"
+			<:actions>
+				<button
+					type="button"
+					class="sub-modal-btn is-ghost"
+					disabled={{if this.indices false true}}
+					{{on "click" this.reset}}
+				>
+					<Icon @name="undo-2" />
+					Reset
+				</button>
+			</:actions>
+			<:default>
+				<Group class="is-tall">
+					<Field @label="Preset">
+						<Segmented
+							@options={{PRESETS}}
+							@value={{this.activePreset}}
+							@onChange={{this.preset}}
 						/>
-					</button>
-				</span>
-				<input
-					class="err-mode-input is-narrow"
-					inputmode="decimal"
-					aria-label="Height"
-					value={{this.height}}
-					{{on
-						"input"
-						(this.readInput this.setHeight)
-					}}
-				/>
-				<span class="sub-tool-row-label">mm</span>
-			</Field>
-			<label class="err-mode-field">
-				<span class="sub-tool-row-label">3 mm bleed</span>
-				<Switch
-					@checked={{this.bleed}}
-					@onChange={{this.setBleed}}
-				/>
-			</label>
-			<Field @label="Content">
-				<Segmented
-					@options={{PLACEMENTS}}
-					@value={{this.placement}}
-					@onChange={{this.setPlacement}}
-				/>
-				{{#if (eq this.placement "anchor")}}
-					<span class="segmented err-anchor-grid">
-						{{#each this.anchors as |a|}}
+					</Field>
+					<Field @label="">
+						<PaperSizeCombobox
+							@value={{this.otherId}}
+							@onValueChange={{this.pickOther}}
+							@customLabel="Other…"
+							@caret="chevron-down"
+						/>
+					</Field>
+					<Field @label="Size">
+						<input
+							class="err-mode-input is-narrow"
+							inputmode="decimal"
+							aria-label="Width"
+							value={{this.width}}
+							{{on
+								"input"
+								(this.readInput
+									this.setWidth
+								)
+							}}
+						/>
+						<span
+							class="segmented err-mode-seg"
+						>
 							<button
 								type="button"
-								class="sub-seg-cell
-									{{if
-										(eq
-											this.anchor
-											a
-										)
-										'is-active'
-									}}"
-								aria-label={{a}}
-								title={{a}}
+								class="sub-seg-cell"
+								aria-label="Swap"
+								title="Swap"
 								{{on
 									"click"
-									(fn
-										this.setAnchor
-										a
-									)
+									this.swap
 								}}
 							>
 								<Icon
-									@name={{get
-										this.icons
-										a
-									}}
+									@name="arrow-left-right"
 								/>
 							</button>
-						{{/each}}
-					</span>
-				{{else}}
-					<Segmented
-						@options={{RESAMPLES}}
-						@value={{this.resample}}
-						@onChange={{this.setResample}}
-					/>
-				{{/if}}
-			</Field>
-			<PageScope
-				@scope={{this.scope}}
-				@range={{this.range}}
-				@invalid={{this.rangeInvalid}}
-				@onScope={{this.setScope}}
-				@onRange={{this.setRange}}
-			/>
-			<span class="segmented err-mode-seg">
-				<button
-					type="button"
-					class="sub-seg-cell"
-					disabled={{if this.indices false true}}
-					{{on "click" this.reset}}
-				>Reset</button>
-			</span>
+						</span>
+						<input
+							class="err-mode-input is-narrow"
+							inputmode="decimal"
+							aria-label="Height"
+							value={{this.height}}
+							{{on
+								"input"
+								(this.readInput
+									this.setHeight
+								)
+							}}
+						/>
+						<span
+							class="sub-tool-row-label"
+						>mm</span>
+					</Field>
+					<InputField @label="Bleed">
+						<Switch
+							@checked={{this.bleed}}
+							@onChange={{this.setBleed}}
+						/>
+						<span
+							class="sub-tool-row-label"
+						>3 mm</span>
+					</InputField>
+				</Group>
+				<Group>
+					<Field @label="Content">
+						<Segmented
+							@options={{PLACEMENTS}}
+							@value={{this.placement}}
+							@onChange={{this.setPlacement}}
+						/>
+					</Field>
+					{{#if (eq this.placement "anchor")}}
+						<AnchorPicker
+							@value={{this.anchor}}
+							@onChange={{this.setAnchor}}
+						/>
+					{{else}}
+						<Field @label="Scale">
+							<Segmented
+								@options={{RESAMPLES}}
+								@value={{this.resample}}
+								@onChange={{this.setResample}}
+							/>
+						</Field>
+					{{/if}}
+				</Group>
+				<PageScope
+					@scope={{this.scope}}
+					@range={{this.range}}
+					@invalid={{this.rangeInvalid}}
+					@onScope={{this.setScope}}
+					@onRange={{this.setRange}}
+				/>
+			</:default>
 		</ToolPanel>
 	</template>
 }

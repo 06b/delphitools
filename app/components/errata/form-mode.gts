@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { eq, or } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
+import { Field, InputField } from 'delphitools-v2/components/errata/tool-panel';
 import Switch from 'delphitools-v2/components/ui/switch';
 import {
 	Select,
@@ -119,8 +120,7 @@ export default class FormFields extends Component<{ Args: { open: boolean } }> {
 	};
 
 	<template>
-		<span class="err-mode-field" {{this.activate @open}}>
-			<span class="sub-tool-row-label">Type</span>
+		<Field @label="Type" {{this.activate @open}}>
 			<span class="segmented err-mode-seg">
 				{{#each TYPES key="value" as |t|}}
 					<button
@@ -147,11 +147,11 @@ export default class FormFields extends Component<{ Args: { open: boolean } }> {
 					</button>
 				{{/each}}
 			</span>
-		</span>
-		<label class="err-mode-field">
-			<span class="sub-tool-row-label">Name</span>
+		</Field>
+		<InputField @label="Name">
 			<input
 				class="err-mode-input"
+				aria-label="Name"
 				aria-invalid={{if
 					this.duplicate
 					"true"
@@ -161,32 +161,28 @@ export default class FormFields extends Component<{ Args: { open: boolean } }> {
 				value={{this.props.name}}
 				{{on "change" this.setName}}
 			/>
-		</label>
+		</InputField>
 		{{#if
 			(or
 				(eq this.props.field "radio")
 				(eq this.props.field "dropdown")
 			)
 		}}
-			<label class="err-mode-field">
-				<span class="sub-tool-row-label">Options</span>
+			<InputField @label="Options">
 				<input
 					class="err-mode-input"
+					aria-label="Options"
 					placeholder="One, Two"
 					value={{this.optionsText}}
 					{{on "change" this.setOptions}}
 				/>
-			</label>
-			<span class="err-mode-field">
-				<span class="sub-tool-row-label">Default</span>
+			</InputField>
+			<Field @label="Default">
 				<Select
 					@value={{this.props.value}}
 					@onValueChange={{this.setChoice}}
 				>
-					<SelectTrigger
-						class="sub-font-trigger err-mode-select"
-						aria-label="Default"
-					>
+					<SelectTrigger aria-label="Default">
 						<SelectValue>{{if
 								this.props.value
 								this.props.value
@@ -207,19 +203,18 @@ export default class FormFields extends Component<{ Args: { open: boolean } }> {
 						{{/each}}
 					</SelectContent>
 				</Select>
-			</span>
+			</Field>
 		{{else if (eq this.props.field "text")}}
-			<label class="err-mode-field">
-				<span class="sub-tool-row-label">Default</span>
+			<InputField @label="Default">
 				<input
 					class="err-mode-input"
+					aria-label="Default"
 					value={{this.props.value}}
 					{{on "change" this.setValue}}
 				/>
-			</label>
+			</InputField>
 		{{else if (eq this.props.field "checkbox")}}
-			<label class="err-mode-field">
-				<span class="sub-tool-row-label">Checked</span>
+			<InputField @label="Checked">
 				<Switch
 					@checked={{if
 						this.props.value
@@ -228,14 +223,13 @@ export default class FormFields extends Component<{ Args: { open: boolean } }> {
 					}}
 					@onChange={{this.setChecked}}
 				/>
-			</label>
+			</InputField>
 		{{/if}}
-		<label class="err-mode-field">
-			<span class="sub-tool-row-label">Required</span>
+		<InputField @label="Required">
 			<Switch
 				@checked={{this.props.required}}
 				@onChange={{this.setRequired}}
 			/>
-		</label>
+		</InputField>
 	</template>
 }

@@ -1,7 +1,10 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
+import ToolPanel, {
+	Field,
+	InputField,
+} from 'delphitools-v2/components/errata/tool-panel';
 import {
 	Select,
 	SelectContent,
@@ -94,45 +97,50 @@ export default class CommentModeBar extends Component<{
 			@onApply={{this.done}}
 			@applyLabel="Done"
 		>
-			<span class="sub-omni-tag">Click to place</span>
-			<label class="err-mode-field">
-				<span class="sub-tool-row-label">Author</span>
-				<input
-					class="err-mode-input is-narrow"
-					value={{this.author}}
-					{{on "input" this.setAuthor}}
-				/>
-			</label>
-			<span class="err-mode-field">
-				<span class="sub-tool-row-label">List</span>
-				<Select
-					@value={{this.selected.id}}
-					@onValueChange={{this.pick}}
-				>
-					<SelectTrigger
-						class="sub-font-trigger err-mode-select"
-						aria-label="List"
+			<:status>
+				<span class="sub-omni-tag">Click to place</span>
+			</:status>
+			<:default>
+				<InputField @label="Author">
+					<input
+						class="err-mode-input"
+						aria-label="Author"
+						value={{this.author}}
+						{{on "input" this.setAuthor}}
+					/>
+				</InputField>
+				<Field @label="List">
+					<Select
+						@value={{this.selected.id}}
+						@onValueChange={{this.pick}}
 					>
-						<SelectValue>
-							{{#if this.selected}}
-								{{this.selected.label}}
-							{{else}}
-								{{this.entries.length}}
-							{{/if}}
-						</SelectValue>
-					</SelectTrigger>
-					<SelectContent>
-						{{#each
-							this.entries key="id"
-							as |e|
-						}}
-							<SelectItem
-								@value={{e.id}}
-							>{{e.label}}</SelectItem>
-						{{/each}}
-					</SelectContent>
-				</Select>
-			</span>
+						<SelectTrigger
+							aria-label="List"
+						>
+							<SelectValue>
+								{{#if
+									this.selected
+								}}
+									{{this.selected.label}}
+								{{else}}
+									{{this.entries.length}}
+								{{/if}}
+							</SelectValue>
+						</SelectTrigger>
+						<SelectContent>
+							{{#each
+								this.entries
+								key="id"
+								as |e|
+							}}
+								<SelectItem
+									@value={{e.id}}
+								>{{e.label}}</SelectItem>
+							{{/each}}
+						</SelectContent>
+					</Select>
+				</Field>
+			</:default>
 		</ToolPanel>
 	</template>
 }

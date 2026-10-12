@@ -27,28 +27,45 @@ export interface ToolPanelSignature {
 		busy?: boolean;
 		failed?: boolean;
 	};
-	Blocks: { default: [] };
+	Blocks: {
+		/** fields, laid out by the body grid */
+		default: [];
+		/** tags after the title */
+		status: [];
+		/** buttons before cancel and apply */
+		actions: [];
+	};
 }
 
-/** wraps when controls overflow */
+/** a header row, then a grid of fields */
 const ToolPanel: TOC<ToolPanelSignature> = <template>
 	<div
 		class="err-mode pointer-events-auto {{if @open 'is-open'}}"
 		data-mode={{@mode}}
 		...attributes
 	>
-		<span class="err-mode-head">
-			<Icon @name={{@icon}} class="sub-omni-tool-glyph" />
-			<span class="sub-omni-tool-name">{{@label}}</span>
-		</span>
-		<span class="err-mode-body">{{yield}}</span>
-		<span class="err-mode-end">
+		<div class="err-mode-head">
+			<span class="err-mode-title">
+				<Icon
+					@name={{@icon}}
+					class="sub-omni-tool-glyph"
+				/>
+				<span
+					class="sub-omni-tool-name"
+				>{{@label}}</span>
+			</span>
+			{{#if (has-block "status")}}
+				<span class="err-mode-status">{{yield
+						to="status"
+					}}</span>
+			{{/if}}
 			{{#if @failed}}
 				<span
 					class="sub-omni-tag err-mode-failed"
 				>Failed</span>
 			{{/if}}
 			<span class="err-mode-actions">
+				{{yield to="actions"}}
 				{{#if @onCancel}}
 					<button
 						type="button"
@@ -87,13 +104,24 @@ const ToolPanel: TOC<ToolPanelSignature> = <template>
 					</button>
 				{{/if}}
 			</span>
-		</span>
+		</div>
+		{{#if (has-block)}}
+			<div class="err-mode-body">{{yield}}</div>
+		{{/if}}
 	</div>
 </template>;
 
 export default ToolPanel;
 
-/** a labelled control group */
+/** fields sharing one column */
+export const Group: TOC<{
+	Element: HTMLDivElement;
+	Blocks: { default: [] };
+}> = <template>
+	<div class="err-mode-group" ...attributes>{{yield}}</div>
+</template>;
+
+/** label column, control column */
 export const Field: TOC<{
 	Element: HTMLSpanElement;
 	Args: { label: string };
@@ -101,8 +129,20 @@ export const Field: TOC<{
 }> = <template>
 	<span class="err-mode-field" ...attributes>
 		<span class="sub-tool-row-label">{{@label}}</span>
-		{{yield}}
+		<span class="err-mode-control">{{yield}}</span>
 	</span>
+</template>;
+
+/** a Field whose label focuses its one input */
+export const InputField: TOC<{
+	Element: HTMLLabelElement;
+	Args: { label: string };
+	Blocks: { default: [] };
+}> = <template>
+	<label class="err-mode-field" ...attributes>
+		<span class="sub-tool-row-label">{{@label}}</span>
+		<span class="err-mode-control">{{yield}}</span>
+	</label>
 </template>;
 
 export interface SegmentedOption<V> {
@@ -221,18 +261,20 @@ export const PageScope: TOC<{
 	</Field>
 </template>;
 
-/** a page-shaped 3x3 grid */
+/** a page-shaped 3x3 grid, two rows tall */
 export const AnchorPicker: TOC<{
 	Args: {
 		value: Anchor;
 		onChange: (anchor: Anchor) => void;
+		/** default Position */
+		label?: string;
 	};
 }> = <template>
-	<Field @label="Position">
+	<Field @label={{if @label @label "Position"}} class="is-tall">
 		<span
 			class="err-anchor-page"
 			role="radiogroup"
-			aria-label="Position"
+			aria-label={{if @label @label "Position"}}
 		>
 			{{#each ANCHORS as |a|}}
 				<button

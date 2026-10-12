@@ -134,20 +134,20 @@ export default class PreflightPanel extends Component {
 			class="z-40"
 			{{this.run (if this.open this.doc.current)}}
 		>
-			{{#each this.badges key="severity" as |b|}}
-				<span
-					class="err-mode-field err-preflight-count"
-				>
-					<Icon
-						@name={{b.icon}}
-						class="dt-preflight-sev is-{{b.severity}}"
-					/>
-					{{b.label}}
-				</span>
-			{{/each}}
-			{{#if this.busy}}
-				<NdsLoader />
-			{{/if}}
+			<:status>
+				{{#each this.badges key="severity" as |b|}}
+					<span class="err-preflight-count">
+						<Icon
+							@name={{b.icon}}
+							class="dt-preflight-sev is-{{b.severity}}"
+						/>
+						{{b.label}}
+					</span>
+				{{/each}}
+				{{#if this.busy}}
+					<NdsLoader />
+				{{/if}}
+			</:status>
 		</ToolPanel>
 
 		<div

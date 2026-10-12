@@ -281,14 +281,16 @@ export default class Organise extends Component {
 				@onApply={{this.done}}
 				@applyLabel="Done"
 			>
-				<span class="sub-omni-tag">{{this.count}}
-					selected</span>
-				<span
-					class="segmented err-mode-seg err-organise-ops"
-				>
+				<:status>
+					<span
+						class="sub-omni-tag"
+					>{{this.count}}
+						selected</span>
+				</:status>
+				<:actions>
 					<button
 						type="button"
-						class="sub-seg-cell"
+						class="sub-modal-btn is-ghost is-icon"
 						title="Rotate left"
 						aria-label="Rotate left"
 						disabled={{this.none}}
@@ -301,7 +303,7 @@ export default class Organise extends Component {
 					</button>
 					<button
 						type="button"
-						class="sub-seg-cell"
+						class="sub-modal-btn is-ghost is-icon"
 						title="Rotate right"
 						aria-label="Rotate right"
 						disabled={{this.none}}
@@ -314,7 +316,7 @@ export default class Organise extends Component {
 					</button>
 					<button
 						type="button"
-						class="sub-seg-cell"
+						class="sub-modal-btn is-ghost is-icon"
 						title="Duplicate"
 						aria-label="Duplicate"
 						disabled={{this.none}}
@@ -324,7 +326,7 @@ export default class Organise extends Component {
 					</button>
 					<button
 						type="button"
-						class="sub-seg-cell"
+						class="sub-modal-btn is-ghost is-icon"
 						title="Insert blank page"
 						aria-label="Insert blank page"
 						{{on "click" this.insert}}
@@ -333,7 +335,7 @@ export default class Organise extends Component {
 					</button>
 					<button
 						type="button"
-						class="sub-seg-cell"
+						class="sub-modal-btn is-ghost is-icon"
 						title="Delete"
 						aria-label="Delete"
 						disabled={{this.cannotDelete}}
@@ -341,7 +343,7 @@ export default class Organise extends Component {
 					>
 						<Icon @name="trash-2" />
 					</button>
-				</span>
+				</:actions>
 			</ToolPanel>
 		</div>
 	</template>
