@@ -110,6 +110,13 @@
 	font-display: swap;
 }
 
+// --canon-segment-font names FluoWrite; the kit ships no font files
+@font-face {
+	font-family: FluoWrite;
+	src: url("/fonts/fluoWrite-Regular.otf") format("opentype");
+	font-display: swap;
+}
+
 html:root {
 	--canon-font: "Open Sans Condensed", system-ui, sans-serif;
 	--canon-mono-font: #{crayon.font-family("mono")};

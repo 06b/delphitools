@@ -1,10 +1,3 @@
-/* --canon-segment-font names FluoWrite; the kit ships no font files */
-@font-face {
-	font-family: FluoWrite;
-	font-display: swap;
-	src: url("/fonts/fluoWrite-Regular.otf") format("opentype");
-}
-
 .tcc-picture {
 	display: flex;
 	justify-content: flex-end;
