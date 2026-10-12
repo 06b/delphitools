@@ -37,7 +37,10 @@ async function roundTrip(rotation: Rotation) {
 		...blankPage(400, 500),
 		sourceIndex: 0,
 		baseRotation: rotation,
-		objects: [note(60, 90, 'Café — ünïcode'), note(300, 200, '')],
+		objects: [
+			note(60, 90, 'Café — ünïcode\nsecond line'),
+			note(300, 200, ''),
+		],
 	};
 	writeComments(pdfPage, page);
 	const reloaded = await PDFDocument.load(await doc.save());

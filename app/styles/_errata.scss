@@ -689,3 +689,73 @@
 .err-hud-dims {
 	color: var(--muted-foreground);
 }
+
+// placed by floating-ui
+.err-note {
+	position: fixed;
+	visibility: hidden;
+	display: flex;
+	flex-direction: column;
+	inline-size: 240px;
+}
+
+.err-note-text {
+	display: block;
+	min-block-size: 72px;
+	max-block-size: 240px;
+	resize: vertical;
+	border: none;
+	border-block-end: 1px solid var(--border);
+	background-color: var(--card);
+	padding: 8px;
+	color: var(--foreground);
+	font: inherit;
+	font-size: 12px;
+	line-height: 1.4;
+	white-space: pre-wrap;
+	outline: none;
+
+	&:focus {
+		box-shadow: inset 0 0 0 1px var(--primary);
+	}
+}
+
+.err-note-meta {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-inline-start: 8px;
+	font-size: 10.5px;
+	color: var(--muted-foreground);
+}
+
+.err-note-author {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--foreground);
+}
+
+.err-note-delete {
+	display: grid;
+	place-items: center;
+	block-size: 26px;
+	inline-size: 26px;
+	border: none;
+	border-inline-start: 1px solid var(--border);
+	background: none;
+	color: var(--muted-foreground);
+	cursor: pointer;
+
+	&:hover {
+		background-color: var(--accent);
+		color: var(--destructive);
+	}
+
+	.dt-icon {
+		inline-size: 14px;
+		block-size: 14px;
+	}
+}

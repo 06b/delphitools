@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import {
 	Select,
@@ -14,24 +13,19 @@ import {
 	commentAuthor,
 	setCommentAuthor,
 } from 'delphitools-v2/lib/errata/comments';
-import {
-	patchObjects,
-	setPageIndex,
-	store,
-} from 'delphitools-v2/lib/errata/store';
+import { setPageIndex, store } from 'delphitools-v2/lib/errata/store';
 import {
 	getSelectedIds,
 	selectObject,
 	setMode,
+	setOpenNote,
 	subscribeUi,
 } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 interface Entry {
 	id: string;
-	pageId: string;
 	index: number;
-	text: string;
 	label: string;
 }
 
@@ -61,9 +55,7 @@ export default class CommentModeBar extends Component<{
 					? [
 							{
 								id: o.id,
-								pageId: page.id,
 								index,
-								text: o.text,
 								label: `${index + 1} · ${excerpt(o.text)}`,
 							},
 						]
@@ -83,67 +75,13 @@ export default class CommentModeBar extends Component<{
 		if (!entry) return;
 		setPageIndex(entry.index);
 		selectObject(id);
-	};
-
-	#target: Entry | null = null;
-	#known = new Set<string>();
-
-	patchNote(entry: Entry, text: string) {
-		if (text === entry.text) return;
-		patchObjects(
-			entry.pageId,
-			new Map([
-				[
-					entry.id,
-					{
-						text,
-						date: new Date().toISOString(),
-					},
-				],
-			]),
-		);
-	}
-
-	focusNote = () => {
-		this.#target = this.selected;
-	};
-
-	commitNote = (event: Event) => {
-		if (this.#target)
-			this.patchNote(
-				this.#target,
-				(event.target as HTMLInputElement).value,
-			);
+		setOpenNote(id);
 	};
 
 	setAuthor = (event: Event) => {
 		this.author = (event.target as HTMLInputElement).value;
 		setCommentAuthor(this.author);
 	};
-
-	// unbound: keeps typed text
-	noteField = modifier(
-		(
-			el: HTMLInputElement,
-			[id, text, open]: [string?, string?, boolean?],
-		) => {
-			const focused = el === document.activeElement;
-			const pending = this.#target;
-			if (focused && pending && pending.id !== id) {
-				const typed = el.value;
-				queueMicrotask(() =>
-					this.patchNote(pending, typed),
-				);
-			}
-			this.#target = focused ? this.selected : null;
-			el.value = text ?? '';
-			const placed = id !== undefined && !this.#known.has(id);
-			this.#known = new Set(this.entries.map((e) => e.id));
-			// after canvas steals focus
-			if (open && placed && text === '')
-				setTimeout(() => el.focus());
-		},
-	);
 
 	done = () => setMode(null);
 
@@ -156,22 +94,7 @@ export default class CommentModeBar extends Component<{
 			@onApply={{this.done}}
 			@applyLabel="Done"
 		>
-
-			<label class="err-mode-field">
-				<span class="sub-tool-row-label">Note</span>
-				<input
-					class="err-mode-input is-wide"
-					placeholder="Click to place"
-					disabled={{if this.selected false true}}
-					{{on "focus" this.focusNote}}
-					{{on "change" this.commitNote}}
-					{{this.noteField
-						this.selected.id
-						this.selected.text
-						@open
-					}}
-				/>
-			</label>
+			<span class="sub-omni-tag">Click to place</span>
 			<label class="err-mode-field">
 				<span class="sub-tool-row-label">Author</span>
 				<input

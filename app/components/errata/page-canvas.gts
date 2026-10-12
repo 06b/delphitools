@@ -74,8 +74,10 @@ import {
 import {
 	getMode,
 	registerCanvasActions,
+	setOpenNote,
 	setSelectedIds,
 	subscribeUi,
+	type Box,
 } from 'delphitools-v2/lib/errata/ui';
 import { commentAuthor, newComment } from 'delphitools-v2/lib/errata/comments';
 import { redactObject } from 'delphitools-v2/lib/errata/redact';
@@ -109,6 +111,7 @@ const TILE_DEBOUNCE = 80;
 const K_MIN = 0.5;
 const K_MAX = 40;
 const REDACT = '#d1242f';
+const HIGHLIGHT = '#e6007e';
 
 // half-octave buckets keep zoom wobble from re-rendering
 function bucket(k: number): number {
@@ -355,6 +358,39 @@ export default class PageCanvas extends Component {
 			const top = -vpt[5] / z;
 			return { top, bottom: top + canvas.getHeight() / z };
 		};
+
+		const reveal = (top: number, bottom: number) => {
+			const seen = visibleRange();
+			if (top >= seen.top && bottom <= seen.bottom) return;
+			const vpt =
+				canvas.viewportTransform.slice() as typeof canvas.viewportTransform;
+			vpt[5] = FIT_PAD - top * vpt[0];
+			canvas.setViewportTransform(vpt);
+			clampViewport();
+			scheduleVisible();
+		};
+
+		const outline = (
+			slot: Slot,
+			b: Box,
+			style: {
+				fill: string;
+				stroke: string;
+				strokeWidth: number;
+			},
+		) =>
+			new Rect({
+				left: slot.x + b.x,
+				top: slot.y + b.y,
+				originX: 'left',
+				originY: 'top',
+				width: b.width,
+				height: b.height,
+				...style,
+				strokeUniform: true,
+				selectable: false,
+				evented: false,
+			});
 
 		const dropTile = (slot: Slot) => {
 			slot.job?.cancel();
@@ -1281,9 +1317,24 @@ export default class PageCanvas extends Component {
 				);
 		};
 
+		let notePress: { id: string; at: Point } | null = null;
+		const noteId = (f: FabricObject | undefined) => {
+			const t = f ? tracked.get(idOf(f) ?? '') : undefined;
+			return t?.doc.kind === 'comment' ? t.doc.id : null;
+		};
+
 		canvas.on('mouse:down', (opt: TPointerEventInfo) => {
 			const tool = getActiveTool();
 			if (order.length === 0) return;
+			const pressed = noteId(opt.target);
+			notePress = pressed
+				? {
+						id: pressed,
+						at: canvas.getViewportPoint(
+							opt.e,
+						),
+					}
+				: null;
 			if (getMode() === 'redact') {
 				// fabric moves the mark
 				if (opt.target) return;
@@ -1321,6 +1372,7 @@ export default class PageCanvas extends Component {
 				addObject(slot.id, note);
 				const f = tracked.get(note.id)?.fabric;
 				if (f) canvas.setActiveObject(f);
+				setOpenNote(note.id);
 				return;
 			}
 			if (tool === 'text') {
@@ -1396,6 +1448,15 @@ export default class PageCanvas extends Component {
 		});
 
 		canvas.on('mouse:up', (opt: TPointerEventInfo) => {
+			// drags move the note
+			if (
+				notePress &&
+				notePress.at.distanceFrom(
+					canvas.getViewportPoint(opt.e),
+				) < 4
+			)
+				setOpenNote(notePress.id);
+			notePress = null;
 			if (pendingEdit) {
 				// after fabric has finished its own selection handling for this click
 				const t = pendingEdit;
@@ -2212,6 +2273,7 @@ export default class PageCanvas extends Component {
 		};
 
 		let debugRects: FabricObject[] = [];
+		let highlights: FabricObject[] = [];
 		let previews: FabricObject[] = [];
 		registerCanvasActions({
 			preview: (items) => {
@@ -2250,30 +2312,51 @@ export default class PageCanvas extends Component {
 				for (const r of debugRects) canvas.remove(r);
 				const slot = slotAt(index);
 				debugRects = slot
-					? boxes.map(
-							(b) =>
-								new Rect({
-									left:
-										slot.x +
-										b.x,
-									top:
-										slot.y +
-										b.y,
-									originX: 'left',
-									originY: 'top',
-									width: b.width,
-									height: b.height,
-									fill: 'transparent',
-									stroke: b.colour,
-									strokeWidth: 0.5,
-									strokeUniform: true,
-									selectable: false,
-									evented: false,
-								}),
+					? boxes.map((b) =>
+							outline(slot, b, {
+								fill: 'transparent',
+								stroke: b.colour,
+								strokeWidth: 0.5,
+							}),
 						)
 					: [];
 				for (const r of debugRects) canvas.add(r);
 				canvas.requestRenderAll();
+			},
+			highlight: (index, boxes) => {
+				for (const r of highlights) canvas.remove(r);
+				const slot = slotAt(index);
+				highlights = slot
+					? boxes.map((b) =>
+							outline(slot, b, {
+								fill: 'rgba(230,0,126,0.15)',
+								stroke: HIGHLIGHT,
+								strokeWidth: 2,
+							}),
+						)
+					: [];
+				for (const r of highlights) canvas.add(r);
+				const top = Math.min(...boxes.map((b) => b.y));
+				const bottom = Math.max(
+					...boxes.map((b) => b.y + b.height),
+				);
+				if (slot && boxes.length)
+					reveal(slot.y + top, slot.y + bottom);
+				canvas.requestRenderAll();
+			},
+			objectRect: (id) => {
+				const f = tracked.get(id)?.fabric;
+				if (!f) return null;
+				const vpt = canvas.viewportTransform;
+				const r = wrap.getBoundingClientRect();
+				f.setCoords();
+				const b = f.getBoundingRect();
+				return {
+					x: r.left + b.left * vpt[0] + vpt[4],
+					y: r.top + b.top * vpt[3] + vpt[5],
+					w: b.width * vpt[0],
+					h: b.height * vpt[3],
+				};
 			},
 			deleteSelection: () => {
 				const editing = canvas
