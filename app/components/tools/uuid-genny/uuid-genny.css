@@ -1,0 +1,146 @@
+/* the banner: UUIDAnatomy */
+.uuid-picture {
+	/* the kit has no monospaced token; iOS draws in delphiMono */
+	--uuid-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
+	--uuid-bit: var(--canon-muted-foreground);
+
+	container-type: inline-size;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	box-sizing: border-box;
+	padding: 12px var(--canon-panel-padding) var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+/* columns 24 px at most, else as wide as the row allows; the bit cell is 0.72 of the pitch */
+.uuid-picture-grid {
+	--uuid-pitch: min(
+		24px,
+		round(
+			down,
+			(100cqi - 2 * var(--canon-panel-padding)) /
+				var(--uuid-columns),
+			1px
+		)
+	);
+	--uuid-cell: max(3px, round(var(--uuid-pitch) * 0.72, 1px));
+	--uuid-gap: max(1px, var(--uuid-pitch) - var(--uuid-cell));
+
+	display: grid;
+	grid-template-columns: repeat(var(--uuid-columns), var(--uuid-pitch));
+	row-gap: 10px;
+}
+
+.uuid-picture-column {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+}
+
+/* ios sets the advance to 0.94 of the pitch, 38 pt at most */
+.uuid-picture-character {
+	font-family: var(--uuid-mono);
+	font-size: min(38px, var(--uuid-pitch) * 1.55);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.2;
+}
+
+.uuid-picture--muted {
+	color: var(--canon-muted-foreground);
+}
+
+.uuid-picture--fixed {
+	color: var(--canon-primary);
+}
+
+.uuid-picture-bits {
+	display: flex;
+	flex-direction: column;
+	gap: var(--uuid-gap);
+	min-block-size: calc(
+		var(--uuid-rows) * var(--uuid-cell) + (var(--uuid-rows) - 1) *
+			var(--uuid-gap)
+	);
+}
+
+.uuid-picture-bit {
+	inline-size: var(--uuid-cell);
+	block-size: var(--uuid-cell);
+	background: color-mix(in srgb, var(--uuid-bit) 14%, transparent);
+}
+
+.uuid-picture-bit--on {
+	background: var(--uuid-bit);
+}
+
+.uuid-picture-bit--time {
+	--uuid-bit: var(--canon-foreground);
+}
+
+.uuid-picture-bit--version,
+.uuid-picture-bit--variant {
+	--uuid-bit: var(--canon-primary);
+}
+
+.uuid-picture-bracket {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+	padding-inline: calc((var(--uuid-pitch) - var(--uuid-cell)) / 2);
+}
+
+.uuid-picture-bracket-line {
+	block-size: 6px;
+	border-inline: var(--canon-hairline) solid var(--canon-foreground);
+	background: linear-gradient(var(--canon-foreground) 0 0) center / 100%
+		var(--canon-hairline) no-repeat;
+}
+
+.uuid-picture-stamp {
+	font-family: var(--uuid-mono);
+	font-size: 10px;
+	font-weight: var(--canon-weight-medium);
+	white-space: nowrap;
+}
+
+.uuid-picture-legend {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 2px 28px;
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.uuid-picture-legend-item {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.uuid-picture-key {
+	inline-size: 9px;
+	block-size: 9px;
+	background: var(--uuid-bit);
+}
+
+.uuid-picture-legend-bits {
+	color: var(--canon-muted-foreground);
+}
+
+/* nano id ignores the options */
+.uuid-genny-option--off .canon-row-title {
+	color: var(--canon-muted-foreground);
+}
+
+/* ids read as code: I, l, 0 and O stay apart */
+.uuid-genny .uuid-genny-row .canon-value-line-value {
+	font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+	font-size: var(--canon-text-footnote);
+}

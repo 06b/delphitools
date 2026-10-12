@@ -1,303 +1,315 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import Switch from 'delphitools-v2/components/ui/switch';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import {
 	clampCount,
+	COUNT_MAX,
+	COUNT_MIN,
 	formatIdentifier,
 	generateIdentifier,
 	generateIdentifiers,
 	IDENTIFIER_KINDS,
 	type IdentifierKind,
 } from 'delphitools-v2/lib/uuid';
+import UuidPicture from 'delphitools-v2/components/tools/uuid-genny/picture';
+import './uuid-genny/uuid-genny.css';
 
-const COPIED_MS = 1500;
-const DEFAULT_COUNT = 10;
+const Refresh = <template><IconSvg @name="refresh-cw" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
 
-interface IdRow {
-	raw: string;
-	text: string;
+const kindTitles = IDENTIFIER_KINDS.map((kind) => kind.label);
+const defaultCount = 10;
+// stagger the first screenful only
+const fadeRows = 24;
+const fadeStep = 0.018;
+
+/**
+ * The iOS launch arguments as query flags: ?uuidKind=uuid4|uuid7|nanoid
+ * ?uuidCount=<n> ?uuidSelect=<row> ?uuidUpper=1 ?uuidStrip=1
+ */
+function launchFlags(search: string) {
+	const query = new URLSearchParams(search);
+	const kind = IDENTIFIER_KINDS.find(
+		(k) => k.id === query.get('uuidKind'),
+	)?.id;
+	const count = Number(query.get('uuidCount'));
+	return {
+		kind: kind ?? 'uuid4',
+		count: query.has('uuidCount')
+			? clampCount(count)
+			: defaultCount,
+		selected: Number(query.get('uuidSelect')) || 0,
+		uppercase: query.get('uuidUpper') === '1',
+		stripHyphens: query.get('uuidStrip') === '1',
+	};
 }
 
-export default class UuidGeneratorTool extends Component {
-	@tracked kind: IdentifierKind = 'uuid4';
-	@tracked count = DEFAULT_COUNT;
-	@tracked uppercase = false;
-	@tracked stripHyphens = false;
-	@tracked ids: string[];
-	@tracked copiedId: string | null = null;
-	@tracked copiedAll = false;
+/** The port of UUIDGeneratorViewController. */
+export default class UuidGenny extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	@tracked kind: IdentifierKind;
+	@tracked count: number;
+	@tracked uppercase: boolean;
+	@tracked stripHyphens: boolean;
+	@tracked ids: string[];
+	/** The identifier the banner draws; a click on a row moves it. */
+	@tracked selected: number;
+	@tracked fades = false;
+	@tracked scrambleKey = 0;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		this.kind = flags.kind;
+		this.count = flags.count;
+		this.uppercase = flags.uppercase;
+		this.stripHyphens = flags.stripHyphens;
+		this.selected = flags.selected;
 		this.ids = generateIdentifiers(this.kind, this.count);
-	}
-
-	get kinds() {
-		return IDENTIFIER_KINDS;
 	}
 
 	get isUuid() {
 		return this.kind !== 'nanoid';
 	}
 
+	get kindIndex() {
+		return IDENTIFIER_KINDS.findIndex((k) => k.id === this.kind);
+	}
+
 	get kindLabel() {
-		return (
-			IDENTIFIER_KINDS.find((kind) => kind.id === this.kind)
-				?.label ?? this.kind
-		);
+		return IDENTIFIER_KINDS[this.kindIndex]!.label;
 	}
 
 	// toggles never regenerate ids
-	get rows(): IdRow[] {
+	get rows() {
 		const options = {
 			uppercase: this.uppercase,
 			stripHyphens: this.stripHyphens,
 		};
-		return this.ids.map((raw) => ({
+		return this.ids.map((raw, index) => ({
 			raw,
 			text: formatIdentifier(raw, this.kind, options),
+			number: String(index + 1).padStart(2, '0'),
+			lit: index === this.shownIndex,
+			fadeDelay:
+				this.fades && index < fadeRows
+					? index * fadeStep
+					: undefined,
 		}));
 	}
 
-	setKind = (kind: IdentifierKind) => {
-		if (kind === this.kind) return;
+	get shownIndex() {
+		return Math.min(
+			Math.max(this.selected, 0),
+			this.ids.length - 1,
+		);
+	}
+
+	get shown() {
+		return this.rows[this.shownIndex]!;
+	}
+
+	get joined() {
+		return this.rows.map((row) => row.text).join('\n');
+	}
+
+	pickKind = (index: number) => {
+		const kind = IDENTIFIER_KINDS[index]?.id;
+		if (!kind || kind === this.kind) return;
 		this.kind = kind;
 		this.regenerate();
 	};
 
-	setCount = (event: Event) => {
-		const parsed = parseInt(
-			(event.target as HTMLInputElement).value,
-			10,
-		);
-		if (!Number.isFinite(parsed)) return;
-		this.count = clampCount(parsed);
-		this.#resize();
+	setCount = (value: number) => {
+		this.count = clampCount(value);
+		this.fades = false;
+		// resize keeps existing ids
+		this.ids =
+			this.ids.length >= this.count
+				? this.ids.slice(0, this.count)
+				: [
+						...this.ids,
+						...Array.from(
+							{
+								length:
+									this
+										.count -
+									this.ids
+										.length,
+							},
+							() =>
+								generateIdentifier(
+									this
+										.kind,
+								),
+						),
+					];
 	};
 
-	// resize keeps copied ids
-	#resize() {
-		if (this.ids.length >= this.count) {
-			this.ids = this.ids.slice(0, this.count);
-			return;
-		}
-		this.ids = [
-			...this.ids,
-			...Array.from(
-				{ length: this.count - this.ids.length },
-				() => generateIdentifier(this.kind),
-			),
-		];
-	}
-
-	setUppercase = (checked: boolean) => {
-		this.uppercase = checked;
+	setUppercase = (on: boolean) => {
+		this.uppercase = on;
+		this.fades = false;
 	};
 
-	setStripHyphens = (checked: boolean) => {
-		this.stripHyphens = checked;
+	setStripHyphens = (on: boolean) => {
+		this.stripHyphens = on;
+		this.fades = false;
 	};
 
 	regenerate = () => {
 		this.ids = generateIdentifiers(this.kind, this.count);
+		this.fades = true;
+		this.scrambleKey += 1;
 	};
 
-	#flash() {
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(() => {
-			this.copiedId = null;
-			this.copiedAll = false;
-		}, COPIED_MS);
-	}
-
-	copyRow = async (row: IdRow) => {
-		await navigator.clipboard.writeText(row.text);
-		this.copiedId = row.raw;
-		this.#flash();
+	select = (index: number) => {
+		this.fades = false;
+		if (index === this.shownIndex) return;
+		this.selected = index;
+		this.scrambleKey += 1;
 	};
 
-	copyAll = async () => {
-		await navigator.clipboard.writeText(
-			this.rows.map((row) => row.text).join('\n'),
-		);
-		this.copiedAll = true;
-		this.#flash();
-	};
+	copyAll = () => void this.toast.copy(this.joined);
 
 	<template>
-		<div class="dt-uuid">
-			<div class="dt-uuid-frame">
-				<div class="dt-uuid-bar">
-					<div class="dt-uuid-info">
-						<p class="dt-uuid-name">
-							{{this.kindLabel}}
-						</p>
-						<p class="dt-uuid-meta">
-							{{this.ids.length}}
-							generated
-						</p>
-					</div>
-					<div
-						class="segmented dt-uuid-kinds"
-						aria-label="Kind"
-					>
-						{{#each
-							this.kinds key="id"
-							as |kind|
-						}}
-							<button
-								type="button"
-								class="dt-uuid-kind
-									{{if
-										(eq
-											this.kind
-											kind.id
-										)
-										'is-active'
-									}}"
-								aria-pressed={{if
-									(eq
-										this.kind
-										kind.id
-									)
-									"true"
-									"false"
+		<CanonSplit class="uuid-genny">
+			<:banner>
+				<CanonCanvas
+					@fitting={{true}}
+					@animated={{true}}
+				>
+					<UuidPicture
+						@text={{this.shown.text}}
+						@raw={{this.shown.raw}}
+						@kind={{this.kind}}
+						@label={{this.kindLabel}}
+						@scrambleKey={{this.scrambleKey}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Kind" />
+					<CanonSegmented
+						@items={{kindTitles}}
+						@selected={{this.kindIndex}}
+						@onChange={{this.pickKind}}
+					/>
+					<CanonHeading @text="Options" />
+					<CanonGrid @columns={{1}}>
+						<CanonRow
+							class="uuid-genny-option
+								{{unless
+									this.isUuid
+									'uuid-genny-option--off'
+								}}"
+							@title="Uppercase"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.uppercase}}
+								@disabled={{unless
+									this.isUuid
+									true
 								}}
-								{{on
-									"click"
-									(fn
-										this.setKind
-										kind.id
-									)
+								@onChange={{this.setUppercase}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="uuid-genny-option
+								{{unless
+									this.isUuid
+									'uuid-genny-option--off'
+								}}"
+							@title="Strip hyphens"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.stripHyphens}}
+								@disabled={{unless
+									this.isUuid
+									true
 								}}
-							>
-								{{kind.label}}
-							</button>
-						{{/each}}
-					</div>
-					<button
-						type="button"
-						class="dt-uuid-btn
-							{{if
-								this.copiedAll
-								'is-copied'
-							}}"
-						{{on "click" this.copyAll}}
+								@onChange={{this.setStripHyphens}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					</CanonGrid>
+					<CanonButton
+						@kind="primary"
+						@text="Regenerate"
+						@icon={{Refresh}}
+						@iconStyle="oversized"
+						@onClick={{this.regenerate}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text={{this.kindLabel}}
+					/>
+					<CanonRow
+						@title="Count"
+						@form="flush"
+						as |titleId|
 					>
-						<Icon
-							@name={{if
-								this.copiedAll
-								"check"
-								"copy"
-							}}
+						<CanonNumberField
+							@value={{this.count}}
+							@min={{COUNT_MIN}}
+							@max={{COUNT_MAX}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setCount}}
 						/>
-						Copy all
-					</button>
-					<button
-						type="button"
-						class="dt-uuid-btn is-primary"
-						{{on "click" this.regenerate}}
-					>
-						<Icon @name="refresh-cw" />
-						Regenerate
-					</button>
-				</div>
-
-				<div class="dt-uuid-settings">
-					<label class="dt-uuid-field">
-						<span>Count</span>
-						<input
-							type="number"
-							min="1"
-							max="100"
-							value={{this.count}}
+					</CanonRow>
+					<CanonGrid>
+						<CanonButton
+							@kind="cell"
+							@text="Copy all"
+							@icon={{Copy}}
+							@onClick={{this.copyAll}}
+						/>
+					</CanonGrid>
+					{{#each
+						this.rows key="@index"
+						as |row index|
+					}}
+						<CanonValueLine
+							class="uuid-genny-row"
+							@layout="numbered"
+							@label={{row.number}}
+							@value={{row.text}}
+							@lit={{row.lit}}
+							@fadeDelay={{row.fadeDelay}}
 							{{on
-								"input"
-								this.setCount
+								"click"
+								(fn
+									this.select
+									index
+								)
 							}}
 						/>
-					</label>
-					{{#if this.isUuid}}
-						<div class="dt-uuid-field">
-							<span>Options</span>
-							<div
-								class="dt-uuid-options"
-							>
-								<label
-									class="dt-uuid-option"
-								>
-									<Switch
-										@checked={{this.uppercase}}
-										@onChange={{this.setUppercase}}
-										@label="Uppercase"
-									/>
-									<span
-									>Uppercase</span>
-								</label>
-								<label
-									class="dt-uuid-option"
-								>
-									<Switch
-										@checked={{this.stripHyphens}}
-										@onChange={{this.setStripHyphens}}
-										@label="Strip hyphens"
-									/>
-									<span
-									>Strip
-										hyphens</span>
-								</label>
-							</div>
-						</div>
-					{{/if}}
-				</div>
-
-				<div>
-					{{#each this.rows key="raw" as |row|}}
-						<div class="dt-uuid-row">
-							<span
-								class="dt-uuid-value"
-							>{{row.text}}</span>
-							<button
-								type="button"
-								class="dt-uuid-copy
-									{{if
-										(eq
-											this.copiedId
-											row.raw
-										)
-										'is-copied'
-									}}"
-								title="Copy"
-								{{on
-									"click"
-									(fn
-										this.copyRow
-										row
-									)
-								}}
-							>
-								<Icon
-									@name={{if
-										(eq
-											this.copiedId
-											row.raw
-										)
-										"check"
-										"copy"
-									}}
-								/>
-							</button>
-						</div>
 					{{/each}}
-				</div>
-			</div>
-		</div>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

@@ -908,6 +908,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'fingerprint',
 				href: '/tools/uuid-genny',
 				new: true,
+				canon: true,
 			},
 		],
 	},
