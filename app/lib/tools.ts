@@ -874,6 +874,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'key-square',
 				href: '/tools/jwt-decoder',
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'meta-tag-genny',

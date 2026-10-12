@@ -1,0 +1,294 @@
+/* the picture: JWTAnatomy around the typed token */
+.jwt-picture {
+	--jwt-0: var(--canon-foreground);
+	--jwt-1: var(--canon-primary);
+	--jwt-2: var(--canon-muted-foreground);
+
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	container-type: inline-size;
+}
+
+.jwt-picture-head,
+.jwt-picture-body {
+	box-sizing: border-box;
+	inline-size: min(100%, 736px);
+	margin-inline: auto;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.jwt-picture-head {
+	display: flex;
+	flex: none;
+	gap: 24px;
+	align-items: center;
+	block-size: 44px;
+	margin-block-start: 6px;
+}
+
+.jwt-picture-figure {
+	display: inline-flex;
+	gap: 10px;
+	align-items: baseline;
+}
+
+.jwt-picture-word {
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.jwt-picture-tools {
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-inline-start: auto;
+}
+
+.jwt-picture-scroll {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+.jwt-picture-body {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding-block: 4px var(--canon-panel-padding);
+}
+
+/* both in one cell, set alike, so the caret sits on the marks */
+.jwt-token {
+	display: grid;
+	font-family: var(--canon-mono-font);
+	font-variant-ligatures: none;
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+@container (min-width: 420px) {
+	.jwt-token {
+		font-size: 17px;
+	}
+}
+
+.jwt-marks,
+.jwt-editor {
+	grid-area: 1 / 1;
+	min-inline-size: 0;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+.jwt-editor {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: transparent;
+	caret-color: var(--canon-foreground);
+	font: inherit;
+	line-height: inherit;
+	resize: none;
+	outline: none;
+}
+
+.jwt-editor::selection {
+	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
+}
+
+.jwt-editor::placeholder {
+	color: var(--canon-muted-foreground);
+}
+
+/* empty: the dashed box, the place to paste */
+.jwt-editor:placeholder-shown {
+	min-block-size: 96px;
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.jwt-editor:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+.jwt-mark--0 {
+	color: var(--jwt-0);
+}
+
+.jwt-mark--1 {
+	color: var(--jwt-1);
+}
+
+.jwt-mark--2,
+.jwt-mark--dot {
+	color: var(--jwt-2);
+}
+
+.jwt-mark--dot {
+	font-weight: var(--canon-weight-bold);
+}
+
+.jwt-mark--failed {
+	color: var(--canon-destructive);
+	text-decoration: underline wavy;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+}
+
+/* the parts: bars sized by their bytes, at least 64 px */
+.jwt-parts {
+	display: flex;
+	gap: 8px;
+}
+
+.jwt-part {
+	display: flex;
+	flex: 1 1 0;
+	flex-direction: column;
+	gap: 0;
+	min-inline-size: min(64px, 30%);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.jwt-part-bar {
+	block-size: 10px;
+	margin-block-end: 6px;
+	background: var(--jwt-bar);
+}
+
+.jwt-part--0 {
+	--jwt-bar: var(--jwt-0);
+}
+
+.jwt-part--1 {
+	--jwt-bar: var(--jwt-1);
+}
+
+.jwt-part--2 {
+	--jwt-bar: var(--jwt-2);
+}
+
+.jwt-part-name,
+.jwt-part-detail {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.jwt-part-detail {
+	color: var(--canon-muted-foreground);
+}
+
+.jwt-part--failed .jwt-part-bar,
+.jwt-part--empty .jwt-part-bar {
+	box-sizing: border-box;
+	border: var(--canon-hairline) dashed var(--canon-destructive);
+	background: none;
+}
+
+.jwt-part--failed,
+.jwt-part--failed .jwt-part-detail {
+	color: var(--canon-destructive);
+}
+
+.jwt-part--empty {
+	color: var(--canon-muted-foreground);
+}
+
+.jwt-part--empty .jwt-part-bar {
+	border-color: var(--canon-muted-foreground);
+}
+
+/* the time claims on one axis, now marked */
+.jwt-timeline {
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.jwt-timeline-labels,
+.jwt-timeline-axis {
+	position: relative;
+	margin-inline: 8px;
+}
+
+.jwt-timeline-labels {
+	block-size: calc(2 * 1.3em);
+	line-height: 1.3;
+}
+
+.jwt-timeline-labels--now {
+	block-size: 1.3em;
+	margin-block-start: 2px;
+}
+
+/* the label slides along its own width as the tick does along the axis, so it never leaves the picture */
+.jwt-timeline-label {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: var(--jwt-at);
+	transform: translateX(calc(-1 * var(--jwt-at)));
+	white-space: pre;
+}
+
+.jwt-timeline-label--lower {
+	inset-block-start: 1.3em;
+}
+
+.jwt-timeline-label--now {
+	color: var(--jwt-state);
+}
+
+.jwt-timeline-axis {
+	block-size: 20px;
+	margin-block-start: 4px;
+	background: linear-gradient(var(--canon-border) 0 0) center / 100%
+		var(--canon-hairline) no-repeat;
+}
+
+.jwt-timeline-band {
+	position: absolute;
+	inset-block-start: 7px;
+	block-size: 6px;
+	background: var(--jwt-state);
+}
+
+.jwt-timeline--faded .jwt-timeline-band {
+	opacity: 0.5;
+}
+
+.jwt-timeline-tick,
+.jwt-timeline-now {
+	position: absolute;
+	inset-inline-start: var(--jwt-at);
+	transform: translateX(-50%);
+}
+
+.jwt-timeline-tick {
+	inset-block-start: 2px;
+	inline-size: var(--canon-hairline);
+	block-size: 16px;
+	background: var(--canon-foreground);
+}
+
+.jwt-timeline-now {
+	inset-block-start: 0;
+	inline-size: 2px;
+	block-size: 20px;
+	background: var(--jwt-state);
+}
+
+/* code reads as code */
+.jwt-decoder .jwt-code {
+	font-family: var(--canon-mono-font);
+	font-variant-ligatures: none;
+}
