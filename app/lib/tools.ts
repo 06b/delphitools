@@ -564,6 +564,7 @@ export const toolCategories: ToolCategory[] = [
 					'Add and subtract timecodes, drop-frame aware',
 				icon: 'clock',
 				href: '/tools/timecode-calc',
+				canon: true,
 				new: true,
 			},
 			{
