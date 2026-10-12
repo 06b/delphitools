@@ -1131,10 +1131,7 @@ export default class PageCanvas extends Component {
 		canvas.on('path:created', ({ path }) => {
 			canvas.remove(path);
 			if (!(path instanceof Path)) return;
-			const centre = new Point(
-				path.left + path.width / 2,
-				path.top + path.height / 2,
-			);
+			const centre = path.getCenterPoint();
 			const slot = pageAt(centre);
 			if (!slot) return;
 			const settings = toolSettings.get();

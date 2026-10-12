@@ -202,6 +202,15 @@ await page.mouse.up();
 await sleep(200);
 objs = await objects();
 check('ink added', objs.length === 2 && objs[1].kind === 'ink' && objs[1].d.startsWith('M'), objs[1]?.d?.slice(0, 30));
+const inkScreen = await page.evaluate(() => {
+	const c = window.__errataCanvas;
+	const ink = c.getObjects().findLast((o) => o.type === 'path');
+	const p = ink.getCenterPoint();
+	const v = c.viewportTransform;
+	const r = c.upperCanvasEl.getBoundingClientRect();
+	return { x: r.left + p.x * v[0] + v[4], y: r.top + p.y * v[3] + v[5] };
+});
+check('ink stays where drawn', Math.abs(inkScreen.x - cx) < 4 && Math.abs(inkScreen.y - (cy + 75)) < 4, JSON.stringify({ inkScreen, want: [cx, cy + 75] }));
 
 // text: click, type, escape
 await page.keyboard.press('t');
