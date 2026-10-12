@@ -1,6 +1,4 @@
 .regex-tester {
-	/* the kit has no monospaced token; iOS sets these in delphiMono */
-	--rx-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
 	--rx-group-1: var(--canon-math-blue);
 	--rx-group-2: var(--canon-math-clay);
 	--rx-group-3: var(--canon-math-green);
@@ -25,7 +23,7 @@
 	min-inline-size: 0;
 	padding-inline: var(--canon-panel-padding) 12px;
 	background: var(--canon-card);
-	font-family: var(--rx-mono);
+	font-family: var(--canon-mono-font);
 	font-size: 15px;
 	cursor: text;
 }
@@ -38,7 +36,7 @@
 	flex: 1 1 auto;
 	inline-size: auto;
 	padding: 0;
-	font-family: var(--rx-mono);
+	font-family: var(--canon-mono-font);
 	font-size: 15px;
 }
 
@@ -118,7 +116,7 @@
 	display: grid;
 	padding-block: 4px var(--canon-panel-padding);
 	color: var(--canon-foreground);
-	font-family: var(--rx-mono);
+	font-family: var(--canon-mono-font);
 	font-size: 15px;
 	line-height: calc(1.2em + var(--rx-line-gap, 6px));
 	white-space: pre-wrap;

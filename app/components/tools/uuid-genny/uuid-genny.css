@@ -1,7 +1,5 @@
 /* the banner: UUIDAnatomy */
 .uuid-picture {
-	/* the kit has no monospaced token; iOS draws in delphiMono */
-	--uuid-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
 	--uuid-bit: var(--canon-muted-foreground);
 
 	container-type: inline-size;
@@ -44,7 +42,7 @@
 
 /* ios sets the advance to 0.94 of the pitch, 38 pt at most */
 .uuid-picture-character {
-	font-family: var(--uuid-mono);
+	font-family: var(--canon-mono-font);
 	font-size: min(38px, var(--uuid-pitch) * 1.55);
 	font-weight: var(--canon-weight-semibold);
 	line-height: 1.2;
@@ -103,7 +101,7 @@
 }
 
 .uuid-picture-stamp {
-	font-family: var(--uuid-mono);
+	font-family: var(--canon-mono-font);
 	font-size: 10px;
 	font-weight: var(--canon-weight-medium);
 	white-space: nowrap;
@@ -141,6 +139,6 @@
 
 /* ids read as code: I, l, 0 and O stay apart */
 .uuid-genny .uuid-genny-row .canon-value-line-value {
-	font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+	font-family: var(--canon-mono-font);
 	font-size: var(--canon-text-footnote);
 }

@@ -1,8 +1,3 @@
-.morse-code {
-	/* the kit has no monospaced token; iOS sets the result in delphiMono */
-	--mc-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
-}
-
 .mt-tape {
 	block-size: 100%;
 	background: var(--canon-card);
@@ -80,6 +75,6 @@
 }
 
 .mc-result .tt-result-text {
-	font-family: var(--mc-mono);
+	font-family: var(--canon-mono-font);
 	font-size: 17px;
 }

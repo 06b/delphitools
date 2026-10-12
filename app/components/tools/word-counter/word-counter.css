@@ -1,8 +1,3 @@
-.word-counter {
-	/* the kit has no monospaced token; iOS sets the words in delphiMono */
-	--wc-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
-}
-
 /* picture: the text as the editor */
 .wc-picture {
 	display: flex;
@@ -136,7 +131,7 @@
 	flex: 1;
 	min-inline-size: 0;
 	overflow: hidden;
-	font-family: var(--wc-mono);
+	font-family: var(--canon-mono-font);
 	font-size: 16px;
 	text-overflow: ellipsis;
 	white-space: nowrap;

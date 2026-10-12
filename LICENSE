@@ -63,6 +63,10 @@ own licences, which continue to apply to them:
   public/fonts/iAWriterQuattroV.woff2, iAWriterQuattroV-Italic.woff2
       iA Writer Quattro (Information Architects), SIL Open Font License 1.1.
 
+  public/fonts/Iosevka-400.woff2, Iosevka-700.woff2
+      Iosevka (Renzhi Li), SIL Open Font License 1.1; subset to Latin-1,
+      punctuation, arrows and box drawing.
+
   public/fonts/NotoSansShavian-Regular.woff2
       Noto Sans Shavian (Google), SIL Open Font License 1.1.
 

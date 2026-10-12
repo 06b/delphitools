@@ -69,7 +69,7 @@ where `n` is 0.25rem units: `size(4)` = 1rem = 16px, `size(10)` = 2.5rem = 40px,
   small: `sm` and `xs` dominate; `lg` is a section heading.
 - `font-weight("normal" | "medium" | "semibold" | "bold")`.
 - `font-family("mono" | "sans" | "serif")` — sans is Open Sans Condensed, mono
-  the system monospace stack (section 4).
+  Iosevka (section 4).
 - `color("amber-500", …)` — the Tailwind palette, for the rare fixed colour that
   is not a theme token.
 - `tracking(...)`, `leading(...)`, `rounded(...)` — letter-spacing, line-height,
@@ -96,9 +96,11 @@ where `n` is 0.25rem units: `size(4)` = 1rem = 16px, `size(10)` = 2.5rem = 40px,
   400–700), declared as an `@font-face` pair in `app.scss`. It is the Canon kit's
   typeface and stands in for the iOS app's SF condensed width.
 - Crayon's `$font-families` maps `sans` (the default, on `body`) to Open Sans
-  Condensed and `mono` to the system monospace stack (`ui-monospace`, Menlo, ...),
-  as iOS pairs its condensed sans with the monospaced system face for code and
-  figures. `serif` stays a real serif stack (Georgia) for the rare serif need.
+  Condensed and `mono` to Iosevka, self-hosted at 400 and 700
+  (`public/fonts/Iosevka-*.woff2`, subset to Latin-1, punctuation, arrows and box
+  drawing), then the system monospace stack. Canon tools read it as
+  `--canon-mono-font`. `serif` stays a real serif stack (Georgia) for the rare
+  serif need.
 - Open Sans is proportional; for columnar number alignment add
   `font-variant-numeric: tabular-nums` (used throughout for page counts,
   readouts, sizes).

@@ -119,8 +119,26 @@
 }
 
 // beats the kit's later :root; iOS sizes, kit scaled them for quattro
+// Iosevka 400 and 700, subset to Latin-1, punctuation, arrows, box drawing
+@font-face {
+	font-family: Iosevka;
+	src: url("/fonts/Iosevka-400.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: Iosevka;
+	src: url("/fonts/Iosevka-700.woff2") format("woff2");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
 html:root {
 	--canon-font: "Open Sans Condensed", system-ui, sans-serif;
+	--canon-mono-font: #{crayon.font-family("mono")};
 	--canon-text-title2: 22px;
 	--canon-text-title3: 20px;
 	--canon-text-body: 17px;

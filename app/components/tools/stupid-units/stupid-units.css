@@ -1,11 +1,6 @@
-.stupid-units {
-	/* the kit has no monospaced token */
-	--su-mono: ui-monospace, "SF Mono", menlo, consolas, monospace;
-}
-
 /* figures in the same type as the rows */
 .stupid-units .stupid-units-value .canon-big-number-field-input {
-	font-family: var(--su-mono);
+	font-family: var(--canon-mono-font);
 }
 
 /* a unit: name over its base size, the log size bar, the amount */
@@ -72,7 +67,7 @@
 
 .stupid-units-base {
 	color: var(--canon-muted-foreground);
-	font-family: var(--su-mono);
+	font-family: var(--canon-mono-font);
 	font-size: var(--canon-text-caption);
 }
 
@@ -92,7 +87,7 @@
 }
 
 .stupid-units-amount {
-	font-family: var(--su-mono);
+	font-family: var(--canon-mono-font);
 	font-size: var(--canon-text-subheadline);
 	font-variant-numeric: tabular-nums;
 	text-align: end;

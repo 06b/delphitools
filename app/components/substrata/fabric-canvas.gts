@@ -3216,7 +3216,7 @@ export default class FabricCanvas extends Component {
 				const hud = document.createElement('div');
 				hud.style.cssText =
 					'position:fixed;top:56px;right:8px;z-index:9999;background:rgba(0,0,0,.75);color:#4ade80;' +
-					'font:11px/1.6 ui-monospace,monospace;padding:6px 9px;pointer-events:none;white-space:pre';
+					'font:11px/1.6 Iosevka,ui-monospace,monospace;padding:6px 9px;pointer-events:none;white-space:pre';
 				document.body.appendChild(hud);
 				let frames = 0;
 				let renders = 0;
