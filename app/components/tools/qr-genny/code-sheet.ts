@@ -2,7 +2,7 @@
  * A machine-readable code as it will be written: its modules on a sheet, a
  * margin round them, marks drawn over them. Lengths are in modules, measured
  * from the code's top-left module. The port of iOS CodeSheet, without the
- * writers: qr-genny exports through qr-code-styling.
+ * writers: qr-genny writes PNG and SVG from its own path data (qr.ts).
  */
 export type Sweep = 'zigzag' | 'columns' | 'rings';
 

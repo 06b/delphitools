@@ -12,10 +12,26 @@ export type DotType =
 	| 'dots'
 	| 'classy'
 	| 'classy-rounded'
-	| 'extra-rounded';
-export type CornerSquareType = 'square' | 'dot' | 'extra-rounded';
-export type CornerDotType = 'square' | 'dot';
+	| 'extra-rounded'
+	| 'diamond'
+	| 'cushion';
+export type CornerSquareType =
+	'square' | 'dot' | 'extra-rounded' | 'leaf' | 'shield' | 'diamond';
+export type CornerDotType =
+	'square' | 'dot' | 'rounded' | 'diamond' | 'leaf' | 'cushion';
 export type ErrorLevel = 'L' | 'M' | 'Q' | 'H';
+
+const XML_ESCAPES: Record<string, string> = {
+	'&': '&amp;',
+	'<': '&lt;',
+	'>': '&gt;',
+	"'": '&apos;',
+	'"': '&quot;',
+};
+
+export function escapeXml(value: string): string {
+	return value.replace(/[&<>'"]/g, (c) => XML_ESCAPES[c] ?? c);
+}
 
 export const INFO_FONT =
 	'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -135,58 +151,75 @@ export const inFinder = (r: number, c: number, count: number) =>
 	(r < 7 && c >= count - 7) ||
 	(c < 7 && r >= count - 7);
 
-// unit squares, as qr-code-styling's QRDot draws them at size 1
-const SIDE = 'M0 0v1h0.5a0.5 0.5 0 0 0 0 -1z';
-const CORNER = 'M0 0v1h1v-0.5a0.5 0.5 0 0 0 -0.5 -0.5z';
-const CORNER_EXTRA = 'M0 0v1h1a1 1 0 0 0 -1 -1z';
-const CORNERS =
-	'M0 0v0.5a0.5 0.5 0 0 0 0.5 0.5h0.5v-0.5a0.5 0.5 0 0 0 -0.5 -0.5z';
+/** Corner radii, top-left then clockwise. */
+type Radii = readonly [number, number, number, number];
 
-const units = new Map<string, Path2D>();
-
-/** One unit path, turned `quarters` × 90° about the square's centre. */
-function unit(kind: string, quarters = 0): Path2D {
-	const key = `${kind}${quarters}`;
-	const known = units.get(key);
-	if (known) return known;
-	const base = new Path2D();
-	if (kind === 'dot') base.arc(0.5, 0.5, 0.5, 0, Math.PI * 2);
-	else if (kind === 'square') base.rect(0, 0, 1, 1);
-	else base.addPath(new Path2D(kind));
-	let path = base;
-	if (quarters) {
-		path = new Path2D();
-		path.addPath(
-			base,
-			new DOMMatrix()
-				.translate(0.5, 0.5)
-				.rotate(quarters * 90)
-				.translate(-0.5, -0.5),
-		);
-	}
-	units.set(key, path);
-	return path;
+/** A rect with rounded corners inside its square, or the diamond in it. */
+export interface Shape {
+	/** Share of the side cut from every edge. */
+	inset?: number;
+	radii?: Radii | number;
+	diamond?: boolean;
 }
 
-/** QRDot.draw for one dark module whose dark neighbours are left, right, top and bottom. */
-export function dotPath(
+const f = (n: number) => +n.toFixed(3);
+
+/** Path data of `shape` in the square at (x, y), `side` long. */
+export function shapeData(shape: Shape, x: number, y: number, side: number) {
+	const cut = (shape.inset ?? 0) * side;
+	const l = x + cut;
+	const t = y + cut;
+	const w = side - 2 * cut;
+	if (shape.diamond)
+		return `M${f(l + w / 2)} ${f(t)}L${f(l + w)} ${f(t + w / 2)}L${f(l + w / 2)} ${f(t + w)}L${f(l)} ${f(t + w / 2)}Z`;
+	const radii = shape.radii ?? 0;
+	const [tl, tr, br, bl] = (
+		typeof radii === 'number' ? [radii, radii, radii, radii] : radii
+	).map((r) => r * side);
+	const arc = (r: number, ex: number, ey: number) =>
+		r ? `A${f(r)} ${f(r)} 0 0 1 ${f(ex)} ${f(ey)}` : '';
+	return (
+		`M${f(l + tl!)} ${f(t)}H${f(l + w - tr!)}${arc(tr!, l + w, t + tr!)}` +
+		`V${f(t + w - br!)}${arc(br!, l + w - br!, t + w)}` +
+		`H${f(l + bl!)}${arc(bl!, l, t + w - bl!)}` +
+		`V${f(t + tl!)}${arc(tl!, l + tl!, t)}Z`
+	);
+}
+
+/** `radii` turned `quarters` × 90° clockwise. */
+function turn(radii: Radii, quarters: number): Radii {
+	const out = [0, 0, 0, 0];
+	radii.forEach((r, i) => (out[(i + quarters + 4) % 4] = r));
+	return out as unknown as Radii;
+}
+
+const SQUARE: Shape = {};
+const DOT: Shape = { radii: 0.5 };
+
+/** QRDot.draw for one dark module whose dark neighbours are left, right, top and bottom; iOS dotPath for diamond and cushion. */
+export function dotShape(
 	type: DotType,
 	left: boolean,
 	right: boolean,
 	top: boolean,
 	bottom: boolean,
-): Path2D {
+): Shape {
 	const count = +left + +right + +top + +bottom;
 	switch (type) {
 		case 'dots':
-			return unit('dot');
+			return DOT;
+		case 'diamond':
+			return { inset: 0.05, diamond: true };
+		case 'cushion':
+			return { inset: 0.05, radii: 0.35 };
 		case 'rounded':
 		case 'extra-rounded': {
-			if (count === 0) return unit('dot');
+			if (count === 0) return DOT;
 			if (count > 2 || (left && right) || (top && bottom))
-				return unit('square');
+				return SQUARE;
 			if (count === 2) {
-				const turn =
+				const r = type === 'rounded' ? 0.5 : 1;
+				const quarters =
 					left && top
 						? 1
 						: top && right
@@ -194,55 +227,98 @@ export function dotPath(
 							: right && bottom
 								? -1
 								: 0;
-				return unit(
-					type === 'rounded'
-						? CORNER
-						: CORNER_EXTRA,
-					turn,
-				);
+				return { radii: turn([0, r, 0, 0], quarters) };
 			}
-			return unit(
-				SIDE,
-				top ? 1 : right ? 2 : bottom ? -1 : 0,
-			);
+			return {
+				radii: turn(
+					[0, 0.5, 0.5, 0],
+					top ? 1 : right ? 2 : bottom ? -1 : 0,
+				),
+			};
 		}
 		case 'classy':
 		case 'classy-rounded': {
-			const corner =
-				type === 'classy' ? CORNER : CORNER_EXTRA;
-			if (count === 0) return unit(CORNERS, 1);
-			if (!left && !top) return unit(corner, -1);
-			if (!right && !bottom) return unit(corner, 1);
-			return unit('square');
+			const r = type === 'classy' ? 0.5 : 1;
+			if (count === 0) return { radii: [0.5, 0, 0.5, 0] };
+			if (!left && !top) return { radii: [r, 0, 0, 0] };
+			if (!right && !bottom) return { radii: [0, 0, r, 0] };
+			return SQUARE;
 		}
 		default:
-			return unit('square');
+			return SQUARE;
 	}
 }
 
-/** A finder's 7 × 7 ring at (x, y) in modules, filled even-odd. */
-export function eyePath(type: CornerSquareType, x: number, y: number) {
-	if (type === 'dot') {
-		const path = new Path2D();
-		path.arc(x + 3.5, y + 3.5, 3.5, 0, Math.PI * 2);
-		path.moveTo(x + 6, y + 3.5);
-		path.arc(x + 3.5, y + 3.5, 2.5, 0, Math.PI * 2);
-		return path;
-	}
-	if (type === 'extra-rounded')
-		return new Path2D(
-			`M${x} ${y + 2.5}v2a2.5 2.5 0 0 0 2.5 2.5h2a2.5 2.5 0 0 0 2.5 -2.5v-2a2.5 2.5 0 0 0 -2.5 -2.5h-2a2.5 2.5 0 0 0 -2.5 2.5` +
-				`M${x + 2.5} ${y + 1}h2a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1 -1.5 1.5h-2a1.5 1.5 0 0 1 -1.5 -1.5v-2a1.5 1.5 0 0 1 1.5 -1.5`,
-		);
-	return new Path2D(`M${x} ${y}v7h7v-7zM${x + 1} ${y + 1}h5v5h-5z`);
+const units = new Map<string, Path2D>();
+
+/** The module's path in the unit square, for the picture. */
+export function dotPath(
+	type: DotType,
+	left: boolean,
+	right: boolean,
+	top: boolean,
+	bottom: boolean,
+): Path2D {
+	const data = shapeData(
+		dotShape(type, left, right, top, bottom),
+		0,
+		0,
+		1,
+	);
+	let path = units.get(data);
+	if (!path) units.set(data, (path = new Path2D(data)));
+	return path;
+}
+
+// ring outer and hole, in sevenths and fifths of their sides
+const EYES: Record<CornerSquareType, [Shape, Shape]> = {
+	square: [SQUARE, SQUARE],
+	dot: [DOT, DOT],
+	'extra-rounded': [{ radii: 2.5 / 7 }, { radii: 1.5 / 5 }],
+	leaf: [{ radii: [0.5, 0, 0.5, 0] }, { radii: [0.5, 0, 0.5, 0] }],
+	shield: [
+		{ radii: [2 / 7, 2 / 7, 0, 0] },
+		{ radii: [1.2 / 5, 1.2 / 5, 0, 0] },
+	],
+	diamond: [{ diamond: true }, { diamond: true }],
+};
+
+const PUPILS: Record<CornerDotType, Shape> = {
+	square: SQUARE,
+	dot: DOT,
+	rounded: { radii: 0.8 / 3 },
+	diamond: { diamond: true },
+	leaf: { radii: [0.5, 0, 0.5, 0] },
+	cushion: { inset: 0.05, radii: 0.35 },
+};
+
+/** A finder's 7 × 7 ring at (x, y), `module` per module, filled even-odd. */
+export function eyeData(
+	type: CornerSquareType,
+	x: number,
+	y: number,
+	module = 1,
+) {
+	const [ring, hole] = EYES[type];
+	return (
+		shapeData(ring, x, y, 7 * module) +
+		shapeData(hole, x + module, y + module, 5 * module)
+	);
 }
 
 /** A finder's 3 × 3 pupil, its eye at (x, y). */
-export function pupilPath(type: CornerDotType, x: number, y: number) {
-	const path = new Path2D();
-	if (type === 'dot') path.arc(x + 3.5, y + 3.5, 1.5, 0, Math.PI * 2);
-	else path.rect(x + 2, y + 2, 3, 3);
-	return path;
+export function pupilData(
+	type: CornerDotType,
+	x: number,
+	y: number,
+	module = 1,
+) {
+	return shapeData(
+		PUPILS[type],
+		x + 2 * module,
+		y + 2 * module,
+		3 * module,
+	);
 }
 
 // swatch drawings, as iOS QRGeneratorViewController draws them
@@ -305,8 +381,8 @@ export function drawEye(
 	context.save();
 	context.scale(side / 7, side / 7);
 	context.fillStyle = ink;
-	context.fill(eyePath(eye, 0, 0), 'evenodd');
-	context.fill(pupilPath(pupil, 0, 0));
+	context.fill(new Path2D(eyeData(eye, 0, 0)), 'evenodd');
+	context.fill(new Path2D(pupilData(pupil, 0, 0)));
 	context.restore();
 }
 
@@ -447,6 +523,10 @@ export function infoLayout(
 
 export interface QrPicture {
 	sheet: CodeSheet;
+	/** The code as written, for PNG. */
+	canvas: () => HTMLCanvasElement | undefined;
+	/** The code as written, as SVG markup; the logo goes in as `logoHref`. */
+	svg: (logoHref?: string) => string;
 	/** The written image in px. */
 	pixels: { width: number; height: number };
 	count: number;
@@ -490,12 +570,30 @@ export function qrSheet(
 		[count - 7, 0],
 		[0, count - 7],
 	] as const;
-	const eyes = new Path2D();
-	const pupils = new Path2D();
-	for (const [x, y] of corners) {
-		eyes.addPath(eyePath(style.cornerSquareType, x, y));
-		pupils.addPath(pupilPath(style.cornerDotType, x, y));
-	}
+	const eyesAt = (origin: number, module: number) =>
+		corners
+			.map(([x, y]) =>
+				eyeData(
+					style.cornerSquareType,
+					origin + x * module,
+					origin + y * module,
+					module,
+				),
+			)
+			.join('');
+	const pupilsAt = (origin: number, module: number) =>
+		corners
+			.map(([x, y]) =>
+				pupilData(
+					style.cornerDotType,
+					origin + x * module,
+					origin + y * module,
+					module,
+				),
+			)
+			.join('');
+	const eyes = new Path2D(eyesAt(0, 1));
+	const pupils = new Path2D(pupilsAt(0, 1));
 	const logoBox =
 		logo && space && space.width > 0
 			? {
@@ -564,11 +662,106 @@ export function qrSheet(
 		context.restore();
 	};
 
+	const height = style.size + (info?.blockHeight ?? 0);
+	const writtenModules = () =>
+		modules
+			.flatMap((row, r) =>
+				row.flatMap((on, c) =>
+					on
+						? [
+								shapeData(
+									dotShape(
+										style.dotType,
+										dark(
+											r,
+											c -
+												1,
+										),
+										dark(
+											r,
+											c +
+												1,
+										),
+										dark(
+											r -
+												1,
+											c,
+										),
+										dark(
+											r +
+												1,
+											c,
+										),
+									),
+									offset +
+										c *
+											dot,
+									offset +
+										r *
+											dot,
+									dot,
+								),
+							]
+						: [],
+				),
+			)
+			.join('');
+
+	const canvas = () => {
+		const canvas = document.createElement('canvas');
+		canvas.width = style.size;
+		canvas.height = height;
+		const context = canvas.getContext('2d');
+		if (!context) return;
+		if (style.paper) {
+			context.fillStyle = style.paper;
+			context.fillRect(0, 0, style.size, height);
+		}
+		context.fillStyle = style.ink;
+		context.fill(new Path2D(writtenModules()));
+		marks(context, { x: offset, y: offset }, dot);
+		return canvas;
+	};
+
+	const svg = (logoHref?: string) => {
+		const at = (n: number) => +(offset + n * dot).toFixed(3);
+		const parts = [
+			`<svg xmlns="http://www.w3.org/2000/svg" width="${style.size}" height="${height}" viewBox="0 0 ${style.size} ${height}">`,
+		];
+		if (style.paper)
+			parts.push(
+				`<rect width="100%" height="100%" fill="${style.paper}"/>`,
+			);
+		parts.push(
+			`<path fill="${style.ink}" d="${writtenModules()}"/>`,
+			`<path fill="${style.ink}" fill-rule="evenodd" d="${eyesAt(offset, dot)}"/>`,
+			`<path fill="${style.ink}" d="${pupilsAt(offset, dot)}"/>`,
+		);
+		if (
+			logoHref &&
+			logoBox &&
+			logoBox.width > 0 &&
+			logoBox.height > 0
+		)
+			parts.push(
+				`<image href="${escapeXml(logoHref)}" x="${at(logoBox.x)}" y="${at(logoBox.y)}" width="${+(logoBox.width * dot).toFixed(3)}" height="${+(logoBox.height * dot).toFixed(3)}" preserveAspectRatio="none"/>`,
+			);
+		info?.lines.forEach((line, i) =>
+			parts.push(
+				`<text x="${style.size / 2}" y="${style.size + (i + 0.75) * info.lineHeight}" text-anchor="middle" fill="${style.ink}" font-family='${INFO_FONT}' font-size="${info.fontSize}" font-weight="500">${escapeXml(line)}</text>`,
+			),
+		);
+		parts.push('</svg>');
+		return parts.join('');
+	};
+
 	return {
 		count,
+		canvas,
+		svg,
 		pixels: {
 			width: style.size,
-			height: style.size + (info?.blockHeight ?? 0),
+			height,
 		},
 		sheet: {
 			modules,

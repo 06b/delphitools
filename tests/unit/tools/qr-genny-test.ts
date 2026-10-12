@@ -1,5 +1,4 @@
 import { module, test } from 'qunit';
-import { sealSvgSeams } from 'delphitools-v2/components/tools/qr-genny';
 import {
 	SheetMotion,
 	duration,
@@ -15,19 +14,15 @@ import {
 } from 'delphitools-v2/components/tools/qr-genny/code-sheet';
 import {
 	dotPath,
+	dotShape,
+	eyeData,
+	pupilData,
+	shapeData,
 	qrLayout,
 	qrMatrix,
 	qrSheet,
 	type QrStyle,
 } from 'delphitools-v2/components/tools/qr-genny/qr';
-
-const SVG =
-	'<svg xmlns="http://www.w3.org/2000/svg">' +
-	'<rect width="4" height="4" fill="#7c3aed"/>' +
-	'<path d="M0 0h2v2z" fill="url(#g)"/>' +
-	'<rect width="1" height="1" fill="none"/>' +
-	'<circle r="1" fill="#000" stroke="#fff"/>' +
-	'</svg>';
 
 const sheetOf = (
 	modules: boolean[][],
@@ -64,45 +59,64 @@ const style: QrStyle = {
 };
 
 module('Unit | Tool | qr-genny', function () {
-	test('filled shapes gain a same-colour outline', function (assert) {
-		const out = sealSvgSeams(SVG);
-		assert.true(
-			out.includes(
-				'<rect width="4" height="4" fill="#7c3aed" stroke="#7c3aed" stroke-width="0.5"/>',
-			),
-			out,
+	const context = document.createElement('canvas').getContext('2d')!;
+	const inside = (data: string, x: number, y: number) =>
+		context.isPointInPath(new Path2D(data), x, y, 'evenodd');
+
+	test('iOS eyes: leaf, shield and diamond', function (assert) {
+		const leaf = eyeData('leaf', 0, 0);
+		assert.false(inside(leaf, 0.1, 0.1), 'leaf: round top left');
+		assert.true(inside(leaf, 6.9, 0.1), 'leaf: square top right');
+		const shield = eyeData('shield', 0, 0);
+		assert.false(inside(shield, 0.1, 0.1), 'shield: round top');
+		assert.true(inside(shield, 0.1, 6.9), 'shield: square bottom');
+		const diamond = eyeData('diamond', 0, 0);
+		assert.false(inside(diamond, 0.5, 0.5), 'diamond: no corner');
+		assert.true(inside(diamond, 3.5, 0.3), 'diamond: ring');
+		assert.false(inside(diamond, 3.5, 3.5), 'diamond: hole');
+	});
+
+	test('iOS pupils and dots keep their insets', function (assert) {
+		assert.false(inside(pupilData('cushion', 0, 0), 2.1, 3.5));
+		assert.true(inside(pupilData('cushion', 0, 0), 2.2, 3.5));
+		assert.false(inside(pupilData('diamond', 0, 0), 2.2, 2.2));
+		const dot = shapeData(
+			dotShape('diamond', false, false, false, false),
+			0,
+			0,
+			1,
 		);
+		assert.false(inside(dot, 0.5, 0.02), 'diamond dot: inset');
+		assert.true(inside(dot, 0.5, 0.1));
 	});
 
-	test('gradient fills stroke with the same reference', function (assert) {
-		assert.true(sealSvgSeams(SVG).includes('stroke="url(#g)"'));
-	});
-
-	test('fill=none and shapes with their own stroke stay untouched', function (assert) {
-		const out = sealSvgSeams(SVG);
-		assert.true(
-			out.includes(
-				'<rect width="1" height="1" fill="none"/>',
-			),
+	test('the SVG is the code as written', function (assert) {
+		const matrix = qrMatrix('https://delphi.tools', 'M')!;
+		const svg = qrSheet(matrix, {
+			...style,
+			cornerSquareType: 'diamond',
+			info: ['a < b'],
+		})!.svg();
+		const doc = new DOMParser().parseFromString(
+			svg,
+			'image/svg+xml',
 		);
-		assert.true(out.includes('stroke="#fff"'));
-		assert.false(out.includes('fill="#000" stroke="#000"'));
-	});
-
-	test('the stroke width is adjustable', function (assert) {
-		assert.true(sealSvgSeams(SVG, 1).includes('stroke-width="1"'));
-	});
-
-	test('quoted url references are unquoted', function (assert) {
-		const out = sealSvgSeams(
-			`<svg xmlns="http://www.w3.org/2000/svg"><rect clip-path="url('#c')" fill="url('#g')"/></svg>`,
+		assert.strictEqual(doc.querySelector('parsererror'), null, svg);
+		assert.strictEqual(doc.querySelectorAll('path').length, 3);
+		assert.strictEqual(
+			doc
+				.querySelector('[fill-rule="evenodd"]')
+				?.getAttribute('fill'),
+			'#000000',
 		);
-		assert.true(out.includes('clip-path="url(#c)"'), out);
-		assert.true(out.includes('stroke="url(#g)"'), out);
-	});
-
-	test('unparseable input comes back unchanged', function (assert) {
-		assert.strictEqual(sealSvgSeams('not svg'), 'not svg');
+		assert.strictEqual(
+			doc.querySelector('text')?.textContent,
+			'a < b',
+		);
+		assert.strictEqual(
+			doc.documentElement.getAttribute('width'),
+			'300',
+		);
 	});
 });
 
@@ -390,7 +404,11 @@ module('Unit | Tool | qr-genny | qr', function () {
 		context.drawImage(bitmap, 0, 0);
 		const matrix = qrMatrix(data, 'M')!;
 		const { dot, offset } = qrLayout(matrix.length, 300, 8)!;
+		const written = qrSheet(matrix, style)!
+			.canvas()!
+			.getContext('2d')!;
 		let same = 0;
+		let ours = 0;
 		matrix.forEach((row, r) =>
 			row.forEach((dark, c) => {
 				const x = Math.floor(offset + (c + 0.5) * dot);
@@ -398,9 +416,13 @@ module('Unit | Tool | qr-genny | qr', function () {
 				const pixel = context.getImageData(x, y, 1, 1)
 					.data[0]!;
 				if (pixel < 128 === dark) same++;
+				const mine = written.getImageData(x, y, 1, 1)
+					.data[0]!;
+				if (mine < 128 === dark) ours++;
 			}),
 		);
 		assert.strictEqual(same, matrix.length ** 2);
+		assert.strictEqual(ours, matrix.length ** 2, 'the PNG writer');
 	});
 
 	test('rounded dots follow their neighbours', function (assert) {

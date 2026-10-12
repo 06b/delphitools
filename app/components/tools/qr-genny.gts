@@ -39,16 +39,12 @@ import type CanonToastService from 'delphicanon/services/canon-toast';
 import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
-import type QRCodeStyling from 'qr-code-styling';
-import type { Options as StylingOptions } from 'qr-code-styling';
 import CodeSheetPicture from './qr-genny/picture';
 import Swatches, { type Swatch } from './qr-genny/swatches';
 import {
-	INFO_FONT,
 	drawDots,
 	drawEye,
 	drawSample,
-	infoLayout,
 	qrMatrix,
 	qrSheet,
 	versionOf,
@@ -58,26 +54,11 @@ import {
 	type ErrorLevel,
 	type Logo,
 	type QrPicture,
+	type QrStyle,
 } from './qr-genny/qr';
 import './qr-genny/qr-genny.css';
 
 export { wrapText } from './qr-genny/qr';
-
-// same-colour stroke closes seams
-// coresvg ignores quoted url()
-export function sealSvgSeams(svg: string, strokeWidth = 0.5): string {
-	svg = svg.replace(/url\('(#[^']*)'\)/g, 'url($1)');
-	const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
-	if (doc.querySelector('parsererror')) return svg;
-	for (const el of doc.querySelectorAll('[fill]')) {
-		const fill = el.getAttribute('fill');
-		if (!fill || fill === 'none' || el.hasAttribute('stroke'))
-			continue;
-		el.setAttribute('stroke', fill);
-		el.setAttribute('stroke-width', String(strokeWidth));
-	}
-	return new XMLSerializer().serializeToString(doc);
-}
 
 export async function qrDataUrl(
 	text: string,
@@ -149,17 +130,26 @@ const DOT_STYLES: { value: DotType; label: string }[] = [
 	{ value: 'classy', label: 'Calligraph' },
 	{ value: 'classy-rounded', label: 'Kiki' },
 	{ value: 'extra-rounded', label: 'Blobby' },
+	{ value: 'diamond', label: 'Diamond' },
+	{ value: 'cushion', label: 'Cushion' },
 ];
 
 const CORNER_SQUARE_STYLES: { value: CornerSquareType; label: string }[] = [
 	{ value: 'square', label: 'Boxy' },
 	{ value: 'dot', label: 'Circular' },
 	{ value: 'extra-rounded', label: 'Rounded' },
+	{ value: 'leaf', label: 'Leaf' },
+	{ value: 'shield', label: 'Shield' },
+	{ value: 'diamond', label: 'Diamond' },
 ];
 
 const CORNER_DOT_STYLES: { value: CornerDotType; label: string }[] = [
 	{ value: 'square', label: 'Square' },
 	{ value: 'dot', label: 'Circle' },
+	{ value: 'rounded', label: 'Rounded' },
+	{ value: 'diamond', label: 'Diamond' },
+	{ value: 'leaf', label: 'Leaf' },
+	{ value: 'cushion', label: 'Cushion' },
 ];
 
 const ERROR_LEVELS: ErrorLevel[] = ['L', 'M', 'Q', 'H'];
@@ -301,18 +291,6 @@ const QR_INFO = {
 	description:
 		'Quick Response code, originally for automotive tracking. Now ubiquitous for URLs, payments, and more.',
 };
-
-const XML_ESCAPES: Record<string, string> = {
-	'&': '&amp;',
-	'<': '&lt;',
-	'>': '&gt;',
-	"'": '&apos;',
-	'"': '&quot;',
-};
-
-function escapeXml(value: string): string {
-	return value.replace(/[&<>'"]/g, (c) => XML_ESCAPES[c] ?? c);
-}
 
 export function vcardString(data: VCardData): string {
 	const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
@@ -778,8 +756,24 @@ export default class QrGennyTool extends Component {
 	get picture(): QrPicture | undefined {
 		const matrix = this.matrix;
 		if (!matrix) return undefined;
-		const info = this.includeInfo ? this.infoTexts : [];
-		const style = {
+		const style = this.#style(
+			this.includeInfo ? this.infoTexts : [],
+		);
+		// one object per look: the picture fades or sweeps only on a new one
+		const key = JSON.stringify({
+			...style,
+			logo: style.logo?.id,
+			data: this.qrContent,
+		});
+		// a plain field, not tracked: the cache only keeps identity
+		if (this.#picture?.key !== key)
+			// eslint-disable-next-line ember/no-side-effects
+			this.#picture = { key, value: qrSheet(matrix, style) };
+		return this.#picture.value;
+	}
+
+	#style(info: string[]): QrStyle {
+		return {
 			size: this.size,
 			margin: this.padding * 4,
 			level: this.errorCorrection,
@@ -795,17 +789,6 @@ export default class QrGennyTool extends Component {
 			logoMargin: this.logoMargin,
 			info,
 		};
-		// one object per look: the picture fades or sweeps only on a new one
-		const key = JSON.stringify({
-			...style,
-			logo: style.logo?.id,
-			data: this.qrContent,
-		});
-		// a plain field, not tracked: the cache only keeps identity
-		if (this.#picture?.key !== key)
-			// eslint-disable-next-line ember/no-side-effects
-			this.#picture = { key, value: qrSheet(matrix, style) };
-		return this.#picture.value;
 	}
 
 	get tooLong() {
@@ -1164,165 +1147,49 @@ export default class QrGennyTool extends Component {
 		this.logoMargin = value;
 	};
 
-	// export through qr-code-styling, as the web tool always has
-
-	#styleOptions(data: string): StylingOptions {
-		const options: StylingOptions = {
-			width: this.size,
-			height: this.size,
-			type: 'svg',
-			data,
-			margin: this.padding * 4,
-			qrOptions: {
-				errorCorrectionLevel: this.errorCorrection,
-			},
-			dotsOptions: {
-				type: this.dotType,
-				color: this.safeForeground,
-			},
-			cornersSquareOptions: {
-				type: this.cornerSquareType,
-				color: this.safeForeground,
-			},
-			cornersDotOptions: {
-				type: this.cornerDotType,
-				color: this.safeForeground,
-			},
-			backgroundOptions: {
-				color: this.transparent
-					? 'transparent'
-					: this.safeBackground,
-			},
-		};
-
-		if (this.logo) {
-			options.image = this.logo;
-			options.imageOptions = {
-				crossOrigin: 'anonymous',
-				margin: this.logoMargin,
-				imageSize: this.logoSize,
-				hideBackgroundDots: true,
-			};
-		}
-
-		return options;
-	}
-
-	async #styling(): Promise<QRCodeStyling | undefined> {
-		const data = this.qrContent;
-		if (!data.trim() || !this.picture) return;
-		const { default: Styling } = await import('qr-code-styling');
-		return new Styling(this.#styleOptions(data));
-	}
-
-	async #composeInfoPng(qr: QRCodeStyling): Promise<Blob | null> {
-		const raw = await qr.getRawData('png');
-		if (!(raw instanceof Blob)) return null;
-
-		const bitmap = await createImageBitmap(raw);
-		const layout = infoLayout(
-			this.infoTexts,
-			this.size,
-			bitmap.width / this.size,
-		);
-		if (!layout) return null;
-
-		const canvas = document.createElement('canvas');
-		canvas.width = bitmap.width;
-		canvas.height = bitmap.height + layout.blockHeight;
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return null;
-
-		if (!this.transparent) {
-			ctx.fillStyle = this.safeBackground;
-			ctx.fillRect(0, 0, canvas.width, canvas.height);
-		}
-		ctx.drawImage(bitmap, 0, 0);
-		ctx.fillStyle = this.safeForeground;
-		ctx.font = `500 ${layout.fontSize}px ${INFO_FONT}`;
-		ctx.textAlign = 'center';
-		layout.lines.forEach((line, i) => {
-			ctx.fillText(
-				line,
-				canvas.width / 2,
-				bitmap.height + (i + 0.75) * layout.lineHeight,
-			);
-		});
-
+	#png(picture: QrPicture): Promise<Blob | null> {
+		const canvas = picture.canvas();
+		if (!canvas) return Promise.resolve(null);
 		return new Promise((resolve) =>
 			canvas.toBlob(resolve, 'image/png'),
 		);
 	}
 
-	async #svgText(qr: QRCodeStyling): Promise<string | null> {
-		const raw = await qr.getRawData('svg');
-		if (raw === null) return null;
-		// qr-code-styling may resolve a string
-		const svg =
-			raw instanceof Blob ? await raw.text() : String(raw);
-		if (!this.includeInfo) return sealSvgSeams(svg);
-
-		const qrSvg = sealSvgSeams(svg.replace(/<\?xml[^?]*\?>/, ''));
-		const layout = infoLayout(this.infoTexts, this.size);
-		if (!layout) return null;
-
-		const totalHeight = this.size + layout.blockHeight;
-		const background = this.transparent
-			? ''
-			: `<rect width="100%" height="100%" fill="${this.safeBackground}"/>`;
-		const text = layout.lines
-			.map(
-				(line, i) =>
-					`<text x="${this.size / 2}" y="${this.size + (i + 0.75) * layout.lineHeight}" text-anchor="middle" fill="${this.safeForeground}" font-family='${INFO_FONT}' font-size="${layout.fontSize}" font-weight="500">${escapeXml(line)}</text>`,
-			)
-			.join('');
-		return `<svg xmlns="http://www.w3.org/2000/svg" width="${this.size}" height="${totalHeight}" viewBox="0 0 ${this.size} ${totalHeight}">${background}${qrSvg}${text}</svg>`;
-	}
-
-	async #png(qr: QRCodeStyling): Promise<Blob | null> {
-		if (this.includeInfo) return this.#composeInfoPng(qr);
-		const raw = await qr.getRawData('png');
-		if (raw === null) return null;
-		return raw instanceof Blob
-			? raw
-			: new Blob([raw as unknown as BlobPart], {
-					type: 'image/png',
-				});
-	}
-
 	export = () => void this.#export();
 
 	async #export() {
-		const qr = await this.#styling();
-		if (!qr) return;
+		const picture = this.picture;
+		if (!picture) return;
 		const filename = `qr-code-${Date.now()}`;
 		if (this.isSvg) {
-			const svg = await this.#svgText(qr);
-			if (svg)
-				downloadBlob(
-					new Blob([svg], {
+			downloadBlob(
+				new Blob(
+					[picture.svg(this.logo ?? undefined)],
+					{
 						type: 'image/svg+xml',
-					}),
-					`${filename}.svg`,
-				);
+					},
+				),
+				`${filename}.svg`,
+			);
 			return;
 		}
-		const png = await this.#png(qr);
+		const png = await this.#png(picture);
 		if (png) downloadBlob(png, `${filename}.png`);
 	}
 
 	copy = () => void this.#copy();
 
 	async #copy() {
-		const qr = await this.#styling();
-		if (!qr) return;
+		const picture = this.picture;
+		if (!picture) return;
 		if (this.isSvg) {
-			const svg = await this.#svgText(qr);
-			if (svg) await this.toast.copy(svg);
+			await this.toast.copy(
+				picture.svg(this.logo ?? undefined),
+			);
 			return;
 		}
 		try {
-			const blob = await this.#png(qr);
+			const blob = await this.#png(picture);
 			if (!blob) return;
 			await navigator.clipboard.write([
 				new ClipboardItem({ 'image/png': blob }),
@@ -1382,11 +1249,7 @@ export default class QrGennyTool extends Component {
 		if (this.batchItems.length === 0) return;
 		this.batchGenerating = true;
 
-		const [{ default: Styling }, { default: JSZip }] =
-			await Promise.all([
-				import('qr-code-styling'),
-				import('jszip'),
-			]);
+		const { default: JSZip } = await import('jszip');
 		if (this.#destroyed) return;
 
 		const zip = new JSZip();
@@ -1397,12 +1260,21 @@ export default class QrGennyTool extends Component {
 
 			item.status = 'generating';
 			try {
-				const qr = new Styling(
-					this.#styleOptions(item.content),
+				const matrix = qrMatrix(
+					item.content,
+					this.errorCorrection,
 				);
-				const blob = await qr.getRawData('png');
+				const written =
+					matrix &&
+					qrSheet(matrix, this.#style([]));
+				const blob = written
+					? await this.#png(written)
+					: null;
 				if (this.#destroyed) return;
-				if (!(blob instanceof Blob)) continue;
+				if (!blob) {
+					item.status = 'error';
+					continue;
+				}
 
 				const safeName = item.content
 					.slice(0, 30)

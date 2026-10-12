@@ -211,7 +211,7 @@ check(
 	),
 );
 
-// export: SVG sealed with its own colour
+// export: SVG, one path each for modules, eyes and pupils
 await page.evaluate(() =>
 	[...document.querySelectorAll('.qr-genny [role="radio"], .qr-genny button')]
 		.find((el) => el.textContent.trim() === 'SVG')
@@ -230,16 +230,14 @@ const result = await page.evaluate(async () => {
 	const filled = [...doc.querySelectorAll('[fill]')].filter(
 		(el) => el.getAttribute('fill') !== 'none',
 	);
-	const sealed = filled.filter(
-		(el) =>
-			el.getAttribute('stroke') === el.getAttribute('fill') &&
-			el.getAttribute('stroke-width') === '0.5',
-	);
+	const paths = doc.querySelectorAll('path');
 	return {
 		type: window.__result.type,
 		parses: !doc.querySelector('parsererror'),
 		filled: filled.length,
-		sealed: sealed.length,
+		paths: paths.length,
+		evenodd: paths[1]?.getAttribute('fill-rule'),
+		text,
 		width: doc.documentElement.getAttribute('width'),
 	};
 });
@@ -247,11 +245,9 @@ check('export is SVG', result.type === 'image/svg+xml', result.type);
 check('and still parses', result.parses);
 check('at the chosen size', result.width === '310', result.width);
 check('it has filled shapes', result.filled > 0, String(result.filled));
-check(
-	'every filled shape is sealed with its own colour',
-	result.sealed === result.filled,
-	`${result.sealed} of ${result.filled}`,
-);
+check('one path each for modules, eyes and pupils', result.paths === 3, String(result.paths));
+check('the eyes fill even-odd', result.evenodd === 'evenodd', result.evenodd);
+if (process.env.QR_SVG_OUT) (await import('node:fs')).writeFileSync(process.env.QR_SVG_OUT, result.text);
 await page.evaluate(() =>
 	[...document.querySelectorAll('.qr-genny button')]
 		.find((el) => el.textContent.trim() === 'Copy')
