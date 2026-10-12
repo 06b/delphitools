@@ -8,6 +8,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
 	{
+		version: '2.2.1',
+		since: '2.2.0',
+		features: [],
+		fixes: ['Errata now has an OpenGraph card. Grumble Grumble'],
+		technical: [],
+	},
+	{
 		version: '2.2.0',
 		since: '2.1.1',
 		features: [
