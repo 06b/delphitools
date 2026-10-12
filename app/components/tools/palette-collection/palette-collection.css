@@ -52,6 +52,8 @@
 }
 
 .pc-chip-hex {
+	/* at the chip's free end: a long notation clears the cover */
+	align-self: flex-start;
 	rotate: 180deg;
 	font-family: var(--canon-mono-font);
 	font-size: 10px;
@@ -119,8 +121,8 @@
 .pc-window {
 	position: absolute;
 	inset-inline: 0;
-	inset-block-start: calc(50% - 23px);
-	block-size: 46px;
+	inset-block-start: calc(50% - var(--pc-row) / 2);
+	block-size: var(--pc-row);
 	border-block: var(--canon-hairline) solid var(--canon-border);
 	background: var(--canon-card);
 	pointer-events: none;
@@ -190,8 +192,12 @@
 }
 
 .pc-row--palette {
-	gap: 2px;
+	gap: 4px;
 	padding-inline: 16px 20px;
+}
+
+.pc-row--palette .pc-row-title {
+	flex: none;
 }
 
 .pc-ribbon {

@@ -137,4 +137,17 @@ const phone = await page.evaluate(async () => {
 check('the deck collapses to 240 px', phone.full > 240 && Math.round(phone.band) === 240, `${phone.full} ${phone.band}`);
 check('no horizontal scroll', !phone.wide);
 
+// values follow the header notation: cards, chips and copy
+await page.evaluate(() => localStorage.setItem('colour-notation', 'oklch'));
+await visit(page, '/tools/palette-collection');
+await sleep(700);
+const shown = await page.evaluate(() => ({
+	label: document.querySelector('.canon-colour-card .canon-value-line-label')?.textContent.trim(),
+	value: document.querySelector('.canon-colour-card .canon-value-line-value')?.textContent.trim(),
+	chip: document.querySelector('.pc-chip-hex')?.textContent.trim(),
+}));
+check('card values use the header notation', shown.label === 'OKLCH' && shown.value?.startsWith('oklch('), JSON.stringify(shown));
+check('chips use the header notation', shown.chip?.startsWith('oklch('), shown.chip);
+await page.evaluate(() => localStorage.removeItem('colour-notation'));
+
 await finish(browser);

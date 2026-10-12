@@ -7,7 +7,6 @@ import { htmlSafe } from '@ember/template';
 import { LinkTo } from '@ember/routing';
 import type Owner from '@ember/owner';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
-import CanonColourCard from 'delphicanon/components/canon-colour-card';
 import CanonDetentWheel from 'delphicanon/components/canon-detent-wheel';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonRow from 'delphicanon/components/canon-row';
@@ -15,7 +14,7 @@ import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
-import { parseHex } from 'delphicanon/lib/colour';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
 import Icon from 'delphitools-v2/components/icon';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
 import {
@@ -26,12 +25,14 @@ import {
 	type PaletteCollectionCategory,
 } from 'delphitools-v2/lib/palette-collection';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
-import { kitFormat } from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import { COLOUR_NOTATIONS } from 'delphitools-v2/lib/colour-notation';
 import Deck from 'delphitools-v2/components/tools/palette-collection/deck';
+// the card markup without the component, which formats rows as hex
+import 'delphicanon/components/canon-colour-card.css';
 import './palette-collection/palette-collection.css';
 
-const rowHeight = 46;
-const wheelHeight = rowHeight * 8;
+const rowHeight = 56;
+const wheelHeight = rowHeight * 7;
 
 const shelves = Object.keys(
 	COLLECTION_CATEGORIES,
@@ -131,8 +132,21 @@ export default class PaletteCollection extends Component {
 		];
 	}
 
+	// the kit's row CanonColourCard shows hex whatever its format
 	get colours() {
-		return (this.palette?.colors ?? []).map((c) => parseHex(c)!);
+		return (this.palette?.colors ?? []).map((hex) => ({
+			name: getColourName(hex),
+			value: this.colourNotation.format(hex),
+			swatch: htmlSafe(`background: ${hex}`),
+		}));
+	}
+
+	get notationLabel() {
+		const { notation } = this.colourNotation;
+		return (
+			COLOUR_NOTATIONS.find((n) => n.id === notation)
+				?.label ?? ''
+		);
 	}
 
 	get detail() {
@@ -155,10 +169,6 @@ export default class PaletteCollection extends Component {
 			return `${CURATED_PALETTES.length} palettes`;
 		const found = this.shown.length;
 		return `${found} ${found === 1 ? 'result' : 'results'}`;
-	}
-
-	get format() {
-		return kitFormat(this.colourNotation.notation);
 	}
 
 	get colorsQuery() {
@@ -227,6 +237,7 @@ export default class PaletteCollection extends Component {
 						@palette={{this.palette}}
 						@detail={{this.detail}}
 						@emptyTitle={{this.emptyTitle}}
+						@format={{this.colourNotation.format}}
 					/>
 				</CanonCanvas>
 			</:sidebar>
@@ -236,6 +247,7 @@ export default class PaletteCollection extends Component {
 					@background="var(--canon-muted)"
 				>
 					<div
+						style={{wheelStyle}}
 						class="pc-wheels
 							{{if
 								this.searching
@@ -361,12 +373,25 @@ export default class PaletteCollection extends Component {
 							this.colours
 							as |colour|
 						}}
-							<CanonColourCard
-								@colour={{colour}}
-								@layout="row"
-								@nameOf={{getColourName}}
-								@primaryFormat={{this.format}}
-							/>
+							<div
+								class="canon-colour-card canon-colour-card--row"
+							>
+								<div
+									class="canon-colour-card-swatch"
+									style={{colour.swatch}}
+								></div>
+								<div
+									class="canon-colour-card-info"
+								>
+									<div
+										class="canon-colour-card-name"
+									>{{colour.name}}</div>
+									<CanonValueLine
+										@label={{this.notationLabel}}
+										@value={{colour.value}}
+									/>
+								</div>
+							</div>
 						{{/each}}
 						<LinkTo
 							@route="tools.tool"
@@ -385,6 +410,8 @@ export default class PaletteCollection extends Component {
 		</CanonSplit>
 	</template>
 }
+
+const wheelStyle = htmlSafe(`--pc-row: ${rowHeight}px`);
 
 /** Titles grow, darken and gain weight towards the centre line. */
 function focusStyle(focus: number) {
