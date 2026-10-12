@@ -12,7 +12,6 @@ import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
-import CanonToast from 'delphicanon/components/canon-toast';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import press from 'delphicanon/modifiers/canon-press';
 import { parseDecimal } from 'delphicanon/lib/number';
@@ -254,6 +253,5 @@ export default class LineHeightCalc extends Component {
 				</CanonRows>
 			</:main>
 		</CanonSplit>
-		<CanonToast />
 	</template>
 }

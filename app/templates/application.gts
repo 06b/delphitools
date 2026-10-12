@@ -6,6 +6,7 @@ import type SidebarService from 'delphitools-v2/services/sidebar';
 import type ThemeService from 'delphitools-v2/services/theme';
 import { pageTitle } from 'ember-page-title';
 import CanonButton from 'delphicanon/components/canon-button';
+import CanonToast from 'delphicanon/components/canon-toast';
 import AppSidebar from 'delphitools-v2/components/app-sidebar';
 import AppTab from 'delphitools-v2/components/app-tab';
 import ColourNotationSelector from 'delphitools-v2/components/colour-notation-selector';
@@ -130,6 +131,7 @@ export default class ApplicationTemplate extends Component {
 					>
 						{{outlet}}
 					</main>
+					<CanonToast />
 				</div>
 			</div>
 		{{/if}}

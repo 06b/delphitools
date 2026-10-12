@@ -13,7 +13,6 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import CanonTextInput from 'delphicanon/components/canon-text-input';
-import CanonToast from 'delphicanon/components/canon-toast';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
@@ -362,6 +361,5 @@ export default class RegexTester extends Component {
 				</CanonRows>
 			</:main>
 		</CanonSplit>
-		<CanonToast />
 	</template>
 }
