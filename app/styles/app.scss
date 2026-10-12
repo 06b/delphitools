@@ -1081,6 +1081,13 @@ body {
 	background: transparent;
 }
 
+// a CanonSplit or CanonPage fills it, as CanonWindow's main does
+.dt-canon-tool {
+	display: grid;
+	block-size: 100%;
+	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
 .dt-main {
 	flex: 1;
 	min-height: 0;

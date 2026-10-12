@@ -44,6 +44,8 @@ export interface Tool {
 	highlight?: boolean;
 	atlas?: boolean;
 	wide?: boolean;
+	// built on the delphicanon kit; fills the sheet without the tool header
+	canon?: boolean;
 	accepts?: string[];
 	carryColour?: boolean;
 	// same vocabulary as accepts
