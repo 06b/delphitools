@@ -120,6 +120,8 @@ export const toolCategories: ToolCategory[] = [
 				atlas: true,
 				carryColour: true,
 				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'colorblind-sim',

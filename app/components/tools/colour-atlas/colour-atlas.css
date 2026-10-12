@@ -1,0 +1,144 @@
+.colour-atlas {
+	/* the kit has no monospaced token; iOS sets the ratio in delphiMono */
+	--colour-atlas-mono:
+		ui-monospace, "SF Mono", menlo, consolas, monospace;
+}
+
+/* the picture: the solid over the strip and the notation input */
+.colour-atlas-picture {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+}
+
+.colour-atlas-solid {
+	flex: 1;
+	min-block-size: 0;
+}
+
+.colour-atlas-input {
+	flex: none;
+	border-block-start: var(--canon-hairline) solid var(--canon-border);
+}
+
+.colour-atlas-input .canon-text-cell {
+	padding-inline: var(--canon-panel-padding);
+}
+
+/* contrast rows: chip 56 wide, the ratio cell beside it */
+.colour-atlas-contrast {
+	display: flex;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-row-height);
+	background: var(--canon-border);
+	font-family: var(--canon-font);
+}
+
+.colour-atlas-contrast-chip {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 56px;
+	background: black;
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-bold);
+}
+
+.colour-atlas-contrast-chip--white {
+	background: white;
+}
+
+.colour-atlas-contrast-cell {
+	display: flex;
+	flex: 1;
+	gap: 12px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 8px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+}
+
+.colour-atlas-contrast-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+	line-height: 1.2;
+}
+
+.colour-atlas-contrast-ratio {
+	font-family: var(--colour-atlas-mono);
+	font-size: var(--canon-text-body);
+	font-variant-numeric: tabular-nums;
+}
+
+.colour-atlas-contrast-against {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.colour-atlas-contrast-lamps {
+	display: flex;
+	flex: none;
+	gap: 12px;
+}
+
+.colour-atlas-contrast-lamp {
+	color: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 30%,
+		transparent
+	);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+}
+
+.colour-atlas-contrast-lamp--on {
+	color: var(--canon-primary);
+}
+
+.colour-atlas-hidden {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* the shared open-in list, in the kit's cells; the app rule is crayon */
+.colour-atlas .dt-atlas-open {
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--canon-hairline);
+	border: 0;
+	background: var(--canon-border);
+}
+
+.colour-atlas .dt-atlas-open a {
+	gap: 6px;
+	padding: 14px 8px;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.colour-atlas .dt-atlas-open a .dt-icon {
+	color: var(--canon-primary);
+}
+
+.colour-atlas .dt-atlas-open a:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+@media (hover: hover) {
+	.colour-atlas .dt-atlas-open a:hover {
+		background: var(--canon-accent-bg);
+		color: var(--canon-foreground);
+	}
+}

@@ -1,58 +1,51 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { fn, hash } from '@ember/helper';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourCard from 'delphicanon/components/canon-colour-card';
+import CanonColourControls, {
+	CanonColourSolidState,
+} from 'delphicanon/components/canon-colour-controls';
+import CanonColourNotationInput from 'delphicanon/components/canon-colour-notation-input';
+import CanonColourSolid from 'delphicanon/components/canon-colour-solid';
+import CanonColourStrip from 'delphicanon/components/canon-colour-strip';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonPaletteCard from 'delphicanon/components/canon-palette-card';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import AtlasOpenIn from 'delphitools-v2/components/atlas-open-in';
-import {
-	hexToRgb,
-	rgbToHex,
-	rgbToHsl,
-	hslToRgb,
-	rgbToOklch,
-	lchToLab,
-	oklabToRgb,
-	maxOklchChroma,
-	luminance,
-	type Triple,
-} from 'delphitools-v2/lib/colour-maths';
-import {
-	COLOUR_NOTATIONS,
-	formatColour,
-} from 'delphitools-v2/lib/colour-notation';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
-import { detectColour } from 'delphitools-v2/lib/colour-parse';
-import { colourFromUrl, colourToQuery } from 'delphitools-v2/lib/colour-query';
-import {
-	simulateHex,
-	type SimulationType,
-} from 'delphitools-v2/lib/colour-vision';
+import { carryColour, colourToQuery } from 'delphitools-v2/lib/colour-query';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import {
+	contrastRows,
+	gamutTiles,
+	harmonies,
+	harmony,
+	kitFormat,
+	launchFlags,
+	notationLines,
+	readColour,
+	scale,
+	visionCards,
+} from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import ContrastRow from 'delphitools-v2/components/tools/colour-atlas/contrast-row';
+import './colour-atlas/colour-atlas.css';
 
-const DEFAULT_COLOUR = '#3b82f6';
-const COPIED_MS = 1500;
+const startColour = parseHex('3B82F6')!;
+const harmonyTitles = harmonies.map((h) => h.title);
+const urlPauseMs = 300;
 
-// plane chroma range
-const CHROMA_RANGE = 0.35;
-
-const HARMONIES: [label: string, offsets: number[]][] = [
-	['Complement', [0, 180]],
-	['Triad', [0, 120, 240]],
-	['Analogous', [-30, 0, 30]],
-	['Split', [0, 150, 210]],
-];
-
-const VISION_TYPES: [label: string, type: SimulationType][] = [
-	['Protanopia', 'protanopia'],
-	['Deuteranopia', 'deuteranopia'],
-	['Tritanopia', 'tritanopia'],
-	['Achromatopsia', 'achromatopsia'],
-];
-
-const OPEN_IN: { id: string; name: string; icon: string }[] = [
+const openIn = [
 	{ id: 'contrast-checker', name: 'Contrast Checker', icon: 'contrast' },
 	{ id: 'harmony-genny', name: 'Harmony Generator', icon: 'rainbow' },
 	{ id: 'tailwind-shades', name: 'Tailwind Shades', icon: 'wind' },
@@ -61,506 +54,289 @@ const OPEN_IN: { id: string; name: string; icon: string }[] = [
 	{ id: 'colorblind-sim', name: 'Blindness Simulator', icon: 'eye' },
 ];
 
-const SCALE_STEPS = 8;
+const closestName = (colour: Rgb) => getColourName(hex(colour));
 
-function contrastRatio(l1: number, l2: number): number {
-	const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
-	return (hi + 0.05) / (lo + 0.05);
-}
+const editable = (target: EventTarget | null) =>
+	target instanceof HTMLElement &&
+	(target.isContentEditable || target.matches('input, textarea, select'));
 
-function mixHex(rgb: Triple, to: number, t: number): string {
-	return rgbToHex(...(rgb.map((v) => v + (to - v) * t) as Triple));
-}
-
-function rotateHue(hsl: Triple, offset: number): string {
-	return rgbToHex(
-		...hslToRgb(
-			(((hsl[0] + offset) % 360) + 360) % 360,
-			hsl[1],
-			hsl[2],
-		),
-	);
-}
-
-export default class ColourAtlasTool extends Component {
+/** The port of ColourAtlasViewController. */
+export default class ColourAtlas extends Component {
 	@service declare colourNotation: ColourNotationService;
 
-	@tracked inputValue = colourFromUrl() ?? DEFAULT_COLOUR;
-	@tracked copied: string | null = null;
+	state: CanonColourSolidState;
+	@tracked harmonyIndex = 0;
+	#urlArmed = false;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-	}
-
-	get rgb(): Triple | null {
-		return detectColour(this.inputValue);
-	}
-
-	get hex(): string | null {
-		const rgb = this.rgb;
-		return rgb ? rgbToHex(...rgb) : null;
-	}
-
-	get swatchHex() {
-		return this.hex ?? '#ffffff';
-	}
-
-	get swatchStyle() {
-		return htmlSafe(`background-color: ${this.swatchHex}`);
-	}
-
-	get nearestName() {
-		const hex = this.hex;
-		return hex ? getColourName(hex) : '';
-	}
-
-	get notationRows() {
-		const rgb = this.rgb;
-		const hex = this.hex;
-		if (!rgb || !hex) return [];
-		const rows: { id: string; label: string; value: string }[] =
-			COLOUR_NOTATIONS.map((n) => ({
-				id: n.id,
-				label: n.label,
-				value: formatColour(hex, n.id),
-			}));
-		rows.push({
-			id: 'luminance',
-			label: 'Luminance',
-			value: luminance(...rgb).toFixed(3),
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		// sliced row, oklch hue
+		this.state = new CanonColourSolidState({
+			space: flags.space ?? 'oklch',
+			colour: flags.colour ?? startColour,
+			activeRow: flags.row ?? 2,
 		});
-		return rows.map((row) => ({
-			...row,
-			isCopied: this.copied === row.value,
-		}));
-	}
-
-	get oklch(): Triple | null {
-		const rgb = this.rgb;
-		return rgb ? rgbToOklch(...rgb) : null;
-	}
-
-	get gamutCaption() {
-		const oklch = this.oklch;
-		if (!oklch) return '';
-		const [l, c, h] = oklch;
-		const cmax = maxOklchChroma(l, h);
-		const pct = cmax > 0 ? Math.round((c / cmax) * 100) : 0;
-		return `chroma ${c.toFixed(3)} of ${cmax.toFixed(3)} at this hue (${pct}%)`;
-	}
-
-	get hueMarkerStyle() {
-		const oklch = this.oklch;
-		if (!oklch) return htmlSafe('');
-		return htmlSafe(
-			`left: ${((oklch[2] / 360) * 100).toFixed(1)}%`,
-		);
-	}
-
-	get planeMarkerStyle() {
-		const oklch = this.oklch;
-		if (!oklch) return htmlSafe('');
-		const x = Math.min(100, (oklch[1] / CHROMA_RANGE) * 100);
-		const y = (1 - oklch[0]) * 100;
-		return htmlSafe(
-			`left: ${x.toFixed(1)}%; top: ${y.toFixed(1)}%`,
-		);
-	}
-
-	drawPlane = modifier(
-		(canvas: HTMLCanvasElement, [hex]: [string | null]) => {
-			const rgb = hex ? hexToRgb(hex) : null;
-			const ctx = canvas.getContext('2d');
-			if (!ctx) return;
-			ctx.clearRect(0, 0, canvas.width, canvas.height);
-			if (!rgb) return;
-
-			const [, , h] = rgbToOklch(...rgb);
-			const { width, height } = canvas;
-			const image = ctx.createImageData(width, height);
-			for (let y = 0; y < height; y++) {
-				const l = 1 - y / height;
-				const cmax = maxOklchChroma(l, h);
-				for (let x = 0; x < width; x++) {
-					const c = (x / width) * CHROMA_RANGE;
-					if (c > cmax) break;
-					const [r, g, b] = oklabToRgb(
-						...lchToLab(l, c, h),
-					);
-					const i = (y * width + x) * 4;
-					image.data[i] = r;
-					image.data[i + 1] = g;
-					image.data[i + 2] = b;
-					image.data[i + 3] = 255;
-				}
-			}
-			ctx.putImageData(image, 0, 0);
-		},
-	);
-
-	get contrastRows() {
-		const rgb = this.rgb;
-		if (!rgb) return [];
-		const l = luminance(...rgb);
-		return [
-			{
-				label: 'on white',
-				chip: '#ffffff',
-				ratio: contrastRatio(l, 1),
-			},
-			{
-				label: 'on black',
-				chip: '#000000',
-				ratio: contrastRatio(l, 0),
-			},
-		].map(({ label, chip, ratio }) => ({
-			label,
-			chipStyle: htmlSafe(
-				`background-color: ${chip}; color: ${this.hex}`,
+		this.state.viewPlane = flags.ortho;
+		if (flags.harmony !== undefined)
+			this.harmonyIndex = flags.harmony;
+		if (!flags.orthoLater) return;
+		const timers = [
+			window.setTimeout(
+				() => (this.state.viewPlane = true),
+				2000,
 			),
-			ratio: `${ratio.toFixed(2)}:1`,
-			aa: ratio >= 4.5,
-			aaa: ratio >= 7,
-			large: ratio >= 3,
-		}));
+			window.setTimeout(
+				() => (this.state.viewPlane = false),
+				5000,
+			),
+		];
+		registerDestructor(this, () =>
+			timers.forEach((timer) => window.clearTimeout(timer)),
+		);
 	}
 
-	get harmonyRows() {
-		const rgb = this.rgb;
-		if (!rgb) return [];
-		const hsl = rgbToHsl(...rgb);
-		return HARMONIES.map(([label, offsets]) => {
-			const hexes = offsets.map((o) => rotateHue(hsl, o));
-			return {
-				label,
-				swatches: hexes.map((hex) => ({
-					hex,
-					style: htmlSafe(
-						`background-color: ${hex}`,
-					),
-				})),
-				caption: hexes
-					.slice(1)
-					.map((hex) =>
-						this.colourNotation.format(hex),
-					)
-					.join(' · '),
-			};
-		});
+	get colour(): Rgb {
+		return this.state.colour;
+	}
+
+	get hex() {
+		return hex(this.colour);
+	}
+
+	get format() {
+		return kitFormat(this.colourNotation.notation);
+	}
+
+	get text() {
+		return this.colourNotation.format(this.hex);
+	}
+
+	get notations() {
+		return notationLines(this.colour);
+	}
+
+	get gamut() {
+		return gamutTiles(this.colour);
+	}
+
+	get contrast() {
+		return contrastRows(this.colour);
+	}
+
+	get harmony() {
+		return harmony(
+			this.colour,
+			harmonies[this.harmonyIndex]!.offsets,
+		);
+	}
+
+	get marks() {
+		const { offsets } = harmonies[this.harmonyIndex]!;
+		return this.harmony.filter((_, i) => offsets[i] !== 0);
 	}
 
 	get tints() {
-		return this.scale(255);
+		return scale(this.colour, 1);
 	}
 
 	get shades() {
-		return this.scale(0);
+		return scale(this.colour, 0);
 	}
 
-	scale(to: number) {
-		const rgb = this.rgb;
-		if (!rgb) return [];
-		return [
-			this.hex!,
-			...Array.from({ length: SCALE_STEPS }, (_, i) =>
-				mixHex(rgb, to, (i + 1) / (SCALE_STEPS + 1)),
-			),
-		].map((hex) => ({
-			hex,
-			style: htmlSafe(`background-color: ${hex}`),
-		}));
-	}
-
-	get visionRows() {
-		const hex = this.hex;
-		if (!hex) return [];
-		return VISION_TYPES.map(([label, type]) => {
-			const sim = simulateHex(hex, type)!;
-			return {
-				label,
-				style: htmlSafe(`background-color: ${sim}`),
-				value: this.colourNotation.format(sim),
-			};
-		});
+	get vision() {
+		return visionCards(this.colour);
 	}
 
 	get queryColour() {
-		const hex = this.hex;
-		return hex ? colourToQuery(hex) : '';
+		return colourToQuery(this.hex);
 	}
 
-	#syncUrl() {
-		const hex = this.hex;
-		if (!hex || typeof window === 'undefined') return;
-		const url = new URL(window.location.href);
-		url.searchParams.set('color', colourToQuery(hex));
-		window.history.replaceState(null, '', url);
-	}
+	pickHarmony = (index: number) => (this.harmonyIndex = index);
 
-	setValue = (event: Event) => {
-		this.inputValue = (event.target as HTMLInputElement).value;
-		this.#syncUrl();
+	/** The notation input's own read, after a pause and on Return. */
+	parse = (text: string) => {
+		const colour = readColour(text);
+		if (colour) this.state.use(colour);
+		return colour !== undefined;
 	};
 
-	pickColour = (event: Event) => {
-		this.inputValue = (event.target as HTMLInputElement).value;
-		this.#syncUrl();
-	};
-
-	copyRow = (value: string) => {
-		void navigator.clipboard.writeText(value);
-		this.copied = value;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
+	// the web field answered every keystroke; the kit input waits 400 ms
+	typeLive = (event: Event) => {
+		const colour = readColour(
+			(event.target as HTMLInputElement).value,
 		);
+		if (colour) this.state.use(colour);
 	};
+
+	pasteAnywhere = modifier(() => {
+		const paste = (event: ClipboardEvent) => {
+			if (editable(event.target)) return;
+			const colour = readColour(
+				event.clipboardData?.getData('text') ?? '',
+			);
+			if (!colour) return;
+			event.preventDefault();
+			this.state.use(colour);
+		};
+		document.addEventListener('paste', paste);
+		return () => document.removeEventListener('paste', paste);
+	});
+
+	// replaceState on every drag frame trips the browsers' navigation throttles
+	syncUrl = modifier((_element: Element, [code]: [string]) => {
+		if (!this.#urlArmed) {
+			this.#urlArmed = true;
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			const url = new URL(window.location.href);
+			url.searchParams.set('color', colourToQuery(code));
+			window.history.replaceState(
+				window.history.state,
+				'',
+				url,
+			);
+		}, urlPauseMs);
+		return () => window.clearTimeout(timer);
+	});
 
 	<template>
-		<div class="dt-atlas">
-			<div class="dt-atlas-input">
-				<span class="dt-atlas-swatch">
-					<span
-						style={{this.swatchStyle}}
-						aria-hidden="true"
-					></span>
-					<input
-						type="color"
-						value={{this.swatchHex}}
-						aria-label="Pick colour"
-						{{on "input" this.pickColour}}
-					/>
-				</span>
-				<input
-					type="text"
-					class="dt-atlas-field"
-					value={{this.inputValue}}
-					placeholder={{DEFAULT_COLOUR}}
-					aria-label="Colour value"
-					{{on "input" this.setValue}}
-				/>
-				{{#if this.nearestName}}
-					<span class="dt-atlas-name">nearest:
-						{{this.nearestName}}</span>
-				{{/if}}
-			</div>
-
-			{{#if this.hex}}
-				<div class="dt-atlas-cols">
-					<div class="dt-atlas-col">
-						<span
-							class="dt-atlas-title"
-						>Notations</span>
-						<div class="dt-atlas-table">
-							{{#each
-								this.notationRows
-								key="id"
-								as |row|
+		<CanonSplit
+			class="colour-atlas"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			{{this.pasteAnywhere}}
+			{{this.syncUrl this.hex}}
+			{{carryColour this.hex}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					<div class="colour-atlas-picture">
+						<CanonColourSolid
+							class="colour-atlas-solid"
+							@space={{this.state.space}}
+							@point={{this.state.point}}
+							@animated={{this.state.animated}}
+							@sliceAxis={{this.state.sliceAxis}}
+							@isOrtho={{this.state.isOrtho}}
+							@showsWhole={{this.state.showsWhole}}
+							@marks={{this.marks}}
+							@onChange={{this.state.pick}}
+							@closestName={{closestName}}
+						/>
+						<CanonColourStrip
+							@colour={{this.colour}}
+							@nameOf={{getColourName}}
+							@format={{this.format}}
+						/>
+						<CanonColourNotationInput
+							class="colour-atlas-input"
+							@colour={{this.colour}}
+							@text={{this.text}}
+							@onColour={{this.state.use}}
+							@parse={{this.parse}}
+							@label="Any notation"
+							{{on
+								"input"
+								this.typeLive
 							}}
-								<div
-									class="dt-atlas-notation"
-								>
-									<span
-										class="dt-atlas-notation-label"
-									>{{row.label}}</span>
-									<code
-									>{{row.value}}</code>
-									<button
-										type="button"
-										class="dt-atlas-copy"
-										aria-label="Copy
-											{{row.label}}"
-										{{on
-											"click"
-											(fn
-												this.copyRow
-												row.value
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												row.isCopied
-												"check"
-												"copy"
-											}}
-										/>
-									</button>
-								</div>
-							{{/each}}
-						</div>
+						/>
 					</div>
-					<div class="dt-atlas-col">
-						<span
-							class="dt-atlas-title"
-						>Gamut</span>
-						<div class="dt-atlas-hue">
-							<span
-								class="dt-atlas-marker"
-								style={{this.hueMarkerStyle}}
-							></span>
-						</div>
-						<div class="dt-atlas-plane">
-							<canvas
-								width="340"
-								height="170"
-								{{this.drawPlane
-									this.hex
-								}}
-							></canvas>
-							<span
-								class="dt-atlas-marker"
-								style={{this.planeMarkerStyle}}
-							></span>
-						</div>
-						<span
-							class="dt-atlas-caption"
-						>{{this.gamutCaption}}</span>
-
-						<span
-							class="dt-atlas-title"
-						>Contrast</span>
-						{{#each
-							this.contrastRows
-							key="label"
-							as |row|
-						}}
-							<div
-								class="dt-atlas-contrast"
-							>
-								<span
-									class="dt-atlas-chip"
-									style={{row.chipStyle}}
-								>Aa</span>
-								<code
-								>{{row.ratio}}
-									{{row.label}}</code>
-								<span
-									class="dt-atlas-verdict"
-								>AA
-									{{if
-										row.aa
-										"✓"
-										"✗"
-									}}
-									· AAA
-									{{if
-										row.aaa
-										"✓"
-										"✗"
-									}}
-									· large
-									{{if
-										row.large
-										"✓"
-										"✗"
-									}}</span>
-							</div>
-						{{/each}}
-					</div>
-				</div>
-
-				<div class="dt-atlas-section">
-					<span
-						class="dt-atlas-title"
-					>Harmonies</span>
-					{{#each
-						this.harmonyRows key="label"
-						as |row|
-					}}
-						<div class="dt-atlas-row">
-							<span
-								class="dt-atlas-row-label"
-							>{{row.label}}</span>
-							<span
-								class="dt-atlas-swatches"
-							>
-								{{#each
-									row.swatches
-									key="hex"
-									as |swatch|
-								}}
-									<i
-										style={{swatch.style}}
-										title={{swatch.hex}}
-									></i>
-								{{/each}}
-							</span>
-							<code
-								class="dt-atlas-row-caption"
-							>{{row.caption}}</code>
-						</div>
-					{{/each}}
-				</div>
-
-				<div class="dt-atlas-section is-flush">
-					<span
-						class="dt-atlas-title"
-					>Tints</span>
-					<div class="dt-atlas-strip">
-						{{#each
-							this.tints key="hex"
-							as |cell|
-						}}
-							<i
-								style={{cell.style}}
-								title={{cell.hex}}
-							></i>
-						{{/each}}
-					</div>
-					<span
-						class="dt-atlas-title"
-					>Shades</span>
-					<div class="dt-atlas-strip">
-						{{#each
-							this.shades key="hex"
-							as |cell|
-						}}
-							<i
-								style={{cell.style}}
-								title={{cell.hex}}
-							></i>
-						{{/each}}
-					</div>
-				</div>
-
-				<div class="dt-atlas-section">
-					<span class="dt-atlas-title">Colour
-						blindness</span>
-					{{#each
-						this.visionRows key="label"
-						as |row|
-					}}
-						<div class="dt-atlas-row">
-							<span
-								class="dt-atlas-row-label"
-							>{{row.label}}</span>
-							<span
-								class="dt-atlas-swatches"
-							>
-								<i
-									style={{row.style}}
-								></i>
-							</span>
-							<code
-								class="dt-atlas-row-caption"
-							>{{row.value}}</code>
-						</div>
-					{{/each}}
-				</div>
-
-				<AtlasOpenIn
-					@tools={{OPEN_IN}}
-					@query={{hash color=this.queryColour}}
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonColourControls
+						@state={{this.state}}
+						@hidesNotation={{true}}
+					/>
+				</CanonRows>
+				<CanonColourCard
+					@colour={{this.colour}}
+					@nameOf={{getColourName}}
+					@primaryFormat={{this.format}}
 				/>
-			{{else}}
-				<p class="dt-atlas-empty">Enter a valid colour
-					value to see conversions</p>
-			{{/if}}
-		</div>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Notations" />
+					{{#each this.notations as |line|}}
+						<CanonValueLine
+							@label={{line.label}}
+							@value={{line.value}}
+							@labelWidth={{92}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Gamut" />
+					<CanonTiles @items={{this.gamut}} />
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Contrast" />
+					{{#each this.contrast as |row|}}
+						<ContrastRow
+							@colour={{this.colour}}
+							@row={{row}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonPaletteCard
+					@title="Harmonies"
+					@colours={{this.harmony}}
+					@height={{96}}
+					@nameOf={{getColourName}}
+					@primaryFormat={{this.format}}
+				>
+					<:picker>
+						<CanonSegmented
+							@items={{harmonyTitles}}
+							@selected={{this.harmonyIndex}}
+							@columns={{2}}
+							@onChange={{this.pickHarmony}}
+						/>
+					</:picker>
+				</CanonPaletteCard>
+				<CanonPaletteCard
+					@title="Tints"
+					@colours={{this.tints}}
+					@height={{96}}
+					@nameOf={{getColourName}}
+					@primaryFormat={{this.format}}
+				/>
+				<CanonPaletteCard
+					@title="Shades"
+					@colours={{this.shades}}
+					@height={{96}}
+					@nameOf={{getColourName}}
+					@primaryFormat={{this.format}}
+				/>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text="Colour blindness"
+					/>
+					{{#each this.vision as |card|}}
+						<CanonColourCard
+							@colour={{card.colour}}
+							@name={{card.name}}
+							@layout="row"
+							@primaryFormat={{this.format}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Open in" />
+					<AtlasOpenIn
+						@tools={{openIn}}
+						@query={{hash
+							color=this.queryColour
+						}}
+					/>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

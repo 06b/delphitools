@@ -9,7 +9,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 // children carry the styling
 const UNSTYLED_CONTAINERS = new Set([
 	'dt-bc-rows',
-	'dt-atlas-table',
 	'dt-cc-table',
 	'dt-docconv-option-text',
 	'dt-shades-rows',
