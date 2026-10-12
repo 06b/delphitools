@@ -1,0 +1,91 @@
+.artwork-frame {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	padding: var(--canon-panel-padding);
+	gap: 6px;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.artwork-area {
+	display: grid;
+	flex: 1;
+	place-items: center;
+	min-block-size: 0;
+	container-type: size;
+}
+
+.artwork-box {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: min(100cqi, 100cqb * (var(--artwork-aspect)));
+	aspect-ratio: var(--artwork-aspect);
+}
+
+.artwork-compare {
+	position: absolute;
+	inset: 0;
+}
+
+.artwork-caption {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	font-weight: var(--canon-weight-semibold);
+	text-align: center;
+}
+
+.artwork-slot {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: var(--canon-frame) dashed
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 50%,
+			transparent
+		);
+	background: none;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+}
+
+.artwork-slot:focus-visible {
+	border-style: solid;
+	border-color: var(--canon-primary);
+	outline: none;
+}
+
+.artwork-slot--over {
+	background: var(--canon-accent-bg);
+	color: var(--canon-primary);
+}
+
+.artwork-slot-icon {
+	display: flex;
+}
+
+.artwork-slot-icon svg {
+	inline-size: 34px;
+	block-size: 34px;
+}
+
+.artwork-loader {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+	color: var(--canon-primary);
+}
+
+/* the detail shows pixels, not a smoothed blur */
+.artwork-grain .canon-image-compare img {
+	image-rendering: pixelated;
+}

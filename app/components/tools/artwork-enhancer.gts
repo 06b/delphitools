@@ -1,356 +1,540 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { not } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { downloadUrl } from 'delphitools-v2/lib/download';
-
-const MIN_OPACITY = 1;
-const MAX_OPACITY = 20;
-const MIN_SCALE = 1;
-const MAX_SCALE = 4;
+import { htmlSafe } from '@ember/template';
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonImageCompare from 'delphicanon/components/canon-image-compare';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { stem } from 'delphicanon/lib/files';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import {
+	detail,
+	detailRect,
+	enhance,
+	magnified,
+	noiseCanvas,
+} from 'delphitools-v2/components/tools/artwork-enhancer/noise';
+import './artwork-enhancer/artwork-enhancer.css';
 
 const RENDER_DEBOUNCE_MS = 120;
+const scales = [1, 2, 3, 4];
+const scaleNames = scales.map((scale) => `${scale}×`);
+const percentText = (value: number) => `${Math.round(value)} %`;
 
-export function fillNoise(
-	data: Uint8ClampedArray,
-	random: () => number = Math.random,
-): void {
-	for (let i = 0; i < data.length; i += 4) {
-		data[i] = Math.floor(random() * 256);
-		data[i + 1] = Math.floor(random() * 256);
-		data[i + 2] = Math.floor(random() * 256);
-		data[i + 3] = 255;
-	}
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Again = <template><IconSvg @name="refresh-cw" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+interface Pair {
+	before: string;
+	after: string;
 }
 
-export function noiseDimensions(
-	width: number,
-	height: number,
-	scale: number,
-): { width: number; height: number } {
+const toBlob = (canvas: HTMLCanvasElement) =>
+	new Promise<Blob | null>((resolve) =>
+		canvas.toBlob(resolve, 'image/png'),
+	);
+
+const fitStyle = (width: number, height: number) =>
+	htmlSafe(`--artwork-aspect: ${width} / ${height}`);
+
+// ?artSample ?artOpacity=<1-20> ?artScale=<1-4>: the iOS -artSample, -artOpacity, -artScale arguments
+function launchFlags() {
+	const query = new URLSearchParams(window.location.search);
+	const clamp = (
+		key: string,
+		min: number,
+		max: number,
+		fallback: number,
+	) => {
+		const value = Math.round(Number(query.get(key) ?? fallback));
+		return Number.isFinite(value)
+			? Math.min(max, Math.max(min, value))
+			: fallback;
+	};
 	return {
-		width: Math.ceil(width / scale),
-		height: Math.ceil(height / scale),
+		sample: query.has('artSample'),
+		opacity: clamp('artOpacity', 1, 20, 2),
+		scale: clamp('artScale', 1, 4, 1),
 	};
 }
 
-function noiseCanvas(
-	width: number,
-	height: number,
-	scale: number,
-): HTMLCanvasElement | null {
-	const size = noiseDimensions(width, height, scale);
-	const canvas = document.createElement('canvas');
-	canvas.width = size.width;
-	canvas.height = size.height;
-
-	const ctx = canvas.getContext('2d');
-	if (!ctx) return null;
-
-	const buffer = ctx.createImageData(size.width, size.height);
-	fillNoise(buffer.data);
-	ctx.putImageData(buffer, 0, 0);
-	return canvas;
-}
-
-function clamp(value: string, min: number, max: number): number {
-	return Math.max(min, Math.min(max, parseInt(value, 10) || min));
-}
-
-export default class ArtworkEnhancerTool extends Component {
-	@tracked hasImage = false;
+/** The port of ArtworkEnhancerViewController, on the web tool's noise. */
+export default class ArtworkEnhancer extends Component {
 	@tracked fileName = '';
 	@tracked imageWidth = 0;
 	@tracked imageHeight = 0;
-	@tracked opacity = 2;
-	@tracked noiseScale = 1;
-	@tracked resultImage: string | null = null;
+	@tracked opacity: number;
+	@tracked noiseScale: number;
+	@tracked picture?: Pair;
+	@tracked grain?: Pair;
+	@tracked result?: Blob;
+	@tracked over = false;
+	@tracked failed = false;
 
 	#image: HTMLImageElement | null = null;
-	#timer: ReturnType<typeof setTimeout> | null = null;
+	#noise: HTMLCanvasElement | null = null;
+	#timer?: ReturnType<typeof setTimeout>;
+	#input?: HTMLInputElement;
+	#sourceUrl?: string;
+	#grainBefore?: string;
+	#run = 0;
 
-	willDestroy() {
-		super.willDestroy();
-		if (this.#timer) clearTimeout(this.#timer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags();
+		this.opacity = flags.opacity;
+		this.noiseScale = flags.scale;
+		registerDestructor(this, () => {
+			clearTimeout(this.#timer);
+			this.#release();
+		});
+		if (flags.sample)
+			void drawnSample().then((file) => this.readFile(file));
 	}
 
-	readFile = (file: File) => {
-		this.fileName = file.name.replace(/\.[^.]+$/, '');
-		const reader = new FileReader();
-		reader.onload = () => {
-			const image = new Image();
-			image.onload = () => {
-				this.#image = image;
-				this.imageWidth = image.width;
-				this.imageHeight = image.height;
-				this.hasImage = true;
-				this.render();
-			};
-			image.src = reader.result as string;
-		};
-		reader.readAsDataURL(file);
-	};
+	get hasImage() {
+		return this.imageWidth > 0;
+	}
 
-	handleFileSelect = (event: Event) => {
+	get sizeText() {
+		return `${this.imageWidth} × ${this.imageHeight}`;
+	}
+
+	get aspect() {
+		return this.hasImage
+			? Math.min(
+					Math.max(
+						this.imageWidth /
+							this.imageHeight,
+						0.6,
+					),
+					2,
+				)
+			: 4 / 3;
+	}
+
+	get pictureFit() {
+		return this.hasImage
+			? fitStyle(this.imageWidth, this.imageHeight)
+			: fitStyle(4, 3);
+	}
+
+	get grainSide() {
+		return detailRect(
+			this.imageWidth,
+			this.imageHeight,
+			detail.side,
+		).side;
+	}
+
+	get grainFit() {
+		return fitStyle(1, 1);
+	}
+
+	get grainCaption() {
+		return `${this.grainSide}×${this.grainSide} px · ${detail.factor}×`;
+	}
+
+	get scaleIndex() {
+		return this.noiseScale - 1;
+	}
+
+	get busy() {
+		return this.hasImage && !this.picture?.after && !this.failed;
+	}
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// allow same-file selection.
+		// allow same-file selection
 		input.value = '';
+		if (file) this.readFile(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
+	dragOver = (event: DragEvent) => {
+		if (!event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readFile(file);
+		this.over = true;
 	};
 
-	// prevent drop navigation.
-	allowDrop = (event: DragEvent) => {
+	dragLeave = (event: DragEvent) => {
+		const root = event.currentTarget as Element;
+		if (!root.contains(event.relatedTarget as Node | null))
+			this.over = false;
+	};
+
+	drop = (event: DragEvent) => {
+		this.over = false;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		this.readFile(file);
 	};
 
-	setOpacity = (event: Event) => {
-		this.opacity = clamp(
-			(event.target as HTMLInputElement).value,
-			MIN_OPACITY,
-			MAX_OPACITY,
-		);
-		this.queueRender();
+	readFile = (file: File) => {
+		const url = URL.createObjectURL(file);
+		const image = new Image();
+		const run = ++this.#run;
+		image.onload = () => {
+			if (run !== this.#run || this.isDestroying) {
+				URL.revokeObjectURL(url);
+				return;
+			}
+			this.clear();
+			this.#run = run;
+			this.#sourceUrl = url;
+			this.#image = image;
+			this.fileName = stem(file.name);
+			this.imageWidth = image.width;
+			this.imageHeight = image.height;
+			this.picture = { before: url, after: '' };
+			const grain = magnified(image);
+			if (grain)
+				void toBlob(grain).then((blob) => {
+					if (!blob || run !== this.#run) return;
+					this.#grainBefore =
+						URL.createObjectURL(blob);
+					this.grain = {
+						before: this.#grainBefore,
+						after: this.grain?.after ?? '',
+					};
+				});
+			void this.render();
+		};
+		image.onerror = () => {
+			URL.revokeObjectURL(url);
+			if (run === this.#run) this.failed = true;
+		};
+		image.src = url;
 	};
 
-	setNoiseScale = (event: Event) => {
-		this.noiseScale = clamp(
-			(event.target as HTMLInputElement).value,
-			MIN_SCALE,
-			MAX_SCALE,
+	setOpacity = (value: number) => {
+		if (value === this.opacity) return;
+		this.opacity = value;
+		clearTimeout(this.#timer);
+		this.#timer = setTimeout(
+			() => void this.render(),
+			RENDER_DEBOUNCE_MS,
 		);
-		this.queueRender();
+	};
+
+	pickScale = (index: number) => {
+		const scale = scales[index];
+		if (!scale || scale === this.noiseScale) return;
+		this.noiseScale = scale;
+		this.#noise = null;
+		void this.render();
+	};
+
+	regenerate = () => {
+		this.#noise = null;
+		void this.render();
 	};
 
 	clear = () => {
-		if (this.#timer) clearTimeout(this.#timer);
-		this.#timer = null;
+		clearTimeout(this.#timer);
+		this.#run++;
+		this.#release();
 		this.#image = null;
-		this.hasImage = false;
-		this.resultImage = null;
+		this.#noise = null;
 		this.fileName = '';
+		this.imageWidth = 0;
+		this.imageHeight = 0;
+		this.picture = undefined;
+		this.grain = undefined;
+		this.result = undefined;
+		this.failed = false;
 	};
 
-	queueRender = () => {
-		if (this.#timer) clearTimeout(this.#timer);
-		this.#timer = setTimeout(this.render, RENDER_DEBOUNCE_MS);
-	};
-
-	render = () => {
-		this.#timer = null;
+	render = async () => {
 		const image = this.#image;
 		if (!image) return;
-
-		const canvas = document.createElement('canvas');
-		canvas.width = image.width;
-		canvas.height = image.height;
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
-
-		ctx.drawImage(image, 0, 0);
-
-		const noise = noiseCanvas(
+		const run = this.#run;
+		this.#noise ??= noiseCanvas(
 			image.width,
 			image.height,
 			this.noiseScale,
 		);
-		if (!noise) return;
-
-		ctx.imageSmoothingEnabled = false;
-		ctx.globalCompositeOperation = 'overlay';
-		ctx.globalAlpha = this.opacity / 100;
-		ctx.drawImage(noise, 0, 0, image.width, image.height);
-		ctx.globalCompositeOperation = 'source-over';
-		ctx.globalAlpha = 1;
-
-		this.resultImage = canvas.toDataURL('image/png');
+		const canvas =
+			this.#noise &&
+			enhance(image, this.#noise, this.opacity);
+		const grain = canvas && magnified(canvas);
+		const [blob, grainBlob] = await Promise.all([
+			canvas ? toBlob(canvas) : null,
+			grain ? toBlob(grain) : null,
+		]);
+		if (run !== this.#run || this.isDestroying) return;
+		if (this.picture?.after)
+			URL.revokeObjectURL(this.picture.after);
+		if (this.grain?.after) URL.revokeObjectURL(this.grain.after);
+		this.result = blob ?? undefined;
+		this.failed = !blob;
+		this.picture = {
+			before: this.#sourceUrl ?? '',
+			after: blob ? URL.createObjectURL(blob) : '',
+		};
+		this.grain = {
+			before: this.#grainBefore ?? '',
+			after: grainBlob ? URL.createObjectURL(grainBlob) : '',
+		};
 	};
 
 	download = () => {
-		if (!this.resultImage) return;
-		downloadUrl(
-			this.resultImage,
-			`${this.fileName || 'artwork'}-enhanced.png`,
-		);
+		if (this.result)
+			downloadBlob(
+				this.result,
+				`${this.fileName || 'artwork'}-enhanced.png`,
+			);
 	};
 
+	#release() {
+		for (const url of [
+			this.#sourceUrl,
+			this.#grainBefore,
+			this.picture?.after,
+			this.grain?.after,
+		])
+			if (url) URL.revokeObjectURL(url);
+		this.#sourceUrl = undefined;
+		this.#grainBefore = undefined;
+	}
+
 	<template>
-		<div
-			class="dt-art"
+		<CanonSplit
+			class="artwork-enhancer"
+			@halves={{true}}
+			@collapsesTo={{240}}
 			{{filePaste this.readFile accept="image/*"}}
+			{{on "dragover" this.dragOver}}
+			{{on "dragleave" this.dragLeave}}
+			{{on "drop" this.drop}}
 		>
-			<div class="dt-art-frame">
-				{{#if this.hasImage}}
-					<div class="dt-art-controls">
-						<div class="dt-art-control">
-							<div
-								class="dt-art-control-head"
-							>
-								<label
-									for="dt-art-opacity"
-								>Noise Opacity</label>
-								<span
-									class="dt-art-readout"
-								>{{this.opacity}}%</span>
-							</div>
-							<input
-								id="dt-art-opacity"
-								type="range"
-								class="dt-art-slider"
-								min="1"
-								max="20"
-								step="1"
-								value={{this.opacity}}
-								{{on
-									"input"
-									this.setOpacity
-								}}
-							/>
-							<p
-								class="dt-art-hint"
-							>Classic trick uses 2%
-								opacity</p>
-						</div>
-
-						<div class="dt-art-control">
-							<div
-								class="dt-art-control-head"
-							>
-								<label
-									for="dt-art-scale"
-								>Noise Scale</label>
-								<span
-									class="dt-art-readout"
-								>{{this.noiseScale}}x</span>
-							</div>
-							<input
-								id="dt-art-scale"
-								type="range"
-								class="dt-art-slider"
-								min="1"
-								max="4"
-								step="1"
-								value={{this.noiseScale}}
-								{{on
-									"input"
-									this.setNoiseScale
-								}}
-							/>
-							<p
-								class="dt-art-hint"
-							>Higher = blockier noise</p>
-						</div>
-					</div>
-
-					<div class="dt-art-preview">
-						<div
-							class="dt-art-preview-head"
-						>
-							<span
-								class="dt-art-preview-title"
-							>Preview</span>
-							<span
-								class="dt-art-readout"
-							>{{this.imageWidth}}
-								×
-								{{this.imageHeight}}px</span>
-						</div>
-						<div class="dt-art-canvas">
-							{{#if this.resultImage}}
-								<img
-									src={{this.resultImage}}
-									alt="Enhanced artwork"
-								/>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<div class="artwork-frame">
+						<div class="artwork-area">
+							{{#if this.picture}}
+								<div
+									class="artwork-box"
+									style={{this.pictureFit}}
+								>
+									<CanonImageCompare
+										class="artwork-compare"
+										@before={{this.picture.before}}
+										@after={{this.picture.after}}
+										@failed={{this.failed}}
+										@failure="Failed"
+										@beforeTitle="Original"
+										@afterTitle="Result"
+									/>
+								</div>
+							{{else}}
+								<button
+									type="button"
+									class="artwork-box artwork-slot
+										{{if
+											this.over
+											'artwork-slot--over'
+										}}"
+									style={{this.pictureFit}}
+									{{on
+										"click"
+										this.choose
+									}}
+								>
+									<span
+										class="artwork-slot-icon"
+									><IconSvg
+											@name="sparkles"
+										/></span>
+									<span
+									>Drop
+										your
+										artwork
+										here</span>
+								</button>
 							{{/if}}
 						</div>
-					</div>
-
-					<div class="dt-art-actions">
-						<button
-							type="button"
-							class="dt-art-btn"
-							{{on
-								"click"
-								this.render
-							}}
-						>
-							<Icon
-								@name="refresh-cw"
+						{{#if this.busy}}
+							<CanonLoader
+								class="artwork-loader"
 							/>
-							Regenerate
-						</button>
-						<button
-							type="button"
-							class="dt-art-btn is-divided"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-art-btn is-primary"
-							disabled={{not
-								this.resultImage
-							}}
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel
-								@label="Download PNG"
-							/>
-						</button>
+						{{/if}}
 					</div>
-				{{else}}
-					<label
-						class="dt-art-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.hasImage}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="artwork-source"
+							@title={{this.fileName}}
+							@detail={{this.sizeText}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					</CanonRows>
+					<CanonCanvas
+						class="artwork-grain"
+						@aspect={{1.5}}
+						@maxHeight={{360}}
+						@boxing="unlessWide"
+						@background="var(--canon-muted)"
 					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+						<div
+							class="artwork-frame artwork-frame--captioned"
+						>
+							<div
+								class="artwork-area"
+							>
+								<div
+									class="artwork-box"
+									style={{this.grainFit}}
+								>
+									<CanonImageCompare
+										class="artwork-compare"
+										@before={{this.grain.before}}
+										@after={{this.grain.after}}
+										@beforeTitle="Original"
+										@afterTitle="Result"
+									/>
+								</div>
+							</div>
+							<span
+								class="artwork-caption"
+							>{{this.grainCaption}}</span>
+						</div>
+					</CanonCanvas>
+				{{else if this.failed}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							@text="Failed"
+							@tone="warn"
+							@row={{true}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-art-drop-title"
-						>Drop your artwork here</span>
-						<span
-							class="dt-art-drop-hint"
-						>or click to browse, or paste</span>
-					</label>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			<div class="dt-art-note">
-				<p class="dt-art-note-title">About this
-					technique</p>
-				<p>Adding colour noise at low opacity with
-					overlay blend mode is a classic digital
-					art trick. It adds subtle texture and
-					colour variation that makes artwork feel
-					more organic and cohesive, similar to
-					the natural grain in traditional media.</p>
-			</div>
-		</div>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Noise" />
+					<CanonRow
+						class="artwork-opacity"
+						@title="Opacity"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.opacity}}
+							@min={{1}}
+							@max={{20}}
+							@step={{1}}
+							@readout={{percentText}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setOpacity}}
+						/>
+					</CanonRow>
+					<CanonStatus
+						@text="Classic trick uses 2% opacity"
+						@tone="muted"
+						@row={{true}}
+					/>
+					<CanonHeading @text="Scale" />
+					<CanonSegmented
+						class="artwork-scales"
+						@items={{scaleNames}}
+						@selected={{this.scaleIndex}}
+						@onChange={{this.pickScale}}
+					/>
+					<CanonStatus
+						@text="Higher = blockier noise"
+						@tone="muted"
+						@row={{true}}
+					/>
+					<CanonGrid>
+						<CanonButton
+							class="artwork-regenerate"
+							@text="Regenerate"
+							@icon={{Again}}
+							@disabled={{if
+								this.hasImage
+								false
+								true
+							}}
+							@onClick={{this.regenerate}}
+						/>
+						<CanonButton
+							class="artwork-download"
+							@kind="primary"
+							@text={{passAlong
+								"Download PNG"
+							}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{if
+								this.result
+								false
+								true
+							}}
+							@onClick={{this.download}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text="About this technique"
+					/>
+					<CanonStatus
+						@text="Adding colour noise at low opacity with overlay blend mode is a classic digital art trick. It adds subtle texture and colour variation that makes artwork feel more organic and cohesive, similar to the natural grain in traditional media."
+						@tone="muted"
+						@row={{true}}
+					/>
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

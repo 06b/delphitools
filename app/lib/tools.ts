@@ -269,6 +269,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/artwork-enhancer',
 				produces: ['image/png'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'background-remover',
