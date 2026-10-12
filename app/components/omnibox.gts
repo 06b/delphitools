@@ -11,12 +11,14 @@ import { LinkTo } from '@ember/routing';
 import { modifier } from 'ember-modifier';
 import Icon from 'delphitools-v2/components/icon';
 import ToolGrid from 'delphitools-v2/components/tool-grid';
+import SuiteBox from 'delphitools-v2/components/suite-box';
 import {
 	homeFeatured,
 	getToolById,
 	homeCategories,
 	type Tool,
 	allTools,
+	suites,
 } from 'delphitools-v2/lib/tools';
 import {
 	readInput,
@@ -534,6 +536,20 @@ export default class Omnibox extends Component<OmniboxSignature> {
 					@tools={{homeFeatured}}
 					class="is-featured"
 				/>
+			</section>
+
+			<section class="dt-section">
+				<h2 class="dt-section-title">
+					Suites
+					<span
+						class="dt-section-count"
+					>{{suites.length}}</span>
+				</h2>
+				<div class="dt-suites">
+					{{#each suites as |suite|}}
+						<SuiteBox @suite={{suite}} />
+					{{/each}}
+				</div>
 			</section>
 
 			{{#each homeCategories as |category|}}

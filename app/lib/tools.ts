@@ -1157,6 +1157,32 @@ const experimentsEntry: Tool = {
 	route: 'experiments',
 };
 
+export interface Suite {
+	tool: Tool;
+	route: string;
+	tagline: string;
+	word: string;
+	features: string[];
+}
+
+export const suites: Suite[] = [
+	{
+		id: 'substrata',
+		tagline: 'the delphitools image editor',
+		word: 'Edit images',
+		features: ['Layers', 'Masks', 'Crop', 'Text'],
+	},
+	{
+		id: 'errata',
+		tagline: 'the delphitools PDF editor',
+		word: 'Edit PDFs',
+		features: ['Redact', 'Forms', 'Sign', 'Impose'],
+	},
+].flatMap(({ id, ...rest }) => {
+	const tool = allTools.find((t) => t.id === id);
+	return tool?.route ? [{ tool, route: tool.route, ...rest }] : [];
+});
+
 export const homeFeatured: Tool[] = [
 	...featuredTools.filter((tool) => tool.highlight),
 	workflowsEntry,
