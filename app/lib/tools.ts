@@ -941,6 +941,8 @@ export const toolCategories: ToolCategory[] = [
 					'Generate styled QR codes with custom colors, shapes, and logos',
 				icon: 'qr-code',
 				href: '/tools/qr-genny',
+				canon: true,
+				expands: true,
 				produces: [
 					'image/png',
 					'image/svg+xml',
