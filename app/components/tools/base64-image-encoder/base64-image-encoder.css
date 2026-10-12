@@ -1,0 +1,123 @@
+/* the character wall replaces the banner's pattern, as on iOS */
+.b64-encoder .canon-split-banner .canon-canvas-content::before {
+	content: none;
+}
+
+.b64-mosaic {
+	position: absolute;
+	inset: 0;
+}
+
+.b64-mosaic canvas {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.b64-mosaic-ghost {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.b64-mosaic-figure {
+	position: absolute;
+	inset-block-end: 10px;
+	inset-inline-end: var(--canon-panel-padding);
+	opacity: 0;
+	transition: opacity 300ms ease-in-out;
+}
+
+.b64-mosaic-figure--shown {
+	opacity: 1;
+}
+
+.b64-top {
+	display: flex;
+	gap: var(--canon-hairline);
+}
+
+.b64-head {
+	display: flex;
+	flex: 1;
+	gap: 12px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 10px 12px 10px var(--canon-panel-padding);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+}
+
+.b64-head:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.b64-head--lit {
+	background: var(--canon-accent-bg);
+}
+
+.b64-thumb {
+	display: flex;
+	flex: none;
+	inline-size: 44px;
+	block-size: 44px;
+	overflow: hidden;
+	background: var(--canon-muted);
+}
+
+.b64-thumb img {
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+}
+
+.b64-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+}
+
+.b64-name {
+	overflow: hidden;
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-medium);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.b64-size {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.b64-remove {
+	flex: none;
+	inline-size: 56px;
+}
+
+.b64-text {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	line-height: 1.35;
+	word-break: break-all;
+	resize: none;
+}
+
+.b64-text:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}

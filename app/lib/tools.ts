@@ -445,6 +445,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'file-code',
 				href: '/tools/base64-image-encoder',
 				accepts: ['image/*'],
+				canon: true,
 			},
 		],
 	},
