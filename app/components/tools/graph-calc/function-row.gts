@@ -100,11 +100,13 @@ export default class GraphFunctionRow extends Component<RowSignature> {
 						<button
 							type="button"
 							class="graph-swatch"
-							style={{this.swatchStyle}}
 							aria-label={{this.swatchLabel}}
 							{{press}}
 							{{p.trigger}}
-						>{{@name}}</button>
+						><span
+								class="graph-swatch-fill"
+								style={{this.swatchStyle}}
+							>{{@name}}</span></button>
 					</:trigger>
 					<:content as |p|>
 						<div

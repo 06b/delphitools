@@ -104,18 +104,27 @@
 }
 
 .graph-swatch {
+	display: flex;
 	flex: none;
 	inline-size: 52px;
 	margin: 0;
 	padding: 0;
 	border: 0;
 	border-radius: 0;
+	background: none;
 	font-family: var(--canon-font);
 	font-size: var(--canon-text-body);
 	font-weight: var(--canon-weight-semibold);
 	cursor: pointer;
-	transition: background-color 250ms;
 	appearance: none;
+}
+
+/* the trigger's own style attribute holds the popover's anchor-name */
+.graph-swatch-fill {
+	display: grid;
+	flex: 1;
+	place-items: center;
+	transition: background-color 250ms;
 }
 
 @media (hover: hover) {
