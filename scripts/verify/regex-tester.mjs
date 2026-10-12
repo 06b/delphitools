@@ -71,7 +71,7 @@ check(
 await page.$$eval('.canon-grid button', (els) =>
 	els.find((el) => el.textContent.trim() === 'Email')?.click(),
 );
-await page.$eval('.canon-text-area', (el) => {
+await page.$eval('.rx-editor', (el) => {
 	el.value = 'a@b.co x c@d.org';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
 });
@@ -81,6 +81,21 @@ check(
 	'the worker recovers after a timeout',
 	seen.count === '2' && seen.status === undefined,
 	`${seen.count} ${seen.status}`,
+);
+
+const box = (sel) =>
+	page.$eval(sel, (el) => {
+		const r = el.getBoundingClientRect();
+		return [Math.round(r.x), Math.round(r.y), Math.round(r.width)];
+	});
+check(
+	'the editor sits exactly on the marks',
+	JSON.stringify(await box('.rx-editor')) ===
+		JSON.stringify(await box('.rx-marks')),
+);
+check(
+	'and the test string is typed in the picture, not the main pane',
+	!(await page.$('.canon-split-main textarea')),
 );
 
 await finish(browser);

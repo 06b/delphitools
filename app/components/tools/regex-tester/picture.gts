@@ -1,7 +1,10 @@
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
 import CanonFigure from 'delphicanon/components/canon-figure';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import {
 	failed,
 	pieces,
@@ -13,7 +16,10 @@ import {
 interface PictureSignature {
 	Args: {
 		text: string;
+		/** The text the outcome was run on; marks show only while it is `text`. */
+		shownText: string;
 		outcome: RegexOutcome;
+		onInput: (text: string) => void;
 		/** The picture's own height in px at its current width. */
 		onHeight: (height: number) => void;
 	};
@@ -57,6 +63,9 @@ function pieceStyle(piece: Piece) {
 	return htmlSafe(`${room}background: ${layers.join(', ')}`);
 }
 
+const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
+const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
+
 // .rx-picture-head: 6 px over a 44 px head
 const headHeight = 50;
 
@@ -70,9 +79,10 @@ const reportHeight = modifier(
 	},
 );
 
-// iOS MarkedTextView.reveal: first match into view
+// iOS MarkedTextView.reveal: first match into view, unless the reader is typing
 const revealFirst = modifier((scroller: HTMLElement, [key]: [unknown]) => {
 	void key;
+	if (scroller.contains(document.activeElement)) return;
 	const hit = scroller.querySelector<HTMLElement>('.rx-hit, .rx-caret');
 	if (!hit) return;
 	const top = hit.offsetTop - scroller.offsetTop;
@@ -128,9 +138,25 @@ export default class Picture extends Component<PictureSignature> {
 			: 'var(--canon-muted-foreground)';
 	}
 
+	// marks for an older text would sit on the wrong characters
 	get pieces() {
-		return pieces(this.args.text, this.matched?.matches ?? []);
+		const { text, shownText } = this.args;
+		const matches =
+			text === shownText ? this.matched?.matches : undefined;
+		return pieces(text, matches ?? []);
 	}
+
+	input = (event: Event) =>
+		this.args.onInput((event.target as HTMLTextAreaElement).value);
+
+	paste = async () => {
+		const text = await navigator.clipboard
+			.readText()
+			.catch(() => '');
+		if (text) this.args.onInput(text);
+	};
+
+	clear = () => this.args.onInput('');
 
 	get textStyle() {
 		const levels = Math.min(this.groups, railLevels);
@@ -167,16 +193,39 @@ export default class Picture extends Component<PictureSignature> {
 						>Groups</span>
 					</span>
 				{{/if}}
+				<span class="rx-picture-tools">
+					<CanonButton
+						@kind="cell"
+						@label="Paste"
+						@icon={{PasteIcon}}
+						@onClick={{this.paste}}
+					/>
+					<CanonButton
+						@kind="cell"
+						@label="Clear"
+						@icon={{ClearIcon}}
+						@disabled={{if
+							@text
+							false
+							true
+						}}
+						@onClick={{this.clear}}
+					/>
+				</span>
 			</div>
-			{{#if @text}}
+			<div
+				class="rx-picture-scroll"
+				{{revealFirst this.pieces}}
+			>
+				{{! the marks lie under a transparent textarea set in the same type }}
 				<div
-					class="rx-picture-scroll"
-					{{revealFirst this.pieces}}
+					class="rx-picture-text"
+					style={{this.textStyle}}
+					{{reportHeight @onHeight}}
 				>
 					<div
-						class="rx-picture-text"
-						style={{this.textStyle}}
-						{{reportHeight @onHeight}}
+						class="rx-marks"
+						aria-hidden="true"
 					>
 						{{~#each
 							this.pieces
@@ -204,16 +253,19 @@ export default class Picture extends Component<PictureSignature> {
 							{{~/if~}}
 						{{~/each~}}
 					</div>
+					<textarea
+						class="rx-editor"
+						rows="1"
+						placeholder="Test String"
+						aria-label="Test String"
+						autocomplete="off"
+						autocapitalize="off"
+						spellcheck="false"
+						value={{@text}}
+						{{on "input" this.input}}
+					></textarea>
 				</div>
-			{{else}}
-				<div
-					class="rx-picture-blank"
-					{{reportHeight @onHeight}}
-				>
-					<div class="rx-picture-blank-box">Test
-						String</div>
-				</div>
-			{{/if}}
+			</div>
 		</div>
 	</template>
 }

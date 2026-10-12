@@ -76,8 +76,7 @@
 }
 
 .rx-picture-head,
-.rx-picture-text,
-.rx-picture-blank {
+.rx-picture-text {
 	box-sizing: border-box;
 	inline-size: min(100%, 736px);
 	margin-inline: auto;
@@ -116,6 +115,7 @@
 }
 
 .rx-picture-text {
+	display: grid;
 	padding-block: 4px var(--canon-panel-padding);
 	color: var(--canon-foreground);
 	font-family: var(--rx-mono);
@@ -145,16 +145,50 @@
 	box-shadow: 0 0 0 1px var(--rx-caret);
 }
 
-.rx-picture-blank {
-	padding-block-end: var(--canon-panel-padding);
+.rx-picture-tools {
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-inline-start: auto;
 }
 
-.rx-picture-blank-box {
-	display: grid;
-	place-items: center;
-	block-size: 96px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+/* both in one cell, set alike, so the caret sits on the marks */
+.rx-marks,
+.rx-editor {
+	grid-area: 1 / 1;
+	min-inline-size: 0;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+.rx-editor {
+	box-sizing: border-box;
+	min-block-size: 96px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: transparent;
+	caret-color: var(--canon-foreground);
+	font: inherit;
+	line-height: inherit;
+	resize: none;
+	outline: none;
+}
+
+.rx-editor::placeholder {
 	color: var(--canon-muted-foreground);
+}
+
+/* empty: the dashed box iOS shows, now the place to type */
+.rx-editor:placeholder-shown {
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-family: var(--canon-font);
 	font-size: var(--canon-text-subheadline);
-	font-weight: var(--canon-weight-semibold);
+}
+
+.rx-editor:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
 }

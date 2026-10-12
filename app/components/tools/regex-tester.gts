@@ -12,7 +12,6 @@ import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
-import CanonTextInput from 'delphicanon/components/canon-text-input';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
@@ -207,7 +206,7 @@ export default class RegexTester extends Component {
 		);
 	};
 
-	// CanonTextInput waits for typing to pause
+	// the worker is quick; marks follow every keystroke, as the web tool did
 	setText = (text: string) => {
 		this.text = text;
 		this.refresh();
@@ -244,7 +243,9 @@ export default class RegexTester extends Component {
 			<:sidebar>
 				<CanonCanvas @height={{this.pictureHeight}}>
 					<Picture
-						@text={{this.shownText}}
+						@text={{this.text}}
+						@shownText={{this.shownText}}
+						@onInput={{this.setText}}
 						@outcome={{this.outcome}}
 						@onHeight={{this.measured}}
 					/>
@@ -332,15 +333,6 @@ export default class RegexTester extends Component {
 							/>
 						{{/each}}
 					</CanonGrid>
-				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Test String" />
-					<CanonTextInput
-						@value={{this.text}}
-						@height={{150}}
-						@label="Test String"
-						@onChange={{this.setText}}
-					/>
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text={{this.heading}} />
