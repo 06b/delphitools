@@ -1083,6 +1083,22 @@ body {
 	display: grid;
 	block-size: 100%;
 	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+	justify-items: center;
+	container-type: inline-size;
+
+	// ipad widths, not a 2000 px desktop
+	> * {
+		box-sizing: border-box;
+		inline-size: 100%;
+		max-inline-size: 1200px;
+	}
+}
+
+// hairlines only once the column stops short of the sheet's edges
+@container (width > 1200px) {
+	.dt-canon-tool > * {
+		border-inline: var(--canon-hairline) solid var(--canon-border);
+	}
 }
 
 .dt-main {
