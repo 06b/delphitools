@@ -121,7 +121,7 @@ if (!existsSync(join(dist, 'index.html'))) {
 		header: document
 			.querySelector('.dt-bar-title')
 			?.textContent.trim(),
-		rows: document.querySelectorAll('.dt-cc-row').length,
+		rows: document.querySelectorAll('.cc-ribbons').length,
 	}));
 	check(
 		'client-side navigation works from a prerendered page',
@@ -132,7 +132,7 @@ if (!existsSync(join(dist, 'index.html'))) {
 	check(
 		'and the tool actually runs',
 		navigated.rows === 8,
-		`${navigated.rows} rows`,
+		`${navigated.rows} ribbon sets`,
 	);
 
 	// window.__substrata dev-only via import.meta.env.DEV; shipping exposes doc model

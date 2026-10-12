@@ -120,14 +120,18 @@ await page.evaluate(() =>
 		.find((a) => a.getAttribute('href')?.includes('colour-converter'))
 		?.click(),
 );
-await page.waitForSelector('.dt-cc-value', { timeout: 15000 });
+await page.waitForSelector('.colour-converter .canon-colour-strip-value', {
+	timeout: 15000,
+});
 const landed = await page.evaluate(() => ({
 	search: location.search,
-	value: document.querySelector('.dt-cc-value')?.value,
+	value: document
+		.querySelector('.colour-converter .canon-colour-strip-value')
+		?.textContent.trim(),
 }));
 check(
 	'colour: the converter opens on the carried colour',
-	landed.search === '?color=2e7d32' && landed.value === '#2e7d32',
+	landed.search === '?color=2e7d32' && landed.value === '#2E7D32',
 	JSON.stringify(landed),
 );
 await visit(page, '/');

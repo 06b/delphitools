@@ -1,321 +1,255 @@
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import { carryColour, colourFromUrl } from 'delphitools-v2/lib/colour-query';
+import type Owner from '@ember/owner';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourControls, {
+	CanonColourSolidState,
+} from 'delphicanon/components/canon-colour-controls';
+import CanonColourNotationInput from 'delphicanon/components/canon-colour-notation-input';
+import CanonColourSolid from 'delphicanon/components/canon-colour-solid';
+import CanonColourStrip from 'delphicanon/components/canon-colour-strip';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
+	pointFor,
+	solidSpaces,
+	spaceNames,
+	type SolidSpace,
+} from 'delphicanon/lib/colour-space';
+import { getColourName } from 'delphitools-v2/lib/colour-names';
+import { carryColour } from 'delphitools-v2/lib/colour-query';
 import {
-	hexToRgb,
-	rgbToHex,
-	rgbToHsl,
-	rgbToXyz,
-	xyzToLab,
-	labToLch,
-	rgbToOklab,
-	type Triple,
-} from 'delphitools-v2/lib/colour-maths';
-import {
-	parseColour,
-	type ColourFormat,
-} from 'delphitools-v2/lib/colour-parse';
+	colourOf,
+	decimalRgb,
+	examples,
+	format,
+	launchFlags,
+	pointOf,
+	read,
+	valuesAt,
+	valuesOf,
+} from 'delphitools-v2/components/tools/colour-converter/notation';
+import Ribbons from 'delphitools-v2/components/tools/colour-converter/ribbons';
+import './colour-converter/colour-converter.css';
 
-export type { ColourFormat };
+const startColour = parseHex('3B82F6')!;
 
-export interface ColourValues {
-	hex: string;
-	rgb: Triple;
-	hsl: Triple;
-	lab: Triple;
-	lch: Triple;
-	oklab: Triple;
-	oklch: Triple;
-}
+/** Fits "Decimal RGB" in the caption face. */
+const labelWidth = 76;
 
-export const FORMATS: {
-	id: ColourFormat;
-	name: string;
-	placeholder: string;
-}[] = [
-	{ id: 'hex', name: 'HEX', placeholder: '#3b82f6' },
-	{ id: 'rgb', name: 'RGB', placeholder: '59, 130, 246' },
-	{
-		id: 'rgb-decimal',
-		name: 'Decimal RGB',
-		placeholder: '0.2314, 0.5098, 0.9647',
-	},
-	{ id: 'hsl', name: 'HSL', placeholder: '217, 91%, 60%' },
-	{ id: 'lab', name: 'LAB', placeholder: '54.5, 8.5, -65.5' },
-	{ id: 'lch', name: 'LCH', placeholder: '54.5, 66.0, 277.5' },
-	{ id: 'oklab', name: 'OKLAB', placeholder: '0.64, -0.01, -0.15' },
-	{ id: 'oklch', name: 'OKLCH', placeholder: '0.64, 0.15, 264' },
-];
+const closestName = (colour: Rgb) => getColourName(hex(colour));
 
-export function convert(
-	format: ColourFormat,
-	value: string,
-): ColourValues | null {
-	const parsed = parseColour(format, value);
-	if (!parsed) return null;
+/** The port of ColourConverterViewController, without its colour management. */
+export default class ColourConverter extends Component {
+	state: CanonColourSolidState;
 
-	const rgb = parsed.map((n) =>
-		Math.max(0, Math.min(255, Math.round(n))),
-	) as Triple;
-	const lab = xyzToLab(...rgbToXyz(...rgb));
-	const oklab = rgbToOklab(...rgb);
-
-	return {
-		hex: rgbToHex(...rgb),
-		rgb,
-		hsl: rgbToHsl(...rgb),
-		lab,
-		lch: labToLch(...lab),
-		oklab,
-		oklch: labToLch(...oklab),
-	};
-}
-
-export function formatOutput(format: ColourFormat, v: ColourValues): string {
-	switch (format) {
-		case 'hex':
-			return v.hex;
-		case 'rgb':
-			return `rgb(${v.rgb.join(', ')})`;
-		case 'rgb-decimal':
-			return `rgb(${v.rgb.map((n) => (n / 255).toFixed(4)).join(', ')})`;
-		case 'hsl':
-			return `hsl(${v.hsl[0].toFixed(1)}, ${v.hsl[1].toFixed(1)}%, ${v.hsl[2].toFixed(1)}%)`;
-		case 'lab':
-			return `lab(${v.lab[0].toFixed(2)} ${v.lab[1].toFixed(2)} ${v.lab[2].toFixed(2)})`;
-		case 'lch':
-			return `lch(${v.lch[0].toFixed(2)} ${v.lch[1].toFixed(2)} ${v.lch[2].toFixed(1)})`;
-		case 'oklab':
-			return `oklab(${v.oklab[0].toFixed(4)} ${v.oklab[1].toFixed(4)} ${v.oklab[2].toFixed(4)})`;
-		case 'oklch':
-			return `oklch(${v.oklch[0].toFixed(4)} ${v.oklch[1].toFixed(4)} ${v.oklch[2].toFixed(1)})`;
-	}
-}
-
-const EXAMPLES: [string, string][] = [
-	['HEX', '#3b82f6'],
-	['RGB', '59, 130, 246'],
-	['Decimal RGB', '0.2314, 0.5098, 0.9647'],
-	['HSL', '217, 91%, 60%'],
-	['LAB', '54.5 8.5 -65.5'],
-	['LCH', '54.5 66.0 277.5'],
-	['OKLAB', '0.64 -0.01 -0.15'],
-	['OKLCH', '0.64 0.15 264'],
-];
-
-const COPIED_MS = 1500;
-
-export default class ColourConverterTool extends Component {
-	@tracked inputFormat: ColourFormat = 'hex';
-	@tracked inputValue = colourFromUrl() ?? '#3b82f6';
-	@tracked copied: string | null = null;
-
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		// sliced row, rgb blue
+		this.state = new CanonColourSolidState({
+			space: flags.space ?? 'rgb',
+			colour: flags.colour ?? startColour,
+			activeRow: flags.row ?? 2,
+		});
+		this.state.viewPlane = flags.ortho;
+		if (flags.typed) this.#take(flags.typed);
 	}
 
-	get formats() {
-		return FORMATS;
+	get colour(): Rgb {
+		return this.state.colour;
 	}
 
-	get examples() {
-		return EXAMPLES.map(([label, example]) => ({ label, example }));
+	get hex() {
+		return hex(this.colour);
 	}
 
-	@cached
-	get values() {
-		return convert(this.inputFormat, this.inputValue);
+	get carried() {
+		return this.hex.toLowerCase();
 	}
 
-	get formatName() {
-		return (
-			FORMATS.find((f) => f.id === this.inputFormat)?.name ??
-			''
-		);
+	/** The solid's own numbers keep a grey's hue. */
+	values(space: SolidSpace) {
+		return space === this.state.space
+			? valuesAt(this.state.point, space)
+			: valuesOf(this.colour, space);
+	}
+
+	get text() {
+		return format(this.values(this.state.space), this.state.space);
 	}
 
 	get placeholder() {
-		return (
-			FORMATS.find((f) => f.id === this.inputFormat)
-				?.placeholder ?? ''
-		);
+		return examples[this.state.space];
 	}
 
-	get swatchHex() {
-		return this.values?.hex ?? '#ffffff';
+	get lit() {
+		return this.state.slices
+			? Math.min(this.state.activeRow, 2)
+			: undefined;
 	}
 
-	get swatchStyle() {
-		return htmlSafe(`background-color: ${this.swatchHex}`);
-	}
-
-	get rows() {
-		const values = this.values;
-		if (!values) return [];
-		return FORMATS.map((format) => {
-			const output = formatOutput(format.id, values);
+	get spaces() {
+		return solidSpaces.map((space) => {
+			const values = this.values(space);
 			return {
-				id: format.id,
-				name: format.name,
-				output,
-				isCopied: this.copied === output,
+				space,
+				label: spaceNames[space].toUpperCase(),
+				value: format(values, space),
+				values,
+				lit:
+					space === this.state.space
+						? this.lit
+						: undefined,
+				rgb: space === 'rgb',
+				oklch: space === 'oklch',
 			};
 		});
 	}
 
-	setValue = (event: Event) => {
-		this.inputValue = (event.target as HTMLInputElement).value;
+	get name() {
+		return getColourName(this.hex);
+	}
+
+	get decimal() {
+		return decimalRgb(this.colour);
+	}
+
+	/** Values in `space` reach the solid as its point, or as the colour they name. */
+	pick = (space: SolidSpace, values: number[], animated: boolean) => {
+		const point =
+			space === this.state.space
+				? pointOf(values, space)
+				: pointFor(
+						this.state.space,
+						colourOf(values, space),
+					);
+		this.state.setPoint(point, animated);
 	};
 
-	chooseFormat = (id: string) => {
-		const next = id as ColourFormat;
-		const values = this.values;
-		if (values) this.inputValue = formatOutput(next, values);
-		this.inputFormat = next;
-	};
+	#take(text: string) {
+		const values = read(text, this.state.space);
+		if (values) this.pick(this.state.space, values, true);
+		return values;
+	}
 
-	pickColour = (event: Event) => {
-		const hex = (event.target as HTMLInputElement).value;
-		if (!hexToRgb(hex)) return;
-		this.inputFormat = 'hex';
-		this.inputValue = hex;
-	};
+	/** The notation input's own read, after a pause and on Return; blank text is not marked as unread. */
+	parse = (text: string) =>
+		this.#take(text) !== undefined || text.trim() === '';
 
-	copy = async (value: string) => {
-		await navigator.clipboard.writeText(value);
-		this.copied = value;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	};
+	// the web field answered every keystroke; the kit input waits 400 ms
+	typeLive = (event: Event) =>
+		void this.#take((event.target as HTMLInputElement).value);
 
-	copyRow = (value: string) => void this.copy(value);
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
+	};
 
 	<template>
-		<div class="dt-cc" {{carryColour this.values.hex}}>
-			<div class="dt-cc-input">
-				<span class="dt-cc-swatch">
-					<span
-						style={{this.swatchStyle}}
-						aria-hidden="true"
-					></span>
-					<input
-						type="color"
-						value={{this.swatchHex}}
-						aria-label="Pick colour"
-						{{on "input" this.pickColour}}
-					/>
-				</span>
-
-				<span class="dt-cc-field">
-					<span class="dt-cc-label">Format</span>
-					<Select
-						@value={{this.inputFormat}}
-						@onValueChange={{this.chooseFormat}}
-					>
-						<SelectTrigger>
-							<SelectValue
-							>{{this.formatName}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each
-								this.formats
-								key="id"
-								as |format|
-							}}
-								<SelectItem
-									@value={{format.id}}
-								>{{format.name}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
-				</span>
-
-				<span class="dt-cc-field is-wide">
-					<span class="dt-cc-label">Value</span>
-					<input
-						type="text"
-						class="dt-cc-value"
-						value={{this.inputValue}}
-						placeholder={{this.placeholder}}
-						aria-label="Colour value"
-						{{on "input" this.setValue}}
-					/>
-				</span>
-			</div>
-
-			<div class="dt-cc-section">
-				<span class="dt-cc-heading">All Formats</span>
-			</div>
-
-			{{#if this.rows}}
-				<div class="dt-cc-table">
-					{{#each this.rows key="id" as |row|}}
-						<div class="dt-cc-row">
-							<span
-								class="dt-cc-name"
-							>{{row.name}}</span>
-							<code
-								class="dt-cc-out"
-							>{{row.output}}</code>
-							<button
-								type="button"
-								class="dt-cc-copy"
-								aria-label="Copy
-									{{row.name}}"
-								{{on
-									"click"
-									(fn
-										this.copyRow
-										row.output
-									)
-								}}
-							>
-								<Icon
-									@name={{if
-										row.isCopied
-										"check"
-										"copy"
-									}}
-								/>
-							</button>
-						</div>
-					{{/each}}
-				</div>
-			{{else}}
-				<p class="dt-cc-empty">Enter a valid colour
-					value to see conversions</p>
-			{{/if}}
-
-			<div class="dt-cc-section is-top">
-				<span class="dt-cc-heading">Format Examples</span>
-			</div>
-			<div class="dt-cc-examples">
-				{{#each this.examples key="label" as |example|}}
-					<div class="dt-cc-example">
-						<span
-							class="dt-cc-example-label"
-						>{{example.label}}</span>
-						<code>{{example.example}}</code>
+		<CanonSplit
+			class="colour-converter"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			{{carryColour this.carried}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					<div class="cc-picture">
+						<CanonColourSolid
+							class="cc-solid"
+							@space={{this.state.space}}
+							@point={{this.state.point}}
+							@animated={{this.state.animated}}
+							@sliceAxis={{this.state.sliceAxis}}
+							@isOrtho={{this.state.isOrtho}}
+							@showsWhole={{this.state.showsWhole}}
+							@onChange={{this.state.pick}}
+							@closestName={{closestName}}
+						/>
+						<CanonColourStrip
+							@colour={{this.colour}}
+							@nameOf={{getColourName}}
+						/>
 					</div>
-				{{/each}}
-			</div>
-		</div>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonColourNotationInput
+						class="cc-input"
+						@colour={{this.colour}}
+						@text={{this.text}}
+						@onColour={{this.state.use}}
+						@parse={{this.parse}}
+						@placeholder={{this.placeholder}}
+						@label="Any notation"
+						{{on "input" this.typeLive}}
+						{{on "focusin" this.selectAll}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonColourControls
+						@state={{this.state}}
+						@hidesNotation={{true}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="All Formats" />
+					<CanonValueLine
+						@label="Name"
+						@value={{this.name}}
+						@labelWidth={{labelWidth}}
+					/>
+					{{#each
+						this.spaces key="space"
+						as |line|
+					}}
+						{{#if line.rgb}}
+							<CanonHeading
+								@text="sRGB"
+							/>
+							<CanonValueLine
+								@label="HEX"
+								@value={{this.hex}}
+								@labelWidth={{labelWidth}}
+							/>
+						{{else if line.oklch}}
+							<CanonHeading
+								@text="D65"
+							/>
+						{{/if}}
+						<CanonValueLine
+							@label={{line.label}}
+							@value={{line.value}}
+							@labelWidth={{labelWidth}}
+						/>
+						{{#if line.rgb}}
+							<CanonValueLine
+								@label="Decimal RGB"
+								@value={{this.decimal}}
+								@labelWidth={{labelWidth}}
+							/>
+						{{/if}}
+						<Ribbons
+							@space={{line.space}}
+							@values={{line.values}}
+							@lit={{line.lit}}
+							@animated={{this.state.animated}}
+							@onPick={{this.pick}}
+						/>
+					{{/each}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

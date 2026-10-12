@@ -143,6 +143,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/colour-converter',
 				produces: [COLOUR_OUTPUT],
 				carryColour: true,
+				canon: true,
 			},
 			{
 				id: 'contrast-checker',

@@ -254,7 +254,7 @@ check(
 
 await visit(page, '/');
 await startFlow('Colour to gradient');
-await page.$eval('.dt-cc-value', (input) => {
+await page.$eval('.cc-input input', (input) => {
 	const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
 	set.call(input, '#ff0000');
 	input.dispatchEvent(new Event('input', { bubbles: true }));
