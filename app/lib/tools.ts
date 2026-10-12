@@ -690,7 +690,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Text, but big',
 				icon: 'case-upper',
 				href: '/tools/large-type',
-				wide: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'line-height-calc',

@@ -1,84 +1,118 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
-import Icon from 'delphitools-v2/components/icon';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import press from 'delphicanon/modifiers/canon-press';
+import { clamp, formatDecimal, parseDecimal } from 'delphicanon/lib/number';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Display from 'delphitools-v2/components/tools/large-type/display';
+import {
+	charClass,
+	fit,
+	marqueeSize,
+	padding,
+	sizes,
+	spaceGlyph,
+	type Size,
+} from 'delphitools-v2/components/tools/large-type/layout';
+import {
+	themeStyle,
+	themes,
+} from 'delphitools-v2/components/tools/large-type/themes';
+import './large-type/large-type.css';
 
-const CELL_PAD = 14;
+const FullScreenIcon = <template><IconSvg @name="maximize-2" /></template>;
 
-const BOX_PAD = 48;
+const speedRange = { min: 0.25, max: 4, step: 0.25 };
+const defaultAdvance = 0.6;
 
-const MIN_SIZE = 28;
-const MAX_SIZE = 360;
-const DEFAULT_SIZE = 112;
-const SIZE_STEP = 4;
+const legend = [
+	{ glyph: 'A', kind: 'letter', name: 'Letters' },
+	{ glyph: '1', kind: 'digit', name: 'Digits' },
+	{ glyph: '#', kind: 'special', name: 'Symbols' },
+	{ glyph: spaceGlyph, kind: 'space', name: 'Spaces' },
+];
 
-// prevent pixel overflow
-const FIT_SLACK = 0.98;
+let context: CanvasRenderingContext2D | null | undefined;
+let family: string | undefined;
+const advances = new Map<string, number>();
 
-const DEFAULT_ASPECT = 0.6;
-
-// make spaces visible
-const SPACE_GLYPH = '␣';
-
-export type CharClass = 'digit' | 'space' | 'letter' | 'special';
-
-export function charClass(ch: string): CharClass {
-	if (/\p{N}/u.test(ch)) return 'digit';
-	if (/\s/.test(ch)) return 'space';
-	if (/\p{L}/u.test(ch)) return 'letter';
-	return 'special';
-}
-
-const advanceCache = new Map<string, number>();
-let measureCtx: CanvasRenderingContext2D | null = null;
-
-// cache loaded font widths
-export function charAspect(ch: string, cacheable: boolean): number {
-	const cached = advanceCache.get(ch);
-	if (cached != null) return cached;
-
-	measureCtx ??= document.createElement('canvas').getContext('2d');
-	if (!measureCtx) return DEFAULT_ASPECT;
-
-	measureCtx.font = `100px ${getComputedStyle(document.body).fontFamily}`;
+/** Advance of `ch` in the mono face as a share of the size; cached once the fonts are in. */
+function advanceOf(ch: string, cacheable: boolean): number {
+	const known = advances.get(ch);
+	if (known !== undefined) return known;
+	context ??= document.createElement('canvas').getContext('2d');
+	if (!context) return defaultAdvance;
+	family ??=
+		getComputedStyle(document.documentElement)
+			.getPropertyValue('--canon-mono-font')
+			.trim() || 'monospace';
+	context.font = `100px ${family}`;
 	const measured =
-		measureCtx.measureText(ch === ' ' ? SPACE_GLYPH : ch).width /
-			100 || DEFAULT_ASPECT;
-	if (cacheable) advanceCache.set(ch, measured);
+		context.measureText(charClass(ch) === 'space' ? spaceGlyph : ch)
+			.width / 100 || defaultAdvance;
+	if (cacheable) advances.set(ch, measured);
 	return measured;
 }
 
-export function fitFontSize(
-	boxWidth: number,
-	count: number,
-	widest: number,
-): number {
-	if (boxWidth <= 0 || count === 0) return DEFAULT_SIZE;
-	const perCell = (boxWidth - BOX_PAD) / count - CELL_PAD;
-	return Math.max(
-		MIN_SIZE,
-		Math.min(MAX_SIZE, (perCell / widest) * FIT_SLACK),
-	);
-}
+const sizeText = (value: number) => `${Math.round(value)} px`;
+const speedText = (value: number) => `${formatDecimal(value, 2)}×`;
 
+/** The port of LargeTypeViewController. */
 export default class LargeTypeTool extends Component {
 	@tracked text = '';
-
-	@tracked auto = true;
-	@tracked size = DEFAULT_SIZE;
-	@tracked showPositions = true;
+	@tracked maximum = true;
+	@tracked manualSize: number = sizes.start;
+	@tracked positions = true;
 	@tracked colours = true;
-	@tracked boxWidth = 0;
+	@tracked themeIndex = 0;
+	@tracked marquee = false;
+	@tracked speed = 1;
+	@tracked box: Size = { width: 0, height: 0 };
 	@tracked fontsReady = false;
-
-	#display: HTMLElement | null = null;
 	#alive = true;
+	#display?: HTMLElement;
 
+	// ?ltText= ?ltSize=<px> ?ltPositions=no ?ltColours=no ?ltTheme=<0-4> ?ltMarquee=yes ?ltSpeed=<multiple>: the iOS launch flags
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		this.text = query.get('ltText') ?? '';
+		const size = parseDecimal(query.get('ltSize') ?? '');
+		if (size !== undefined) {
+			this.maximum = false;
+			this.manualSize = clamp(size, sizes.min, sizes.max);
+		}
+		this.positions = query.get('ltPositions') !== 'no';
+		this.colours = query.get('ltColours') !== 'no';
+		const theme = parseDecimal(query.get('ltTheme') ?? '');
+		if (theme !== undefined)
+			this.themeIndex = clamp(
+				Math.round(theme),
+				0,
+				themes.length - 1,
+			);
+		this.marquee = query.get('ltMarquee') === 'yes';
+		const speed = parseDecimal(query.get('ltSpeed') ?? '');
+		if (speed !== undefined)
+			this.speed = clamp(
+				speed,
+				speedRange.min,
+				speedRange.max,
+			);
 		// remeasure after font load
 		void document.fonts?.ready.then(() => {
 			if (this.#alive) this.fontsReady = true;
@@ -90,203 +124,292 @@ export default class LargeTypeTool extends Component {
 		this.#alive = false;
 	}
 
-	registerDisplay = modifier((element: HTMLElement) => {
-		this.#display = element;
-		const observer = new ResizeObserver(() => {
-			this.boxWidth = element.clientWidth;
-		});
-		observer.observe(element);
-		return () => {
-			observer.disconnect();
-			if (this.#display === element) this.#display = null;
-		};
-	});
-
-	// preserve code points
-	get chars() {
+	get glyphs() {
 		return Array.from(this.text);
 	}
 
-	get isEmpty() {
-		return this.chars.length === 0;
-	}
-
-	get count() {
-		return this.chars.length;
+	get countText() {
+		return `${this.glyphs.length} characters`;
 	}
 
 	get widest() {
 		const cacheable = this.fontsReady;
-		const chars = this.chars;
-		if (chars.length === 0) return DEFAULT_ASPECT;
 		return Math.max(
-			...chars.map((ch) => charAspect(ch, cacheable)),
+			defaultAdvance,
+			...[...new Set(this.glyphs)].map((ch) =>
+				advanceOf(ch, cacheable),
+			),
 		);
 	}
 
-	get effectiveSize() {
-		return this.auto
-			? fitFontSize(this.boxWidth, this.count, this.widest)
-			: this.size;
+	get advance() {
+		return advanceOf('M', this.fontsReady);
 	}
 
-	get sliderValue() {
-		return Math.round(this.effectiveSize);
+	/** The size in use: the slider's, or the largest that fits. */
+	get size() {
+		const manual = this.maximum ? undefined : this.manualSize;
+		const { width, height } = this.box;
+		if (this.marquee)
+			return marqueeSize(
+				{ width, height: height - padding * 2 },
+				this.advance,
+				manual,
+			);
+		return (
+			manual ??
+			fit(
+				this.glyphs,
+				this.widest,
+				width - padding * 2,
+				height - padding * 2,
+				this.positions,
+			)
+		);
 	}
 
-	// numeric style input only
-	get glyphStyle() {
-		return htmlSafe(`font-size: ${this.effectiveSize}px`);
+	get theme() {
+		return themes[this.themeIndex]!;
 	}
 
-	get cells() {
-		const colours = this.colours;
-		return this.chars.map((ch, index) => ({
+	get themeStyle() {
+		return themeStyle(this.theme);
+	}
+
+	get swatches() {
+		return themes.map((theme, index) => ({
 			index,
-			glyph: ch === ' ' ? SPACE_GLYPH : ch,
-			position: index + 1,
-			shaded: index % 2 === 0,
-			colourClass: colours ? `is-${charClass(ch)}` : '',
+			name: theme.name,
+			chosen: index === this.themeIndex,
+			style: htmlSafe(themeStyle(theme)),
 		}));
 	}
 
-	setText = (event: Event) => {
-		this.text = (event.target as HTMLInputElement).value;
+	get legendStyle() {
+		return htmlSafe(this.themeStyle);
+	}
+
+	get isEmpty() {
+		return this.text === '';
+	}
+
+	setText = (text: string) => (this.text = text);
+
+	setBox = (box: Size) => (this.box = box);
+
+	pickTheme = (index: number) => (this.themeIndex = index);
+
+	setMarquee = (on: boolean) => (this.marquee = on);
+
+	setSpeed = (value: number) => (this.speed = value);
+
+	setPositions = (on: boolean) => (this.positions = on);
+
+	setColours = (on: boolean) => (this.colours = on);
+
+	setMaximum = (on: boolean) => {
+		if (!on) this.manualSize = Math.round(this.size);
+		this.maximum = on;
 	};
 
-	useMaximum = () => {
-		this.auto = true;
+	// a drag turns Maximum off
+	setSize = (value: number) => {
+		this.manualSize = value;
+		this.maximum = false;
 	};
 
-	setSize = (event: Event) => {
-		this.auto = false;
-		this.size = Number((event.target as HTMLInputElement).value);
-	};
-
-	setShowPositions = (event: Event) => {
-		this.showPositions = (event.target as HTMLInputElement).checked;
-	};
-
-	setColours = (event: Event) => {
-		this.colours = (event.target as HTMLInputElement).checked;
-	};
+	registerDisplay = (element: HTMLElement) => (this.#display = element);
 
 	goFullscreen = () => {
 		void this.#display?.requestFullscreen().catch(() => undefined);
 	};
 
 	<template>
-		<div class="dt-lt">
-			<div class="dt-lt-controls">
-				<div class="dt-lt-entry">
-					<input
-						type="text"
-						class="dt-lt-input"
-						aria-label="Text"
-						placeholder="Type or paste"
-						value={{this.text}}
-						{{on "input" this.setText}}
+		<CanonSplit
+			class="large-type"
+			@halves={{true}}
+			@collapsesTo={{200}}
+		>
+			<:sidebar>
+				<CanonCanvas @aspect={{1}}>
+					<Display
+						@text={{this.text}}
+						@glyphs={{this.glyphs}}
+						@size={{this.size}}
+						@widest={{this.widest}}
+						@advance={{this.advance}}
+						@positions={{this.positions}}
+						@colours={{this.colours}}
+						@themeStyle={{this.themeStyle}}
+						@marquee={{this.marquee}}
+						@speed={{this.speed}}
+						@onInput={{this.setText}}
+						@onBox={{this.setBox}}
+						{{register
+							this.registerDisplay
+						}}
 					/>
-					<button
-						type="button"
-						class="dt-lt-fullscreen"
-						disabled={{this.isEmpty}}
-						{{on "click" this.goFullscreen}}
-					>
-						<Icon @name="maximize-2" />
-						Fullscreen
-					</button>
-				</div>
-
-				<div class="dt-lt-options">
-					<span class="dt-lt-legend">Size</span>
-					<button
-						type="button"
-						class="dt-lt-max
-							{{if
-								this.auto
-								'is-active'
-							}}"
-						{{on "click" this.useMaximum}}
-					>
-						Maximum
-					</button>
-					<input
-						type="range"
-						class="dt-lt-slider"
-						aria-label="Size"
-						min={{MIN_SIZE}}
-						max={{MAX_SIZE}}
-						step={{SIZE_STEP}}
-						value={{this.sliderValue}}
-						{{on "input" this.setSize}}
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonStatus
+						@text={{this.countText}}
+						@tone="muted"
+						@row={{true}}
+						aria-live="polite"
 					/>
-					<label class="dt-lt-toggle">
-						<input
-							type="checkbox"
-							class="dt-lt-switch"
-							checked={{this.showPositions}}
-							{{on
-								"change"
-								this.setShowPositions
-							}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Theme" />
+					<CanonGrid
+						class="lt-themes"
+						role="radiogroup"
+						aria-label="Theme"
+					>
+						{{#each
+							this.swatches
+							key="index"
+							as |swatch|
+						}}
+							<button
+								type="button"
+								role="radio"
+								class="lt-swatch"
+								aria-checked={{if
+									swatch.chosen
+									"true"
+									"false"
+								}}
+								aria-label={{swatch.name}}
+								style={{swatch.style}}
+								{{press}}
+								{{on
+									"click"
+									(fn
+										this.pickTheme
+										swatch.index
+									)
+								}}
+							>
+								<span
+									class="lt-swatch-sample"
+								>Aa<span
+										class="lt-swatch-digit"
+									>1</span></span>
+								<span
+									class="lt-swatch-name"
+								>{{swatch.name}}</span>
+							</button>
+						{{/each}}
+					</CanonGrid>
+					<CanonHeading @text="Display" />
+					<CanonRow @title="Marquee" as |titleId|>
+						<CanonSwitch
+							@on={{this.marquee}}
+							@onChange={{this.setMarquee}}
+							aria-labelledby={{titleId}}
 						/>
-						Positions
-					</label>
-					<label class="dt-lt-toggle">
-						<input
-							type="checkbox"
-							class="dt-lt-switch"
-							checked={{this.colours}}
-							{{on
-								"change"
-								this.setColours
-							}}
-						/>
-						Colours
-					</label>
-					<span class="dt-lt-count">{{this.count}}
-						characters</span>
-				</div>
-			</div>
-
-			<div class="dt-lt-stage">
-				<div
-					class="dt-lt-display"
-					{{this.registerDisplay}}
-				>
-					{{#if this.cells}}
-						<div class="dt-lt-strip">
+					</CanonRow>
+					{{#if this.marquee}}
+						<CanonRow
+							@title="Speed"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.speed}}
+								@min={{speedRange.min}}
+								@max={{speedRange.max}}
+								@step={{speedRange.step}}
+								@readout={{speedText}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setSpeed}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonGrid @columns={{2}}>
+						<CanonRow
+							@title="Positions"
+							@sizingTitle="Positions"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.positions}}
+								@onChange={{this.setPositions}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+						<CanonRow
+							@title="Colours"
+							@sizingTitle="Positions"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.colours}}
+								@onChange={{this.setColours}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					</CanonGrid>
+					{{#if this.colours}}
+						<CanonGrid
+							class="lt-legend"
+							style={{this.legendStyle}}
+						>
 							{{#each
-								this.cells
-								key="index"
-								as |cell|
+								legend
+								as |item|
 							}}
 								<div
-									class="dt-lt-cell
-										{{if
-											cell.shaded
-											'is-shaded'
-										}}"
+									class="lt-legend-cell"
 								>
 									<span
-										class="dt-lt-glyph
-											{{cell.colourClass}}"
-										style={{this.glyphStyle}}
-									>{{cell.glyph}}</span>
-									{{#if
-										this.showPositions
-									}}
-										<span
-											class="dt-lt-pos"
-										>{{cell.position}}</span>
-									{{/if}}
+										class="lt-legend-sample lt-glyph--{{item.kind}}"
+										aria-hidden="true"
+									>{{item.glyph}}</span>
+									<span
+										class="lt-legend-name"
+									>{{item.name}}</span>
 								</div>
 							{{/each}}
-						</div>
+						</CanonGrid>
 					{{/if}}
-				</div>
-			</div>
-		</div>
+					<CanonHeading @text="Size" />
+					<CanonRow @title="Maximum" as |titleId|>
+						<CanonSwitch
+							@on={{this.maximum}}
+							@onChange={{this.setMaximum}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonSlider
+						@value={{this.size}}
+						@min={{sizes.min}}
+						@max={{sizes.max}}
+						@step={{sizes.step}}
+						@readout={{sizeText}}
+						@label="Size"
+						@onChange={{this.setSize}}
+					/>
+					<CanonButton
+						@kind="primary"
+						@text="Full Screen"
+						@icon={{FullScreenIcon}}
+						@disabled={{this.isEmpty}}
+						@onClick={{this.goFullscreen}}
+					/>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }
+
+const register = modifier(
+	(
+		element: HTMLElement,
+		[callback]: [(element: HTMLElement) => void],
+	) => {
+		callback(element);
+	},
+);

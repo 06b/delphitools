@@ -1,0 +1,251 @@
+.large-type {
+	--lt-digit: light-dark(rgb(3 133 199), rgb(56 189 247));
+	--lt-special: light-dark(rgb(217 120 5), rgb(250 191 36));
+}
+
+/* the display: cells on the theme's background, the editor over them */
+.lt-display {
+	position: absolute;
+	inset: 0;
+	overflow: auto;
+	background: var(--canon-card);
+	overscroll-behavior: contain;
+}
+
+.lt-stage {
+	position: relative;
+	box-sizing: border-box;
+	min-block-size: 100%;
+	overflow: hidden;
+	background: var(--lt-background);
+	color: var(--lt-text);
+	font-family: var(--canon-mono-font);
+}
+
+.lt-cell {
+	--lt-spring: cubic-bezier(0.3, 1.25, 0.5, 1);
+
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	box-sizing: border-box;
+	padding: 6px;
+	transition:
+		translate 500ms var(--lt-spring),
+		inline-size 500ms var(--lt-spring),
+		block-size 500ms var(--lt-spring),
+		opacity 250ms;
+}
+
+@starting-style {
+	.lt-cell {
+		opacity: 0;
+	}
+}
+
+.lt-cell--shaded {
+	background: color-mix(in srgb, var(--lt-text) 7%, transparent);
+}
+
+.lt-cell--selected {
+	background: color-mix(in srgb, var(--canon-primary) 35%, transparent);
+}
+
+.lt-glyph,
+.lt-marquee-glyph {
+	color: var(--lt-text);
+	font-size: var(--lt-size);
+	line-height: 1.2;
+	white-space: pre;
+}
+
+.lt-glyph {
+	flex: 1;
+	transition: font-size 500ms var(--lt-spring);
+}
+
+.lt-glyph--digit {
+	color: var(--lt-digit-colour);
+}
+
+.lt-glyph--special {
+	color: var(--lt-special-colour);
+}
+
+.lt-glyph--space {
+	color: color-mix(in srgb, var(--lt-text) 35%, transparent);
+}
+
+.lt-position {
+	block-size: 18px;
+	color: color-mix(in srgb, var(--lt-text) 50%, transparent);
+	font-size: 11px;
+	line-height: 18px;
+}
+
+.lt-caret {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: 2px;
+	background: var(--canon-primary);
+	animation: lt-blink 1s steps(1) infinite;
+}
+
+@keyframes lt-blink {
+	50% {
+		opacity: 0;
+	}
+}
+
+.lt-marquee {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	display: flex;
+	white-space: nowrap;
+}
+
+.lt-marquee-glyph {
+	flex: none;
+	inline-size: var(--lt-advance);
+	text-align: center;
+}
+
+/* the editor's own text and caret are hidden; the cells show them */
+.lt-editor {
+	position: absolute;
+	inset: 0;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 100%;
+	margin: 0;
+	padding: 16px;
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: transparent;
+	caret-color: transparent;
+	font: 16px/1.2 var(--canon-mono-font);
+	resize: none;
+	outline: none;
+	cursor: text;
+}
+
+.lt-editor::selection {
+	background: transparent;
+}
+
+.lt-editor:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--canon-primary);
+}
+
+/* empty: the dashed box, now the place to type */
+.lt-editor:placeholder-shown {
+	inset: var(--canon-panel-padding);
+	inline-size: auto;
+	block-size: auto;
+	padding: 12px;
+	border: var(--canon-hairline) dashed
+		color-mix(in srgb, var(--lt-text) 60%, transparent);
+	color: var(--lt-text);
+	caret-color: var(--canon-primary);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.lt-editor:placeholder-shown::placeholder {
+	color: color-mix(in srgb, var(--lt-text) 60%, transparent);
+}
+
+.lt-editor:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
+	box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lt-cell,
+	.lt-glyph {
+		transition: none;
+	}
+
+	.lt-caret {
+		animation: none;
+	}
+}
+
+/* theme swatches and the legend, each in its theme's colours */
+.lt-swatch,
+.lt-legend-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 10px 4px;
+	background: var(--lt-background);
+	color: var(--lt-text);
+}
+
+.lt-swatch {
+	position: relative;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.lt-swatch[aria-checked="true"]::after {
+	position: absolute;
+	inset: 0;
+	border: 3px solid var(--canon-primary);
+	content: "";
+}
+
+.lt-swatch:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -5px;
+}
+
+.lt-swatch-sample,
+.lt-legend-sample {
+	font-family: var(--canon-mono-font);
+	font-size: 20px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.2;
+}
+
+.lt-swatch-digit {
+	color: var(--lt-digit-colour);
+}
+
+.lt-swatch-name,
+.lt-legend-name {
+	overflow: hidden;
+	max-inline-size: 100%;
+	color: color-mix(in srgb, var(--lt-text) 75%, transparent);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.lt-legend-cell {
+	padding-block: 8px;
+}
+
+.lt-legend-sample.lt-glyph--space {
+	color: color-mix(in srgb, var(--lt-text) 60%, transparent);
+}
+
+.lt-legend-sample.lt-glyph--letter {
+	color: var(--lt-text);
+}
