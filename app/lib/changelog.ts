@@ -11,30 +11,15 @@ export const RELEASES: Release[] = [
 		version: '2.2.0',
 		since: '2.1.1',
 		features: [
-			// ∑CG: changelog feature line, errata launch
-			//   spec: one or two sentences in the "pitch!" voice, "Errata:" prefix or lead with the name; new beta PDF editor at /errata, in the sidebar next to Substrata; open a PDF or image, change existing text in place, move and delete existing text and images, add text, pen, shapes, highlights and a signature, reorder/rotate/delete/insert pages, export a PDF; everything runs locally in the browser
-			//   sample: "Errata: A real PDF editor, in your browser. Change the text that's already there, move things around, sign it, and export. It's in beta, so tell us what breaks!"
-			'∑CG',
-			// ∑CG: changelog feature line, errata toolbox
-			//   spec: one or two sentences, "Errata:" prefix; the Toolbox holds page tools that apply to the document and stay undoable until export: organise (grid of pages, drag to reorder, duplicate, delete), page size, rotate and flip, insert page, crop, page numbers, watermark, stamp, compress, impose, true redaction (content is removed, not covered), comments, prepare form (add fillable fields), and preflight; keep it to a handful of named tools if the list is too long
-			//   sample: "Errata: The Toolbox has page numbers, watermarks, stamps, real redaction, fillable forms, comments, imposition and a preflight check, and every one of them can be undone."
-			'∑CG',
+			'Errata: Edit PDFs in the browser. Yes, I went there. Still in beta, so calibrate your expectations. Of course, completely free, unlimited, local and open source as always.',
+			'',
 		],
 		fixes: [
-			// ∑CG: changelog fix line, imposer rotated and cropped pages
-			//   spec: one sentence, "PDF Imposer:" prefix; source pages with a rotation, a crop box, or no content came out blank, misplaced or sideways on the imposed sheet, now they impose upright and in place
-			//   sample: "PDF Imposer: Rotated and cropped pages now land upright and in the right spot."
-			'∑CG',
-			// ∑CG: changelog fix line, substrata undo after a control
-			//   spec: one sentence, "Substrata:" prefix; after clicking a checkbox, toggle or slider in the editor, Cmd/Ctrl+Z and the other shortcuts did nothing until you clicked the canvas, now they work straight away
-			//   sample: "Substrata: Undo works again right after you touch a slider or checkbox."
-			'∑CG',
+			'PDF Imposer: Rotated and cropped pages now land upright and in the right spot.',
+			'Substrata: Undo works again right after you touch a slider or checkbox.',
 		],
 		technical: [
-			// ∑CG: changelog technical line, mupdf
-			//   spec: one sentence; Errata loads MuPDF (WebAssembly, self-hosted, fetched only when a tool needs it) for redaction and reading existing form fields; no file leaves the browser
-			//   sample: "Errata uses MuPDF, loaded on demand, for redaction and forms. Your files still never leave your browser."
-			'∑CG',
+			'Errata uses MuPDF, loaded on demand, for redaction and forms.',
 		],
 	},
 	{

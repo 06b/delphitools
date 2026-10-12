@@ -771,10 +771,7 @@ export class RedactPanel extends ReplacePanel {
 		},
 	});
 
-	// ∑CG: redact mode bar hint chip, beside the mark count
-	//   spec: at most 32 chars, no period; drag on a page marks an area, a click on a text line marks that line
-	//   sample: "Drag an area or click a line"
-	redactHint = '∑CG';
+	redactHint = 'Drag an area or click a line';
 
 	willDestroy() {
 		super.willDestroy();
