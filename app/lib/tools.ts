@@ -727,6 +727,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Count words, characters and more',
 				icon: 'book-open',
 				href: '/tools/word-counter',
+				canon: true,
 			},
 		],
 	},
