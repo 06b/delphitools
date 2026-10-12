@@ -211,7 +211,6 @@ const unary = new Set([
 	'atan',
 	'asec',
 	'acsc',
-	'acot',
 	'sinh',
 	'cosh',
 	'tanh',
@@ -229,10 +228,16 @@ const unary = new Set([
 ]);
 const binary: Record<string, string> = {
 	nthroot: 'nthRoot',
-	mod: 'mod',
 	min: 'min',
 	max: 'max',
 	log: 'log',
+};
+
+// mathjs differs from iOS MathExpression: its acot is atan(1/x), its mod floors
+const rewrites: Record<string, (args: string[]) => string | undefined> = {
+	acot: ([a, more]) => (more ? undefined : `(pi/2-atan(${a}))`),
+	mod: ([a, b, more]) =>
+		b && !more ? `(${a}-${b}*fix(${a}/${b}))` : undefined,
 };
 
 function emit(node: Node): string | undefined {
@@ -271,6 +276,17 @@ function emit(node: Node): string | undefined {
 			return wrap(node.a);
 		case 'call': {
 			const n = node.items.length;
+			const rewrite = rewrites[node.name];
+			if (rewrite) {
+				const args = node.items.map(wrap);
+				return args.length &&
+					args.every(
+						(a): a is string =>
+							a !== undefined,
+					)
+					? rewrite(args)
+					: undefined;
+			}
 			const name =
 				n === 1 &&
 				(unary.has(node.name) || node.name === 'log')

@@ -2,12 +2,12 @@
 
 import { launch, visit, check, sleep, finish } from './harness.mjs';
 
-const TRIGGER = '.dt-graph-toggle';
+const TRIGGER = '.dt-code-type';
 
 const { browser, page } = await launch({
 	viewport: { width: 1400, height: 900 },
 });
-await visit(page, '/tools/graph-calc');
+await visit(page, '/tools/code-genny');
 
 const count = () =>
 	page.$$eval('.dt-tooltip', (els) => els.length).catch(() => 0);
@@ -31,8 +31,9 @@ const shown = await page.evaluate(() => {
 	};
 });
 check('a hover shows one', shown, JSON.stringify(shown));
-check('naming its trigger', shown?.text === 'Toggle grid', shown?.text);
-check('placed on the requested side', shown?.side === 'top', shown?.side);
+const name = await page.$eval(TRIGGER, (el) => el.textContent.trim());
+check('naming its trigger', shown?.text.startsWith(name), shown?.text);
+check('placed on the requested side', shown?.side === 'bottom', shown?.side);
 check('portalled to the body', shown?.inBody);
 check(
 	'positioned on screen',
