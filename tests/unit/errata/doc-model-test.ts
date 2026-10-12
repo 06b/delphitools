@@ -412,7 +412,7 @@ module('Unit | errata | doc-model | flip', function () {
 			flipPage(blankPage(400, 600), 'horizontal'),
 			1,
 		);
-		// mirrored to top-right, turned to bottom-right
+		// top-right, then bottom-right
 		near(
 			assert,
 			displayed(page, 0, 0),

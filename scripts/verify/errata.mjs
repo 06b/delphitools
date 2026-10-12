@@ -287,7 +287,7 @@ await page.mouse.move(box3.x + box3.w / 2 + 100, box3.y + box3.h / 2 + 40, { ste
 await page.mouse.up();
 await sleep(300);
 check('crop waits for apply', !(await doc()).pages[2].crop);
-// the draft rect, in client pixels and displayed page points
+// client px, page points
 const cropDraft = () => page.evaluate(() => {
 	const c = window.__errataCanvas;
 	const a = c.getActiveObject();
@@ -299,7 +299,6 @@ const cropDraft = () => page.evaluate(() => {
 let draft = await cropDraft();
 check('crop draft shown', !!draft && !draft.rotate && Math.abs(draft.w - 200 / (box3.w / 500)) < 2, JSON.stringify(draft));
 const cropZ = box3.w / 500;
-// move by 20pt right, 10pt down
 const mid = { x: (draft.tl.x + draft.br.x) / 2, y: (draft.tl.y + draft.br.y) / 2 };
 await page.mouse.move(mid.x, mid.y);
 await page.mouse.down();
@@ -309,7 +308,6 @@ await page.mouse.up();
 await sleep(250);
 const movedDraft = await cropDraft();
 check('crop draft moves', !!movedDraft && Math.abs(movedDraft.tl.x - draft.tl.x - 20 * cropZ) < 2 && Math.abs(movedDraft.tl.y - draft.tl.y - 10 * cropZ) < 2, JSON.stringify(movedDraft));
-// narrow by 40pt from the right handle
 await page.mouse.move(movedDraft.mr.x, movedDraft.mr.y);
 await page.mouse.down();
 await page.mouse.move(movedDraft.mr.x - 20 * cropZ, movedDraft.mr.y, { steps: 4 });
@@ -331,7 +329,6 @@ check('crop draft gone', await page.evaluate(() => !window.__errataCanvas.getObj
 const modeOpen = (m) => page.$(`.err-mode.is-open[data-mode="${m}"]`).then((e) => !!e);
 const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l || b.getAttribute('aria-label') === l)?.click(), label);
 
-// page size panel from the document menu: a4 keeps the page landscape, fit, apply
 await page.click('.sub-topbar-menu-btn');
 await page.evaluate(() => [...document.querySelectorAll('.sub-topbar-item')].find((b) => b.textContent.includes('Page size'))?.click());
 await sleep(500);
@@ -350,7 +347,6 @@ check('resize stored', cropped.resize?.mode === 'fit' && Math.round(cropped.resi
 check('thumb re-rendered', await page.$$eval('.err-page-thumb', (imgs) =>
 		Math.abs(imgs[2].naturalWidth / imgs[2].naturalHeight - 859 / 612) < 0.05));
 
-// page size with scope: a range of pages, one undo step
 const sizesOf = async () => (await doc()).pages.map((p) => p.resize && [Math.round(p.resize.width), Math.round(p.resize.height)]);
 const sizesBefore = await sizesOf();
 await page.click('[data-toolbox]');
@@ -366,10 +362,10 @@ await page.type('.err-mode.is-open input[aria-label="Range"]', '1-2');
 await sleep(100);
 await clickIn('Apply');
 await sleep(400);
-// element.click() leaves focus in the range input
+// click() keeps input focused
 await page.evaluate(() => document.activeElement?.blur());
 const sizesScoped = await sizesOf();
-// a3 landscape plus the seeded bleed; page 1 is turned, so stored unrotated
+// turned page stored unrotated
 check('page size range applied', JSON.stringify(sizesScoped.slice(0, 2)) === '[[859,1208],[1208,859]]' && JSON.stringify(sizesScoped[2]) === JSON.stringify(sizesBefore[2]), JSON.stringify(sizesScoped));
 await page.keyboard.down('Meta');
 await page.keyboard.press('z');
@@ -429,7 +425,7 @@ const texts = async () => (await doc()).pages.map((p) => p.objects.filter((o) =>
 
 await openCell('Page numbers');
 check('numbers mode bar', await modeOpen('page-numbers'));
-// field columns: distinct label x positions in the body grid
+// distinct label x positions
 const fieldColumns = (sel = '.err-mode.is-open') => page.$$eval(`${sel} .err-mode-body > .err-mode-field > .sub-tool-row-label`, (ls) => new Set(ls.map((l) => Math.round(l.getBoundingClientRect().left))).size);
 const panelBox = () => page.$eval('.err-mode.is-open', (e) => {
 	const r = e.getBoundingClientRect();
@@ -519,7 +515,6 @@ await sleep(500);
 afterTexts = await texts();
 check('stamp applied to range', afterTexts[0].includes('APPROVED') && !afterTexts[1].includes('APPROVED') && afterTexts[2].includes('APPROVED'), JSON.stringify(afterTexts));
 
-// custom label, bold, blue, bottom-left, current page
 await openCell('Stamp');
 const stampCells = await anchorCells();
 check('stamp position picker', stampCells.length === 9 && stampCells.filter((c) => c.endsWith(':true')).join() === 'top-right:true', JSON.stringify(stampCells));
@@ -572,7 +567,6 @@ const undoStep = async () => {
 const loadPdf = (b) => getDocument({ data: b.slice(), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
 const exportBytes = async () => new Uint8Array(await page.evaluate(() => window.__errata.export()));
 
-// compress replaces the document in place, undoably, without a download
 const beforeCompress = await doc();
 await openCell('Compress');
 check('compress mode bar', await modeOpen('compress'));
@@ -611,7 +605,6 @@ await clickIn('Cancel');
 await sleep(300);
 check('compress mode closed', !(await modeOpen('compress')));
 
-// closing mid-apply discards the replace
 const beforeAbort = await doc();
 await openCell('Impose');
 const abortBusy = await page.evaluate(() => new Promise((resolve) => {
@@ -644,7 +637,6 @@ await sleep(600);
 check('abort adds no undo step', (await doc()).source === afterCompress.source);
 await undoStep();
 
-// impose replaces the document with sheets, undoably
 const beforeImpose = await doc();
 const sheetsOf = async () => {
 	const out = await exportBytes();
@@ -670,7 +662,7 @@ check('impose mode bar', await modeOpen('impose'));
 check('impose form grid', (await fieldColumns('.err-mode.is-open[data-mode="impose"]')) >= 2);
 await imposeApply();
 const afterImpose = await doc();
-// 3 pages pad to 4
+// padded to 4 pages
 const landscape = await sheetsOf();
 check('impose replaces source', afterImpose.source !== beforeImpose.source && afterImpose.pages.length === 2 && objectCount(afterImpose) === 0, `${afterImpose.pages.length}`);
 check('impose renders sheets', (await page.evaluate(() => window.__errata.activePdf()))?.pages === 2);
@@ -693,7 +685,6 @@ check('impose crop marks off', portrait.paths < landscape.paths, JSON.stringify(
 await undoStep();
 check('impose undo again', (await doc()).source === beforeImpose.source && (await doc()).pages.length === 3);
 
-// organise page grid
 const orgCells = () => page.$$('.err-organise-cell');
 const pressed = () => page.$$eval('.err-organise-cell', (cs) => cs.map((c) => c.getAttribute('aria-pressed') === 'true'));
 const orgClick = (label) => page.evaluate((l) => document.querySelector(`.err-organise button[aria-label="${l}"]`)?.click(), label);
@@ -755,7 +746,7 @@ check('organise insert blank', orgDoc.pages.length === 4 && orgDoc.pages[2].sour
 await undo();
 await sleep(200);
 
-// page 1 after page 3
+// page 1 to end
 await page.evaluate(() => {
 	const cells = [...document.querySelectorAll('.err-organise-cell')];
 	const dt = new DataTransfer();
@@ -805,7 +796,7 @@ await page.waitForSelector('.err-preflight.is-open .err-preflight-group', { time
 const groups = await findings();
 check('preflight pages', JSON.stringify(groups.filter((g) => g.head !== 'Document').map((g) => g.head)) === JSON.stringify(['Page 1', 'Page 2', 'Page 3']), JSON.stringify(groups.map((g) => g.head)));
 check('preflight checks run', groups.every((g) => g.head === 'Document' || g.issues.includes('No BleedBox defined')));
-// watermark opacity only exists in the edited export
+// transparency comes from watermark
 check('preflight sees edits', groups.find((g) => g.head === `Page ${wmPage + 1}`)?.issues.some((m) => /transparency effects/.test(m)), JSON.stringify(groups));
 check('preflight counts', /\d+ (warnings?|errors?|info)/.test(await page.$eval('.err-mode.is-open[data-mode="preflight"]', (e) => e.textContent)));
 await page.evaluate(() => [...document.querySelectorAll('.err-preflight-group')].find((g) => g.querySelector('.dt-preflight-page-btn')?.textContent.trim() === 'Page 3')?.querySelector('.dt-preflight-issue')?.click());
@@ -821,7 +812,6 @@ await openCell('Preflight');
 await page.keyboard.press('Escape');
 await sleep(300);
 check('preflight escape', !(await preflightOpen()));
-// low-res image issue highlight
 const pngBytes = await page.evaluate(() => {
 	const c = document.createElement('canvas');
 	c.width = c.height = 20;
@@ -860,7 +850,6 @@ await sleep(200);
 check('preflight highlight click clears', (await highlighted()).length === 0);
 await clickIn('Close');
 await sleep(300);
-// comments: a source /Text note (with popup) imports as a comment; notes export once, as /Annots
 const cdoc = await PDFDocument.create();
 const cpage = cdoc.addPage([400, 500]);
 const cctx = cdoc.context;
@@ -931,7 +920,6 @@ check('comment list', options.length === 2 && options[0] === '1 · Imported note
 await page.evaluate(() => [...document.querySelectorAll('.dt-select-item')].find((e) => e.textContent.includes('Imported'))?.click());
 await sleep(400);
 check('comment list opens popover', (await popover())?.text === 'Imported note\nline two' && (await page.evaluate(() => !!window.__errataCanvas.getActiveObject())));
-// typed text commits on switch
 await page.focus('.err-note-text');
 await page.evaluate(() => document.querySelector('.err-note-text').select());
 await page.keyboard.type('Edited');
@@ -954,7 +942,6 @@ await page.keyboard.up('Shift');
 await page.keyboard.up('Meta');
 await sleep(300);
 check('comment redo', (await comments()).length === 3);
-// move and delete like other objects
 await page.mouse.move(...at(200, 250));
 await page.mouse.down();
 await page.mouse.move(...at(220, 260), { steps: 6 });
@@ -998,7 +985,7 @@ const fresh = notes[1];
 check('export comment dict', fresh.lookup(PDFName.of('T')).decodeText() === 'Ruby' && !!fresh.get(PDFName.of('M')) && fresh.get(PDFName.of('P')) === commented.getPage(0).ref);
 check('export comment rect', notes[0].get(PDFName.of('Rect')).toString().replace(/\s+/g, ' ') === '[ 50 400 70 420 ]', notes[0].get(PDFName.of('Rect')).toString());
 
-// redact; page 2 nests page 1
+// second page nests first
 const rd = await PDFDocument.create();
 const helv = await rd.embedFont(StandardFonts.Helvetica);
 const rp = rd.addPage([400, 500]);
@@ -1150,7 +1137,6 @@ check('redact undo restores content', (await linesOf(0)).includes('TOPSECRET'), 
 const pendingText = (await (await (await loadPdf(await exportBytes())).getPage(1)).getTextContent()).items.map((i) => i.str).join(' ');
 check('redact export burns pending marks', !pendingText.includes('TOPSECRET') && pendingText.includes('KEEPME'), pendingText);
 
-// a source form: a text field on page 1, a checkbox on a /Rotate 90 page 2
 const formSrc = await PDFDocument.create();
 formSrc.addPage([400, 500]);
 formSrc.addPage([400, 500]).setRotation(degrees(90));
@@ -1226,7 +1212,6 @@ await page.keyboard.up('Meta');
 await sleep(200);
 check('form rename undo', (await fieldObjs())[0].name === 'email');
 
-// a click on the page deselects; the bar edits the draft again
 await drag(fr0, [300, 450], [301, 451]);
 check('form click deselects', (await fieldObjs()).length === 1 && (await nameValue()) === 'email');
 await setInput('Name', '');
@@ -1250,7 +1235,7 @@ await drag(fr0, [200, 300], [360, 340]);
 fobjs = await fieldObjs();
 check('form five types', fobjs.map((o) => `${o.field}:${o.name}`).join() === 'text:email,radio:radio,dropdown:dropdown,checkbox:checkbox,signature:signature', fobjs.map((o) => `${o.field}:${o.name}`).join());
 
-// fields move like other objects; a resize bakes into w/h
+// resize bakes into w/h
 const placed = fobjs[0];
 const z0 = fr0.w / 400;
 await page.mouse.move(fr0.x + placed.cx * z0, fr0.y + placed.cy * z0);
@@ -1277,7 +1262,6 @@ const scaled = (await fieldObjs())[0];
 check('form resize bakes', Math.abs(scaled.w - placed.w * 1.5) < 0.5 && scaled.scaleX === 1, `${scaled.w} ${scaled.scaleX}`);
 check('form stays selected after rebuild', (await nameValue()) === 'email');
 
-// page 2 is turned: its field is written upright for the viewer
 await page.keyboard.press(']');
 await sleep(700);
 const fr1 = await page.evaluate(() => window.__errata.pageRect(1));
@@ -1304,7 +1288,6 @@ check('form export pages', onPage(formOut, form.getTextField('email'), 0) && onP
 const mk = form.getTextField('turned').acroField.getWidgets()[0].getAppearanceCharacteristics()?.getRotation();
 check('form turned page widget upright', mk === 90, String(mk));
 
-// saved signatures: a tall and a wide upload, every thumb inside its own cell
 const sigDir = mkdtempSync(join(tmpdir(), 'errata-sig-'));
 for (const [name, w, h] of [['tall', 60, 600], ['wide', 1200, 80]]) {
 	const url = await page.evaluate((w, h) => {
@@ -1334,7 +1317,6 @@ check('signature thumbs fit cells', thumbs.length === 3 && thumbs.every(inside),
 check('signature thumbs do not overlap', thumbs.every((t, i) => thumbs.every((u, j) => i === j || apart(t.img, u.img))), JSON.stringify(thumbs.map((t) => t.img)));
 await page.keyboard.press('Escape');
 
-// rotate and flip strip, insert strip, crop cancel: a fresh two-page file
 const stripSrc = await PDFDocument.create();
 const stripFont = await stripSrc.embedFont(StandardFonts.HelveticaBold);
 stripSrc.addPage([400, 500]).drawText('MMMM', { x: 20, y: 420, size: 48, font: stripFont });
@@ -1343,7 +1325,7 @@ await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'strip
 await page.waitForFunction(() => window.__errata.doc()?.name === 'strips', { timeout: 10000 });
 await sleep(800);
 const pagesNow = async () => (await doc()).pages;
-// centroid of dark pixels across the page, 0 left .. 1 right, 0 top .. 1 bottom
+// dark-pixel centroid, 0..1
 const inkAt = (index) => page.evaluate((i) => {
 	const c = window.__errataCanvas;
 	const el = c.lowerCanvasEl;
@@ -1405,7 +1387,7 @@ check('flip one undo step', !sp[0].flipX && sp[0].rotation === 0, JSON.stringify
 await clickIn('Rotate right');
 await clickIn('Flip horizontal');
 await sleep(300);
-// turned page: a displayed left-right mirror is a source top-bottom one
+// turned: mirror swaps axis
 sp = await pagesNow();
 check('flip on a turned page', sp[0].rotation === 90 && sp[0].flipY === true && !sp[0].flipX, JSON.stringify(sp[0]));
 await clickIn('All');
@@ -1413,7 +1395,7 @@ await clickIn('Flip vertical');
 await sleep(900);
 sp = await pagesNow();
 check('flip vertical all pages', sp[0].flipX === true && sp[0].flipY === true && sp[1].flipY === true && !sp[1].flipX, JSON.stringify(sp.map((p) => [p.flipX, p.flipY])));
-// turned then mirrored both ways: a half turn of the turned page
+// both flips: half turn
 const inkTurned = await inkAt(0);
 check('flipped turned raster', !!inkTurned && inkTurned.x < 0.3 && inkTurned.y > 0.5, JSON.stringify(inkTurned));
 await clickIn('Close');
@@ -1432,9 +1414,9 @@ check('export flip blank page', !flipOut.getPage(1).node.Contents());
 const flipPdf = await getDocument({ data: new Uint8Array(await flipOut.save()), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
 const flipText = await (await flipPdf.getPage(1)).getTextContent();
 const flipItem = flipText.items.find((it) => it.str === 'MMMM');
-// both flips: the run starts near the source top-right corner, drawn mirrored
+// run starts top-right, mirrored
 check('export flip moves the text', !!flipItem && flipItem.transform[0] < 0 && flipItem.transform[3] < 0 && flipItem.transform[4] > 300 && flipItem.transform[5] < 100, JSON.stringify(flipItem?.transform));
-// turned and mirrored both ways: displayed (x, y) is source (399 - y, x)
+// source pixel (399-y, x)
 {
 	const raster = (b) => new mupdf.PDFDocument(b).loadPage(0).toPixmap(mupdf.Matrix.identity, mupdf.ColorSpace.DeviceGray, false);
 	const want = raster(await stripSrc.save());
@@ -1494,7 +1476,6 @@ await clickIn('Close');
 await sleep(400);
 check('insert strip closes', !(await modeOpen('insert')));
 
-// crop cancel leaves the page alone
 await openCell('Crop');
 const cr = await page.evaluate((i) => window.__errata.pageRect(i), await page.evaluate(() => window.__errata.pageIndex()));
 await page.mouse.move(cr.x + cr.w * 0.3, cr.y + cr.h * 0.3);
@@ -1508,7 +1489,6 @@ await sleep(400);
 check('crop cancel', (await pagesNow()).every((p) => !p.crop) && !(await cropDraft()) && !(await page.$('.err-mode.is-open')));
 check('crop cancel removes draft', await page.evaluate(() => !window.__errataCanvas.getObjects().some((o) => o.type === 'rect' && o.strokeDashArray && o.selectable && o.evented !== false)));
 
-// escape out of crop drops the draft; c starts fresh
 const dashedDraft = () => page.evaluate(() => window.__errataCanvas.getObjects().some((o) => o.type === 'rect' && o.strokeDashArray && o.selectable && o.evented !== false));
 await openCell('Crop');
 const ecr = await page.evaluate((i) => window.__errata.pageRect(i), await page.evaluate(() => window.__errata.pageIndex()));
@@ -1527,7 +1507,6 @@ check('crop key starts fresh', (await modeOpen('crop')) && !(await dashedDraft()
 await page.keyboard.press('Escape');
 await sleep(400);
 
-// undo after a panel checkbox or slider
 const cropNow = async () => (await pagesNow())[await page.evaluate(() => window.__errata.pageIndex())].crop;
 for (const [cell, control] of [['Stamp', 'input[aria-label="Bold"]'], ['Watermark', 'input[type="range"][aria-label="Opacity"]']]) {
 	await page.evaluate(() => window.__errata.crop({ x: 0, y: 0, width: 100, height: 100 }));
@@ -1541,7 +1520,6 @@ for (const [cell, control] of [['Stamp', 'input[aria-label="Bold"]'], ['Watermar
 	await sleep(400);
 }
 
-// closed panels take no focus; escape blurs a panel field first
 check('closed panels inert', await page.$$eval('.err-mode:not(.is-open)', (els) => els.length > 5 && els.every((e) => e.inert)));
 check('closed panel refuses focus', await page.evaluate(() => {
 	const b = document.querySelector('.err-mode:not(.is-open) button');
@@ -1560,7 +1538,6 @@ await page.keyboard.press('Tab');
 await sleep(200);
 check('shell stays unscrolled', await page.$eval('.sub-shell', (e) => e.scrollTop === 0));
 
-// switching stamp modes keeps only the open panel's preview
 for (const [m, want] of [['page-numbers', /^\d+ \/ \d+$/], ['watermark', /^DRAFT$/], ['stamp', /^(?!DRAFT$|\d+ \/ \d+$)/]]) {
 	await page.evaluate((id) => window.__errata.setMode(id), m);
 	await sleep(300);

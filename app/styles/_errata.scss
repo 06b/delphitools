@@ -133,7 +133,7 @@
 	}
 }
 
-// a4 proportion, two control rows tall
+// a4 ratio, two rows
 .err-anchor-page {
 	display: grid;
 	grid-template-rows: repeat(3, minmax(0, 1fr));
@@ -388,7 +388,6 @@
 	}
 }
 
-// tool panel, in the markup bar's slot: a header row, then a grid of fields
 .err-mode {
 	--err-h: 26px;
 	--err-gap: 8px;
@@ -403,7 +402,7 @@
 	flex-direction: column;
 	inline-size: max-content;
 	max-inline-size: calc(100% - 32px);
-	// the containing block is the bar slot, not the stage
+	// containing block: bar slot
 	max-block-size: calc(100dvh - 120px);
 	border: 1px solid var(--border);
 	background-color: var(--background);
@@ -519,7 +518,7 @@
 	}
 }
 
-// columns of label + control pairs; fields subgrid so labels align per column
+// subgrid aligns column labels
 .err-mode-body {
 	--cols: 3;
 
@@ -609,7 +608,6 @@
 	}
 }
 
-// icon beside label
 .err-strip-cell {
 	grid-auto-flow: column;
 	justify-content: center;
@@ -639,7 +637,7 @@
 	}
 }
 
-// app.scss loads after this file, so the trigger rules need two classes
+// two classes beat app.scss
 .err-mode .dt-select-trigger,
 .err-mode .dt-paper-combo-trigger {
 	gap: var(--err-gap);
@@ -675,7 +673,6 @@
 	}
 }
 
-// preflight findings, docked right above the mode bar
 .err-preflight {
 	position: absolute;
 	inset-block: 16px 80px;

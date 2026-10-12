@@ -143,7 +143,7 @@ function dictAt(
 	return asDict(lib, dict.get(lib.PDFName.of(key)), context);
 }
 
-// pdf box: [llx lly urx ury]
+// [llx lly urx ury]
 function arrayToBox(lib: PdfLib, arr: PDFArray): PageBox {
 	const nums: number[] = [];
 	for (let i = 0; i < arr.size(); i++) {
@@ -178,10 +178,11 @@ function extractFontData(
 	descriptor: PDFDict,
 	context: PDFContext,
 ): { data: Uint8Array; extension: string } | null {
+	// type 1, truetype, cff
 	const entries: [string, string][] = [
-		['FontFile', '.pfb'], // type 1
-		['FontFile2', '.ttf'], // truetype
-		['FontFile3', '.otf'], // cff / opentype
+		['FontFile', '.pfb'],
+		['FontFile2', '.ttf'],
+		['FontFile3', '.otf'],
 	];
 
 	for (const [key, ext] of entries) {
@@ -374,7 +375,7 @@ export async function analyseWithPdfLib(
 				baseFont instanceof lib.PDFString
 					? baseFont.decodeText()
 					: 'Unknown';
-			// strip 6-letter subset prefix (ABCDEF+…)
+			// strip subset tag prefix
 			fontName = fontName.replace(/^[A-Z]{6}\+/, '');
 
 			const subtype = fontDict.get(lib.PDFName.of('Subtype'));
@@ -408,7 +409,7 @@ export async function analyseWithPdfLib(
 			if (!embedded && STANDARD_14_FONTS.has(fontName))
 				embedded = true;
 
-			// type0 embeds at descendant cidfont
+			// embedded in descendant cidfont
 			if (!embedded && fontType === 'Type0') {
 				const descendants = fontDict.get(
 					lib.PDFName.of('DescendantFonts'),
@@ -781,7 +782,7 @@ export function imagePlacements(
 	return out;
 }
 
-// pdf.js image may never resolve
+// pdf.js images may hang
 function imageSize(
 	objs: {
 		get(objId: string, callback?: (obj: unknown) => void): unknown;

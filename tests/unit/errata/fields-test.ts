@@ -96,7 +96,7 @@ module('Unit | errata | fields', function () {
 	});
 
 	test('fieldRectToUser and rotation on a turned page', function (assert) {
-		// displayed 500 x 400; the field sits near the displayed top-left
+		// field near displayed top-left
 		const page = rotated(90);
 		const r = fieldRectToUser(page, field());
 		assert.deepEqual(
@@ -104,7 +104,7 @@ module('Unit | errata | fields', function () {
 			[50, 40, 20, 100],
 		);
 		assert.strictEqual(fieldRotation(page, field()), 90);
-		// carried by rotatePage: angle follows the page
+		// angle carried by rotatePage
 		assert.strictEqual(
 			fieldRotation(page, field({ angle: 90 })),
 			0,

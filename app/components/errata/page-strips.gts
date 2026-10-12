@@ -124,7 +124,6 @@ export class RotatePanel extends Component<Signature> {
 		return this.indices === null;
 	}
 
-	// one undo step
 	turn = (run: Turn) => {
 		const pages = this.doc.current?.pages ?? [];
 		const ids = new Set(

@@ -166,7 +166,6 @@ export default class Organise extends Component {
 		closeMode();
 	};
 
-	// off-screen thumbs wait
 	lazyThumb = modifier((img: HTMLImageElement, [page]: [ErrataPage]) => {
 		this.#pageOf.set(img, page);
 		if (this.#visible.has(img)) paintThumb(img, page, THUMB_PX);
@@ -242,7 +241,6 @@ export default class Organise extends Component {
 		this.dropAt = null;
 	};
 
-	// clicks between cells
 	deselect = modifier((grid: HTMLElement) => {
 		const onClick = (e: MouseEvent) => {
 			if (e.target === grid) this.selected = new Set();

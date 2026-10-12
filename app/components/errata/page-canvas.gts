@@ -1208,7 +1208,6 @@ export default class PageCanvas extends Component {
 			};
 		};
 
-		// clamped to the page
 		const clampRect = (slot: Slot, r: PageCrop): PageCrop => {
 			const x = Math.max(0, Math.min(r.x, slot.width));
 			const y = Math.max(0, Math.min(r.y, slot.height));
@@ -1222,7 +1221,6 @@ export default class PageCanvas extends Component {
 			};
 		};
 
-		// adjustable until apply
 		let cropRect: Rect | null = null;
 		let cropShown: CropDraft | null = null;
 		const showCropDraft = () => {
