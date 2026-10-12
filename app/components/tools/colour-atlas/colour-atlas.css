@@ -4,7 +4,7 @@
 		ui-monospace, "SF Mono", menlo, consolas, monospace;
 }
 
-/* the picture: the solid over the strip and the notation input */
+/* the picture: the solid over the strip */
 .colour-atlas-picture {
 	display: flex;
 	flex-direction: column;
@@ -16,13 +16,19 @@
 	min-block-size: 0;
 }
 
-.colour-atlas-input {
-	flex: none;
-	border-block-start: var(--canon-hairline) solid var(--canon-border);
+/* first and large: typing a colour is the main way in */
+.colour-atlas .colour-atlas-input {
+	min-block-size: var(--canon-primary-height);
 }
 
-.colour-atlas-input .canon-text-cell {
+.colour-atlas .colour-atlas-input .canon-text-cell {
 	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-big-number);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.colour-atlas .colour-atlas-input > .canon-button {
+	inline-size: var(--canon-primary-height);
 }
 
 /* contrast rows: chip 56 wide, the ratio cell beside it */

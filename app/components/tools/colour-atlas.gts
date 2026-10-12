@@ -162,6 +162,13 @@ export default class ColourAtlas extends Component {
 	};
 
 	// the web field answered every keystroke; the kit input waits 400 ms
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
+	};
+
 	typeLive = (event: Event) => {
 		const colour = readColour(
 			(event.target as HTMLInputElement).value,
@@ -234,22 +241,22 @@ export default class ColourAtlas extends Component {
 							@nameOf={{getColourName}}
 							@format={{this.format}}
 						/>
-						<CanonColourNotationInput
-							class="colour-atlas-input"
-							@colour={{this.colour}}
-							@text={{this.text}}
-							@onColour={{this.state.use}}
-							@parse={{this.parse}}
-							@label="Any notation"
-							{{on
-								"input"
-								this.typeLive
-							}}
-						/>
 					</div>
 				</CanonCanvas>
 			</:sidebar>
 			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonColourNotationInput
+						class="colour-atlas-input"
+						@colour={{this.colour}}
+						@text={{this.text}}
+						@onColour={{this.state.use}}
+						@parse={{this.parse}}
+						@label="Any notation"
+						{{on "input" this.typeLive}}
+						{{on "focusin" this.selectAll}}
+					/>
+				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonColourControls
 						@state={{this.state}}

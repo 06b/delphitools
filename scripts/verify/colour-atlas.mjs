@@ -227,9 +227,6 @@ const phone = await page.evaluate(async () => {
 		wide:
 			document.documentElement.scrollWidth >
 			document.documentElement.clientWidth,
-		input: document
-			.querySelector('.colour-atlas-input')
-			.getBoundingClientRect().bottom,
 	};
 });
 check(
@@ -237,7 +234,32 @@ check(
 	phone.full > 240 && Math.round(phone.band) === 240,
 	`${phone.full} ${phone.band}`,
 );
-check('the field stays in the band', phone.input <= 52 + 240 + 1, `${phone.input}`);
 check('no horizontal scroll', !phone.wide);
+
+await page.setViewport({ width: 1400, height: 1000 });
+await page.goto(`${BASE}/tools/colour-atlas`, { waitUntil: 'networkidle2' });
+await sleep(600);
+const field = await page.evaluate(() => {
+	const input = document.querySelector('.colour-atlas-input');
+	const first = document.querySelector('.canon-split-main > *');
+	return {
+		first: first?.contains(input),
+		height: Math.round(input.getBoundingClientRect().height),
+		size: getComputedStyle(input.querySelector('input')).fontSize,
+	};
+});
+check('the colour field opens the settings', field.first);
+check(
+	'and is large',
+	field.height >= 68 && field.size === '36px',
+	`${field.height} ${field.size}`,
+);
+
+await page.click('.colour-atlas-input input');
+await sleep(100);
+await page.keyboard.type('#4cb86a');
+await sleep(300);
+const typed = await page.$eval('.colour-atlas-input input', (el) => el.value);
+check('a click selects the value, so typing replaces it', typed === '#4cb86a', typed);
 
 await finish(browser);
