@@ -172,6 +172,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'rainbow',
 				href: '/tools/harmony-genny',
 				carryColour: true,
+				canon: true,
 			},
 			{
 				id: 'palette-collection',

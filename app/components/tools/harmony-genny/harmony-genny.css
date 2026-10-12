@@ -1,0 +1,128 @@
+/* the picture: the wheel over the strip */
+.hg-picture {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+}
+
+.hg-wheel {
+	position: relative;
+	display: flex;
+	flex: 1;
+	container-type: size;
+	align-items: center;
+	justify-content: center;
+	min-block-size: 0;
+	font-family: var(--canon-font);
+}
+
+.hg-wheel-figure {
+	position: absolute;
+	inset-block-start: 12px;
+	inset-inline-start: 14px;
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-title2);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	pointer-events: none;
+}
+
+.hg-wheel-disc {
+	position: relative;
+	inline-size: calc(min(100cqi, 100cqb) - 20px);
+	aspect-ratio: 1;
+}
+
+.hg-wheel-control {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	cursor: grab;
+	touch-action: none;
+}
+
+.hg-wheel-control:active {
+	cursor: grabbing;
+}
+
+.hg-wheel-control:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 4px;
+}
+
+.hg-wheel-under,
+.hg-wheel-plane,
+.hg-wheel-over {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.hg-wheel-well {
+	fill: var(--canon-card);
+	stroke: var(--canon-border);
+	stroke-width: 0.004;
+}
+
+.hg-wheel-ticks {
+	stroke: var(--canon-muted);
+	stroke-width: 0.008;
+}
+
+.hg-wheel-shape {
+	fill: color-mix(in srgb, var(--canon-foreground) 6%, transparent);
+	stroke: color-mix(in srgb, var(--canon-foreground) 30%, transparent);
+	stroke-width: 0.005;
+	stroke-linejoin: round;
+}
+
+.hg-wheel-spokes {
+	fill: none;
+	stroke: color-mix(in srgb, var(--canon-foreground) 45%, transparent);
+	stroke-width: 0.007;
+}
+
+.hg-wheel-hub {
+	fill: var(--canon-foreground);
+}
+
+.hg-wheel-bead {
+	stroke: var(--canon-card);
+	stroke-width: 0.01;
+}
+
+.hg-wheel-bead--base {
+	stroke: var(--canon-foreground);
+	stroke-width: 0.014;
+}
+
+/* first and large: typing a colour is the main way in */
+.harmony-genny .hg-input {
+	min-block-size: var(--canon-primary-height);
+}
+
+.harmony-genny .hg-input .canon-text-cell {
+	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-big-number);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.harmony-genny .hg-input > .canon-button {
+	inline-size: var(--canon-primary-height);
+}
+
+.hg-description {
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.3;
+}
+
+/* code is monospaced; the kit block sets the text face */
+.harmony-genny .canon-code-block-code {
+	font-family: var(--canon-mono-font);
+}
