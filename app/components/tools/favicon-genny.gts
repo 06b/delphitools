@@ -1,188 +1,239 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { stem } from 'delphicanon/lib/files';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { downloadBlob, downloadUrl } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { buildIco, dataUrlToBytes } from 'delphitools-v2/lib/ico';
 import { pinSvgSize } from 'delphitools-v2/lib/svg-size';
-
-const FAVICON_SIZES = [16, 32, 48, 64, 128, 180, 192, 512];
-
-const ICO_SIZES = [16, 32, 48, 64];
-
-const PREVIEW_MAX = 48;
-
-const HTML_SNIPPET = `<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/favicon-180x180.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="/favicon-512x512.png">`;
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import {
+	centred,
+	fileName,
+	icoSizes,
+	render,
+	role,
+	sizes,
+	snippet,
+	type Icon,
+	type Square,
+} from 'delphitools-v2/components/tools/favicon-genny/favicon';
+import Crop from 'delphitools-v2/components/tools/favicon-genny/crop';
+import Scene from 'delphitools-v2/components/tools/favicon-genny/scene';
+import './favicon-genny/favicon-genny.css';
 
 const LOAD_FAILED = 'Image could not be read. Try another file?';
+const sceneHeight = 196;
 
-interface GeneratedFavicon {
-	size: number;
-	dataUrl: string;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+interface Source {
+	url: string;
+	name: string;
+	image: HTMLImageElement;
+	width: number;
+	height: number;
 }
 
-function sizeLabel(size: number): string {
-	if (size === 180) return 'Apple Touch';
-	if (size === 192) return 'Android';
-	if (size === 512) return 'PWA';
-	return `${size}×${size}`;
+function readDataUrl(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(reader.result as string);
+		reader.onerror = () => reject(new Error('read'));
+		reader.readAsDataURL(file);
+	});
 }
 
-export default class FaviconGennyTool extends Component {
-	@tracked sourceImage: string | null = null;
-	@tracked fileName = '';
-	@tracked favicons: GeneratedFavicon[] = [];
-	@tracked generating = false;
+// img misreports unsized svgs; pinSvgSize gives them one
+async function dataUrlOf(file: File) {
+	if (file.type !== 'image/svg+xml') return readDataUrl(file);
+	const svg = pinSvgSize(await file.text());
+	if (svg === null) throw new Error('svg');
+	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** The port of FaviconGeneratorViewController, on the web tool's export. */
+export default class FaviconGenny extends Component {
+	@tracked source?: Source;
+	@tracked square?: Square;
+	@tracked icons: Icon[] = [];
 	@tracked loadFailed = false;
 
+	#loading = 0;
+	#frame = 0;
+	#requestedSide?: number;
+
+	// ?faviconSample: the iOS -faviconsample argument, with a drawn image; ?faviconCrop=<side>: the iOS -faviconcrop
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const side = Number(query.get('faviconCrop'));
+		if (side > 0) this.#requestedSide = side;
+		registerDestructor(this, () =>
+			cancelAnimationFrame(this.#frame),
+		);
+		if (query.has('faviconSample'))
+			void drawnSample().then((file) => this.load(file));
+	}
+
 	get title() {
-		return this.fileName || 'Source Image';
+		return this.source ? stem(this.source.name) || 'image' : '';
+	}
+
+	get detail() {
+		const { source, square } = this;
+		if (!source || !square) return '';
+		return `${source.width} × ${source.height} → ${square.side} × ${square.side}`;
+	}
+
+	get ready() {
+		return this.icons.length > 0;
 	}
 
 	get rows() {
-		return this.favicons.map((favicon) => {
-			const px = Math.min(favicon.size, PREVIEW_MAX);
+		return sizes.map((size) => {
+			const icon = this.icons.find((i) => i.size === size);
+			const side = Math.min(size, 48);
 			return {
-				favicon,
-				label: sizeLabel(favicon.size),
-				dimensions: `${favicon.size}×${favicon.size}`,
-				// derived dimensions only
-				boxStyle: htmlSafe(
-					`width: ${px + 8}px; height: ${px + 8}px`,
-				),
-				imageStyle: htmlSafe(
-					`width: ${px}px; height: ${px}px`,
+				size,
+				icon,
+				pixels: `${size} × ${size}`,
+				role: role(size),
+				iconStyle: htmlSafe(
+					`inline-size: ${side}px; block-size: ${side}px`,
 				),
 			};
 		});
 	}
 
-	get snippet() {
-		return HTML_SNIPPET;
+	icon = (size: number) =>
+		this.icons.find((i) => i.size === size)?.dataUrl;
+
+	get tab() {
+		return this.icon(32);
 	}
 
-	readFile = (file: File) => {
-		this.fileName = file.name.replace(/\.[^.]+$/, '');
-		this.loadFailed = false;
-		if (file.type === 'image/svg+xml') {
-			void this.#readSvg(file);
-			return;
-		}
-		const reader = new FileReader();
-		reader.onload = () => {
-			const dataUrl = reader.result as string;
-			this.sourceImage = dataUrl;
-			this.generate(dataUrl);
-		};
-		reader.onerror = () => this.fail();
-		reader.readAsDataURL(file);
-	};
-
-	async #readSvg(file: File) {
-		const svg = pinSvgSize(await file.text());
-		if (this.isDestroyed) return;
-		if (svg === null) return this.fail();
-		const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-		this.sourceImage = dataUrl;
-		this.generate(dataUrl);
+	get touch() {
+		return this.icon(180);
 	}
 
-	handleFileSelect = (event: Event) => {
-		const file = (event.target as HTMLInputElement).files?.[0];
-		if (file) this.readFile(file);
+	get app() {
+		return this.icon(192);
+	}
+
+	loadFiles = (files: File[]) => {
+		if (files[0]) void this.load(files[0]);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readFile(file);
-	};
-
-	// prevent drop navigation
 	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
+
+	// a drop on the banner or the sizes replaces the image; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		void this.load(file);
+	};
+
+	load = async (file: File) => {
+		const run = ++this.#loading;
+		this.loadFailed = false;
+		try {
+			const url = await dataUrlOf(file);
+			const image = new Image();
+			image.src = url;
+			await image.decode();
+			if (!image.naturalWidth || !image.naturalHeight)
+				throw new Error('empty');
+			if (run !== this.#loading || this.isDestroying) return;
+			const { naturalWidth: width, naturalHeight: height } =
+				image;
+			this.source = {
+				url,
+				name: file.name,
+				image,
+				width,
+				height,
+			};
+			this.square = centred(
+				width,
+				height,
+				this.#requestedSide,
+			);
+			this.#render();
+		} catch {
+			if (run !== this.#loading) return;
+			this.clear();
+			this.loadFailed = true;
+		}
 	};
 
 	clear = () => {
-		this.sourceImage = null;
-		this.fileName = '';
-		this.favicons = [];
+		this.#loading++;
+		cancelAnimationFrame(this.#frame);
+		this.#frame = 0;
+		this.source = undefined;
+		this.square = undefined;
+		this.icons = [];
 		this.loadFailed = false;
 	};
 
-	fail = () => {
-		this.generating = false;
-		this.sourceImage = null;
-		this.favicons = [];
-		this.loadFailed = true;
-	};
-
-	generate = (imageDataUrl: string) => {
-		this.generating = true;
-		const image = new Image();
-
-		image.onload = () => {
-			const canvas = document.createElement('canvas');
-			const ctx = canvas.getContext('2d');
-			if (!ctx) return this.fail();
-
-			const edge = Math.min(image.width, image.height);
-			const sx = (image.width - edge) / 2;
-			const sy = (image.height - edge) / 2;
-
-			this.favicons = FAVICON_SIZES.map((size) => {
-				canvas.width = size;
-				canvas.height = size;
-				ctx.clearRect(0, 0, size, size);
-				ctx.drawImage(
-					image,
-					sx,
-					sy,
-					edge,
-					edge,
-					0,
-					0,
-					size,
-					size,
-				);
-				return {
-					size,
-					dataUrl: canvas.toDataURL('image/png'),
-				};
+	crop = (square: Square) => {
+		this.square = square;
+		// one render per frame while the square is dragged
+		if (!this.#frame)
+			this.#frame = requestAnimationFrame(() => {
+				this.#frame = 0;
+				this.#render();
 			});
-			this.generating = false;
-		};
-
-		image.onerror = () => this.fail();
-		image.src = imageDataUrl;
 	};
 
-	download = (favicon: GeneratedFavicon) => {
-		downloadUrl(
-			favicon.dataUrl,
-			`favicon-${favicon.size}x${favicon.size}.png`,
-		);
+	#render() {
+		const { source, square } = this;
+		if (source && square) this.icons = render(source.image, square);
+	}
+
+	download = (size: number) => {
+		const url = this.icon(size);
+		if (url) downloadUrl(url, fileName(size));
 	};
 
-	downloadAll = () => void this.#zipFavicons();
+	downloadAll = () => void this.#zip();
 
-	async #zipFavicons() {
-		if (this.favicons.length === 0) return;
+	async #zip() {
+		if (this.icons.length === 0) return;
 		const { default: JSZip } = await import('jszip');
 		const zip = new JSZip();
-		for (const favicon of this.favicons)
+		for (const icon of this.icons)
 			zip.file(
-				`favicon-${favicon.size}x${favicon.size}.png`,
-				dataUrlToBytes(favicon.dataUrl),
+				fileName(icon.size),
+				dataUrlToBytes(icon.dataUrl),
 			);
 		const blob = await zip.generateAsync({ type: 'blob' });
 		if (this.isDestroyed) return;
@@ -190,182 +241,175 @@ export default class FaviconGennyTool extends Component {
 	}
 
 	downloadIco = () => {
-		const frames = this.favicons
-			.filter((f) => ICO_SIZES.includes(f.size))
-			.map((f) => ({
-				size: f.size,
-				data: dataUrlToBytes(f.dataUrl),
+		const frames = this.icons
+			.filter((icon) => icoSizes.includes(icon.size))
+			.map((icon) => ({
+				size: icon.size,
+				data: dataUrlToBytes(icon.dataUrl),
 			}));
 		if (frames.length === 0) return;
-
-		const blob = new Blob([buildIco(frames)], {
-			type: 'image/x-icon',
-		});
-		downloadBlob(blob, 'favicon.ico');
+		downloadBlob(
+			new Blob([buildIco(frames)], { type: 'image/x-icon' }),
+			'favicon.ico',
+		);
 	};
 
 	<template>
-		<div
-			class="dt-favicon"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="favicon-genny"
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
 		>
-			<div class="dt-favicon-frame">
-				{{#if this.sourceImage}}
-					<div class="dt-favicon-bar">
-						<span
-							class="dt-favicon-bar-title"
-						>{{this.title}}</span>
-						<button
-							type="button"
-							class="dt-favicon-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+			<:banner>
+				<CanonCanvas
+					@height={{sceneHeight}}
+					@background="var(--canon-muted)"
+				>
+					<Scene
+						@tab={{this.tab}}
+						@touch={{this.touch}}
+						@app={{this.app}}
+						@name={{this.title}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.source}}
+						<CanonRow
+							class="favicon-source"
+							@title={{this.title}}
+							@detail={{this.detail}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-					<div class="dt-favicon-source">
-						<span class="dt-favicon-thumb">
-							<img
-								src={{this.sourceImage}}
-								alt="Source"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-						</span>
-						<p>Image will be centre-cropped
-							to a square for each
-							size.</p>
-					</div>
-				{{else}}
-					<label
-						class="dt-favicon-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-favicon-drop-title"
-						>Drop image here</span>
-						<span
-							class="dt-favicon-drop-hint"
-						>PNG, JPG, SVG or any image
-							format, or paste</span>
-					</label>
-				{{/if}}
-
-				{{#if this.loadFailed}}
-					<p
-						class="dt-favicon-error"
-					>{{LOAD_FAILED}}</p>
-				{{/if}}
-
-				{{#if this.generating}}
-					<p class="dt-favicon-status">Generating
-						favicons…</p>
-				{{/if}}
-
-				{{#if this.favicons.length}}
-					<div class="dt-favicon-bar is-actions">
-						<span
-							class="dt-favicon-bar-title"
-						>Generated Favicons</span>
-						<button
-							type="button"
-							class="dt-favicon-bar-btn"
-							{{on
-								"click"
-								this.downloadIco
-							}}
-						>
-							<DownloadLabel
-								@label="Download .ico"
+						</CanonRow>
+						{{#if this.square}}
+							<Crop
+								@url={{this.source.url}}
+								@width={{this.source.width}}
+								@height={{this.source.height}}
+								@square={{this.square}}
+								@onChange={{this.crop}}
 							/>
-						</button>
-						<button
-							type="button"
-							class="dt-favicon-bar-btn is-primary"
-							{{on
-								"click"
-								this.downloadAll
-							}}
-						>
-							<DownloadLabel
-								@label="Download All"
-							/>
-						</button>
-					</div>
-
-					<div class="dt-favicon-list">
-						{{#each
-							this.rows
-							key="favicon.size"
-							as |row|
-						}}
-							<button
-								type="button"
-								class="dt-favicon-row"
-								{{on
-									"click"
-									(fn
-										this.download
-										row.favicon
-									)
+						{{/if}}
+						<CanonGrid>
+							<CanonButton
+								class="favicon-ico"
+								@text="favicon.ico"
+								@icon={{Save}}
+								@disabled={{if
+									this.ready
+									false
+									true
 								}}
+								@onClick={{this.downloadIco}}
+							/>
+							<CanonButton
+								class="favicon-all"
+								@kind="primary"
+								@text={{passAlong
+									"Download All"
+								}}
+								@icon={{Save}}
+								@iconStyle="oversized"
+								@disabled={{if
+									this.ready
+									false
+									true
+								}}
+								@onClick={{this.downloadAll}}
+							/>
+						</CanonGrid>
+					{{else}}
+						<CanonDropZone
+							class="favicon-drop"
+							@prompt="Drop an image here"
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
+						/>
+						{{#if this.loadFailed}}
+							<CanonStatus
+								class="favicon-error"
+								@text={{LOAD_FAILED}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows
+					class="favicon-sizes"
+					@framed={{true}}
+				>
+					<CanonHeading @text="Sizes" />
+					{{#each this.rows key="size" as |row|}}
+						<div class="favicon-row">
+							<span
+								class="favicon-well"
+							>
+								{{#if row.icon}}
+									<img
+										src={{row.icon.dataUrl}}
+										alt={{row.pixels}}
+										style={{row.iconStyle}}
+									/>
+								{{else}}
+									<span
+										class="favicon-blank"
+										style={{row.iconStyle}}
+									></span>
+								{{/if}}
+							</span>
+							<span
+								class="favicon-meta"
 							>
 								<span
-									class="dt-favicon-cell"
-								>
+									class="favicon-pixels"
+								>{{row.pixels}}</span>
+								{{#if row.role}}
 									<span
-										class="dt-favicon-chip"
-										style={{row.boxStyle}}
-									>
-										<img
-											src={{row.favicon.dataUrl}}
-											alt={{row.dimensions}}
-											style={{row.imageStyle}}
-										/>
-									</span>
-								</span>
-								<span
-									class="dt-favicon-meta"
-								>
-									<span
-										class="dt-favicon-size"
-									>{{row.dimensions}}</span>
-									<span
-										class="dt-favicon-role"
-									>{{row.label}}</span>
-								</span>
-								<span
-									class="dt-favicon-hint"
-								>
-									<DownloadLabel
-										@label="Download PNG"
-									/>
-								</span>
-							</button>
-						{{/each}}
-					</div>
-
-					<div class="dt-favicon-snippet">
-						<span
-							class="dt-favicon-snippet-label"
-						>HTML Snippet</span>
-						<pre>{{this.snippet}}</pre>
-					</div>
-				{{/if}}
-			</div>
-		</div>
+										class="favicon-role"
+									>{{row.role}}</span>
+								{{/if}}
+							</span>
+							<CanonButton
+								class="favicon-save"
+								@kind="cell"
+								@icon={{Save}}
+								@label={{passAlong
+									"Download PNG"
+								}}
+								@disabled={{if
+									row.icon
+									false
+									true
+								}}
+								@onClick={{fn
+									this.download
+									row.size
+								}}
+							/>
+						</div>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonCodeBlock
+						class="favicon-snippet"
+						@code={{snippet}}
+						@language="HTML"
+					/>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

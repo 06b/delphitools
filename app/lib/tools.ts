@@ -291,6 +291,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Generate favicons from any image',
 				icon: 'image',
 				href: '/tools/favicon-genny',
+				canon: true,
 				produces: [
 					'image/png',
 					'image/x-icon',
