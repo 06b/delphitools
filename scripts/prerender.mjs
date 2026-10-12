@@ -112,6 +112,16 @@ const routes = [
 		imageAlt: 'A share card for Substrata, the delphitools image editor',
 		card: toolCard('Substrata'),
 	},
+	{
+		url: '/errata',
+		title: 'Errata',
+		description:
+			allTools.find((t) => t.id === 'errata')?.description ??
+			'',
+		image: '/errata/og.png',
+		imageAlt: 'A share card for Errata, the delphitools PDF editor',
+		card: toolCard('Errata'),
+	},
 ];
 
 let written = 0;
