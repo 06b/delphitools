@@ -1,6 +1,6 @@
 // needs npm start first
 
-import { launch, visit, check, sleep, finish } from './harness.mjs';
+import { BASE, launch, visit, check, sleep, finish } from './harness.mjs';
 
 // node strips .ts types
 const { HTTP_STATUSES, filterStatuses, lookupStatus } = await import(
@@ -8,153 +8,131 @@ const { HTTP_STATUSES, filterStatuses, lookupStatus } = await import(
 );
 
 const { browser, page } = await launch();
+await page
+	.browserContext()
+	.overridePermissions(BASE, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
 await visit(page, '/tools/http-status');
 
-const rowCount = () => page.$$eval('.dt-http-code', (els) => els.length);
-const visibleCodes = () =>
-	page.$$eval('.dt-http-code', (els) =>
-		els.map((el) => el.textContent.trim()),
-	);
+const codes = () =>
+	page.$$eval('.hs-row-code', (els) => els.map((el) => el.textContent.trim()));
 const rowsFor = (search, cls) =>
-	filterStatuses(search, cls).reduce(
-		(sum, group) => sum + group.items.length,
-		0,
+	filterStatuses(search, cls).reduce((sum, g) => sum + g.items.length, 0);
+const pickClass = async (label) => {
+	await page.$$eval(
+		'.http-status [role="radio"]',
+		(els, text) => els.find((el) => el.textContent.trim() === text)?.click(),
+		label,
 	);
-const clickFilter = async (label) => {
-	await page.$$eval('.dt-http-filter', (els, text) => {
-		els.find((el) => el.textContent.trim().startsWith(text))?.click();
-	}, label);
-	await sleep(200);
+	await sleep(150);
 };
-// cdp select-all fails headless
 const typeSearch = async (text) => {
-	await page.$eval('.dt-http-search-input', (el) => {
+	await page.$eval('.hs-search-field', (el) => {
 		el.value = '';
 		el.dispatchEvent(new Event('input', { bubbles: true }));
 	});
-	await page.type('.dt-http-search-input', text);
-	await sleep(250);
+	await page.type('.hs-search-field', text);
+	await sleep(50);
 };
+const banner = () =>
+	page.evaluate(() => ({
+		code: document.querySelector('.hs-chart .canon-figure-said')?.textContent.trim(),
+		phrase: document.querySelector('.hs-chart-phrase')?.textContent.trim(),
+		meta: document.querySelector('.hs-chart-meta')?.textContent.replace(/\s+/g, ' ').trim(),
+		href: document.querySelector('.hs-chart-ref')?.getAttribute('href'),
+		lit: [...document.querySelectorAll('.hs-tile--lit')].map((el) => el.textContent),
+		matches: document.querySelectorAll('.hs-tile--match').length,
+	}));
 
 check(
-	'the page is the http-status tool',
-	(await page.$eval('.dt-tool-header h1', (el) =>
-		el.textContent.trim(),
-	)) === 'HTTP Status',
+	'the split fills the sheet',
+	await page.evaluate(
+		() =>
+			document.querySelector('.dt-canon-tool').getBoundingClientRect().height ===
+			document.querySelector('.http-status').getBoundingClientRect().height,
+	),
+);
+check('one row per table entry', (await codes()).length === HTTP_STATUSES.length);
+check(
+	'one tile per code in the banner',
+	(await page.$$eval('.hs-tile', (els) => els.length)) === HTTP_STATUSES.length,
+);
+let b = await banner();
+check('200 is selected at the start', b.code === '200' && b.phrase === 'OK' && b.lit.join() === '200', JSON.stringify(b));
+check(
+	'the banner reads the reference and links the spec section',
+	b.meta === 'RFC 9110 §15.3.1 · Cacheable' && b.href === lookupStatus(200).url,
+	`${b.meta} ${b.href}`,
+);
+check('All plus the five classes', (await page.$$eval('.http-status [role="radio"]', (els) => els.length)) === 6);
+check(
+	'one jump heading per class',
+	(await page.$$eval('.canon-jump-heading', (els) => els.map((el) => el.dataset.canonJumpTitle))).join('|') ===
+		'1xx · Informational|2xx · Successful|3xx · Redirection|4xx · Client Error|5xx · Server Error',
 );
 
-check(
-	'one row per table entry',
-	(await rowCount()) === HTTP_STATUSES.length,
-	`${await rowCount()} of ${HTTP_STATUSES.length}`,
-);
-
-check(
-	'All plus the five class filters',
-	(await page.$$eval('.dt-http-filter', (els) => els.length)) === 6,
-);
-
-check(
-	'filter counts match the table',
-	(
-		await page.$$eval('.dt-http-filter-count', (els) =>
-			els.map((el) => Number(el.textContent.trim())),
-		)
-	).reduce((a, b) => a + b, 0) ===
-		HTTP_STATUSES.length * 2, // total plus per-class doubles
-);
-
-await clickFilter('5xx');
-check(
-	'5xx narrow the list to server errors',
-	(await rowCount()) === rowsFor('', 5),
-	`${await rowCount()} of ${rowsFor('', 5)}`,
-);
-check(
-	'and nothing outside 5xx survives',
-	(await visibleCodes()).every((code) => code.startsWith('5')),
-);
-
-await clickFilter('All');
-check('All restores the table', (await rowCount()) === HTTP_STATUSES.length);
-
-await page.$$eval('.dt-http-row .dt-http-tint', (els) =>
-	els.find((el) => el.classList.contains('is-2xx'))?.click(),
-);
-await sleep(200);
-check(
-	'the row tint chip filters to its class',
-	(await rowCount()) === rowsFor('', 2),
-);
-await clickFilter('All');
+await pickClass('5xx');
+check('5xx narrows the list', (await codes()).length === rowsFor('', 5) && (await codes()).every((c) => c.startsWith('5')));
+check('and the banner dims the rest', (await banner()).matches === rowsFor('', 5));
+await pickClass('All');
 
 await typeSearch('418');
+check('code search finds exactly the teapot, live', (await codes()).join() === '418');
 check(
-	'code search finds exactly the teapot',
-	(await visibleCodes()).join() === '418',
+	'with its registry note',
+	(await page.$eval('.hs-row-note', (el) => el.textContent.trim())) === 'Unused',
 );
-check(
-	'with its registered phrase',
-	(
-		await page.$eval('.dt-http-phrase', (el) => el.textContent.trim())
-	).includes('Teapot'),
-);
-
 await typeSearch('unauthorized');
+check('phrase search is case-insensitive', (await codes()).join() === '401');
+await typeSearch('zzz');
 check(
-	'phrase search is case-insensitive',
-	(await visibleCodes()).join() === '401',
+	'a miss shows the web wording',
+	(await page.$eval('.http-status .canon-empty-row', (el) => el.textContent.trim())) === 'No matches: “zzz”',
 );
-
-await typeSearch('zzz-no-such-code');
-check(
-	'a miss shows the empty state',
-	await page.$('.dt-http-empty'),
-);
-
-await page.click('.dt-http-clear');
-await sleep(200);
-check('Clear restores the table', (await rowCount()) === HTTP_STATUSES.length);
-
-await page.$$eval('.dt-http-code', (els) => {
-	els.find((el) => el.textContent.trim() === '200')
-		?.closest('.dt-http-row')
-		?.querySelector('.dt-http-row-expand')
-		?.click();
-});
-await sleep(200);
-check(
-	'expanding a row shows its reference',
-	(await page.$eval('.dt-http-ref', (el) => el.textContent.trim())) ===
-		(lookupStatus(200)?.ref ?? 'no detail rendered'),
-);
-
-const expected200 = lookupStatus(200);
-const href = await page.$eval('.dt-http-ref', (el) => el.getAttribute('href'));
-check(
-	'the reference links to the spec section',
-	href === expected200?.url,
-	href ?? 'no href',
-);
-check(
-	'200 reads cacheable, from the table',
-	(await page.$eval('.dt-http-cacheable', (el) =>
-		el.textContent.trim(),
-	)) === (expected200?.cacheable ? 'Yes' : 'No'),
-);
-
-await page.$$eval('.dt-http-code', (els) =>
-	els.find((el) => el.textContent.trim() === '404')?.click(),
-);
+await page.click('.hs-search .canon-button');
 await sleep(100);
+check('Clear restores the table', (await codes()).length === HTTP_STATUSES.length);
+
+await page.$$eval('.hs-row-body', (els) =>
+	els.find((el) => el.textContent.includes('305'))?.click(),
+);
+await sleep(300);
+b = await banner();
+check('a row selects its code', b.code === '305' && b.lit.join() === '305', b.code);
+check('the banner reads the registry state', b.meta === 'RFC 9110 §15.4.6 · Deprecated', b.meta);
 check(
-	'clicking a code arms the copied state',
-	await page.$$eval('.dt-http-code', (els) =>
-		els.some(
-			(el) =>
-				el.classList.contains('dt-http-code') &&
-				el.querySelector('.dt-icon'),
-		),
+	'the row is lit and pressed',
+	await page.$eval('.hs-row-body--lit', (el) => el.getAttribute('aria-pressed') === 'true' && el.textContent.includes('305')),
+);
+
+await page.$$eval('.hs-row-copy', (els) =>
+	els.find((el) => el.getAttribute('aria-label') === 'Copy 404')?.click(),
+);
+await sleep(300);
+check('copy writes the code', (await page.evaluate(() => navigator.clipboard.readText())) === '404');
+check('and the toast confirms', await page.$eval('.canon-toast', (t) => t.style.opacity === '1'));
+
+await page.click('.canon-jump-heading-button');
+await sleep(400);
+check('a heading opens the jump grid', !!(await page.$('dialog[open]')));
+await page.keyboard.press('Escape');
+await sleep(300);
+
+await visit(page, '/tools/http-status?httpSearch=gate&httpClass=5&httpSelect=504');
+b = await banner();
+check(
+	'launch flags: search, class, selection',
+	(await codes()).join() === '502,504' && b.code === '504',
+	(await codes()).join(),
+);
+
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/http-status');
+check(
+	'no horizontal scroll on a phone',
+	await page.evaluate(
+		() =>
+			document.documentElement.scrollWidth <= document.documentElement.clientWidth &&
+			document.querySelector('.hs-chart').scrollWidth <= document.querySelector('.hs-chart').clientWidth,
 	),
 );
 

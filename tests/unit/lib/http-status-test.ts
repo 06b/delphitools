@@ -5,6 +5,7 @@ import {
 	STATUS_CLASSES,
 	filterStatuses,
 	lookupStatus,
+	statusFacts,
 } from 'delphitools-v2/lib/http-status';
 
 module('Unit | Lib | http-status', function () {
@@ -143,5 +144,14 @@ module('Unit | Lib | http-status', function () {
 		const ok = lookupStatus(200);
 		assert.strictEqual(ok?.phrase, 'OK');
 		assert.strictEqual(lookupStatus(519), null);
+	});
+
+	test('statusFacts: reference, then cacheable and registry when they apply', function (assert) {
+		const facts = (code: number) =>
+			statusFacts(lookupStatus(code)!).join(' · ');
+		assert.strictEqual(facts(200), 'RFC 9110 §15.3.1 · Cacheable');
+		assert.strictEqual(facts(201), 'RFC 9110 §15.3.2');
+		assert.strictEqual(facts(305), 'RFC 9110 §15.4.6 · Deprecated');
+		assert.strictEqual(facts(306), 'RFC 9110 §15.4.7 · Unused');
 	});
 });

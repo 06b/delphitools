@@ -167,3 +167,20 @@ export function filterStatuses(
 export function lookupStatus(code: number): HttpStatus | null {
 	return HTTP_STATUSES.find((status) => status.code === code) ?? null;
 }
+
+export const REGISTRY_LABELS: Record<RegistryStatus, string> = {
+	standard: 'Standard',
+	deprecated: 'Deprecated',
+	unused: 'Unused',
+};
+
+/** The reference, then Cacheable and a non-standard registry state where they apply. */
+export function statusFacts(status: HttpStatus): string[] {
+	return [
+		status.ref,
+		status.cacheable ? 'Cacheable' : null,
+		status.registered === 'standard'
+			? null
+			: REGISTRY_LABELS[status.registered],
+	].filter((fact) => fact !== null);
+}

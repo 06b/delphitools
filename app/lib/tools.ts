@@ -853,6 +853,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'server',
 				href: '/tools/http-status',
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'json-formatter',
