@@ -1,13 +1,26 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonBar from 'delphicanon/components/canon-bar';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob, downloadUrl } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
 	loadRemover,
 	maskToCanvas,
@@ -15,18 +28,100 @@ import {
 	loadImage,
 	type Remover,
 } from 'delphitools-v2/lib/bg-removal';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import Picture from 'delphitools-v2/components/tools/background-remover/picture';
+import './background-remover/background-remover.css';
 
 type Status = 'idle' | 'downloading' | 'processing' | 'done' | 'error';
 
-export default class BackgroundRemoverTool extends Component {
+const modes = ['Transparent', 'Colour'];
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Eraser = <template><IconSvg @name="eraser" /></template>;
+
+function readDataUrl(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(reader.result as string);
+		reader.onerror = () =>
+			reject(new Error('image failed to load'));
+		reader.readAsDataURL(file);
+	});
+}
+
+/** Mean opacity of an image, measured on a copy at most 256 px across. */
+async function keptShare(url: string) {
+	const image = await loadImage(url);
+	const scale = Math.min(1, 256 / Math.max(image.width, image.height));
+	const canvas = document.createElement('canvas');
+	canvas.width = Math.max(1, Math.round(image.width * scale));
+	canvas.height = Math.max(1, Math.round(image.height * scale));
+	const context = canvas.getContext('2d', { willReadFrequently: true })!;
+	context.drawImage(image, 0, 0, canvas.width, canvas.height);
+	const { data } = context.getImageData(
+		0,
+		0,
+		canvas.width,
+		canvas.height,
+	);
+	let sum = 0;
+	for (let i = 3; i < data.length; i += 4) sum += data[i]!;
+	return sum / 255 / (data.length / 4);
+}
+
+/** The cut-out as a PNG blob, on the background colour when one is set. */
+async function pngOf(result: string, fill?: string) {
+	const image = await loadImage(result);
+	const canvas = document.createElement('canvas');
+	canvas.width = image.naturalWidth;
+	canvas.height = image.naturalHeight;
+	const context = canvas.getContext('2d')!;
+	if (fill) {
+		context.fillStyle = fill;
+		context.fillRect(0, 0, canvas.width, canvas.height);
+	}
+	context.drawImage(image, 0, 0);
+	return new Promise<Blob | null>((resolve) =>
+		canvas.toBlob(resolve, 'image/png'),
+	);
+}
+
+/** The port of BackgroundRemoverViewController, on the web tool's model. */
+export default class BackgroundRemover extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 	@tracked sourceImage: string | null = null;
+	@tracked sourceName = '';
+	@tracked width = 0;
+	@tracked height = 0;
 	@tracked resultImage: string | null = null;
+	@tracked kept?: number;
 	@tracked status: Status = 'idle';
 	@tracked percent = 0;
 	@tracked errorDetail = '';
+	@tracked mode = 0;
+	@tracked colour: Rgb = [1, 1, 1];
+	@tracked over = false;
 
 	#remover: Remover | null = null;
 	#destroyed = false;
+	#input?: HTMLInputElement;
+	#loading = 0;
+
+	// ?bgSample: the iOS -bgSample launch argument, with a drawn image; ?bgFill=<hex>: the iOS -bgFill
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const fill = parseHex(query.get('bgFill') ?? '');
+		if (fill) {
+			this.mode = 1;
+			this.colour = fill;
+		}
+		if (query.has('bgSample'))
+			void drawnSample().then((file) => this.readFile(file));
+	}
 
 	willDestroy() {
 		super.willDestroy();
@@ -47,44 +142,110 @@ export default class BackgroundRemoverTool extends Component {
 		return this.status === 'downloading';
 	}
 
-	get progressStyle() {
-		return htmlSafe(`width: ${this.percent}%`);
+	get runText() {
+		if (this.status === 'downloading')
+			return `Downloading... ${this.percent}%`;
+		if (this.status === 'processing')
+			return 'Removing background...';
+		return 'Remove Background';
 	}
 
-	readFile = (file: File) => {
-		if (!file.type.startsWith('image/')) return;
-		const reader = new FileReader();
-		reader.onload = () => {
-			this.sourceImage = reader.result as string;
-			this.resultImage = null;
-			this.status = 'idle';
-			this.errorDetail = '';
-		};
-		reader.onerror = () => this.report('image failed to load');
-		reader.readAsDataURL(file);
-	};
+	get share() {
+		return this.percent / 100;
+	}
 
-	handleFileSelect = (event: Event) => {
+	get fill() {
+		return this.mode === 1 ? hex(this.colour) : undefined;
+	}
+
+	get sizeText() {
+		return `${this.width} × ${this.height}`;
+	}
+
+	get tiles() {
+		return [
+			{
+				label: 'Kept',
+				value:
+					this.kept === undefined
+						? '—'
+						: `${Math.round(this.kept * 100)} %`,
+				level: this.kept ?? 0,
+			},
+			{ label: 'Size', value: `${this.sizeText} px` },
+		];
+	}
+
+	get hasError() {
+		return this.status === 'error';
+	}
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
 		// reset permits reselect
 		input.value = '';
+		if (file) void this.readFile(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
+	dragOver = (event: DragEvent) => {
+		if (!event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file) this.readFile(file);
+		this.over = true;
 	};
 
-	allowDrop = (event: DragEvent) => {
+	dragLeave = (event: DragEvent) => {
+		const root = event.currentTarget as Element;
+		if (!root.contains(event.relatedTarget as Node | null))
+			this.over = false;
+	};
+
+	drop = (event: DragEvent) => {
+		this.over = false;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		if (!this.isBusy) void this.readFile(file);
+	};
+
+	readFile = async (file: File) => {
+		if (!file.type.startsWith('image/') || this.isBusy) return;
+		const run = ++this.#loading;
+		try {
+			const url = await readDataUrl(file);
+			const image = await loadImage(url);
+			if (run !== this.#loading || this.#destroyed) return;
+			this.sourceImage = url;
+			this.sourceName = file.name || 'image';
+			this.width = image.naturalWidth;
+			this.height = image.naturalHeight;
+			this.resultImage = null;
+			this.kept = undefined;
+			this.status = 'idle';
+			this.errorDetail = '';
+		} catch (error) {
+			if (run !== this.#loading) return;
+			this.report(
+				error instanceof Error
+					? error.message
+					: String(error),
+			);
+		}
 	};
 
 	clear = () => {
+		this.#loading++;
 		this.sourceImage = null;
 		this.resultImage = null;
+		this.kept = undefined;
 		this.status = 'idle';
 		this.errorDetail = '';
 	};
@@ -125,10 +286,14 @@ export default class BackgroundRemoverTool extends Component {
 				throw new Error('the model returned no mask');
 
 			const image = await loadImage(source);
-			if (this.#destroyed) return;
+			if (this.#destroyed || source !== this.sourceImage)
+				return;
 
-			this.resultImage = applyMask(image, maskToCanvas(mask));
+			const result = applyMask(image, maskToCanvas(mask));
+			this.resultImage = result;
 			this.status = 'done';
+			const kept = await keptShare(result);
+			if (result === this.resultImage) this.kept = kept;
 		} catch (error) {
 			if (this.#destroyed) return;
 			this.report(
@@ -139,189 +304,169 @@ export default class BackgroundRemoverTool extends Component {
 		}
 	};
 
-	download = () => {
+	pickMode = (index: number) => (this.mode = index);
+
+	pickColour = (colour: Rgb) => (this.colour = colour);
+
+	copy = async () => {
 		if (!this.resultImage) return;
-		downloadUrl(this.resultImage, 'background-removed.png');
+		const blob = await pngOf(this.resultImage, this.fill);
+		if (!blob) return;
+		try {
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob }),
+			]);
+		} catch {
+			return;
+		}
+		this.toast.show();
+	};
+
+	download = async () => {
+		if (!this.resultImage) return;
+		if (!this.fill) {
+			downloadUrl(this.resultImage, 'background-removed.png');
+			return;
+		}
+		const blob = await pngOf(this.resultImage, this.fill);
+		if (blob) downloadBlob(blob, 'background-removed.png');
 	};
 
 	<template>
-		<div class="dt-bg" {{filePaste this.readFile accept="image/*"}}>
-			<div class="dt-bg-frame">
-				{{#if this.resultImage}}
-					<div class="dt-bg-bar">
-						<span
-							class="dt-bg-bar-title"
-						>Result</span>
-						<button
-							type="button"
-							class="dt-bg-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+		<CanonSplit
+			class="background-remover"
+			@halves={{true}}
+			@collapsesTo={{200}}
+			{{filePaste this.readFile accept="image/*"}}
+			{{on "dragover" this.dragOver}}
+			{{on "dragleave" this.dragLeave}}
+			{{on "drop" this.drop}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@source={{this.sourceImage}}
+						@width={{this.width}}
+						@height={{this.height}}
+						@result={{this.resultImage}}
+						@fill={{this.fill}}
+						@busy={{this.isBusy}}
+						@over={{this.over}}
+						@onChoose={{this.choose}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.sourceImage}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="bg-source"
+							@title={{this.sourceName}}
+							@detail={{this.sizeText}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-bg-bar-btn is-primary"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel
-								@label="Download PNG"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{this.isBusy}}
+								@onClick={{this.clear}}
 							/>
-						</button>
-					</div>
-					<div class="dt-bg-compare">
-						<figure class="dt-bg-pane">
-							{{! wording carried over from the Next app }}
-							<figcaption
-							>Original</figcaption>
-							<span
-								class="dt-bg-canvas"
-							>
-								<img
-									src={{this.sourceImage}}
-									alt="Original"
+						</CanonRow>
+						{{#unless this.resultImage}}
+							<CanonButton
+								class="bg-run"
+								@kind="primary"
+								@text={{this.runText}}
+								@icon={{Eraser}}
+								@disabled={{this.isBusy}}
+								@onClick={{this.remove}}
+							/>
+							{{#if
+								this.isDownloading
+							}}
+								<CanonBar
+									class="bg-progress"
+									@share={{this.share}}
 								/>
-							</span>
-						</figure>
-						<figure class="dt-bg-pane">
-							{{! wording carried over from the Next app }}
-							<figcaption>Background
-								Removed</figcaption>
-							<span
-								class="dt-bg-canvas is-checkered"
-							>
-								<img
-									src={{this.resultImage}}
-									alt="Background removed"
-								/>
-							</span>
-						</figure>
-					</div>
-				{{else if this.sourceImage}}
-					<div class="dt-bg-bar">
-						{{! wording carried over from the Next app }}
-						<span
-							class="dt-bg-bar-title"
-						>Your Image</span>
-						<button
-							type="button"
-							class="dt-bg-bar-btn"
-							disabled={{this.isBusy}}
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-					<label class="dt-bg-source">
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							disabled={{this.isBusy}}
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<img
-							src={{this.sourceImage}}
-							alt="Source"
-						/>
-					</label>
-
-					<div class="dt-bg-action">
-						<button
-							type="button"
-							class="dt-bg-run"
-							disabled={{this.isBusy}}
-							{{on
-								"click"
-								this.remove
-							}}
-						>
-							{{#if this.isBusy}}
-								<NdsLoader />
-								{{#if
-									this.isDownloading
-								}}
-									Downloading...
-									{{this.percent}}%
-								{{else}}
-									Removing
-									background...
-								{{/if}}
-							{{else}}
-								Remove
-								Background
 							{{/if}}
-						</button>
-						{{#if this.isDownloading}}
-							<span
-								class="dt-bg-progress"
-							>
-								<span
-									style={{this.progressStyle}}
-								></span>
-							</span>
-						{{/if}}
-					</div>
-				{{else}}
-					<label
-						class="dt-bg-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-bg-drop-title"
-						>Drop an image here</span>
-						<span class="dt-bg-drop-hint">or
-							click to select a file,
-							or paste</span>
-					</label>
+						{{/unless}}
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			{{#if (eq this.status "error")}}
-				<div class="dt-bg-error" role="alert">
-					<Icon @name="circle-alert" />
-					<div>
-						<p
-							class="dt-bg-error-title"
-						>Error</p>
-						<p
-							class="dt-bg-error-detail"
-						>{{this.errorDetail}}</p>
-					</div>
-				</div>
-			{{/if}}
-
-			<div class="dt-bg-note">
-				<Icon @name="info" />
-				<p>Processing happens entirely in your browser.
-					On first use, a ~110MB processing engine
-					is downloaded and cached.</p>
-			</div>
-		</div>
+				{{#if this.hasError}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							class="bg-error"
+							@text={{this.errorDetail}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					</CanonRows>
+				{{/if}}
+				{{#if this.resultImage}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Subject" />
+						<CanonTiles
+							@items={{this.tiles}}
+						/>
+						<CanonHeading
+							@text="Background"
+						/>
+						<CanonSegmented
+							class="bg-modes"
+							@items={{modes}}
+							@selected={{this.mode}}
+							@onChange={{this.pickMode}}
+						/>
+						{{#if this.fill}}
+							<CanonColourWell
+								@label="Background Colour"
+								@colour={{this.colour}}
+								@onChange={{this.pickColour}}
+							/>
+						{{/if}}
+						<CanonGrid>
+							<CanonButton
+								class="bg-copy"
+								@text="Copy Image"
+								@icon={{Copy}}
+								@onClick={{this.copy}}
+							/>
+							<CanonButton
+								class="bg-download"
+								@kind="primary"
+								@text={{passAlong
+									"Download PNG"
+								}}
+								@icon={{Save}}
+								@iconStyle="oversized"
+								@onClick={{this.download}}
+							/>
+						</CanonGrid>
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonStatus
+						@text="Processing happens entirely in your browser. On first use, a ~110MB processing engine is downloaded and cached."
+						@tone="muted"
+						@row={{true}}
+					/>
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

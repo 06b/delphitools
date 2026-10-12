@@ -280,6 +280,8 @@ export const toolCategories: ToolCategory[] = [
 				produces: ['image/png'],
 				accepts: ['image/*'],
 				beta: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'favicon-genny',
