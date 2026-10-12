@@ -1053,6 +1053,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/morse-code',
 				produces: ['text/plain'],
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'braille-converter',
