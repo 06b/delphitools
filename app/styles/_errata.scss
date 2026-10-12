@@ -133,37 +133,63 @@
 	}
 }
 
-// a4 ratio, two rows
+// a4 ratio, three rows
 .err-anchor-page {
 	display: grid;
 	grid-template-rows: repeat(3, minmax(0, 1fr));
 	grid-template-columns: repeat(3, minmax(0, 1fr));
-	inline-size: calc((2 * var(--err-h) + var(--err-gap)) / 1.414);
-	block-size: calc(2 * var(--err-h) + var(--err-gap));
+	inline-size: calc((3 * var(--err-h) + 2 * var(--err-gap)) / 1.414);
+	block-size: calc(3 * var(--err-h) + 2 * var(--err-gap));
+	padding: 3px;
 	border: 1px solid var(--border);
 	background-color: var(--card);
 }
 
 .err-anchor-cell {
-	display: grid;
-	place-items: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 3px;
 	cursor: pointer;
 
-	&::after {
-		inline-size: 7px;
-		block-size: 2px;
-		background-color: var(--border);
-		content: "";
+	&[data-anchor^="top"] {
+		align-items: flex-start;
 	}
 
-	&:hover::after {
+	&[data-anchor^="bottom"] {
+		align-items: flex-end;
+	}
+
+	&[data-anchor$="left"] {
+		justify-content: flex-start;
+	}
+
+	&[data-anchor$="right"] {
+		justify-content: flex-end;
+	}
+
+	&::after {
+		inline-size: 3px;
+		block-size: 3px;
 		background-color: var(--muted-foreground);
+		content: "";
+		opacity: 0.5;
+	}
+
+	&:hover {
+		background-color: var(--accent);
+
+		&::after {
+			inline-size: 12px;
+			opacity: 1;
+		}
 	}
 
 	&.is-active::after {
-		inline-size: 9px;
-		block-size: 3px;
+		inline-size: 12px;
+		block-size: 4px;
 		background-color: var(--primary);
+		opacity: 1;
 	}
 
 	&:focus-visible {
@@ -562,7 +588,7 @@
 	grid-column: span 2;
 
 	&.is-tall {
-		grid-row: span 2;
+		grid-row: span 3;
 	}
 }
 

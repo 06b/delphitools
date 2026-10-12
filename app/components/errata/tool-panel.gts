@@ -297,7 +297,7 @@ export const PageScope: TOC<{
 	</Field>
 </template>;
 
-/** a page-shaped 3x3 grid, two rows tall */
+/** a page-shaped 3x3 grid, three rows tall */
 export const AnchorPicker: TOC<{
 	Args: {
 		value: Anchor;
