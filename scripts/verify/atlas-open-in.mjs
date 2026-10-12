@@ -59,12 +59,12 @@ await page
 	.waitForFunction(
 		() =>
 			location.pathname === '/tools/metadata-stripper' &&
-			!!document.querySelector('.dt-strip-name'),
+			!!document.querySelector('.ms-source .canon-row-title'),
 		{ timeout: 15000 },
 	)
 	.catch(() => {});
 const handed = await page
-	.$eval('.dt-strip-name', (el) => el.textContent.trim())
+	.$eval('.ms-source .canon-row-title', (el) => el.textContent.trim())
 	.catch(() => '');
 check('image-atlas: picking a tool hands the file over', handed.startsWith('IMG_2041'));
 

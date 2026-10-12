@@ -347,10 +347,10 @@ await page.click('[data-tool="metadata-stripper"]');
 await page.waitForFunction(
 	() =>
 		location.pathname === '/tools/metadata-stripper' &&
-		!!document.querySelector('.dt-strip-name'),
+		!!document.querySelector('.ms-source .canon-row-title'),
 	{ timeout: 15000 },
 );
-const handed = await page.$eval('.dt-strip-name', (el) =>
+const handed = await page.$eval('.ms-source .canon-row-title', (el) =>
 	el.textContent.trim(),
 );
 check(

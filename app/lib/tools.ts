@@ -405,6 +405,7 @@ export const toolCategories: ToolCategory[] = [
 					'Strip EXIF and GPS metadata from images',
 				icon: 'shield-check',
 				href: '/tools/metadata-stripper',
+				canon: true,
 				produces: [
 					'image/jpeg',
 					'image/png',

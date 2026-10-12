@@ -155,7 +155,7 @@ const ghostSeen = await page
 await page.waitForFunction(() => location.pathname === '/tools/metadata-stripper', {
 	timeout: 15000,
 });
-await page.waitForSelector('.dt-strip-name', { timeout: 15000 });
+await page.waitForSelector('.ms-source .canon-row-title', { timeout: 15000 });
 await flowSettled();
 state = await barState();
 check(
@@ -170,7 +170,7 @@ check(
 await page.reload({ waitUntil: 'networkidle2' });
 await page.waitForSelector('.dt-flow', { timeout: 15000 });
 const restored = await page
-	.waitForSelector('.dt-strip-name', { timeout: 15000 })
+	.waitForSelector('.ms-source .canon-row-title', { timeout: 15000 })
 	.then(() => true)
 	.catch(() => false);
 state = await barState();
