@@ -1,12 +1,26 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { downloadText } from 'delphitools-v2/lib/download';
 import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonCompressionScale from 'delphicanon/components/canon-compression-scale';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Source from 'delphitools-v2/components/tools/text-tool/source';
+import { downloadText } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import type { Config } from 'svgo/browser';
+import './svg-optimiser/svg-optimiser.css';
 
 /* ~200 kb deferred; same reason bg-removal defers transformers.js */
 async function loadOptimize() {
@@ -45,8 +59,6 @@ const HANDOFF_KEY = 'svg-optimiser-input';
 const HANDOFF_NAME = 'traced.svg';
 
 const ACCEPT = '.svg,image/svg+xml';
-
-const COPIED_MS = 1500;
 
 export interface OptimiseStats {
 	original: number;
@@ -92,15 +104,26 @@ export async function optimiseSvg(
 	}
 }
 
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const FileIcon = <template><IconSvg @name="file-code" /></template>;
+
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+const editable = (target: EventTarget | null) =>
+	target instanceof HTMLElement &&
+	(target.isContentEditable || target.matches('input, textarea, select'));
+
+/** The port of SVGOptimiserViewController, on the web tool's svgo. */
 export default class SvgOptimiserTool extends Component {
 	@tracked input = '';
 	@tracked output = '';
+	@tracked failure = '';
+	@tracked working = false;
 	@tracked previewUrl = '';
+	@tracked aspect = 4 / 3;
 	@tracked fileName = '';
-	@tracked copied = false;
-	@tracked stats: OptimiseStats | null = null;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
 	/** stale async runs must not clobber newer */
 	#runId = 0;
 
@@ -113,29 +136,43 @@ export default class SvgOptimiserTool extends Component {
 			this.input = incoming;
 			this.fileName = HANDOFF_NAME;
 			void this.optimise(incoming);
+			return;
+		}
+		// ?svgoText=<svg>: the iOS -svgoTextFile flag, with the text itself
+		const text = new URLSearchParams(window.location.search).get(
+			'svgoText',
+		);
+		if (text) {
+			this.input = text;
+			void this.optimise(text);
 		}
 	}
 
 	willDestroy() {
 		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
 		this.#setPreview('');
 	}
 
-	get percentLabel() {
-		return `${this.stats?.percent ?? 0}%`;
+	get before() {
+		return looksLikeSvg(this.input)
+			? new Blob([this.input]).size
+			: 0;
 	}
 
-	get originalLabel() {
-		return formatBytes(this.stats?.original ?? 0);
+	get after() {
+		return this.output ? new Blob([this.output]).size : 0;
 	}
 
-	get optimisedLabel() {
-		return formatBytes(this.stats?.optimised ?? 0);
+	get fileSize() {
+		return formatBytes(this.before);
 	}
 
-	get savedLabel() {
-		return formatBytes(this.stats?.saved ?? 0);
+	get hasResult() {
+		return !!(this.output || this.failure);
+	}
+
+	get downloadText() {
+		return passAlong('Download');
 	}
 
 	/** blob URL + img: no scripts, no cross-origin from main */
@@ -151,83 +188,106 @@ export default class SvgOptimiserTool extends Component {
 	}
 
 	#clearOutput() {
+		this.#runId += 1;
 		this.output = '';
-		this.stats = null;
+		this.failure = '';
+		this.working = false;
 		this.#setPreview('');
 	}
 
 	optimise = async (svg: string) => {
 		const runId = ++this.#runId;
+		this.working = true;
 		try {
 			const optimize = await loadOptimize();
 			if (runId !== this.#runId) return;
 
 			const { data } = stripped(optimize(svg, SVGO_CONFIG));
 			this.output = data;
-			this.stats = statsFor(svg, data);
+			this.failure = '';
 			this.#setPreview(data);
 		} catch (error) {
 			if (runId !== this.#runId) return;
 			console.error('SVG optimisation failed:', error);
 			this.#clearOutput();
+			this.failure =
+				error instanceof Error
+					? error.message
+					: String(error);
 		}
+		this.working = false;
 	};
 
 	readFile = (file: File) => {
-		this.fileName = file.name;
 		const reader = new FileReader();
 		reader.onload = () => {
+			if (this.isDestroying) return;
 			const content = reader.result as string;
+			this.fileName = file.name;
 			this.input = content;
 			void this.optimise(content);
 		};
 		reader.readAsText(file);
 	};
 
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// reset; same file re-fires change
-		input.value = '';
+	readFiles = (files: File[]) => {
+		if (files[0]) this.readFile(files[0]);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type === 'image/svg+xml') this.readFile(file);
-	};
-
-	// preventDefault stops navigate-to-file
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	setInput = (event: Event) => {
-		const content = (event.target as HTMLTextAreaElement).value;
+	setInput = (content: string) => {
 		this.input = content;
 		this.fileName = '';
 		if (looksLikeSvg(content)) void this.optimise(content);
 		else this.#clearOutput();
 	};
 
-	clear = () => {
-		this.input = '';
-		this.fileName = '';
-		this.#clearOutput();
+	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
 	};
 
-	copy = async () => {
-		await navigator.clipboard.writeText(this.output);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
+	// a drop anywhere loads the file; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, ACCEPT),
+		);
+		if (!file) return;
+		event.preventDefault();
+		this.readFile(file);
+	};
+
+	// svg code pasted outside a field loads as the input; files go through filePaste
+	pasteCode = modifier(() => {
+		const paste = (event: ClipboardEvent) => {
+			if (
+				editable(event.target) ||
+				event.clipboardData?.files.length
+			)
+				return;
+			const text =
+				event.clipboardData?.getData('text/plain') ??
+				'';
+			if (!looksLikeSvg(text)) return;
+			event.preventDefault();
+			this.setInput(text);
+		};
+		document.addEventListener('paste', paste);
+		return () => document.removeEventListener('paste', paste);
+	});
+
+	// the preview takes the drawing's shape, 3:4 to 2:1
+	measure = (event: Event) => {
+		const image = event.target as HTMLImageElement;
+		if (!image.naturalWidth || !image.naturalHeight) return;
+		this.aspect = Math.min(
+			2,
+			Math.max(
+				0.75,
+				image.naturalWidth / image.naturalHeight,
+			),
 		);
 	};
-
-	copyOutput = () => void this.copy();
 
 	download = () => {
 		const filename = this.fileName
@@ -237,152 +297,106 @@ export default class SvgOptimiserTool extends Component {
 	};
 
 	<template>
-		<div class="dt-svgo" {{filePaste this.readFile accept=ACCEPT}}>
-			<label
-				class="dt-svgo-drop"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.allowDrop}}
-			>
-				<input
-					type="file"
-					accept={{ACCEPT}}
-					class="dt-sr-only"
-					{{on "change" this.handleFileSelect}}
-				/>
-				<Icon @name="upload" />
-				<span class="dt-svgo-drop-title">Drop SVG file
-					here</span>
-				<span class="dt-svgo-drop-hint">or click to
-					select, or paste SVG code below</span>
-			</label>
-
-			<div class="dt-svgo-section">
-				<div class="dt-svgo-bar">
-					<label for="dt-svgo-input">Input SVG</label>
-					{{#if this.input}}
-						<button
-							type="button"
-							class="dt-svgo-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
+		<CanonSplit
+			class="svg-optimiser"
+			{{filePaste this.readFile accept=ACCEPT}}
+			{{this.pasteCode}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
+		>
+			<:banner>
+				<CanonCanvas @height={{176}}>
+					<CanonCompressionScale
+						@before={{this.before}}
+						@after={{this.after}}
+						@format="Optimised"
+						@working={{this.working}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<Source
+						@heading="Input SVG"
+						@text={{this.input}}
+						@label="Input SVG"
+						@onChange={{this.setInput}}
+					/>
+					{{#if this.fileName}}
+						<CanonRow
+							class="so-file"
+							@title={{this.fileName}}
+							@detail={{this.fileSize}}
+							@icon={{FileIcon}}
+						/>
+					{{else}}
+						<CanonDropZone
+							class="so-drop"
+							@prompt="Drop an SVG"
+							@icon={{FileIcon}}
+							@accept={{ACCEPT}}
+							@paste={{false}}
+							@onFiles={{this.readFiles}}
+							{{on "paste" keepPaste}}
+						/>
 					{{/if}}
-				</div>
-				<textarea
-					id="dt-svgo-input"
-					class="dt-svgo-code"
-					value={{this.input}}
-					placeholder="Paste your SVG code here..."
-					{{on "input" this.setInput}}
-				></textarea>
-			</div>
-
-			{{#if this.stats}}
-				<div class="dt-svgo-section">
-					<div class="dt-svgo-bar">
-						<span>Results</span>
-					</div>
-					<div class="dt-svgo-stats">
-						<div class="dt-svgo-stat">
-							<span
-								class="dt-svgo-stat-label"
-							>Original</span>
-							<span
-								class="dt-svgo-stat-value"
-							>{{this.originalLabel}}</span>
-						</div>
-						<div class="dt-svgo-stat">
-							<span
-								class="dt-svgo-stat-label"
-							>Optimised</span>
-							<span
-								class="dt-svgo-stat-value"
-							>{{this.optimisedLabel}}</span>
-						</div>
-						<div class="dt-svgo-stat">
-							<span
-								class="dt-svgo-stat-label"
-							>Saved</span>
-							<span
-								class="dt-svgo-stat-value is-primary"
-							>{{this.savedLabel}}</span>
-						</div>
-						<div class="dt-svgo-stat">
-							<span
-								class="dt-svgo-stat-label"
-							>Reduction</span>
-							<span
-								class="dt-svgo-stat-value is-primary"
-							>{{this.percentLabel}}</span>
-						</div>
-					</div>
-				</div>
-			{{/if}}
-
-			{{#if this.output}}
-				<div class="dt-svgo-section">
-					<div class="dt-svgo-bar">
-						<label
-							for="dt-svgo-output"
-						>Optimised SVG</label>
-					</div>
-					<textarea
-						id="dt-svgo-output"
-						class="dt-svgo-code is-output"
-						readonly
-						value={{this.output}}
-					></textarea>
-				</div>
-
-				<div class="dt-svgo-section">
-					<div class="dt-svgo-bar">
-						<span>Preview</span>
-					</div>
-					<div class="dt-svgo-preview">
-						{{#if this.previewUrl}}
-							<img
-								src={{this.previewUrl}}
-								alt="Optimised SVG preview"
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				{{#if this.previewUrl}}
+					<CanonCanvas
+						@aspect={{this.aspect}}
+						@maxHeight={{420}}
+						@boxing="unlessWide"
+						@background="var(--canon-muted)"
+					>
+						<img
+							class="so-preview"
+							src={{this.previewUrl}}
+							alt="Optimised SVG preview"
+							{{on
+								"load"
+								this.measure
+							}}
+						/>
+					</CanonCanvas>
+				{{/if}}
+				{{#if this.hasResult}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Optimised SVG"
+						/>
+						{{#if this.failure}}
+							<CanonStatus
+								class="so-failure"
+								@text={{this.failure}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{else}}
+							<CanonCodeBlock
+								class="so-code"
+								@code={{this.output}}
+								@maxHeight={{320}}
+							/>
+							<CanonButton
+								class="so-download"
+								@kind="primary"
+								@text={{this.downloadText}}
+								@icon={{Save}}
+								@iconStyle="oversized"
+								@onClick={{this.download}}
 							/>
 						{{/if}}
-					</div>
-				</div>
-
-				<div class="dt-svgo-actions">
-					<button
-						type="button"
-						class="dt-svgo-action is-primary"
-						{{on "click" this.download}}
-					>
-						<DownloadLabel
-							@label="Download Optimised SVG"
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonEmptyRow
+							@text="Optimised SVG"
 						/>
-					</button>
-					<button
-						type="button"
-						class="dt-svgo-action"
-						{{on "click" this.copyOutput}}
-					>
-						<Icon
-							@name={{if
-								this.copied
-								"check"
-								"copy"
-							}}
-						/>
-						{{if
-							this.copied
-							"Copied!"
-							"Copy SVG Code"
-						}}
-					</button>
-				</div>
-			{{/if}}
-		</div>
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }

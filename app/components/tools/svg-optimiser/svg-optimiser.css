@@ -1,0 +1,25 @@
+/* the input is code */
+.svg-optimiser .canon-text-area.tt-source {
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	font-variant-ligatures: none;
+}
+
+/* the preview: the drawing whole on the muted ground */
+.so-preview {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 100%;
+	padding: var(--canon-panel-padding);
+	object-fit: contain;
+}
+
+.svg-optimiser .so-code {
+	font-family: var(--canon-mono-font);
+	font-variant-ligatures: none;
+}
+
+.so-file .canon-row-title {
+	overflow-wrap: anywhere;
+}

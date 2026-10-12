@@ -433,6 +433,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Optimise and minify SVG files',
 				icon: 'file-image',
 				href: '/tools/svg-optimiser',
+				canon: true,
 				produces: ['image/svg+xml'],
 				accepts: ['.svg'],
 			},
