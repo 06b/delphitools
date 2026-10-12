@@ -699,6 +699,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Convert pixels to rem units',
 				icon: 'ruler',
 				href: '/tools/px-to-rem',
+				canon: true,
 			},
 			{
 				id: 'text-diff',

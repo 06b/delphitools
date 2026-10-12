@@ -1,0 +1,108 @@
+/* the specimen: baseline 8 px above the panel padding, as the iOS draw(_:) */
+.px-to-rem-specimen {
+	--px-to-rem-baseline: calc(var(--canon-panel-padding) + 8px);
+
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--canon-card);
+}
+
+.px-to-rem-grid {
+	position: absolute;
+	inset: 0 0 var(--px-to-rem-baseline);
+
+	/* Firefox 155 fills the gaps of a repeating gradient interpolated in oklab, the default for color() stops */
+	background: repeating-linear-gradient(
+		to top in srgb,
+		transparent 0
+			calc(var(--px-to-rem-line) - var(--canon-hairline)),
+		var(--canon-border)
+			calc(var(--px-to-rem-line) - var(--canon-hairline))
+			var(--px-to-rem-line)
+	);
+}
+
+.px-to-rem-grid::after {
+	position: absolute;
+	inset-block-start: 100%;
+	inset-inline: 0;
+	block-size: var(--canon-frame);
+	background: var(--canon-border);
+	content: "";
+}
+
+.px-to-rem-glyphs {
+	position: absolute;
+	inset-block-end: var(--px-to-rem-baseline);
+	inset-inline-start: var(--canon-panel-padding);
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: visible;
+	fill: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--px-to-rem-glyph);
+	font-weight: var(--canon-weight-bold);
+}
+
+.px-to-rem-result {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+}
+
+/* the quick reference */
+.px-to-rem-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	align-items: center;
+	box-sizing: border-box;
+	min-block-size: var(--canon-control-height);
+	margin: 0;
+	padding: 0 var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	font-variant-numeric: tabular-nums;
+	text-align: start;
+	appearance: none;
+}
+
+button.px-to-rem-row {
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+button.px-to-rem-row[aria-current="true"] {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	button.px-to-rem-row:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+button.px-to-rem-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.px-to-rem-row-rem {
+	color: var(--canon-primary);
+	text-align: end;
+}
+
+.px-to-rem-row--header {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+}
+
+.px-to-rem-row--header .px-to-rem-row-rem {
+	color: var(--canon-muted-foreground);
+}

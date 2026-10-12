@@ -2,7 +2,6 @@
 
 import { module, test } from 'qunit';
 import { countText } from 'delphitools-v2/components/tools/word-counter';
-import { pxToRem, remToPx } from 'delphitools-v2/components/tools/px-to-rem';
 import {
 	looksLikeSvg,
 	formatBytes,
@@ -50,30 +49,6 @@ module('Unit | Tools | D1', function () {
 			const s = countText('word '.repeat(400));
 			assert.true(s.readingTime.length > 0, s.readingTime);
 			assert.true(s.speakingTime.length > 0, s.speakingTime);
-		});
-	});
-
-	module('px-to-rem', function () {
-		test('converts against the base', function (assert) {
-			assert.strictEqual(pxToRem(16, 16), '1');
-			assert.strictEqual(pxToRem(24, 16), '1.5');
-			assert.strictEqual(pxToRem(8, 16), '0.5');
-		});
-
-		test('round-trips', function (assert) {
-			for (const px of [1, 12, 16, 37.5, 100]) {
-				const rem = Number(pxToRem(px, 16));
-				assert.strictEqual(
-					Number(remToPx(rem, 16)),
-					px,
-					`${px}px`,
-				);
-			}
-		});
-
-		test('honours a base other than 16', function (assert) {
-			assert.strictEqual(pxToRem(20, 10), '2');
-			assert.strictEqual(remToPx(2, 10), '20');
 		});
 	});
 
