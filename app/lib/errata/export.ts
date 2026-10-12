@@ -177,6 +177,7 @@ export async function exportPdf(
 	const source = sourceBytes ? await PDFDocument.load(sourceBytes) : null;
 	if (source) applyEditsToDoc(source, doc.pages);
 	const font = await out.embedFont(StandardFonts.Helvetica);
+	let bold: PDFFont | undefined;
 	const images = new Map<
 		string,
 		Awaited<ReturnType<PDFDocument['embedPng']>>
@@ -288,7 +289,13 @@ export async function exportPdf(
 				object.kind === 'field'
 			)
 				continue;
-			await drawObject(pdfPage, page, object, font, images);
+			const face =
+				object.kind === 'text' && object.bold
+					? (bold ??= await out.embedFont(
+							StandardFonts.HelveticaBold,
+						))
+					: font;
+			await drawObject(pdfPage, page, object, face, images);
 		}
 		writeComments(pdfPage, page);
 	}

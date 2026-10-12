@@ -559,6 +559,9 @@ export default class PageCanvas extends Component {
 						...base,
 						fontFamily: FONT,
 						fontSize: o.fontSize,
+						fontWeight: o.bold
+							? 'bold'
+							: 'normal',
 						fill: o.colour,
 					});
 				case 'ink':
@@ -677,6 +680,7 @@ export default class PageCanvas extends Component {
 					...base,
 					text: o.text,
 					fontSize: o.fontSize,
+					fontWeight: o.bold ? 'bold' : 'normal',
 					fill: o.colour,
 				});
 			} else if (o.kind === 'ink') {

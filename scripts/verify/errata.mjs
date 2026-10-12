@@ -396,11 +396,23 @@ const panelBox = () => page.$eval('.err-mode.is-open', (e) => {
 	const r = e.getBoundingClientRect();
 	return { left: r.left, right: r.right, h: r.height, vw: innerWidth };
 });
-check('numbers panel one row', (await panelBox()).h === 48, JSON.stringify(await panelBox()));
+const wide = await panelBox();
+check('numbers panel one row', wide.h < 120, JSON.stringify(wide));
+const anchorCells = (sel = '.err-mode.is-open') => page.$$eval(`${sel} .err-anchor-cell`, (cs) => cs.map((c) => `${c.dataset.anchor}:${c.getAttribute('aria-checked')}`));
+const numberCells = await anchorCells();
+check('numbers position picker', numberCells.length === 9 && numberCells.filter((c) => c.endsWith(':true')).join() === 'bottom-center:true', JSON.stringify(numberCells));
+const previewAt = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && typeof o.text === 'string').map((o) => ({ left: o.left, top: o.top })));
+const atBottom = await previewAt();
+await page.click('.err-mode.is-open .err-anchor-cell[data-anchor="top-right"]');
+await sleep(200);
+const atTop = await previewAt();
+check('numbers picker moves preview', atTop.length === 3 && atTop.every((p, i) => p.top < atBottom[i].top && p.left > atBottom[i].left), JSON.stringify([atBottom[0], atTop[0]]));
+await page.click('.err-mode.is-open .err-anchor-cell[data-anchor="bottom-center"]');
+await sleep(200);
 await page.setViewport({ width: 640, height: 1000 });
 await sleep(400);
 const narrow = await panelBox();
-check('numbers panel wraps when narrow', narrow.h > 48 && narrow.left >= 0 && narrow.right <= narrow.vw, JSON.stringify(narrow));
+check('numbers panel wraps when narrow', narrow.h > wide.h && narrow.left >= 0 && narrow.right <= narrow.vw, JSON.stringify(narrow));
 await page.setViewport({ width: 1400, height: 1000 });
 await sleep(400);
 check('numbers markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
@@ -430,12 +442,29 @@ check('watermark mode bar', await modeOpen('watermark'));
 await clickIn('Current');
 await sleep(200);
 check('watermark preview current only', (await previews()).length === 1);
+const slide = (label, value) => page.$eval(`.err-mode.is-open input[type="range"][aria-label="${label}"]`, (el, v) => {
+	el.value = String(v);
+	el.dispatchEvent(new Event('input', { bubbles: true }));
+}, value);
+const wmPreview = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && o.text === 'DRAFT').map((o) => [Math.round(o.opacity * 100), o.angle]));
+const sliderRange = await page.$$eval('.err-mode.is-open input[type="range"]', (els) => els.map((e) => `${e.getAttribute('aria-label')}:${e.min}..${e.max}`));
+check('watermark sliders', sliderRange.join() === 'Opacity:5..100,Angle:-90..90', sliderRange.join());
+await slide('Opacity', 60);
+await slide('Angle', 45);
+await sleep(100);
+const wmMid = await wmPreview();
+await slide('Opacity', 30);
+await slide('Angle', 20);
+await sleep(100);
+const wmEnd = await wmPreview();
+check('watermark preview follows sliders', JSON.stringify(wmMid) === '[[60,45]]' && JSON.stringify(wmEnd) === '[[30,20]]', JSON.stringify([wmMid, wmEnd]));
+check('watermark slider readout', (await page.$$eval('.err-mode.is-open .err-mode-readout', (els) => els.map((e) => e.textContent.trim()))).join() === '30%,20°');
 const wmPage = await page.evaluate(() => window.__errata.pageIndex());
 await clickIn('Apply');
 await sleep(500);
 const wm = (await doc()).pages[wmPage].objects.at(-1);
-check('watermark applied', wm?.kind === 'text' && wm.text === 'DRAFT' && wm.opacity === 0.15 && wm.angle === -45, JSON.stringify(wm));
-check('watermark canvas opacity', await page.evaluate((id) => window.__errataCanvas.getObjects().some((o) => o.text === 'DRAFT' && Math.abs(o.opacity - 0.15) < 1e-9 && o.evented), wm?.id));
+check('watermark applied', wm?.kind === 'text' && wm.text === 'DRAFT' && wm.opacity === 0.3 && wm.angle === 20, JSON.stringify(wm));
+check('watermark canvas opacity', await page.evaluate((id) => window.__errataCanvas.getObjects().some((o) => o.text === 'DRAFT' && Math.abs(o.opacity - 0.3) < 1e-9 && o.evented), wm?.id));
 
 await openCell('Stamp');
 check('stamp mode bar', await modeOpen('stamp'));
@@ -448,6 +477,30 @@ await clickIn('Apply');
 await sleep(500);
 afterTexts = await texts();
 check('stamp applied to range', afterTexts[0].includes('APPROVED') && !afterTexts[1].includes('APPROVED') && afterTexts[2].includes('APPROVED'), JSON.stringify(afterTexts));
+
+// custom label, bold, blue, bottom-left, current page
+await openCell('Stamp');
+const stampCells = await anchorCells();
+check('stamp position picker', stampCells.length === 9 && stampCells.filter((c) => c.endsWith(':true')).join() === 'top-right:true', JSON.stringify(stampCells));
+await page.click('.err-mode.is-open [aria-label="Label"]');
+await sleep(200);
+await page.evaluate(() => [...document.querySelectorAll('.dt-select-item')].find((i) => i.textContent.trim() === 'Custom')?.click());
+await sleep(200);
+check('stamp custom waits for text', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+await page.type('.err-mode.is-open input[aria-label="Custom label"]', 'Seen ok');
+await page.click('.err-mode.is-open input[aria-label="Bold"]');
+await page.click('.err-mode.is-open .err-swatch[aria-label="Blue"]');
+await page.click('.err-mode.is-open .err-anchor-cell[data-anchor="bottom-left"]');
+await clickIn('Current');
+await sleep(200);
+const customPreview = await page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && o.text === 'Seen ok').map((o) => `${o.fontWeight}:${o.fill}`));
+check('stamp custom preview', JSON.stringify(customPreview) === '["bold:#0550ae"]', JSON.stringify(customPreview));
+const customPage = await page.evaluate(() => window.__errata.pageIndex());
+await clickIn('Apply');
+await sleep(500);
+const custom = (await doc()).pages[customPage].objects.at(-1);
+check('stamp custom applied', custom?.text === 'Seen ok' && custom.bold === true && custom.colour === '#0550ae' && Math.abs(custom.cx - custom.w / 2 - 24) < 0.01, JSON.stringify(custom));
+check('stamp custom canvas bold', await page.evaluate(() => window.__errataCanvas.getObjects().some((o) => o.evented && o.text === 'Seen ok' && o.fontWeight === 'bold')));
 await openCell('Stamp');
 await page.keyboard.press('Escape');
 await sleep(300);
@@ -456,7 +509,15 @@ check('escape cancels mode', !(await modeOpen('stamp')) && (await previews()).le
 const stamped = await PDFDocument.load(new Uint8Array(await page.evaluate(() => window.__errata.export())));
 const gs = stamped.getPage(wmPage).node.Resources()?.lookup(PDFName.of('ExtGState'));
 const gsOpacity = gs ? gs.entries().map(([, v]) => String(stamped.context.lookup(v).get(PDFName.of('ca')))) : [];
-check('export watermark opacity', gsOpacity.includes('0.15'), JSON.stringify(gsOpacity));
+check('export watermark opacity', gsOpacity.includes('0.3'), JSON.stringify(gsOpacity));
+const customOut = stamped.getPage(customPage).node;
+const customFonts = customOut.Resources()?.lookup(PDFName.of('Font'));
+const fontNames = Object.fromEntries(customFonts ? customFonts.entries().map(([k, v]) => [k.asString().slice(1), String(stamped.context.lookup(v).get(PDFName.of('BaseFont')))]) : []);
+const customContents = customOut.Contents();
+const customStreams = customContents.constructor.name === 'PDFArray' ? customContents.asArray().map((r) => stamped.context.lookup(r)) : [customContents];
+const customText = customStreams.map((st) => new TextDecoder('latin1').decode(decodePDFRawStream(st).decode())).join('\n');
+const customFont = /\/(\S+) [\d.]+ Tf[^/]*?<5365656e206f6b> Tj/i.exec(customText)?.[1];
+check('export custom stamp bold font', fontNames[customFont] === '/Helvetica-Bold', JSON.stringify({ customFont, fontNames }));
 
 const downloads = mkdtempSync(join(tmpdir(), 'errata-dl-'));
 const cdp = await page.createCDPSession();
@@ -1007,5 +1068,35 @@ check('form export values', form.getTextField('email').getText() === 'a@b.c' && 
 check('form export pages', onPage(formOut, form.getTextField('email'), 0) && onPage(formOut, form.getSignature('signature'), 0) && onPage(formOut, form.getTextField('turned'), 1) && onPage(formOut, form.getCheckBox('agree'), 1));
 const mk = form.getTextField('turned').acroField.getWidgets()[0].getAppearanceCharacteristics()?.getRotation();
 check('form turned page widget upright', mk === 90, String(mk));
+
+// saved signatures: a tall and a wide upload, every thumb inside its own cell
+const sigDir = mkdtempSync(join(tmpdir(), 'errata-sig-'));
+for (const [name, w, h] of [['tall', 60, 600], ['wide', 1200, 80]]) {
+	const url = await page.evaluate((w, h) => {
+		const c = document.createElement('canvas');
+		c.width = w;
+		c.height = h;
+		c.getContext('2d').fillRect(0, 0, w, h);
+		return c.toDataURL('image/png');
+	}, w, h);
+	writeFileSync(join(sigDir, `${name}.png`), Buffer.from(url.split(',')[1], 'base64'));
+	await page.keyboard.press('g');
+	await sleep(300);
+	const input = await page.$('input[aria-label="Upload signature"]');
+	await input.uploadFile(join(sigDir, `${name}.png`));
+	await sleep(500);
+}
+await page.keyboard.press('g');
+await sleep(400);
+const thumbs = await page.$$eval('.err-sig-cell', (cells) => cells.map((c) => {
+	const a = c.getBoundingClientRect();
+	const b = c.querySelector('.err-sig-img').getBoundingClientRect();
+	return { cell: [a.left, a.top, a.right, a.bottom], img: [b.left, b.top, b.right, b.bottom] };
+}));
+const inside = ({ cell, img }) => img[0] >= cell[0] && img[1] >= cell[1] && img[2] <= cell[2] && img[3] <= cell[3];
+const apart = (p, q) => p[2] <= q[0] || q[2] <= p[0] || p[3] <= q[1] || q[3] <= p[1];
+check('signature thumbs fit cells', thumbs.length === 3 && thumbs.every(inside), JSON.stringify(thumbs));
+check('signature thumbs do not overlap', thumbs.every((t, i) => thumbs.every((u, j) => i === j || apart(t.img, u.img))), JSON.stringify(thumbs.map((t) => t.img)));
+await page.keyboard.press('Escape');
 
 await finish(browser);

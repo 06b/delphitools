@@ -146,6 +146,60 @@
 	}
 }
 
+// a4 proportion
+.err-anchor-page {
+	display: grid;
+	grid-template-rows: repeat(3, 24px);
+	grid-template-columns: repeat(3, 17px);
+	border: 1px solid var(--border);
+	background-color: var(--card);
+}
+
+.err-anchor-cell {
+	display: grid;
+	place-items: center;
+	cursor: pointer;
+
+	&::after {
+		inline-size: 9px;
+		block-size: 3px;
+		background-color: var(--border);
+		content: "";
+	}
+
+	&:hover::after {
+		background-color: var(--muted-foreground);
+	}
+
+	&.is-active::after {
+		inline-size: 13px;
+		block-size: 4px;
+		background-color: var(--primary);
+	}
+
+	&:focus-visible {
+		outline: 1px solid var(--primary);
+		outline-offset: -1px;
+	}
+}
+
+.err-swatches {
+	display: flex;
+	gap: 4px;
+}
+
+.err-swatch {
+	inline-size: 18px;
+	block-size: 18px;
+	border: 1px solid var(--border);
+	cursor: pointer;
+
+	&.is-active {
+		outline: 2px solid var(--foreground);
+		outline-offset: 1px;
+	}
+}
+
 // signature dialog body
 
 .err-sig-grid {
@@ -154,13 +208,13 @@
 
 .err-sig-cell {
 	position: relative;
+	overflow: hidden;
 	block-size: 56px;
 	background-color: #fff;
 }
 
 .err-sig-place {
-	display: grid;
-	place-items: center;
+	display: block;
 	inline-size: 100%;
 	block-size: 100%;
 	padding: 6px;
@@ -172,8 +226,9 @@
 }
 
 .err-sig-img {
-	max-inline-size: 100%;
-	max-block-size: 100%;
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
 	object-fit: contain;
 }
 

@@ -6,6 +6,7 @@ import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
 import type { PageScope as Scope } from 'delphitools-v2/lib/errata/stamps';
+import { ANCHORS, type Anchor } from 'delphitools-v2/lib/pdf-stamp';
 
 export interface ToolPanelSignature {
 	Element: HTMLDivElement;
@@ -217,5 +218,42 @@ export const PageScope: TOC<{
 				{{on "input" (readText @onRange)}}
 			/>
 		{{/if}}
+	</Field>
+</template>;
+
+/** a page-shaped 3x3 grid */
+export const AnchorPicker: TOC<{
+	Args: {
+		value: Anchor;
+		onChange: (anchor: Anchor) => void;
+	};
+}> = <template>
+	<Field @label="Position">
+		<span
+			class="err-anchor-page"
+			role="radiogroup"
+			aria-label="Position"
+		>
+			{{#each ANCHORS as |a|}}
+				<button
+					type="button"
+					role="radio"
+					class="err-anchor-cell
+						{{if
+							(eq @value a)
+							'is-active'
+						}}"
+					aria-checked={{if
+						(eq @value a)
+						"true"
+						"false"
+					}}
+					aria-label={{a}}
+					title={{a}}
+					data-anchor={{a}}
+					{{on "click" (fn @onChange a)}}
+				></button>
+			{{/each}}
+		</span>
 	</Field>
 </template>;

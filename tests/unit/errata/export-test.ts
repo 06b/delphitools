@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { PDFDocument, PDFName } from 'pdf-lib';
+import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import {
 	blankPage,
 	rotatePage,
@@ -82,6 +82,74 @@ module('Unit | errata | export', function () {
 		assert.strictEqual(p2!.getRotation().angle, 0);
 		const content = p2!.node.Contents();
 		assert.ok(content, 'annotated page has a content stream');
+	});
+
+	test('bold text is written in helvetica bold', async function (assert) {
+		const text = (id: string, bold: boolean) => ({
+			id,
+			kind: 'text' as const,
+			cx: 50,
+			cy: 50,
+			w: 40,
+			h: 12,
+			scaleX: 1,
+			scaleY: 1,
+			angle: 0,
+			text: id,
+			fontSize: 10,
+			colour: '#000000',
+			bold,
+		});
+		const fonts = async (bold: boolean) => {
+			const out = await PDFDocument.load(
+				await exportPdf(
+					{
+						name: 'x',
+						pages: [
+							{
+								...blankPage(
+									100,
+									100,
+								),
+								objects: [
+									text(
+										'a',
+										false,
+									),
+									text(
+										'b',
+										bold,
+									),
+								],
+							},
+						],
+					},
+					null,
+				),
+			);
+			const dict = out
+				.getPage(0)
+				.node.Resources()!
+				.lookup(PDFName.of('Font')) as PDFDict;
+			const names = dict
+				.values()
+				.map((v) =>
+					String(
+						(
+							out.context.lookup(
+								v,
+							) as PDFDict
+						).get(PDFName.of('BaseFont')),
+					),
+				);
+			// one resource per drawText
+			return [...new Set(names)].sort();
+		};
+		assert.deepEqual(await fonts(true), [
+			'/Helvetica',
+			'/Helvetica-Bold',
+		]);
+		assert.deepEqual(await fonts(false), ['/Helvetica']);
 	});
 
 	test('resize embeds the source page, crop sets the crop box', async function (assert) {
