@@ -488,6 +488,7 @@ export const toolCategories: ToolCategory[] = [
 					'Extract the audio out of a video file',
 				icon: 'file-audio',
 				href: '/tools/audio-extractor',
+				canon: true,
 				produces: [
 					'audio/wav',
 					'audio/mp4',

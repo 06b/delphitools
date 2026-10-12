@@ -293,19 +293,19 @@ check(
 await visit(page, '/');
 await startFlow('Extract and normalise');
 await makeClip(page, { audio: true, ms: 1500, name: 'tone.webm' });
-await dropClip(page, '.dt-ax-frame');
+await dropClip(page, '.audio-extractor');
 await page.waitForFunction(
-	() => document.querySelector('.dt-ax-go')?.disabled === false,
+	() => document.querySelector('.media-job-run')?.disabled === false,
 	{ timeout: 15000 },
 );
-await page.click('.dt-ax-go');
-await page.waitForSelector('.dt-ax-out', { timeout: 30000 });
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 });
 check(
 	'a non-final step labels its download control Pass along',
-	(await buttonText('.dt-ax-btn.is-primary')) === 'Pass along',
-	await buttonText('.dt-ax-btn.is-primary'),
+	(await buttonText('.media-job-save')) === 'Pass along',
+	await buttonText('.media-job-save'),
 );
-await page.click('.dt-ax-btn.is-primary');
+await page.click('.media-job-save');
 await page.waitForFunction(
 	() => document.querySelectorAll('.dt-an-cell').length === 4,
 	{ timeout: 20000 },
