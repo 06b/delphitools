@@ -124,7 +124,7 @@ module('Unit | Tool | paper-sizes', function () {
 		assert.true(Math.abs(px.width - 209.97) < 0.01);
 		assert.strictEqual(px.dpi, 300);
 		assert.strictEqual(
-			closest(297, 210)[0]!.pick.size.id,
+			closest(297, 210)[0]!.pick.size.name,
 			'A4',
 			'either way up',
 		);

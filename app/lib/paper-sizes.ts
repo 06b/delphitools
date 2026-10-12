@@ -15,6 +15,8 @@ export interface PaperSize {
 export interface PaperGroup {
 	id: string;
 	label: string;
+	/** The iOS series name, where it is shorter than the label. */
+	short?: string;
 	description: string;
 	sizes: PaperSize[];
 }
@@ -233,6 +235,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'iso-a',
 		label: 'ISO A Series',
+		short: 'ISO A',
 		description:
 			'International standard sizes with 1:√2 aspect ratio.',
 		sizes: [
@@ -257,6 +260,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'iso-b',
 		label: 'ISO B Series',
+		short: 'ISO B',
 		description: 'Geometric mean between A series sizes.',
 		sizes: [
 			isoBSize('B0', 1000, 1414),
@@ -275,6 +279,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'iso-c',
 		label: 'ISO C Series',
+		short: 'ISO C',
 		description: 'Envelope sizes - geometric mean between A and B.',
 		sizes: [
 			isoCSize('C0', 917, 1297),
@@ -291,6 +296,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'raw-format',
 		label: 'RA Series',
+		short: 'RA',
 		description: 'Raw format sizes for printing before trimming.',
 		sizes: [
 			raSize('RA0', 860, 1220),
@@ -303,6 +309,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'sra-series',
 		label: 'SRA Series',
+		short: 'SRA',
 		description: 'Supplementary Raw Format A - extra bleed area.',
 		sizes: [
 			sraSize('SRA0', 900, 1280),

@@ -5,6 +5,7 @@ import {
 
 export interface PaperPick {
 	series: string;
+	seriesName: string;
 	size: PaperSize;
 	key: string;
 }
@@ -12,6 +13,7 @@ export interface PaperPick {
 export const allPicks: PaperPick[] = allSeries.flatMap((series) =>
 	series.sizes.map((size) => ({
 		series: series.id,
+		seriesName: series.name,
 		size,
 		key: `${series.id}/${size.id}`,
 	})),
@@ -149,9 +151,13 @@ export function parseQuery(text: string): PaperQuery {
 
 export function matches(query: PaperQuery, pick: PaperPick): boolean {
 	if (query.kind !== 'name') return true;
-	return [pick.size.name, pick.size.id, pick.series].some((part) =>
-		part.toLowerCase().includes(query.text),
-	);
+	// the app table names JIS B0 'JB0'; the series name carries 'JIS'
+	return [
+		pick.size.name,
+		pick.size.id,
+		pick.series,
+		pick.seriesName,
+	].some((part) => part.toLowerCase().includes(query.text));
 }
 
 export interface Closest {
