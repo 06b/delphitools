@@ -430,6 +430,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'layout-grid',
 				href: '/tools/placeholder-genny',
 				produces: ['image/png', 'image/svg+xml'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'svg-optimiser',

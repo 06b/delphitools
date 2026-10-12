@@ -1,0 +1,49 @@
+.ph-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.ph-area {
+	position: absolute;
+	inset: calc(var(--canon-panel-padding) / 2) var(--canon-panel-padding)
+		var(--canon-panel-padding);
+}
+
+.ph-sheet,
+.ph-dimension {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.ph-sheet {
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.ph-picture--placed .ph-sheet,
+.ph-picture--placed .ph-dimension {
+	transition-duration: 550ms;
+	transition-property:
+		inset-inline-start, inset-block-start, inline-size, block-size;
+	transition-timing-function: var(--ph-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ph-picture--placed .ph-sheet,
+	.ph-picture--placed .ph-dimension {
+		transition: none;
+	}
+}
+
+/* the label field spans its row, as on iOS */
+.placeholder-genny .ph-label {
+	inline-size: 100%;
+	padding-inline: var(--canon-panel-padding);
+}
+
+/* the kit code block sets code in the text face */
+.placeholder-genny .canon-code-block-code {
+	font-family: var(--canon-mono-font);
+}
