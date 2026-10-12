@@ -10,7 +10,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const UNSTYLED_CONTAINERS = new Set([
 	'dt-bc-rows',
 	'dt-docconv-option-text',
-	'dt-shades-rows',
 	'dt-tc-table',
 	'dt-tabs',
 	'sub-csm-section',

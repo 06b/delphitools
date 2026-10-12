@@ -88,7 +88,7 @@ async function colourAnswers(hex: string): Promise<OmniAnswer[]> {
 		});
 
 	const { generateShades } =
-		await import('delphitools-v2/components/tools/tailwind-shades');
+		await import('delphitools-v2/components/tools/tailwind-shades/shades');
 	const shades = generateShades(hex, 'classic');
 	if (shades)
 		push(answers, 'tailwind-shades', {

@@ -216,6 +216,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'wind',
 				href: '/tools/tailwind-shades',
 				carryColour: true,
+				canon: true,
 			},
 		],
 	},
