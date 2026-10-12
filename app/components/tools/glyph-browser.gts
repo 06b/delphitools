@@ -1,415 +1,337 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonJumpHeading from 'delphicanon/components/canon-jump-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import Card from 'delphitools-v2/components/tools/glyph-browser/card';
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
-import {
-	Popover,
-	PopoverTrigger,
-	PopoverContent,
-} from 'delphitools-v2/components/ui/popover';
+	categoryForCode,
+	chart,
+	codeLabel,
+	isVisible,
+	valueLines,
+} from 'delphitools-v2/components/tools/glyph-browser/glyphs';
+import './glyph-browser/glyph-browser.css';
 
-export interface GlyphCategory {
-	name: string;
-	ranges: [number, number][];
-}
+/** g: descender and bowl. */
+const firstGlyph = 0x67;
+/** Row header width and the smallest cell before the chart drops to 8 columns (GlyphChart.Geometry). */
+const rowHeader = 52;
+const minCell = 34;
+const collapsedHeight = 140 + 16 * 2;
 
-export const CATEGORIES: GlyphCategory[] = [
-	{ name: 'Latin Basic', ranges: [[0x0020, 0x007f]] },
-	{
-		name: 'Latin Extended',
-		ranges: [
-			[0x0080, 0x00ff],
-			[0x0100, 0x017f],
-		],
-	},
-	{ name: 'Greek', ranges: [[0x0370, 0x03ff]] },
-	{ name: 'Cyrillic', ranges: [[0x0400, 0x04ff]] },
-	{ name: 'Punctuation', ranges: [[0x2000, 0x206f]] },
-	{ name: 'Currency', ranges: [[0x20a0, 0x20cf]] },
-	{ name: 'Arrows', ranges: [[0x2190, 0x21ff]] },
-	{ name: 'Math Operators', ranges: [[0x2200, 0x22ff]] },
-	{ name: 'Box Drawing', ranges: [[0x2500, 0x257f]] },
-	{ name: 'Geometric Shapes', ranges: [[0x25a0, 0x25ff]] },
-	{ name: 'Symbols', ranges: [[0x2600, 0x26ff]] },
-	{ name: 'Dingbats', ranges: [[0x2700, 0x27bf]] },
-	{
-		name: 'Emoji',
-		ranges: [
-			[0x1f300, 0x1f5ff],
-			[0x1f600, 0x1f64f],
-			[0x1f680, 0x1f6ff],
-		],
-	},
-];
-
-export type GlyphFormat = 'char' | 'html' | 'css' | 'js';
-
-const FORMATS: { id: GlyphFormat; label: string }[] = [
-	{ id: 'char', label: 'Char' },
-	{ id: 'html', label: 'HTML' },
-	{ id: 'css', label: 'CSS' },
-	{ id: 'js', label: 'JS' },
-];
-
-const MAX_GLYPHS = 400;
-
-const COPIED_MS = 1500;
-
-export function codesForCategory(name: string): number[] {
-	const category = CATEGORIES.find((c) => c.name === name);
-	if (!category) return [];
-
-	const codes: number[] = [];
-	for (const [start, end] of category.ranges) {
-		for (let code = start; code <= end; code++) codes.push(code);
-	}
-	return codes;
-}
-
-export function filterCodes(codes: number[], search: string): number[] {
-	if (!search) return codes;
-	const lower = search.toLowerCase();
-	return codes.filter((code) => {
-		const hex = code.toString(16).toLowerCase();
-		return (
-			String.fromCodePoint(code) === search ||
-			hex.includes(lower) ||
-			`u+${hex}`.includes(lower)
-		);
-	});
-}
-
-export function codeLabel(code: number): string {
-	return `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
-}
-
-export function codeText(code: number, format: GlyphFormat): string {
-	const hex = code.toString(16);
-	switch (format) {
-		case 'char':
-			return String.fromCodePoint(code);
-		case 'html':
-			return `&#x${hex};`;
-		case 'css':
-			return `\\${hex}`;
-		case 'js':
-			// astral escapes need braces
-			return code <= 0xffff
-				? `\\u${hex.padStart(4, '0')}`
-				: `\\u{${hex}}`;
-	}
-}
-
-export function categoryForCode(code: number): string | null {
-	for (const category of CATEGORIES) {
-		for (const [start, end] of category.ranges) {
-			if (code >= start && code <= end) return category.name;
-		}
-	}
-	return null;
-}
-
-export function describeGlyph(
-	input: string,
-): { char: string; label: string; category: string } | null {
-	const trimmed = input.trim();
-	let code: number | null = null;
-
-	const hexMatch = /^U\+([0-9A-Fa-f]+)$/i.exec(trimmed);
-	if (hexMatch) {
-		code = parseInt(hexMatch[1]!, 16);
-	} else if ([...trimmed].length === 1) {
-		code = trimmed.codePointAt(0) ?? null;
-	}
-
-	if (code === null || Number.isNaN(code)) return null;
-	try {
-		const char = String.fromCodePoint(code);
-		const category = categoryForCode(code);
-		return {
-			char,
-			label: codeLabel(code),
-			category: category ?? 'Unknown block',
-		};
-	} catch {
-		return null;
-	}
-}
-
+/** The port of GlyphBrowserViewController. */
 export default class GlyphBrowserTool extends Component {
-	@tracked selectedCategory = CATEGORIES[0]!.name;
+	@service('canon-toast') declare toast: CanonToastService;
+
 	@tracked search = '';
-	@tracked copiedFormat: GlyphFormat | 'grid' | null = null;
-	@tracked copiedChar: string | null = null;
-	@tracked openPopover: number | null = null;
+	@tracked selected = firstGlyph;
+	@tracked columns = 16;
+	@tracked cardHeight = 0;
+	chartElement?: HTMLElement;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	// ?gbCode=<hex> ?gbSearch=<query>: the iOS -gbcode and -gbsearch flags
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const code = parseInt(query.get('gbCode') ?? '', 16);
+		if (code >= 0 && code <= 0x10ffff) this.selected = code;
+		this.search = query.get('gbSearch') ?? '';
 	}
 
-	get categories() {
-		return CATEGORIES;
+	get sections() {
+		return chart(this.columns, this.search).map((section) => ({
+			...section,
+			detail: `${section.count} glyphs`,
+			rows: section.rows.map((row) => ({
+				label: codeLabel(row.start),
+				cells: row.cells.map((code, column) =>
+					code === undefined
+						? { key: column, blank: true }
+						: {
+								key: column,
+								blank: false,
+								code,
+								char: String.fromCodePoint(
+									code,
+								),
+								label: codeLabel(
+									code,
+								),
+								selected:
+									code ===
+									this
+										.selected,
+							},
+				),
+			})),
+		}));
 	}
 
-	get filtered() {
-		return filterCodes(
-			codesForCategory(this.selectedCategory),
-			this.search,
+	get visibleCodes() {
+		return this.sections.flatMap((section) =>
+			section.rows.flatMap((row) =>
+				row.cells.flatMap((cell) =>
+					cell.blank ? [] : [cell.code!],
+				),
+			),
 		);
 	}
 
-	get total() {
-		return this.filtered.length;
+	/** The selected glyph takes the tab stop, or the first shown when the search hides it. */
+	get tabStop() {
+		const codes = this.visibleCodes;
+		return codes.includes(this.selected) ? this.selected : codes[0];
 	}
 
-	get overflowing() {
-		return this.total > MAX_GLYPHS;
+	get empty() {
+		return this.sections.length === 0;
 	}
 
-	get countLabel() {
-		return `${this.total} glyphs`;
+	get char() {
+		return String.fromCodePoint(this.selected);
 	}
 
-	get glyphs() {
-		return this.filtered.slice(0, MAX_GLYPHS).map((code) => {
-			const char = String.fromCodePoint(code);
-			const isOpen = this.openPopover === code;
-			return {
-				code,
-				char,
-				label: codeLabel(code),
-				isOpen,
-				isCopied:
-					this.copiedFormat === 'grid' &&
-					this.copiedChar === char,
-				formats: isOpen
-					? FORMATS.map((format) => ({
-							id: format.id,
-							label: format.label,
-							isCopied:
-								this
-									.copiedFormat ===
-									format.id &&
-								this
-									.copiedChar ===
-									char,
-						}))
-					: [],
-			};
-		});
+	get label() {
+		return codeLabel(this.selected);
 	}
 
-	setSearch = (event: Event) => {
-		this.search = (event.target as HTMLInputElement).value;
-	};
+	get category() {
+		return categoryForCode(this.selected) ?? 'Unknown block';
+	}
 
-	chooseCategory = (name: string) => {
-		this.selectedCategory = name;
-		this.search = '';
-		this.openPopover = null;
-	};
+	get lines() {
+		return valueLines(this.selected);
+	}
 
-	setPopover = (code: number, open: boolean) => {
-		this.openPopover = open ? code : null;
-	};
+	get chartStyle() {
+		return htmlSafe(`--gb-columns: ${this.columns}`);
+	}
 
-	#markCopied = (char: string, format: GlyphFormat | 'grid') => {
-		this.copiedChar = char;
-		this.copiedFormat = format;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(() => {
-			this.copiedChar = null;
-			this.copiedFormat = null;
-		}, COPIED_MS);
-	};
+	get pictureHeight() {
+		return this.cardHeight > 0 ? this.cardHeight + 4 : undefined;
+	}
 
-	copyGlyph = (code: number, event: Event) => {
-		event.preventDefault();
-		const char = String.fromCodePoint(code);
-		void navigator.clipboard
-			.writeText(char)
-			.then(() => this.#markCopied(char, 'grid'));
-	};
-
-	copyFormat = (code: number, format: GlyphFormat) => {
-		void navigator.clipboard
-			.writeText(codeText(code, format))
-			.then(() =>
-				this.#markCopied(
-					String.fromCodePoint(code),
-					format,
-				),
+	measureChart = modifier((element: HTMLElement) => {
+		this.chartElement = element;
+		const observer = new ResizeObserver(([entry]) => {
+			const room = Math.max(
+				0,
+				(entry?.contentRect.width ?? 0) - rowHeader,
 			);
+			const columns = room / 16 >= minCell ? 16 : 8;
+			if (columns !== this.columns)
+				requestAnimationFrame(
+					() => (this.columns = columns),
+				);
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	});
+
+	setSearch = (text: string) => (this.search = text);
+
+	measured = (height: number) => {
+		if (height !== this.cardHeight) this.cardHeight = height;
+	};
+
+	pick = (code?: number) => {
+		if (code !== undefined) this.selected = code;
+	};
+
+	copyChar = (code?: number) => {
+		if (code !== undefined)
+			void this.toast.copy(String.fromCodePoint(code));
+	};
+
+	copyLabel = () => void this.toast.copy(this.label);
+
+	// arrows move the selection through the chart, a row is `columns` cells
+	key = (event: KeyboardEvent) => {
+		const codes = this.visibleCodes;
+		const at = codes.indexOf(this.selected);
+		if (at < 0) return;
+		let next: number | undefined;
+		const step = {
+			ArrowRight: 1,
+			ArrowLeft: -1,
+			ArrowDown: this.columns,
+			ArrowUp: -this.columns,
+		}[event.key];
+		if (step === undefined) {
+			if (event.key === 'Home') next = codes[0];
+			else if (event.key === 'End') next = codes.at(-1);
+			else return;
+		} else if (Math.abs(step) === 1) next = codes[at + step];
+		else {
+			const target = this.selected + step;
+			next =
+				step > 0
+					? codes.find((code) => code >= target)
+					: codes.findLast(
+							(code) =>
+								code <= target,
+						);
+		}
+		event.preventDefault();
+		if (next === undefined || !isVisible(next)) return;
+		this.selected = next;
+		requestAnimationFrame(() => {
+			const cell =
+				this.chartElement?.querySelector<HTMLElement>(
+					`[data-code="${next}"]`,
+				);
+			cell?.focus({ preventScroll: true });
+			cell?.scrollIntoView({ block: 'nearest' });
+		});
 	};
 
 	<template>
-		<div class="dt-glyph">
-			<div class="dt-glyph-bar">
-				<span class="dt-glyph-search">
-					<Icon @name="search" />
-					{{! wording carried over from the Next app }}
-					<input
-						type="text"
-						value={{this.search}}
-						placeholder="Search by character or hex code…"
-						aria-label="Search glyphs"
-						{{on "input" this.setSearch}}
+		<CanonSplit
+			class="glyph-browser"
+			@halves={{true}}
+			@collapsesTo={{collapsedHeight}}
+		>
+			<:sidebar>
+				<CanonCanvas @height={{this.pictureHeight}}>
+					<Card
+						@char={{this.char}}
+						@code={{this.selected}}
+						@label={{this.label}}
+						@category={{this.category}}
+						@lines={{this.lines}}
+						@onCopyLabel={{this.copyLabel}}
+						@onHeight={{this.measured}}
 					/>
-				</span>
-				<span class="dt-glyph-category">
-					<Select
-						@value={{this.selectedCategory}}
-						@onValueChange={{this.chooseCategory}}
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonTextCell
+						class="gb-search"
+						@value={{this.search}}
+						@placeholder="Search by character or hex code…"
+						@onChange={{this.setSearch}}
+						aria-label="Search glyphs"
+						autocomplete="off"
+						spellcheck="false"
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					{{! template-lint-disable no-invalid-interactive }}
+					<div
+						class="gb-chart"
+						role="grid"
+						aria-label="Glyphs"
+						style={{this.chartStyle}}
+						{{this.measureChart}}
+						{{on "keydown" this.key}}
 					>
-						<SelectTrigger>
-							<SelectValue
-							>{{this.selectedCategory}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each
-								this.categories
-								key="name"
-								as |category|
-							}}
-								<SelectItem
-									@value={{category.name}}
-								>{{category.name}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
-				</span>
-			</div>
-
-			<div class="dt-glyph-head">
-				<span
-					class="dt-glyph-head-name"
-				>{{this.selectedCategory}}</span>
-				<span
-					class="dt-glyph-head-count"
-				>{{this.countLabel}}</span>
-			</div>
-
-			<div class="dt-glyph-grid">
-				{{#each this.glyphs key="code" as |glyph|}}
-					<Popover
-						@open={{glyph.isOpen}}
-						@onOpenChange={{fn
-							this.setPopover
-							glyph.code
+						{{#each
+							this.sections key="name"
+							as |section|
 						}}
-					>
-						<PopoverTrigger
-							@asChild={{true}}
-							as |trigger|
-						>
-							<button
-								type="button"
-								class="dt-glyph-cell
-									{{if
-										glyph.isOpen
-										'is-open'
-									}}
-									{{if
-										glyph.isCopied
-										'is-copied'
-									}}"
-								title={{glyph.label}}
-								{{on
-									"dblclick"
-									(fn
-										this.copyGlyph
-										glyph.code
-									)
-								}}
-								{{trigger.modifiers}}
-							>{{glyph.char}}</button>
-						</PopoverTrigger>
-						<PopoverContent
-							class="dt-glyph-popover"
-							@side="top"
-							@align="center"
-						>
 							<div
-								class="dt-glyph-detail"
+								class="gb-section"
+								role="rowgroup"
 							>
-								<span
-									class="dt-glyph-detail-char"
-								>{{glyph.char}}</span>
-								<span
-									class="dt-glyph-detail-meta"
-								>
-									<span
-										class="dt-glyph-detail-code"
-									>{{glyph.label}}</span>
-									{{! wording carried over from the Next app }}
-									<span
-										class="dt-glyph-detail-decimal"
-									>Decimal:
-										{{glyph.code}}</span>
-								</span>
-							</div>
-							<div
-								class="segmented dt-glyph-formats"
-							>
+								<CanonJumpHeading
+									@text={{section.name}}
+									@detail={{section.detail}}
+								/>
 								{{#each
-									glyph.formats
-									key="id"
-									as |format|
+									section.rows
+									key="label"
+									as |row|
 								}}
-									<button
-										type="button"
-										class="dt-glyph-format
-											{{if
-												format.isCopied
-												'is-copied'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.copyFormat
-												glyph.code
-												format.id
-											)
-										}}
+									<div
+										class="gb-row"
+										role="row"
 									>
-										<Icon
-											@name={{if
-												format.isCopied
-												"check"
-												"copy"
+										<span
+											class="gb-row-head"
+											role="rowheader"
+										>{{row.label}}</span>
+										{{#each
+											row.cells
+											key="key"
+											as |cell|
+										}}
+											{{#if
+												cell.blank
 											}}
-										/>
-										{{format.label}}
-									</button>
+												<span
+													class="gb-cell gb-cell--blank"
+													role="gridcell"
+												></span>
+											{{else}}
+												<button
+													type="button"
+													class="gb-cell"
+													role="gridcell"
+													data-code={{cell.code}}
+													aria-label={{cell.label}}
+													aria-selected={{if
+														cell.selected
+														"true"
+														"false"
+													}}
+													tabindex={{if
+														(isStop
+															cell.code
+															this.tabStop
+														)
+														"0"
+														"-1"
+													}}
+													{{on
+														"click"
+														(fn
+															this.pick
+															cell.code
+														)
+													}}
+													{{on
+														"dblclick"
+														(fn
+															this.copyChar
+															cell.code
+														)
+													}}
+												>{{cell.char}}</button>
+											{{/if}}
+										{{/each}}
+									</div>
 								{{/each}}
 							</div>
-						</PopoverContent>
-					</Popover>
-				{{/each}}
-			</div>
-
-			{{#if this.overflowing}}
+						{{/each}}
+					</div>
+					{{#if this.empty}}
+						<CanonStatus
+							@text="No glyphs found"
+							@tone="muted"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
 				{{! wording carried over from the Next app }}
-				<p class="dt-glyph-overflow">Showing 400 of
-					{{this.total}}
-					glyphs. Use search to narrow results.</p>
-			{{/if}}
-
-			{{! wording carried over from the Next app }}
-			<p class="dt-glyph-tip"><strong>Tip:</strong>
-				Double-click any glyph to quickly copy the
-				character.</p>
-		</div>
+				<p class="gb-tip">Double-click any glyph to
+					quickly copy the character.</p>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function isStop(code: number | undefined, stop: number | undefined) {
+	return code !== undefined && code === stop;
 }

@@ -683,6 +683,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Browse unicode glyphs',
 				icon: 'type',
 				href: '/tools/glyph-browser',
+				canon: true,
 			},
 			{
 				id: 'large-type',

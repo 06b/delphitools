@@ -332,7 +332,7 @@ async function qrAnswers(input: string): Promise<OmniAnswer[]> {
 
 async function glyphAnswers(input: string): Promise<OmniAnswer[]> {
 	const { describeGlyph } =
-		await import('delphitools-v2/components/tools/glyph-browser');
+		await import('delphitools-v2/components/tools/glyph-browser/glyphs');
 	const info = describeGlyph(input);
 	if (!info) return [];
 
