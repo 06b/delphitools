@@ -3,6 +3,7 @@ import { modifier } from 'ember-modifier';
 import { on } from '@ember/modifier';
 import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
+import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
 import CommentPopover from 'delphitools-v2/components/errata/comment-popover';
 import Omnibar from 'delphitools-v2/components/errata/omnibar';
 import PageCanvas from 'delphitools-v2/components/errata/page-canvas';
@@ -16,6 +17,7 @@ import { exportPdf } from 'delphitools-v2/lib/errata/export';
 import {
 	getSourceBytes,
 	openFile,
+	opening,
 	pageFontFace,
 	debugActivePdf,
 } from 'delphitools-v2/lib/errata/source';
@@ -45,6 +47,7 @@ import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 export default class ErrataShell extends Component {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
 	mode = new TrackedExternal(boxMode.subscribe, boxMode.get);
+	loading = new TrackedExternal(opening.subscribe, opening.get);
 	#pdfInput: HTMLInputElement | null = null;
 	#imageInput: HTMLInputElement | null = null;
 
@@ -52,6 +55,7 @@ export default class ErrataShell extends Component {
 		super.willDestroy();
 		this.doc.unsubscribe();
 		this.mode.unsubscribe();
+		this.loading.unsubscribe();
 	}
 
 	// scripts/verify/errata.mjs drives this
@@ -273,47 +277,57 @@ export default class ErrataShell extends Component {
 							}}
 						/>
 						<CommentPopover />
-					{{else}}
-						<div class="sub-empty-hint">
+					{{else}}{{#unless this.loading.current}}
 							<div
-								class="sub-empty-card pointer-events-auto border shadow-lg"
+								class="sub-empty-hint"
 							>
 								<div
-									class="segmented sub-empty-actions"
+									class="sub-empty-card pointer-events-auto border shadow-lg"
 								>
-									<button
-										type="button"
-										class="sub-empty-action"
-										{{on
-											"click"
-											this.pickPdf
-										}}
+									<div
+										class="segmented sub-empty-actions"
 									>
-										<Icon
-											@name="file-text"
-										/>
-										Open
-										PDF
-									</button>
-									<button
-										type="button"
-										class="sub-empty-action"
-										{{on
-											"click"
-											this.pickImage
-										}}
-									>
-										<Icon
-											@name="image-plus"
-										/>
-										Open
-										image
-									</button>
+										<button
+											type="button"
+											class="sub-empty-action"
+											{{on
+												"click"
+												this.pickPdf
+											}}
+										>
+											<Icon
+												@name="file-text"
+											/>
+											Open
+											PDF
+										</button>
+										<button
+											type="button"
+											class="sub-empty-action"
+											{{on
+												"click"
+												this.pickImage
+											}}
+										>
+											<Icon
+												@name="image-plus"
+											/>
+											Open
+											image
+										</button>
+									</div>
+									<div
+										class="sub-empty-note"
+									>Drop or
+										paste</div>
 								</div>
-								<div
-									class="sub-empty-note"
-								>Drop or paste</div>
 							</div>
+						{{/unless}}{{/if}}
+					{{#if this.loading.current}}
+						<div class="err-opening">
+							<NdsLoader
+								class="is-stage"
+							/>
 						</div>
 					{{/if}}
 				</div>

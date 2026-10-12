@@ -21,6 +21,7 @@ import { store, setPageIndex } from './store';
 import { editedBytes, loadSourceDoc, setContentSource } from './content';
 import { readComments } from './comments';
 import { exportPdf } from './export';
+import { channel } from 'delphitools-v2/lib/channel';
 
 // doc.source keys this
 const versions = new Map<string, Uint8Array>();
@@ -223,10 +224,21 @@ export async function openImage(file: File): Promise<void> {
 	setPageIndex(0);
 }
 
+/** count of opens in flight */
+export const opening = channel(0);
+
 export async function openFile(file: File): Promise<void> {
-	if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name))
-		await openPdf(file);
-	else await openImage(file);
+	opening.set(opening.get() + 1);
+	try {
+		if (
+			file.type === 'application/pdf' ||
+			/\.pdf$/i.test(file.name)
+		)
+			await openPdf(file);
+		else await openImage(file);
+	} finally {
+		opening.set(opening.get() - 1);
+	}
 }
 
 export function closeDoc(): void {

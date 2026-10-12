@@ -847,3 +847,12 @@
 		block-size: 14px;
 	}
 }
+
+.err-opening {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: grid;
+	place-items: center;
+	background: color-mix(in oklch, var(--background) 70%, transparent);
+}

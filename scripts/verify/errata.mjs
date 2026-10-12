@@ -34,14 +34,23 @@ limited.node.setFontDictionary(
 limited.pushOperators(beginText(), setFontAndSize('F9', 24), moveText(40, 250), showText(PDFHexString.of('6f6e65')), endText());
 const bytes = [...(await src.save())];
 
-await page.evaluate(
-	(b) => window.__errata.open(new Uint8Array(b).buffer, 'fixture.pdf', 'application/pdf'),
-	bytes,
-);
+const loaderSeen = await page.evaluate((b) => {
+	let seen = false;
+	const watch = new MutationObserver(() => {
+		seen ||= !!document.querySelector('.err-opening .nds-loader');
+	});
+	watch.observe(document.body, { childList: true, subtree: true });
+	return window.__errata.open(new Uint8Array(b).buffer, 'fixture.pdf', 'application/pdf').then(() => {
+		watch.disconnect();
+		return seen;
+	});
+}, bytes);
 await page.waitForFunction(() => window.__errata.doc()?.pages.length === 2, {
 	timeout: 10000,
 });
 await sleep(600);
+check('open loader shown', loaderSeen);
+check('open loader gone', !(await page.$('.err-opening')));
 
 const doc = () => page.evaluate(() => window.__errata.doc());
 const objects = async () => (await doc()).pages[await page.evaluate(() => window.__errata.pageIndex())].objects;
