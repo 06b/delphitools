@@ -12,7 +12,6 @@ export const RELEASES: Release[] = [
 		since: '2.1.1',
 		features: [
 			'Errata: Edit PDFs in the browser. Yes, I went there. Still in beta, so calibrate your expectations. Of course, completely free, unlimited, local and open source as always.',
-			'',
 		],
 		fixes: [
 			'PDF Imposer: Rotated and cropped pages now land upright and in the right spot.',
