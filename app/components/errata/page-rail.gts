@@ -17,7 +17,11 @@ import {
 	movePage,
 	rotateCurrent,
 } from 'delphitools-v2/lib/errata/page-ops';
-import { imagePage, renderThumb } from 'delphitools-v2/lib/errata/source';
+import {
+	imagePage,
+	pageKey,
+	renderThumb,
+} from 'delphitools-v2/lib/errata/source';
 import {
 	getPageIndex,
 	setPageIndex,
@@ -26,17 +30,25 @@ import {
 } from 'delphitools-v2/lib/errata/store';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
-// thumbnail keyed by page id and rotation
-export const thumb = modifier(
-	(img: HTMLImageElement, [page, width]: [ErrataPage, number?]) => {
-		let live = true;
-		void renderThumb(page, width).then((url) => {
-			if (live) img.src = url;
-		});
-		return () => {
-			live = false;
-		};
-	},
+const painted = new WeakMap<HTMLImageElement, string>();
+
+// rows rebuild every change
+export function paintThumb(
+	img: HTMLImageElement,
+	page: ErrataPage,
+	width?: number,
+): void {
+	const key = `${width}:${pageKey(page)}`;
+	if (painted.get(img) === key) return;
+	painted.set(img, key);
+	void renderThumb(page, width).then((url) => {
+		if (painted.get(img) === key) img.src = url;
+	});
+}
+
+const thumb = modifier(
+	(img: HTMLImageElement, [page, width]: [ErrataPage, number?]) =>
+		paintThumb(img, page, width),
 );
 
 const Gap: TOC<{

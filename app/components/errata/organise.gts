@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import Icon from 'delphitools-v2/components/icon';
 import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
-import { thumb } from 'delphitools-v2/components/errata/page-rail';
+import { paintThumb } from 'delphitools-v2/components/errata/page-rail';
 import type { ErrataPage } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	deletePages,
@@ -42,11 +42,30 @@ export default class Organise extends Component {
 			return true;
 		},
 	});
+	#visible = new WeakSet<Element>();
+	#pageOf = new WeakMap<Element, ErrataPage>();
+	#seen = new IntersectionObserver((entries) => {
+		for (const e of entries) {
+			if (!e.isIntersecting) {
+				this.#visible.delete(e.target);
+				continue;
+			}
+			this.#visible.add(e.target);
+			const page = this.#pageOf.get(e.target);
+			if (page)
+				paintThumb(
+					e.target as HTMLImageElement,
+					page,
+					THUMB_PX,
+				);
+		}
+	});
 
 	willDestroy() {
 		super.willDestroy();
 		this.doc.unsubscribe();
 		this.#off();
+		this.#seen.disconnect();
 		// canvas opens first selection
 		const first = this.pages.findIndex((p) =>
 			this.selected.has(p.id),
@@ -146,6 +165,13 @@ export default class Organise extends Component {
 		this.selected = new Set([this.pages[index]!.id]);
 		closeMode();
 	};
+
+	// off-screen thumbs wait
+	lazyThumb = modifier((img: HTMLImageElement, [page]: [ErrataPage]) => {
+		this.#pageOf.set(img, page);
+		if (this.#visible.has(img)) paintThumb(img, page, THUMB_PX);
+		else this.#seen.observe(img);
+	});
 
 	rotate = (turns: 1 | -1) =>
 		updatePages((p) => rotatePages(p, this.selected, turns));
@@ -285,9 +311,8 @@ export default class Organise extends Component {
 							<img
 								alt=""
 								class="err-page-thumb"
-								{{thumb
+								{{this.lazyThumb
 									row.page
-									THUMB_PX
 								}}
 							/>
 						</span>

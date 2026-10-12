@@ -8,7 +8,9 @@ let pdfjs: Promise<typeof PdfJs> | null = null;
 
 export function getPdfJs(): Promise<typeof PdfJs> {
 	pdfjs ??= import('pdfjs-dist').then((mod) => {
-		mod.GlobalWorkerOptions.workerSrc = workerSrc;
+		mod.GlobalWorkerOptions.workerPort = new Worker(workerSrc, {
+			type: 'module',
+		});
 		return mod;
 	});
 	return pdfjs;
@@ -26,5 +28,9 @@ export async function loadPdfDocument(
 		data,
 		wasmUrl: PDF_WASM_URL,
 		standardFontDataUrl: PDF_FONTS_URL,
+		// passed worker survives destroy
+		worker: pdfjs.PDFWorker.create({
+			port: pdfjs.GlobalWorkerOptions.workerPort ?? undefined,
+		}),
 	}).promise;
 }

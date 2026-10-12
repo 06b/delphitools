@@ -824,6 +824,7 @@ function imageSize(
 
 export async function analyseWithPdfJs(
 	buffer: ArrayBuffer,
+	isStale = () => false,
 ): Promise<{ pdfDoc: PDFDocumentProxy; issues: PreflightIssue[] }> {
 	const pdfjsLib = await getPdfJs();
 	const OPS = pdfjsLib.OPS;
@@ -831,7 +832,7 @@ export async function analyseWithPdfJs(
 
 	const pdfDoc = await loadPdfDocument(buffer.slice(0));
 
-	for (let i = 1; i <= pdfDoc.numPages; i++) {
+	for (let i = 1; i <= pdfDoc.numPages && !isStale(); i++) {
 		const page = await pdfDoc.getPage(i);
 		const opList = await page.getOperatorList();
 		const argsArray = opList.argsArray as unknown[][];
@@ -951,10 +952,15 @@ export async function runPreflight(
 	buffer: ArrayBuffer,
 	fileName: string,
 	fileSize: number,
+	isStale = () => false,
 ): Promise<{ report: PreflightReport; pdfDoc: PDFDocumentProxy | null }> {
 	const report = await analyseWithPdfLib(buffer, fileName, fileSize);
+	if (isStale()) return { report, pdfDoc: null };
 	try {
-		const { pdfDoc, issues } = await analyseWithPdfJs(buffer);
+		const { pdfDoc, issues } = await analyseWithPdfJs(
+			buffer,
+			isStale,
+		);
 		report.issues.push(...issues);
 		return { report, pdfDoc };
 	} catch (pdfJsError) {

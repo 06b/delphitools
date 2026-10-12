@@ -48,14 +48,18 @@ function useSource(
 	void previous.then((pdf) => pdf?.destroy()).catch(() => undefined);
 	sourceBytes = bytes;
 	setContentSource(bytes, preloaded?.lib);
-	thumbCache.clear();
 }
 
 // ponytail: one full pdf per held version; bounded by the 100-step history
-function pruneVersions(): void {
-	const live = new Set(store.states().map((d) => d.source));
+function prune(): void {
+	const states = store.states();
+	const live = new Set(states.map((d) => d.source));
 	for (const id of versions.keys())
 		if (!live.has(id)) versions.delete(id);
+	const keys = new Set(states.flatMap((d) => d.pages.map(pageKey)));
+	for (const k of thumbCache.keys())
+		if (!keys.has(k.slice(k.indexOf(':') + 1)))
+			thumbCache.delete(k);
 }
 
 // content edits render from a rebuilt PDF; the build is keyed on the edits alone
@@ -74,7 +78,7 @@ function editSig(): string {
 
 store.subscribe(() => {
 	useSource(store.getSnapshot()?.source);
-	pruneVersions();
+	prune();
 	const sig = editSig();
 	if (edited?.sig === sig) return;
 	const previous = edited;
@@ -106,17 +110,22 @@ interface ReadSource {
 }
 
 async function readSource(bytes: Uint8Array): Promise<ReadSource> {
-	const pdf = await loadPdfDocument(bytes.slice());
 	const lib = loadSourceDoc(bytes);
-	// pdf-lib stricter than pdf.js
-	const parsed = await lib.catch(() => null);
-	const pages: ErrataPage[] = [];
-	for (let i = 1; i <= pdf.numPages; i++) {
-		const page = await pdf.getPage(i);
+	const pdf = await loadPdfDocument(bytes.slice());
+	const [parsed, sourcePages] = await Promise.all([
+		// pdf-lib stricter than pdf.js
+		lib.catch(() => null),
+		Promise.all(
+			Array.from({ length: pdf.numPages }, (_, i) =>
+				pdf.getPage(i + 1),
+			),
+		),
+	]);
+	const pages = sourcePages.map((page, i) => {
 		const view = page.getViewport({ scale: 1, rotation: 0 });
 		const added: ErrataPage = {
 			id: newId(),
-			sourceIndex: i - 1,
+			sourceIndex: i,
 			image: null,
 			baseRotation: (((page.rotate % 360) + 360) %
 				360) as Rotation,
@@ -129,12 +138,9 @@ async function readSource(bytes: Uint8Array): Promise<ReadSource> {
 			edits: [],
 		};
 		if (parsed && !parsed.isEncrypted)
-			added.objects = readComments(
-				parsed.getPage(i - 1),
-				added,
-			);
-		pages.push(added);
-	}
+			added.objects = readComments(parsed.getPage(i), added);
+		return added;
+	});
 	return { pdf, lib, pages };
 }
 
@@ -333,9 +339,17 @@ async function rasterise(
 	return out;
 }
 
+// pages shared across states
+const pageKeys = new WeakMap<ErrataPage, string>();
+
 /** changes whenever the raster would */
 export function pageKey(page: ErrataPage): string {
-	return `${page.id}:${page.rotation}:${page.flipX ? 'x' : ''}${page.flipY ? 'y' : ''}:${JSON.stringify(page.crop)}:${JSON.stringify(page.resize)}:${JSON.stringify(page.edits)}`;
+	let key = pageKeys.get(page);
+	if (key === undefined) {
+		key = `${page.id}:${page.rotation}:${page.flipX ? 'x' : ''}${page.flipY ? 'y' : ''}:${JSON.stringify(page.crop)}:${JSON.stringify(page.resize)}:${JSON.stringify(page.edits)}`;
+		pageKeys.set(page, key);
+	}
+	return key;
 }
 
 export interface TileJob {
@@ -408,7 +422,7 @@ export function renderThumb(
 	page: ErrataPage,
 	width = THUMB_WIDTH,
 ): Promise<string> {
-	const k = `${pageKey(page)}:${width}`;
+	const k = `${width}:${pageKey(page)}`;
 	let p = thumbCache.get(k);
 	if (!p) {
 		p = rasterise(page, width / pageSize(page).width).then((c) =>

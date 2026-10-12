@@ -22,6 +22,8 @@ import {
 } from 'delphitools-v2/lib/pdf-preflight';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
+const RERUN_MS = 400;
+
 export default class PreflightPanel extends Component<{
 	Args: { open: boolean };
 }> {
@@ -32,6 +34,8 @@ export default class PreflightPanel extends Component<{
 	@tracked failed = false;
 
 	#runId = 0;
+	#started = 0;
+	#checked: ErrataDoc | null = null;
 
 	willDestroy() {
 		super.willDestroy();
@@ -71,35 +75,44 @@ export default class PreflightPanel extends Component<{
 	}
 
 	// export bytes include edits
-	check = async (doc: ErrataDoc) => {
-		const runId = ++this.#runId;
-		await Promise.resolve();
-		if (runId !== this.#runId) return;
+	check = async (doc: ErrataDoc, runId: number) => {
+		const stale = () => runId !== this.#runId;
+		this.#started = runId;
 		this.busy = true;
 		try {
 			const bytes = await exportPdf(doc, getSourceBytes());
+			if (stale()) return;
 			const { report, pdfDoc } = await runPreflight(
 				bytes.slice().buffer,
 				`${doc.name}.pdf`,
 				bytes.length,
+				stale,
 			);
 			void pdfDoc?.destroy();
-			if (runId !== this.#runId) return;
+			if (stale()) return;
 			this.report = report;
 			this.failed = false;
+			this.#checked = doc;
 		} catch (error) {
-			if (runId !== this.#runId) return;
+			if (stale()) return;
 			console.error(error);
 			this.report = null;
 			this.failed = true;
 		} finally {
-			if (runId === this.#runId) this.busy = false;
+			if (runId === this.#started) this.busy = false;
 		}
 	};
 
+	// closing or editing supersedes
 	run = modifier(
 		(_el: HTMLElement, [doc]: [ErrataDoc | null | undefined]) => {
-			if (doc) void this.check(doc);
+			const runId = ++this.#runId;
+			if (!doc || doc === this.#checked) return;
+			const timer = setTimeout(
+				() => void this.check(doc, runId),
+				this.report ? RERUN_MS : 0,
+			);
+			return () => clearTimeout(timer);
 		},
 	);
 
