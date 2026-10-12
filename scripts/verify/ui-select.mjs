@@ -3,9 +3,16 @@
 import { launch, visit, check, sleep, finish } from './harness.mjs';
 
 const { browser, page } = await launch();
-await visit(page, '/tools/typo-calc');
+// hosted on decoder's cipher select; values are read, not assumed
+await visit(page, '/tools/decoder');
+await page.evaluate(() =>
+	[...document.querySelectorAll('.dt-dec [role="tab"], .dt-dec button')]
+		.find((el) => el.textContent.trim() === 'Manual')
+		?.click(),
+);
+await sleep(200);
 
-const trigger = '.dt-typo-picker .dt-select-trigger';
+const trigger = '.dt-dec-select';
 const openContent = () => page.$('.dt-select-content');
 const shown = () => page.$eval(trigger, (el) => el.textContent.trim());
 const items = () =>
@@ -29,25 +36,26 @@ check(
 		'true',
 );
 const list = await items();
+const before = await shown();
+const selected = await page.$$eval('.dt-select-item', (els) =>
+	els
+		.filter((el) => el.getAttribute('aria-selected') === 'true')
+		.map((el) => el.textContent.trim()),
+);
 check(
 	'the current value is marked selected',
-	(
-		await page.$$eval('.dt-select-item', (els) =>
-			els
-				.filter((el) => el.getAttribute('aria-selected') === 'true')
-				.map((el) => el.textContent.trim()),
-		)
-	).join() === 'px',
+	selected.length === 1 && selected[0] === before,
+	`${selected} vs ${before}`,
 );
+check('enough items to walk', list.length >= 4, String(list.length));
+const picked = (list.indexOf(before) + 2) % (list.length - 1) || 1;
 
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-select-item')]
-		.find((el) => el.textContent.trim() === 'pc')
-		.click();
-});
+await page.evaluate((i) => {
+	document.querySelectorAll('.dt-select-item')[i].click();
+}, picked);
 await sleep(250);
 check('picking an item closes the listbox', !(await openContent()));
-check('the trigger shows the new value', (await shown()) === 'pc');
+check('the trigger shows the new value', (await shown()) === list[picked]);
 
 await page.focus(trigger);
 await page.keyboard.press('ArrowDown');
@@ -58,14 +66,14 @@ const active = () =>
 	page.$eval('.dt-select-item[data-active="true"]', (el) =>
 		el.textContent.trim(),
 	);
-check('the active item starts on the current value', (await active()) === 'pc');
+check('the active item starts on the current value', (await active()) === list[picked]);
 await page.keyboard.press('ArrowDown');
 await sleep(80);
-check('ArrowDown moves down the list', (await active()) === 'ag', await active());
+check('ArrowDown moves down the list', (await active()) === list[picked + 1], await active());
 await page.keyboard.press('ArrowUp');
 await page.keyboard.press('ArrowUp');
 await sleep(80);
-check('ArrowUp moves back', (await active()) === 'pt', await active());
+check('ArrowUp moves back', (await active()) === list[picked - 1], await active());
 await page.keyboard.press('Home');
 await sleep(80);
 check('Home jumps to the first', (await active()) === list[0]);
@@ -98,13 +106,17 @@ await page.click(trigger);
 await sleep(150);
 await page.evaluate(() => {
 	document
-		.querySelector('.canon-sidebar-row[href="/tools/palette-genny"]')
+		.querySelector('.canon-sidebar-row[href="/tools/base-converter"]')
 		?.click();
 });
 await sleep(600);
 check(
 	'leaving with the listbox open tears down cleanly',
-	await page.$('.dt-palette-frame'),
+	await page.evaluate(
+		() =>
+			location.pathname === '/tools/base-converter' &&
+			!document.querySelector('.dt-select-content'),
+	),
 	'console errors would have failed above',
 );
 
