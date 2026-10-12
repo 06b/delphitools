@@ -691,6 +691,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Reference for paper dimensions',
 				icon: 'file-text',
 				href: '/tools/paper-sizes',
+				canon: true,
 			},
 			{
 				id: 'px-to-rem',
