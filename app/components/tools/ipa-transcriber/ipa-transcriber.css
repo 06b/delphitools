@@ -1,0 +1,83 @@
+.ipa-transcriber {
+	/* iOS sets the IPA in the system serif; keep in step with interlinear.gts */
+	--ipa-serif: ui-serif, "Iowan Old Style", "Charter", georgia, serif;
+}
+
+.ipa-gloss {
+	background: var(--canon-card);
+}
+
+.ipa-gloss-ipa {
+	display: block;
+	color: var(--canon-foreground);
+	font-family: var(--ipa-serif);
+	font-size: 24px;
+	line-height: 29px;
+	white-space: pre;
+}
+
+.ipa-tone--mark {
+	color: var(--canon-muted-foreground);
+}
+
+.ipa-tone--guess,
+.ipa-word--guess {
+	color: var(--canon-muted-foreground);
+	text-decoration: underline dashed;
+	text-underline-offset: 3px;
+}
+
+.ipa-stress {
+	color: var(--canon-primary);
+}
+
+.ipa-gloss-word {
+	display: block;
+	margin-block-start: 2px;
+	color: var(--canon-muted-foreground);
+	font-size: 13px;
+	font-weight: var(--canon-weight-medium);
+	line-height: 1;
+	white-space: pre;
+}
+
+.ipa-gloss .canon-glyph-flow-empty {
+	display: grid;
+	place-items: center;
+}
+
+.ipa-gloss-empty {
+	color: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 40%,
+		transparent
+	);
+	font-family: var(--ipa-serif);
+	font-size: 24px;
+	white-space: pre;
+}
+
+.ipa-result .tt-result-text {
+	font-family: var(--ipa-serif);
+	font-size: 20px;
+}
+
+.ipa-slash {
+	color: var(--canon-muted-foreground);
+}
+
+.ipa-legend {
+	display: flex;
+	gap: 24px;
+	align-items: baseline;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.ipa-legend-mark {
+	margin-inline-end: 4px;
+	font-family: var(--ipa-serif);
+	font-size: 17px;
+}

@@ -1073,6 +1073,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/ipa-transcriber',
 				produces: ['text/plain'],
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'nato-phonetic',

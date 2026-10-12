@@ -1,42 +1,49 @@
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { eq } from 'ember-truth-helpers';
+import { cached, tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import { downloadText } from 'delphitools-v2/lib/download';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { stressRuns } from 'delphitools-v2/components/tools/ipa-transcriber/gloss';
+import Interlinear, {
+	bandHeight,
+	collapsedHeight,
+} from 'delphitools-v2/components/tools/ipa-transcriber/interlinear';
+import Result from 'delphitools-v2/components/tools/text-tool/result';
+import Source from 'delphitools-v2/components/tools/text-tool/source';
+import { toText, transcribe, type IpaToken } from 'delphitools-v2/lib/ipa';
 import {
 	loadCoreDictionary,
 	loadFullDictionary,
 } from 'delphitools-v2/lib/shavian/dictionary';
 import type { Dictionary } from 'delphitools-v2/lib/shavian/transliterate';
-import { transcribe, toText, type IpaToken } from 'delphitools-v2/lib/ipa';
+import './ipa-transcriber/ipa-transcriber.css';
 
-const DEFAULT_TEXT = 'Mankind, be vigilant; we loved you.';
-const CORE_ONLY_STATUS = 'Core dictionary only, uncommon words are guessed';
-const COPIED_MS = 2000;
+const defaultText = 'Mankind, be vigilant; we loved you.';
+const coreOnlyStatus = 'Core dictionary only, uncommon words are guessed';
+const dash = '—';
 
 type DictStatus = 'loading-core' | 'loading-full' | 'core-only' | 'ready';
 
-export default class IpaTranscriberTool extends Component {
-	@tracked input = DEFAULT_TEXT;
+/** The port of IPATranscriberViewController and its view model. */
+export default class IpaTranscriber extends Component {
+	@tracked input = defaultText;
 	@tracked dictStatus: DictStatus = 'loading-core';
-	@tracked copied = false;
 	@tracked core: Dictionary = new Map();
 	@tracked full: Dictionary = new Map();
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
+		// ?ipaText=: the iOS launch argument
+		const text = new URLSearchParams(window.location.search).get(
+			'ipaText',
+		);
+		if (text !== null) this.input = text;
 		void this.#loadDictionaries();
-	}
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
 	}
 
 	async #loadDictionaries() {
@@ -60,12 +67,28 @@ export default class IpaTranscriberTool extends Component {
 	}
 
 	get coreOnlyStatus() {
-		return CORE_ONLY_STATUS;
+		return coreOnlyStatus;
+	}
+
+	get loading() {
+		return this.dictStatus === 'loading-core';
+	}
+
+	get loadingDetail() {
+		return this.dictStatus === 'loading-core'
+			? 'Loading dictionary…'
+			: this.dictStatus === 'loading-full'
+				? 'Loading full dictionary…'
+				: undefined;
+	}
+
+	get coreOnly() {
+		return this.dictStatus === 'core-only';
 	}
 
 	@cached
 	get tokens(): IpaToken[] {
-		if (this.dictStatus === 'loading-core') return [];
+		if (this.loading) return [];
 		const { core, full } = this;
 		return transcribe(
 			this.input,
@@ -73,182 +96,140 @@ export default class IpaTranscriberTool extends Component {
 		);
 	}
 
-	get hasContent() {
-		return this.tokens.some((token) => token.type === 'word');
+	get words() {
+		return this.tokens.filter((t) => t.type === 'word');
 	}
 
 	get text() {
-		return `/${toText(this.tokens)}/`;
+		return this.words.length ? `/${toText(this.tokens)}/` : '';
 	}
 
-	setInput = (event: Event) => {
-		this.input = (event.target as HTMLTextAreaElement).value;
-	};
+	get tiles() {
+		const words = this.words.length;
+		const guessed = this.words.filter((w) => w.guess).length;
+		const shown = (n: number) =>
+			words ? n.toLocaleString() : dash;
+		return [
+			{ label: 'Words', value: shown(words) },
+			{ label: 'Dictionary', value: shown(words - guessed) },
+			{ label: 'Guessed', value: shown(guessed) },
+		];
+	}
 
-	copy = () => {
-		void navigator.clipboard.writeText(this.text);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
+	setInput = (text: string) => {
+		this.input = text;
 	};
-
-	download = () => downloadText(this.text, 'ipa.txt');
 
 	<template>
-		<div class="dt-ipa">
-			<div class="dt-ipa-frame">
-				<div class="dt-ipa-input-pane">
-					<div class="dt-ipa-pane-head">
-						<span
-							class="dt-ipa-label"
-						>English input</span>
-					</div>
-					<textarea
-						class="dt-ipa-input"
-						aria-label="English input"
-						placeholder="Type or paste English text here..."
-						value={{this.input}}
-						{{on "input" this.setInput}}
-					></textarea>
-				</div>
-
-				<div>
-					<div class="dt-ipa-pane-head is-split">
-						<span
-							class="dt-ipa-label"
-						>IPA</span>
-						{{#if
-							(eq
-								this.dictStatus
-								"loading-core"
-							)
-						}}
-							<span
-								class="dt-ipa-status"
-							>
-								<NdsLoader />
-								Loading
-								dictionary…
-							</span>
-						{{else if
-							(eq
-								this.dictStatus
-								"loading-full"
-							)
-						}}
-							<span
-								class="dt-ipa-status"
-							>
-								<NdsLoader />
-								Loading full
-								dictionary…
-							</span>
-						{{else if
-							(eq
-								this.dictStatus
-								"core-only"
-							)
-						}}
-							<span
-								class="dt-ipa-status is-degraded"
-							>
-								<Icon
-									@name="triangle-alert"
-								/>
-								{{this.coreOnlyStatus}}
-							</span>
-						{{else}}
-							<span
-								class="dt-ipa-status is-ready"
-							>Dictionary ready</span>
-						{{/if}}
-					</div>
-
-					<div class="dt-ipa-output">
-						{{#if this.hasContent}}
-							<p
-								class="dt-ipa-text"
-							>/{{~#each
-									this.tokens
-									as |token|
-								~}}
-									{{~#if
-										(eq
-											token.type
-											"word"
+		<CanonSplit
+			class="ipa-transcriber"
+			@halves={{true}}
+			@collapsesTo={{collapsedHeight}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<Interlinear
+						@tokens={{this.tokens}}
+						@label={{this.text}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<Source
+						@heading="English"
+						@label="English input"
+						@text={{this.input}}
+						@onChange={{this.setInput}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<Result
+					class="ipa-result"
+					@heading="IPA"
+					@text={{this.text}}
+					@fileName="ipa.txt"
+					@busy={{this.loading}}
+				>
+					<:default>
+						<span class="ipa-slash">/</span>
+						{{~#each
+							this.tokens
+							as |token|
+						~}}
+							{{~#if (isWord token)~}}
+								<span
+									class="ipa-word
+										{{if
+											token.guess
+											'ipa-word--guess'
+										}}"
+									title={{token.value}}
+								>
+									{{~#each
+										(stressRuns
+											token.ipa
 										)
+										as |run|
 									~}}
 										<span
-											class="dt-ipa-word
-												{{if
-													token.guess
-													'is-guess'
-												}}"
-											title={{token.value}}
-										>{{token.ipa}}</span>
-									{{~else~}}
-										{{~token.value~}}
-									{{~/if~}}
-								{{~/each~}}/</p>
+											class={{if
+												run.stress
+												"ipa-stress"
+											}}
+										>{{run.text}}</span>
+									{{~/each~}}
+								</span>
+							{{~else~}}
+								<span
+								>{{token.value}}</span>
+							{{~/if~}}
+						{{~/each~}}
+						<span class="ipa-slash">/</span>
+					</:default>
+					<:extra>
+						{{#if this.loadingDetail}}
+							<CanonRow
+								class="ipa-loading"
+								@title="Loading"
+								@detail={{this.loadingDetail}}
+							>
+								<CanonLoader />
+							</CanonRow>
 						{{/if}}
-					</div>
-
-					<div class="dt-ipa-legend">
-						<span
-							class="dt-ipa-legend-item"
-						>
-							<span
-								class="dt-ipa-dot is-dict"
-							></span>
-							Dictionary match
-						</span>
-						<span
-							class="dt-ipa-legend-item"
-						>
-							<span
-								class="dt-ipa-dot is-guess"
-							></span>
-							Heuristic guess
-						</span>
-					</div>
-				</div>
-
-				{{#if this.hasContent}}
-					<div class="dt-ipa-actions">
-						<button
-							type="button"
-							class="dt-ipa-copy"
-							{{on "click" this.copy}}
-						>
-							<Icon
-								@name={{if
-									this.copied
-									"check"
-									"copy"
-								}}
+						{{#if this.coreOnly}}
+							<CanonStatus
+								@text={{this.coreOnlyStatus}}
+								@tone="warn"
+								@row={{true}}
 							/>
-							{{if
-								this.copied
-								"Copied"
-								"Copy"
-							}}
-						</button>
-						<button
-							type="button"
-							class="dt-ipa-download"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel />
-						</button>
-					</div>
-				{{/if}}
-			</div>
-		</div>
+						{{/if}}
+						{{#if this.words.length}}
+							<div class="ipa-legend">
+								<span
+									class="ipa-legend-item"
+								>
+									<span
+										class="ipa-stress ipa-legend-mark"
+									>ˈ</span>
+									Stress
+								</span>
+								<span
+									class="ipa-legend-item ipa-word--guess"
+								>Guessed</span>
+							</div>
+						{{/if}}
+					</:extra>
+				</Result>
+				<CanonRows @framed={{true}}>
+					<CanonTiles @items={{this.tiles}} />
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function isWord(token: IpaToken): token is Extract<IpaToken, { type: 'word' }> {
+	return token.type === 'word';
 }
