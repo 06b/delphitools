@@ -52,7 +52,7 @@ export function preview(items: Stamped[]): void {
 	actions?.preview(items);
 }
 
-export type ModalId = 'signature' | 'page-size';
+export type ModalId = 'signature';
 
 let modal: ModalId | null = null;
 const listeners = new Set<() => void>();
@@ -113,9 +113,15 @@ export type BoxMode =
 	| 'organise'
 	| 'preflight'
 	| 'comment'
-	| 'redact';
+	| 'redact'
+	| 'page-size';
 
-export const OWN_BAR_MODES: BoxMode[] = ['organise', 'preflight', 'comment'];
+export const OWN_BAR_MODES: BoxMode[] = [
+	'organise',
+	'preflight',
+	'comment',
+	'page-size',
+];
 
 let mode: BoxMode | null = null;
 

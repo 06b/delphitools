@@ -71,6 +71,20 @@ export function resizePage(pageId: string, resize: PageResize | null): void {
 	updatePage(pageId, (page) => withResize(page, resize));
 }
 
+/** one undo step */
+export function resizePages(
+	ids: ReadonlySet<string>,
+	resize: (page: ErrataPage) => PageResize | null,
+): void {
+	if (ids.size === 0) return;
+	store.update((doc) => ({
+		...doc,
+		pages: doc.pages.map((p) =>
+			ids.has(p.id) ? withResize(p, resize(p)) : p,
+		),
+	}));
+}
+
 export function cropPage(pageId: string, crop: PageCrop | null): void {
 	updatePage(pageId, (page) => withCrop(page, crop));
 }

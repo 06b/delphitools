@@ -291,21 +291,54 @@ check('crop stored', !!cropped.crop && cropped.crop.width > 50 && cropped.crop.h
 check('crop inside source', cropped.crop.x >= 0 && cropped.crop.x + cropped.crop.width <= 500);
 check('mode bar gone', !(await page.$eval('.err-mode', (e) => e.classList.contains('is-open'))));
 
-// page size: a4 keeps the page landscape, fit, apply
+const modeOpen = (m) => page.$(`.err-mode.is-open[data-mode="${m}"]`).then((e) => !!e);
+const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l || b.getAttribute('aria-label') === l)?.click(), label);
+
+// page size panel from the document menu: a4 keeps the page landscape, fit, apply
 await page.click('.sub-topbar-menu-btn');
 await page.evaluate(() => [...document.querySelectorAll('.sub-topbar-item')].find((b) => b.textContent.includes('Page size'))?.click());
-await sleep(300);
-check('page size dialog', await page.$$eval('dialog.sub-modal', (ds) => ds.some((d) => d.open && d.textContent.includes('Page size'))));
-await page.evaluate(() => [...document.querySelectorAll('.sub-modal-opt')].find((b) => b.textContent.trim() === 'A4')?.click());
-await page.evaluate(() => [...document.querySelectorAll('.sub-modal-opt')].find((b) => b.textContent.trim() === 'Resample')?.click());
-await page.evaluate(() => [...document.querySelectorAll('.sub-modal-opt')].find((b) => b.textContent.trim() === 'Fit page')?.click());
-await page.evaluate(() => document.querySelector('.sub-csm-reflow .dt-switch')?.click());
-await page.evaluate(() => [...document.querySelectorAll('dialog[open] .sub-modal-btn.is-primary')].find((b) => b.textContent.includes('Apply'))?.click());
+await sleep(500);
+check('page size panel', await modeOpen('page-size'));
+check('page size not a dialog', !(await page.$('dialog[open]')));
+await clickIn('A4');
+await clickIn('Resample');
+await sleep(100);
+await clickIn('Fit page');
+await page.evaluate(() => document.querySelector('.err-mode.is-open .dt-switch')?.click());
+await clickIn('Apply');
 await sleep(400);
+check('page size panel closed', !(await modeOpen('page-size')));
 cropped = (await doc()).pages[2];
 check('resize stored', cropped.resize?.mode === 'fit' && Math.round(cropped.resize.width) === 859 && Math.round(cropped.resize.height) === 612 && Math.round(cropped.resize.bleed) === 9, JSON.stringify(cropped.resize));
 check('thumb re-rendered', await page.$$eval('.err-page-thumb', (imgs) =>
 		Math.abs(imgs[2].naturalWidth / imgs[2].naturalHeight - 859 / 612) < 0.05));
+
+// page size with scope: a range of pages, one undo step
+const sizesOf = async () => (await doc()).pages.map((p) => p.resize && [Math.round(p.resize.width), Math.round(p.resize.height)]);
+const sizesBefore = await sizesOf();
+await page.click('[data-toolbox]');
+await sleep(400);
+await page.evaluate(() => [...document.querySelectorAll('.err-sheet-cell')].find((b) => b.querySelector('.dt-cell-name')?.textContent.trim() === 'Page size')?.click());
+await sleep(500);
+check('page size from toolbox', await modeOpen('page-size'));
+await clickIn('A3');
+await clickIn('Range');
+await sleep(100);
+check('page size waits for a range', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+await page.type('.err-mode.is-open input[aria-label="Range"]', '1-2');
+await sleep(100);
+await clickIn('Apply');
+await sleep(400);
+// element.click() leaves focus in the range input
+await page.evaluate(() => document.activeElement?.blur());
+const sizesScoped = await sizesOf();
+// a3 landscape plus the seeded bleed; page 1 is turned, so stored unrotated
+check('page size range applied', JSON.stringify(sizesScoped.slice(0, 2)) === '[[859,1208],[1208,859]]' && JSON.stringify(sizesScoped[2]) === JSON.stringify(sizesBefore[2]), JSON.stringify(sizesScoped));
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(300);
+check('page size range one undo step', JSON.stringify(await sizesOf()) === JSON.stringify(sizesBefore), JSON.stringify(await sizesOf()));
 
 // signature: draw, place
 await page.keyboard.press('g');
@@ -354,13 +387,22 @@ const openCell = async (name) => {
 	await page.evaluate((n) => [...document.querySelectorAll('.err-sheet-cell')].find((b) => b.querySelector('.dt-cell-name')?.textContent.trim() === n)?.click(), name);
 	await sleep(500);
 };
-const modeOpen = (m) => page.$eval('.err-mode[data-mode]', (e, m) => e.classList.contains('is-open') && e.dataset.mode === m, m).catch(() => false);
-const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l || b.getAttribute('aria-label') === l)?.click(), label);
 const previews = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && typeof o.text === 'string').map((o) => o.text));
 const texts = async () => (await doc()).pages.map((p) => p.objects.filter((o) => o.kind === 'text').map((o) => o.text));
 
 await openCell('Page numbers');
 check('numbers mode bar', await modeOpen('page-numbers'));
+const panelBox = () => page.$eval('.err-mode.is-open', (e) => {
+	const r = e.getBoundingClientRect();
+	return { left: r.left, right: r.right, h: r.height, vw: innerWidth };
+});
+check('numbers panel one row', (await panelBox()).h === 48, JSON.stringify(await panelBox()));
+await page.setViewport({ width: 640, height: 1000 });
+await sleep(400);
+const narrow = await panelBox();
+check('numbers panel wraps when narrow', narrow.h > 48 && narrow.left >= 0 && narrow.right <= narrow.vw, JSON.stringify(narrow));
+await page.setViewport({ width: 1400, height: 1000 });
+await sleep(400);
 check('numbers markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
 check('numbers preview', JSON.stringify(await previews()) === JSON.stringify(['1 / 3', '2 / 3', '3 / 3']), JSON.stringify(await previews()));
 await page.keyboard.press('t');
@@ -428,12 +470,42 @@ const waitFile = async (re) => {
 	return null;
 };
 
+// compress replaces the document in place, undoably, without a download
+const beforeCompress = await doc();
 await openCell('Compress');
 check('compress mode bar', await modeOpen('compress'));
 await clickIn('Apply');
-const compressed = await waitFile(/-compressed\.pdf$/);
-check('compress downloads', !!compressed);
-if (compressed) check('compress valid pdf', (await PDFDocument.load(readFileSync(compressed))).getPageCount() === 3);
+await page.waitForSelector('[data-compress-result]', { timeout: 30000 }).catch(() => null);
+const afterCompress = await doc();
+const objectCount = (d) => d.pages.reduce((n, p) => n + p.objects.filter((o) => o.kind !== 'comment').length + p.edits.length, 0);
+check('compress replaces source', !!afterCompress.source && afterCompress.source !== beforeCompress.source && afterCompress.pages.length === 3 && afterCompress.pages.every((p, i) => p.sourceIndex === i && !p.resize && !p.crop), JSON.stringify(afterCompress.pages.map((p) => [p.sourceIndex, p.resize, p.crop])));
+check('compress bakes objects and edits', objectCount(beforeCompress) > 0 && objectCount(afterCompress) === 0);
+check('compress renders new source', (await page.evaluate(() => window.__errata.activePdf()))?.pages === 3);
+check('compress shows sizes', /\d.*→.*\d/.test(await page.$eval('[data-compress-result]', (e) => e.textContent).catch(() => '')));
+check('compress panel stays open', await modeOpen('compress'));
+check('compress no download', !readdirSync(downloads).some((n) => /-compressed\.pdf$/.test(n)));
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(600);
+const undone = await doc();
+check('compress undo restores doc', undone.source === beforeCompress.source && JSON.stringify(undone.pages) === JSON.stringify(beforeCompress.pages));
+check('compress undo restores source', (await page.evaluate(() => window.__errata.activePdf()))?.pages === 2);
+check('compress undo hides sizes', !(await page.$('[data-compress-result]')));
+const undoneExport = await PDFDocument.load(new Uint8Array(await page.evaluate(() => window.__errata.export())));
+check('compress undo export', undoneExport.getPageCount() === 3 && Math.round(undoneExport.getPage(2).getWidth()) === 859);
+await page.keyboard.down('Meta');
+await page.keyboard.down('Shift');
+await page.keyboard.press('z');
+await page.keyboard.up('Shift');
+await page.keyboard.up('Meta');
+await sleep(600);
+check('compress redo', (await doc()).source === afterCompress.source && (await page.evaluate(() => window.__errata.activePdf()))?.pages === 3);
+await page.keyboard.down('Meta');
+await page.keyboard.press('z');
+await page.keyboard.up('Meta');
+await sleep(600);
+await clickIn('Cancel');
 await sleep(300);
 check('compress mode closed', !(await modeOpen('compress')));
 

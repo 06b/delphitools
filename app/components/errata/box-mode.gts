@@ -3,11 +3,14 @@ import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import { eq, not } from 'ember-truth-helpers';
-import type { TOC } from '@ember/component/template-only';
-import Icon from 'delphitools-v2/components/icon';
+import { eq } from 'ember-truth-helpers';
 import FormFields from 'delphitools-v2/components/errata/form-mode';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
+import ToolPanel, {
+	Field,
+	PageScope,
+	Segmented,
+	Slider,
+} from 'delphitools-v2/components/errata/tool-panel';
 import {
 	Select,
 	SelectContent,
@@ -20,13 +23,14 @@ import {
 	type PresetOption,
 } from 'delphitools-v2/components/substrata/preset-row';
 import { exportCurrent } from 'delphitools-v2/lib/errata/export-file';
+import { replaceDocument } from 'delphitools-v2/lib/errata/source';
 import {
 	addStamped,
 	pageNumberObjects,
 	scopePages,
 	stampObjects,
 	watermarkObjects,
-	type PageScope,
+	type PageScope as Scope,
 } from 'delphitools-v2/lib/errata/stamps';
 import {
 	getPageIndex,
@@ -52,19 +56,17 @@ import {
 	ANCHOR_ICON,
 	type Anchor,
 } from 'delphitools-v2/lib/pdf-stamp';
-import { MAX_SIZES, compressPdf } from 'delphitools-v2/lib/pdf-compress';
+import {
+	MAX_SIZES,
+	compressPdf,
+	formatBytes,
+} from 'delphitools-v2/lib/pdf-compress';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 import {
 	getSourceWidgets,
 	subscribeWidgets,
 	widgetStandIns,
 } from 'delphitools-v2/lib/errata/widgets';
-
-const SCOPES: { value: PageScope; label: string }[] = [
-	{ value: 'all', label: 'All' },
-	{ value: 'current', label: 'Current' },
-	{ value: 'range', label: 'Range' },
-];
 
 const EDGE_ANCHORS = ANCHORS.filter((a) => !a.startsWith('middle')).map(
 	(value) => ({ value, icon: ANCHOR_ICON[value] }),
@@ -79,44 +81,10 @@ const NUMBER_SIZES = numbers([8, 10, 12]);
 const STAMP_SIZES = numbers([18, 24, 36]);
 const OPACITIES = numbers([10, 15, 25, 40]);
 const ANGLES = numbers([0, -30, -45], '°');
-const QUALITIES = numbers([40, 65, 80]);
 
 const LAYOUTS = IMPOSITION_LAYOUTS.filter(
 	(l) => l.id !== 'gang-run' && l.id !== 'custom-nup',
 );
-
-interface SegmentedSignature {
-	Args: {
-		options: {
-			value: string | number;
-			label?: string;
-			icon?: string;
-		}[];
-		value: string | number;
-		onChange: (value: string | number) => void;
-	};
-}
-
-const Segmented: TOC<SegmentedSignature> = <template>
-	<span class="segmented err-mode-seg">
-		{{#each @options key="value" as |o|}}
-			<button
-				type="button"
-				class="sub-seg-cell
-					{{if (eq @value o.value) 'is-active'}}"
-				aria-label={{if o.icon o.value}}
-				title={{if o.icon o.value}}
-				{{on "click" (fn @onChange o.value)}}
-			>
-				{{#if o.icon}}
-					<Icon @name={{o.icon}} />
-				{{else}}
-					{{o.label}}
-				{{/if}}
-			</button>
-		{{/each}}
-	</span>
-</template>;
 
 interface Signature {
 	Args: {
@@ -132,7 +100,7 @@ export default class BoxModeBar extends Component<Signature> {
 	pageIndex = new TrackedExternal(subscribePage, getPageIndex);
 	widgets = new TrackedExternal(subscribeWidgets, getSourceWidgets);
 
-	@tracked scope: PageScope = 'all';
+	@tracked scope: Scope = 'all';
 	@tracked range = '';
 	@tracked numberFormat = '{n} / {N}';
 	@tracked numberAnchor: Anchor = 'bottom-center';
@@ -149,6 +117,11 @@ export default class BoxModeBar extends Component<Signature> {
 	@tracked paper = DEFAULT_IMPOSITION_CONFIG.paperSize.id;
 	@tracked busy = false;
 	@tracked failedMode: Mode | null = null;
+	@tracked compressed: {
+		source: string | undefined;
+		before: number;
+		after: number;
+	} | null = null;
 
 	// ∑CG: redact mode bar hint chip, beside the mark count
 	//   spec: at most 32 chars, no period; drag on a page marks an area, a click on a text line marks that line
@@ -236,9 +209,18 @@ export default class BoxModeBar extends Component<Signature> {
 		return redactIds(this.doc.current).size;
 	}
 
+	// hidden once undone
+	get compressResult() {
+		const c = this.compressed;
+		return c && c.source === this.doc.current?.source
+			? `${formatBytes(c.before)} → ${formatBytes(c.after)}`
+			: null;
+	}
+
 	get canApply() {
 		if (!this.args.open || this.busy) return false;
 		if (this.args.mode === 'redact') return this.marks > 0;
+		if (this.args.mode === 'compress') return !this.compressResult;
 		return this.stamping ? this.items.length > 0 : true;
 	}
 
@@ -246,10 +228,12 @@ export default class BoxModeBar extends Component<Signature> {
 	#kept = new Set<string>();
 	#sessionMode: Mode | null | undefined;
 	// reruns on any ui change; snapshot on entry only
-	redactSession = modifier(
+	session = modifier(
 		(_el: HTMLElement, [mode]: [Mode | null | undefined]) => {
 			if (mode === 'redact' && this.#sessionMode !== 'redact')
 				this.#kept = redactIds(store.getSnapshot());
+			// results last one session
+			if (mode !== this.#sessionMode) this.compressed = null;
 			this.#sessionMode = mode;
 		},
 	);
@@ -274,6 +258,7 @@ export default class BoxModeBar extends Component<Signature> {
 
 	pick = (key: string, value: unknown) => {
 		(this as unknown as Record<string, unknown>)[key] = value;
+		if (this.args.mode === 'compress') this.compressed = null;
 	};
 
 	setText = (key: string, event: Event) =>
@@ -281,18 +266,26 @@ export default class BoxModeBar extends Component<Signature> {
 
 	cancel = () => {
 		this.failedMode = null;
+		this.compressed = null;
 		if (this.args.mode === 'redact') dropRedactions(this.#kept);
 		setMode(null);
 	};
 
-	compress = async (bytes: Uint8Array) =>
-		(
+	compress = async (bytes: Uint8Array) => {
+		const out = (
 			await compressPdf(bytes.slice().buffer, {
 				recompressImages: true,
 				quality: this.quality,
 				maxEdge: this.maxEdge,
 			})
 		).bytes;
+		this.compressed = {
+			source: undefined,
+			before: bytes.length,
+			after: out.length,
+		};
+		return out;
+	};
 
 	impose = (bytes: Uint8Array) =>
 		imposePdf(bytes, {
@@ -316,36 +309,54 @@ export default class BoxModeBar extends Component<Signature> {
 		const mode = this.args.mode;
 		this.busy = true;
 		this.failedMode = null;
-		const compress = mode === 'compress';
+		if (mode === 'compress') {
+			const ok = await replaceDocument(this.compress);
+			this.busy = false;
+			const sizes = this.compressed;
+			this.compressed =
+				ok && sizes
+					? {
+							...sizes,
+							source: store.getSnapshot()
+								?.source,
+						}
+					: null;
+			if (!ok) this.failedMode = mode;
+			return;
+		}
 		// exportPdf applies redactions
 		const ok =
 			mode === 'redact'
 				? await exportCurrent(undefined, '-redacted')
 				: await exportCurrent(
-						compress
-							? this.compress
-							: this.impose,
-						compress
-							? '-compressed'
-							: `-imposed-${this.layout}`,
+						this.impose,
+						`-imposed-${this.layout}`,
 					);
 		this.busy = false;
 		if (!ok) this.failedMode = mode;
 		else if (getMode() === mode) setMode(null);
 	};
 
-	<template>
-		<div
-			class="err-mode pointer-events-auto
-				{{if @open 'is-open'}}"
-			data-mode={{@mode}}
-			{{this.livePreview (if @open this.items)}}
-			{{this.redactSession (if @open @mode)}}
-		>
-			<Icon @name={{@icon}} class="sub-omni-tool-glyph" />
-			<span class="sub-omni-tool-name">{{@label}}</span>
-			<span aria-hidden="true" class="sub-omni-sep"></span>
+	setScope = (scope: Scope) => (this.scope = scope);
+	setRange = (range: string) => (this.range = range);
+	setQuality = (quality: number) => this.pick('quality', quality);
 
+	<template>
+		<ToolPanel
+			@open={{@open}}
+			@mode={{@mode}}
+			@icon={{@icon}}
+			@label={{@label}}
+			@onCancel={{if (eq @mode "form") undefined this.cancel}}
+			@cancelLabel={{if this.compressResult "Close"}}
+			@onApply={{this.apply}}
+			@applyLabel={{if (eq @mode "form") "Done"}}
+			@canApply={{this.canApply}}
+			@busy={{this.busy}}
+			@failed={{this.failed}}
+			{{this.livePreview (if @open this.items)}}
+			{{this.session (if @open @mode)}}
+		>
 			{{#if (eq @mode "page-numbers")}}
 				<label class="err-mode-field">
 					<span
@@ -363,10 +374,7 @@ export default class BoxModeBar extends Component<Signature> {
 						}}
 					/>
 				</label>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Position</span>
+				<Field @label="Position">
 					<Segmented
 						@options={{EDGE_ANCHORS}}
 						@value={{this.numberAnchor}}
@@ -375,11 +383,8 @@ export default class BoxModeBar extends Component<Signature> {
 							"numberAnchor"
 						}}
 					/>
-				</span>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Size</span>
+				</Field>
+				<Field @label="Size">
 					<PresetRow
 						@options={{NUMBER_SIZES}}
 						@value={{this.numberSize}}
@@ -391,7 +396,7 @@ export default class BoxModeBar extends Component<Signature> {
 						@max={{72}}
 						@unit="pt"
 					/>
-				</span>
+				</Field>
 			{{else if (eq @mode "watermark")}}
 				<label class="err-mode-field">
 					<span
@@ -409,10 +414,7 @@ export default class BoxModeBar extends Component<Signature> {
 						}}
 					/>
 				</label>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Opacity</span>
+				<Field @label="Opacity">
 					<PresetRow
 						@options={{OPACITIES}}
 						@value={{this.opacity}}
@@ -424,11 +426,8 @@ export default class BoxModeBar extends Component<Signature> {
 						@max={{100}}
 						@unit="%"
 					/>
-				</span>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Angle</span>
+				</Field>
+				<Field @label="Angle">
 					<PresetRow
 						@options={{ANGLES}}
 						@value={{this.angle}}
@@ -440,12 +439,9 @@ export default class BoxModeBar extends Component<Signature> {
 						@max={{90}}
 						@unit="°"
 					/>
-				</span>
+				</Field>
 			{{else if (eq @mode "stamp")}}
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Label</span>
+				<Field @label="Label">
 					<Select
 						@value={{this.stamp}}
 						@onValueChange={{fn
@@ -468,11 +464,8 @@ export default class BoxModeBar extends Component<Signature> {
 							{{/each}}
 						</SelectContent>
 					</Select>
-				</span>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Position</span>
+				</Field>
+				<Field @label="Position">
 					<Segmented
 						@options={{EDGE_ANCHORS}}
 						@value={{this.stampAnchor}}
@@ -481,11 +474,8 @@ export default class BoxModeBar extends Component<Signature> {
 							"stampAnchor"
 						}}
 					/>
-				</span>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Size</span>
+				</Field>
+				<Field @label="Size">
 					<PresetRow
 						@options={{STAMP_SIZES}}
 						@value={{this.stampSize}}
@@ -497,27 +487,16 @@ export default class BoxModeBar extends Component<Signature> {
 						@max={{144}}
 						@unit="pt"
 					/>
-				</span>
+				</Field>
 			{{else if (eq @mode "compress")}}
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Quality</span>
-					<PresetRow
-						@options={{QUALITIES}}
-						@value={{this.quality}}
-						@onChange={{fn
-							this.pick
-							"quality"
-						}}
-						@min={{10}}
-						@max={{100}}
-					/>
-				</span>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Images</span>
+				<Slider
+					@label="Quality"
+					@value={{this.quality}}
+					@min={{10}}
+					@max={{100}}
+					@onChange={{this.setQuality}}
+				/>
+				<Field @label="Images">
 					<Segmented
 						@options={{MAX_SIZES}}
 						@value={{this.maxEdge}}
@@ -526,14 +505,17 @@ export default class BoxModeBar extends Component<Signature> {
 							"maxEdge"
 						}}
 					/>
-				</span>
+				</Field>
+				{{#if this.compressResult}}
+					<span
+						class="sub-omni-tag"
+						data-compress-result
+					>{{this.compressResult}}</span>
+				{{/if}}
 			{{else if (eq @mode "form")}}
 				<FormFields @open={{@open}} />
 			{{else if (eq @mode "impose")}}
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Layout</span>
+				<Field @label="Layout">
 					<Select
 						@value={{this.layout}}
 						@onValueChange={{fn
@@ -559,11 +541,8 @@ export default class BoxModeBar extends Component<Signature> {
 							{{/each}}
 						</SelectContent>
 					</Select>
-				</span>
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Sheet</span>
+				</Field>
+				<Field @label="Sheet">
 					<Select
 						@value={{this.paper}}
 						@onValueChange={{fn
@@ -590,7 +569,7 @@ export default class BoxModeBar extends Component<Signature> {
 							{{/each}}
 						</SelectContent>
 					</Select>
-				</span>
+				</Field>
 			{{else if (eq @mode "redact")}}
 				<span
 					class="sub-omni-tag"
@@ -600,72 +579,14 @@ export default class BoxModeBar extends Component<Signature> {
 			{{/if}}
 
 			{{#if this.stamping}}
-				<span class="err-mode-field">
-					<span
-						class="sub-tool-row-label"
-					>Pages</span>
-					<Segmented
-						@options={{SCOPES}}
-						@value={{this.scope}}
-						@onChange={{fn
-							this.pick
-							"scope"
-						}}
-					/>
-					{{#if (eq this.scope "range")}}
-						<input
-							class="err-mode-input is-narrow"
-							aria-label="Range"
-							aria-invalid={{if
-								this.rangeInvalid
-								"true"
-								"false"
-							}}
-							placeholder="1-3, 5"
-							value={{this.range}}
-							{{on
-								"input"
-								(fn
-									this.setText
-									"range"
-								)
-							}}
-						/>
-					{{/if}}
-				</span>
+				<PageScope
+					@scope={{this.scope}}
+					@range={{this.range}}
+					@invalid={{this.rangeInvalid}}
+					@onScope={{this.setScope}}
+					@onRange={{this.setRange}}
+				/>
 			{{/if}}
-
-			{{#if this.failed}}
-				<span
-					class="sub-omni-tag err-mode-failed"
-				>Failed</span>
-			{{/if}}
-
-			<span class="err-mode-actions">
-				{{#unless (eq @mode "form")}}
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost"
-						{{on "click" this.cancel}}
-					>
-						<Icon @name="x" />
-						Cancel
-					</button>
-				{{/unless}}
-				<button
-					type="button"
-					class="sub-modal-btn is-primary"
-					disabled={{not this.canApply}}
-					{{on "click" this.apply}}
-				>
-					{{#if this.busy}}
-						<NdsLoader />
-					{{else}}
-						<Icon @name="check" />
-					{{/if}}
-					{{if (eq @mode "form") "Done" "Apply"}}
-				</button>
-			</span>
-		</div>
+		</ToolPanel>
 	</template>
 }

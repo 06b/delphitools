@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import { and } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
+import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import type { ErrataDoc } from 'delphitools-v2/lib/errata/doc-model';
 import { exportPdf } from 'delphitools-v2/lib/errata/export';
 import { getSourceBytes } from 'delphitools-v2/lib/errata/source';
@@ -110,14 +111,17 @@ export default class PreflightPanel extends Component {
 	close = () => setMode(null);
 
 	<template>
-		<div
-			class="err-mode z-40 {{if this.open 'is-open'}}"
-			data-mode="preflight"
+		<ToolPanel
+			@open={{this.open}}
+			@mode="preflight"
+			@icon="list-checks"
+			@label="Preflight"
+			@onCancel={{this.close}}
+			@cancelLabel="Close"
+			@failed={{this.failed}}
+			class="z-40"
 			{{this.run (if this.open this.doc.current)}}
 		>
-			<Icon @name="list-checks" class="sub-omni-tool-glyph" />
-			<span class="sub-omni-tool-name">Preflight</span>
-			<span aria-hidden="true" class="sub-omni-sep"></span>
 			{{#each this.badges key="severity" as |b|}}
 				<span
 					class="err-mode-field err-preflight-count"
@@ -132,22 +136,7 @@ export default class PreflightPanel extends Component {
 			{{#if this.busy}}
 				<NdsLoader />
 			{{/if}}
-			{{#if this.failed}}
-				<span
-					class="sub-omni-tag err-mode-failed"
-				>Failed</span>
-			{{/if}}
-			<span class="err-mode-actions">
-				<button
-					type="button"
-					class="sub-modal-btn is-ghost"
-					{{on "click" this.close}}
-				>
-					<Icon @name="x" />
-					Close
-				</button>
-			</span>
-		</div>
+		</ToolPanel>
 
 		<div
 			class="err-preflight z-40 shadow-lg

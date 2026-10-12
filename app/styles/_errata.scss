@@ -133,47 +133,16 @@
 	}
 }
 
-// page size dialog
-
-.err-other {
-	grid-column: span 3;
-	justify-content: center;
-}
-
-.err-dims {
-	grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
-}
-
-.err-swap {
-	block-size: 44px;
-
-	.dt-icon {
-		inline-size: 14px;
-		block-size: 14px;
-	}
-}
-
-.err-place-toggle {
-	margin-block-end: 8px;
-}
-
 .err-anchor-grid {
-	inline-size: max-content;
-	grid-template-columns: repeat(3, 40px);
+	grid-template-columns: repeat(3, 26px);
 
-	> .sub-modal-opt {
-		block-size: 40px;
+	> .sub-seg-cell {
+		block-size: 22px;
 	}
 
 	.dt-icon {
-		inline-size: 14px;
-		block-size: 14px;
-	}
-}
-
-.err-place-modes {
-	> .sub-modal-opt {
-		block-size: 40px;
+		inline-size: 12px;
+		block-size: 12px;
 	}
 }
 
@@ -376,16 +345,18 @@
 	}
 }
 
-// mode bar: replaces the markup bar while a toolbox mode runs
+// replaces markup bar, wraps
 .err-mode {
 	position: absolute;
 	inset-block-end: 16px;
 	inset-inline-start: 50%;
-	display: flex;
-	align-items: center;
-	gap: 10px;
+	display: grid;
+	grid-template-areas: "head body end";
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: start;
+	column-gap: 10px;
 	inline-size: max-content;
-	block-size: 48px;
+	max-inline-size: calc(100% - 32px);
 	padding-inline: 14px 8px;
 	border: 1px solid var(--border);
 	background-color: var(--background);
@@ -408,20 +379,80 @@
 		transition-delay: 170ms;
 	}
 
-	> * {
-		flex-shrink: 0;
-	}
-
 	.sub-preset-row {
 		flex-direction: row;
 		align-items: center;
 	}
+
+	@media (width < 720px) {
+		grid-template-areas:
+			"head end"
+			"body body";
+		grid-template-columns: minmax(0, 1fr) auto;
+
+		.err-mode-body {
+			padding-block-start: 0;
+		}
+	}
 }
 
-.err-mode-field {
+// head, end: first row
+.err-mode-head,
+.err-mode-end {
 	display: flex;
 	align-items: center;
+	gap: 10px;
+}
+
+.err-mode-head {
+	grid-area: head;
+	block-size: 26px;
+	margin-block: 10px;
+	padding-inline-end: 10px;
+	border-inline-end: 1px solid var(--border);
+}
+
+.err-mode-end {
+	grid-area: end;
+	block-size: 46px;
+}
+
+.err-mode-body {
+	display: flex;
+	flex-wrap: wrap;
+	grid-area: body;
+	align-items: center;
+	gap: 10px 14px;
+	min-inline-size: 0;
+	padding-block: 10px;
+
+	> * {
+		flex-shrink: 0;
+		max-inline-size: 100%;
+	}
+}
+
+// wraps only past panel
+.err-mode-field {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
 	gap: 8px;
+	min-block-size: 26px;
+
+	> * {
+		flex-shrink: 0;
+	}
+}
+
+.err-mode-slider {
+	flex: none;
+	inline-size: 120px;
+}
+
+.err-mode-readout {
+	min-inline-size: 4ch;
+	font-variant-numeric: tabular-nums;
 }
 
 .err-mode-seg {
@@ -460,13 +491,17 @@
 	font-size: 11px;
 }
 
+// trigger defaults full width
+.err-mode .dt-paper-combo-trigger {
+	inline-size: 128px;
+}
+
 .err-mode-failed {
 	color: var(--destructive);
 }
 
 .err-mode-actions {
 	display: flex;
-	margin-inline-start: auto;
 	border: 1px solid var(--border);
 
 	.sub-modal-btn {

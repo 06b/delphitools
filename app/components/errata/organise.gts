@@ -4,6 +4,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import Icon from 'delphitools-v2/components/icon';
+import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import { thumb } from 'delphitools-v2/components/errata/page-rail';
 import type { ErrataPage } from 'delphitools-v2/lib/errata/doc-model';
 import {
@@ -272,16 +273,14 @@ export default class Organise extends Component {
 				{{/each}}
 			</div>
 
-			<div class="err-mode is-open" data-mode="organise">
-				<Icon
-					@name="layout-grid"
-					class="sub-omni-tool-glyph"
-				/>
-				<span class="sub-omni-tool-name">Organise</span>
-				<span
-					aria-hidden="true"
-					class="sub-omni-sep"
-				></span>
+			<ToolPanel
+				@open={{true}}
+				@mode="organise"
+				@icon="layout-grid"
+				@label="Organise"
+				@onApply={{this.done}}
+				@applyLabel="Done"
+			>
 				<span class="sub-omni-tag">{{this.count}}
 					selected</span>
 				<span
@@ -343,17 +342,7 @@ export default class Organise extends Component {
 						<Icon @name="trash-2" />
 					</button>
 				</span>
-				<span class="err-mode-actions">
-					<button
-						type="button"
-						class="sub-modal-btn is-primary"
-						{{on "click" this.done}}
-					>
-						<Icon @name="check" />
-						Done
-					</button>
-				</span>
-			</div>
+			</ToolPanel>
 		</div>
 	</template>
 }

@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import {
 	Select,
 	SelectContent,
@@ -148,17 +148,14 @@ export default class CommentModeBar extends Component<{
 	done = () => setMode(null);
 
 	<template>
-		<div
-			class="err-mode pointer-events-auto
-				{{if @open 'is-open'}}"
-			data-mode="comment"
+		<ToolPanel
+			@open={{@open}}
+			@mode="comment"
+			@icon="message-square"
+			@label="Comment"
+			@onApply={{this.done}}
+			@applyLabel="Done"
 		>
-			<Icon
-				@name="message-square"
-				class="sub-omni-tool-glyph"
-			/>
-			<span class="sub-omni-tool-name">Comment</span>
-			<span aria-hidden="true" class="sub-omni-sep"></span>
 
 			<label class="err-mode-field">
 				<span class="sub-tool-row-label">Note</span>
@@ -213,17 +210,6 @@ export default class CommentModeBar extends Component<{
 					</SelectContent>
 				</Select>
 			</span>
-
-			<span class="err-mode-actions">
-				<button
-					type="button"
-					class="sub-modal-btn is-primary"
-					{{on "click" this.done}}
-				>
-					<Icon @name="check" />
-					Done
-				</button>
-			</span>
-		</div>
+		</ToolPanel>
 	</template>
 }

@@ -8,6 +8,8 @@ import Icon from 'delphitools-v2/components/icon';
 import BoxModeBar from 'delphitools-v2/components/errata/box-mode';
 import Organise from 'delphitools-v2/components/errata/organise';
 import CommentModeBar from 'delphitools-v2/components/errata/comment-mode';
+import PageSizePanel from 'delphitools-v2/components/errata/page-size-panel';
+import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import { Bloom } from 'delphitools-v2/components/substrata/omnibar/omnibar';
 import {
 	ColourCell,
@@ -70,14 +72,7 @@ const FONT_SIZES: PresetOption[] = [10, 12, 14, 18].map((v) => ({
 	label: String(v),
 }));
 
-type BoxTool =
-	| 'page-size'
-	| 'rotate'
-	| 'crop'
-	| 'insert'
-	| 'fill-sign'
-	| 'export'
-	| BoxMode;
+type BoxTool = 'rotate' | 'crop' | 'insert' | 'fill-sign' | 'export' | BoxMode;
 
 interface BoxCell {
 	label: string;
@@ -400,9 +395,6 @@ export default class Omnibar extends Component {
 		setToolboxOpen(false);
 		const page = currentPage();
 		switch (tool) {
-			case 'page-size':
-				openModal('page-size');
-				break;
 			case 'rotate':
 				if (page) rotateCurrent(page.id, 1);
 				break;
@@ -771,29 +763,16 @@ export default class Omnibar extends Component {
 				</div>
 			</div>
 
-			<div
-				class="err-mode pointer-events-auto
-					{{if this.inMode 'is-open'}}"
+			<ToolPanel
+				@open={{this.inMode}}
+				@icon="crop"
+				@label="Crop"
+				@onCancel={{this.leaveMode}}
 			>
-				<Icon
-					@name="crop"
-					class="sub-omni-tool-glyph"
-				/>
-				<span class="sub-omni-tool-name">Crop</span>
 				<span
 					class="sub-omni-tag"
 				>{{this.cropHint}}</span>
-				<span class="err-mode-actions">
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost"
-						{{on "click" this.leaveMode}}
-					>
-						<Icon @name="x" />
-						Cancel
-					</button>
-				</span>
-			</div>
+			</ToolPanel>
 
 			<BoxModeBar
 				@mode={{this.modeCell.mode}}
@@ -804,6 +783,7 @@ export default class Omnibar extends Component {
 			<CommentModeBar
 				@open={{eq this.mode.current "comment"}}
 			/>
+			<PageSizePanel />
 		</div>
 	</template>
 }
