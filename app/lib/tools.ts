@@ -304,6 +304,7 @@ export const toolCategories: ToolCategory[] = [
 					'Shrink JPEG, WebP, PNG and AVIF files',
 				icon: 'shrink',
 				href: '/tools/image-compressor',
+				canon: true,
 				produces: [
 					'image/webp',
 					'image/jpeg',

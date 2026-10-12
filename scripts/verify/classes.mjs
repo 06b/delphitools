@@ -18,8 +18,6 @@ const UNSTYLED_CONTAINERS = new Set([
 	'sub-grip', // draggable modifier handle
 	'sub-preset-strip', // .segmented carries styling
 	'sub-topbar-seg-hook', // span[title] rigs read
-	'dt-ic-after-img', // bytes fetched off blob src
-	'dt-ic-download', // disabled state read
 ]);
 
 function* walk(dir) {

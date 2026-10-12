@@ -1,0 +1,4 @@
+/* the empty picture: the drop target takes the picture's default 3:2 */
+.image-compressor .ic-drop .canon-drop-zone-target {
+	aspect-ratio: 3 / 2;
+}
