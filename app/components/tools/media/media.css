@@ -143,3 +143,11 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+.vm-video,
+.va-video {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: contain;
+}

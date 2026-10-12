@@ -81,10 +81,12 @@ export default class AudioExtractor extends Component {
 	@tracked info: Section[] = [];
 
 	#token = 0;
+	#job = 0;
 	#abort: AbortController | null = null;
 
 	willDestroy() {
 		super.willDestroy();
+		this.#job++;
 		this.#token++;
 		this.#abort?.abort();
 		this.intake.release();
@@ -203,7 +205,7 @@ export default class AudioExtractor extends Component {
 	async #extract() {
 		const file = this.intake.file;
 		if (!file || !this.ready) return;
-		const token = ++this.#token;
+		const job = ++this.#job;
 		this.busy = true;
 		this.progress = 0;
 		this.failed = false;
@@ -215,40 +217,40 @@ export default class AudioExtractor extends Component {
 			const result = await extractAudio(file, this.target, {
 				signal: abort.signal,
 				onProgress: (fraction) => {
-					if (token === this.#token)
+					if (job === this.#job)
 						this.progress = fraction;
 				},
 			});
-			if (token !== this.#token) return;
+			if (job !== this.#job) return;
 			this.result = result;
 			this.resultUrl = URL.createObjectURL(result.blob);
-			void this.#describe(result, token);
+			void this.#describe(result, job);
 		} catch (error) {
-			if (token !== this.#token) return;
+			if (job !== this.#job) return;
 			if ((error as Error).name === 'AbortError') return;
 			console.error('Extract failed:', error);
 			this.failed = true;
 		} finally {
 			if (this.#abort === abort) this.#abort = null;
-			if (token === this.#token) this.busy = false;
+			if (job === this.#job) this.busy = false;
 		}
 	}
 
-	async #describe(result: ConvertResult, token: number) {
+	async #describe(result: ConvertResult, job: number) {
 		try {
 			const tracks = await analyzeMedia(
 				new File([result.blob], this.fileName, {
 					type: result.blob.type,
 				}),
 			);
-			if (token === this.#token) this.info = sections(tracks);
+			if (job === this.#job) this.info = sections(tracks);
 		} catch {
 			// no report: the sidebar stays empty
 		}
 	}
 
 	cancel = () => {
-		this.#token++;
+		this.#job++;
 		this.#abort?.abort();
 		this.#abort = null;
 		this.busy = false;
@@ -260,14 +262,17 @@ export default class AudioExtractor extends Component {
 	};
 
 	#releaseResult() {
-		if (this.resultUrl) URL.revokeObjectURL(this.resultUrl);
+		const url = this.resultUrl;
 		this.resultUrl = '';
+		// the player lets go of it on the next render
+		if (url) setTimeout(() => URL.revokeObjectURL(url));
 		this.result = null;
 		this.info = [];
 	}
 
 	#reset() {
 		this.#token++;
+		this.#job++;
 		this.#abort?.abort();
 		this.#abort = null;
 		this.#releaseResult();
@@ -282,7 +287,7 @@ export default class AudioExtractor extends Component {
 	}
 
 	clear = () => {
-		this.playback.stop();
+		this.playback.unload();
 		this.#reset();
 		this.intake.clear();
 	};

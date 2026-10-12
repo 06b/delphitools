@@ -1,15 +1,21 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { eq } from 'ember-truth-helpers';
-import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonReadoutBand, {
+	readoutBandHeight,
+} from 'delphicanon/components/canon-readout-band';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
-import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import { VideoIntake } from 'delphitools-v2/lib/video';
 import { VIDEO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
 import {
@@ -17,68 +23,114 @@ import {
 	type Container,
 	type VideoProbe,
 } from 'delphitools-v2/lib/media-probe';
+import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
+import { type WaveformPeaks } from 'delphitools-v2/lib/audio';
+import {
+	analyzeMedia,
+	sections,
+	type Section,
+} from 'delphitools-v2/lib/mediainfo';
 import {
 	CONTAINERS,
 	containerSupport,
 	muteVideo,
 	type ConvertResult,
 } from 'delphitools-v2/lib/media-convert';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Playback from 'delphitools-v2/components/tools/media/playback';
+import Sections from 'delphitools-v2/components/tools/media/sections';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Strips from 'delphitools-v2/components/tools/media/strips';
+import Transport from 'delphitools-v2/components/tools/media/transport';
+import {
+	peaks,
+	release,
+	thumbnails,
+} from 'delphitools-v2/components/tools/media/frames';
+import './media/media.css';
 
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
-
-const DROP_TITLE = 'Drop a video here';
-
 const NO_AUDIO = 'No audio track';
-
 const MUTE_ERROR = "Couldn't remux. Try MP4, MOV or WEBM.";
+// filmstrip 40 + waveform 56 (iOS AVEditTrackStrips)
+const bandHeight = readoutBandHeight(96);
+// iOS: height over width at most 1.25, at most 340 pt tall
+const tallest = 1.25;
+const tallestPreview = 340;
+const containerLabels = CONTAINERS.map((c) => c.label);
 
-export default class VideoMuterTool extends Component {
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Mute = <template><IconSvg @name="volume-x" /></template>;
+
+/** The port of VideoMuterViewController, on the web tool's mediabunny remux. */
+export default class VideoMuter extends Component {
 	intake = new VideoIntake({
-		onLoad: () => this.#reset(),
+		onLoad: (file) => this.#load(file),
 		probe: true,
 		onProbe: (probe) => void this.#support(probe),
 		canLoad: () => !this.busy,
 	});
+	drop = new Drop(ACCEPT, (file) => this.intake.load(file));
+	playback = new Playback();
 
 	@tracked support: Record<Container, boolean> | null = null;
+	/** Empty: the source's own container. */
 	@tracked container: Container | '' = '';
 	@tracked busy = false;
-	@tracked pct = 0;
+	@tracked progress = 0;
+	@tracked failed = false;
 	@tracked result: ConvertResult | null = null;
 	@tracked resultUrl = '';
-	@tracked errorCode = '';
+	@tracked frames: string[] = [];
+	@tracked aspect = 16 / 9;
+	@tracked peaks: WaveformPeaks | null = null;
+	@tracked info: Section[] = [];
 
 	#token = 0;
-	#muteAbort: AbortController | null = null;
+	#job = 0;
+	#abort: AbortController | null = null;
 
 	willDestroy() {
 		super.willDestroy();
+		this.#job++;
 		this.#token++;
-		this.#muteAbort?.abort();
+		this.#abort?.abort();
 		this.intake.release();
 		this.#releaseResult();
+		release(this.frames);
 	}
 
-	get hasVideo() {
+	get loaded() {
 		return this.intake.url !== null;
 	}
 
+	get probe() {
+		return this.intake.probe;
+	}
+
 	get silent() {
-		return (
-			this.intake.probe !== null &&
-			this.intake.probe.audioTracks === 0
-		);
+		return this.probe !== null && this.probe.audioTracks === 0;
+	}
+
+	get playUrl() {
+		return this.resultUrl || this.intake.url || undefined;
 	}
 
 	get targetContainer(): Container {
-		return this.container || this.intake.probe?.container || 'mp4';
+		return this.container || this.probe?.container || 'mp4';
 	}
 
-	get containers() {
-		return CONTAINERS.map((c) => ({
-			...c,
-			supported: this.support?.[c.id] ?? false,
-		}));
+	get containerIndex() {
+		return CONTAINERS.findIndex(
+			(c) => c.id === this.targetContainer,
+		);
+	}
+
+	get unsupported() {
+		return CONTAINERS.flatMap((c, index) =>
+			this.support?.[c.id] ? [] : [index],
+		);
 	}
 
 	get ready() {
@@ -89,18 +141,18 @@ export default class VideoMuterTool extends Component {
 		);
 	}
 
-	setContainer = (event: Event) => {
-		this.container = (event.target as HTMLSelectElement).value as
-			Container | '';
-		this.#releaseResult();
-	};
+	get previewAspect() {
+		return Math.max(this.aspect, 1 / tallest);
+	}
 
-	get baseName() {
-		return this.intake.baseName || 'video';
+	get warning() {
+		if (this.intake.error) return this.intake.error;
+		if (this.silent) return NO_AUDIO;
+		return '';
 	}
 
 	get meta() {
-		const p = this.intake.probe;
+		const p = this.probe;
 		if (!p) return '';
 		const parts = [`${p.width} × ${p.height}`];
 		if (p.fps) parts.push(formatFps(p.fps));
@@ -113,50 +165,77 @@ export default class VideoMuterTool extends Component {
 		return parts.join(' · ');
 	}
 
-	get status() {
-		if (this.busy) return `${this.pct}%`;
-		if (this.silent) return NO_AUDIO;
-		return this.meta;
+	get baseName() {
+		return this.intake.baseName || 'video';
 	}
 
-	get progressStyle() {
-		return htmlSafe(`width: ${this.pct}%`);
+	get fileName() {
+		return this.result
+			? `${this.baseName}-muted.${this.result.ext}`
+			: '';
 	}
 
-	get resultLabel() {
-		if (!this.result) return '';
-		return `${this.result.ext} · ${formatBytes(this.result.blob.size)}`;
+	get resultRow() {
+		if (!this.result) return null;
+		return {
+			name: this.fileName,
+			detail: `${this.result.ext} · ${formatBytes(this.result.blob.size)}`,
+		};
 	}
 
-	get errorMessage() {
-		if (this.intake.error) return this.intake.error;
-		if (this.errorCode === 'mute') return MUTE_ERROR;
-		return '';
+	#load(file: File) {
+		this.#reset();
+		const token = this.#token;
+		const live = () => token === this.#token;
+		void thumbnails(file, live).then((urls) => {
+			if (!live()) return release(urls);
+			this.frames = urls;
+		});
 	}
 
 	async #support(probe: VideoProbe | null) {
-		const token = ++this.#token;
+		const token = this.#token;
 		if (!probe) {
-			this.errorCode = 'mute';
+			this.failed = true;
 			return;
 		}
+		if (probe.audioTracks > 0)
+			void peaks(this.intake.file!).then((found) => {
+				if (token === this.#token) this.peaks = found;
+			});
 		const support = await containerSupport(probe.codec);
-		if (token !== this.#token) return;
-		this.support = support;
+		if (token === this.#token) this.support = support;
 	}
+
+	metadata = (event: Event) => {
+		// the result plays in the same element; the source sets the length
+		if (!this.result) this.intake.ready(event);
+		const video = event.target as HTMLVideoElement;
+		if (video.videoWidth && video.videoHeight)
+			this.aspect = video.videoWidth / video.videoHeight;
+	};
+
+	pickContainer = (index: number) => {
+		const id = CONTAINERS[index]?.id;
+		if (!id || id === this.targetContainer) return;
+		this.container = id;
+		this.failed = false;
+		this.#releaseResult();
+	};
 
 	mute = () => void this.#mute();
 
 	async #mute() {
 		const file = this.intake.file;
 		if (!file || !this.ready) return;
-		const token = ++this.#token;
+		const job = ++this.#job;
 		this.busy = true;
-		this.pct = 0;
-		this.errorCode = '';
+		this.progress = 0;
+		this.failed = false;
 		this.#releaseResult();
+		this.playback.pause();
 		const abort = new AbortController();
-		this.#muteAbort = abort;
+		this.#abort = abort;
 		try {
 			const result = await muteVideo(
 				file,
@@ -164,265 +243,233 @@ export default class VideoMuterTool extends Component {
 				{
 					signal: abort.signal,
 					onProgress: (fraction) => {
-						if (token === this.#token)
-							this.pct = Math.round(
-								fraction * 100,
-							);
+						if (job === this.#job)
+							this.progress =
+								fraction;
 					},
 				},
 			);
-			if (token !== this.#token) return;
+			if (job !== this.#job) return;
 			this.result = result;
 			this.resultUrl = URL.createObjectURL(result.blob);
-			this.pct = 100;
+			void this.#describe(result, job);
 		} catch (error) {
-			if (token !== this.#token) return;
+			if (job !== this.#job) return;
 			if ((error as Error).name === 'AbortError') return;
 			console.error('Mute failed:', error);
-			this.errorCode = 'mute';
+			this.failed = true;
 		} finally {
-			if (token === this.#token) this.busy = false;
+			if (this.#abort === abort) this.#abort = null;
+			if (job === this.#job) this.busy = false;
 		}
 	}
 
-	download = () => {
-		if (!this.result) return;
-		downloadBlob(
-			this.result.blob,
-			`${this.baseName}-muted.${this.result.ext}`,
-		);
+	async #describe(result: ConvertResult, job: number) {
+		try {
+			const tracks = await analyzeMedia(
+				new File([result.blob], this.fileName, {
+					type: result.blob.type,
+				}),
+			);
+			if (job === this.#job) this.info = sections(tracks);
+		} catch {
+			// no report: the sidebar stays empty
+		}
+	}
+
+	cancel = () => {
+		this.#job++;
+		this.#abort?.abort();
+		this.#abort = null;
+		this.busy = false;
+		this.progress = 0;
+	};
+
+	save = () => {
+		if (this.result) downloadBlob(this.result.blob, this.fileName);
 	};
 
 	#releaseResult() {
-		if (this.resultUrl) URL.revokeObjectURL(this.resultUrl);
+		const url = this.resultUrl;
 		this.resultUrl = '';
+		// the player lets go of it on the next render
+		if (url) setTimeout(() => URL.revokeObjectURL(url));
 		this.result = null;
+		this.info = [];
 	}
 
 	// abort stops mediabunny decoding
 	#reset() {
 		this.#token++;
-		this.#muteAbort?.abort();
-		this.#muteAbort = null;
+		this.#job++;
+		this.#abort?.abort();
+		this.#abort = null;
 		this.#releaseResult();
+		release(this.frames);
+		this.frames = [];
+		this.peaks = null;
 		this.support = null;
 		this.container = '';
 		this.busy = false;
-		this.pct = 0;
-		this.errorCode = '';
+		this.progress = 0;
+		this.failed = false;
 	}
 
 	clear = () => {
+		this.playback.unload();
 		this.#reset();
 		this.intake.clear();
 	};
 
 	<template>
-		<div class="dt-vm" {{filePaste this.intake.load accept=ACCEPT}}>
-			<div
-				class="dt-vm-frame"
-				{{on "drop" this.intake.drop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				<div class="dt-vm-bar">
-					<label
-						class="dt-vm-file"
-						aria-label="Open video file"
-					>
-						<input
-							type="file"
-							class="dt-sr-only"
-							accept={{ACCEPT}}
-							{{on
-								"change"
-								this.intake.chooseFile
-							}}
-						/>
-						<Icon @name="film" />
-						<span
-							class="dt-vm-filename"
-						>{{if
-								this.intake.fileName
-								this.intake.fileName
-								"Choose video"
-							}}</span>
-					</label>
-					{{#if this.status}}
-						<span
-							class="dt-vm-status"
-							role="status"
-						>{{this.status}}</span>
-					{{/if}}
-					<select
-						class="dt-vm-format"
-						aria-label="Output container"
-						{{on
-							"change"
-							this.setContainer
+		<CanonSplit
+			class="video-muter"
+			@bannerSticks={{true}}
+			@mainLeadsStacked={{true}}
+			@footerHidden={{if this.loaded false true}}
+			{{filePaste this.intake.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<CanonReadoutBand
+						@transport={{this.playback.transport}}
+						@idle={{if
+							this.intake.duration
+							this.intake.duration
+							null
 						}}
+						@readout="below"
 					>
-						<option
-							value=""
-							selected={{eq
-								this.container
-								""
-							}}
-						>Same as source</option>
-						{{#each
-							this.containers key="id"
-							as |c|
-						}}
-							<option
-								value={{c.id}}
-								disabled={{unless
-									c.supported
+						{{#if this.loaded}}
+							<Strips
+								@thumbnails={{this.frames}}
+								@aspect={{this.aspect}}
+								@waveform={{true}}
+								@peaks={{this.peaks}}
+								@audioRemoved={{if
+									this.result
 									true
+									false
 								}}
-								selected={{eq
-									this.container
-									c.id
-								}}
-							>{{c.label}}</option>
-						{{/each}}
-					</select>
-					<button
-						type="button"
-						class="dt-vm-go"
-						disabled={{unless
-							this.ready
-							true
-						}}
-						aria-busy={{if
-							this.busy
-							"true"
-							"false"
-						}}
-						{{on "click" this.mute}}
-					>
-						{{#if this.busy}}
-							<NdsLoader />
+								@duration={{this.intake.duration}}
+								@playhead={{this.playback.playhead}}
+								@onScrub={{this.playback.scrub}}
+							/>
 						{{else}}
-							<Icon
-								@name="volume-x"
+							<Slot
+								class="vm-slot"
+								@prompt="Drop a video here"
+								@icon="volume-x"
+								@accept={{ACCEPT}}
+								@over={{this.drop.over}}
+								@onFile={{this.intake.load}}
 							/>
 						{{/if}}
-						<span>Mute</span>
-					</button>
-					<button
-						type="button"
-						class="dt-vm-clear"
-						disabled={{unless
-							this.hasVideo
-							true
-						}}
-						aria-label="Clear"
-						{{on "click" this.clear}}
+					</CanonReadoutBand>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<Sections @sections={{this.info}} />
+			</:sidebar>
+			<:main>
+				{{#if this.loaded}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="vm-source"
+							@title={{this.intake.fileName}}
+							@detail={{if
+								this.warning
+								this.warning
+								this.meta
+							}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					</CanonRows>
+					<CanonCanvas
+						class="vm-preview"
+						@aspect={{this.previewAspect}}
+						@maxHeight={{tallestPreview}}
+						@boxing="unlessWide"
+						@background="#000"
 					>
-						<Icon @name="x" />
-					</button>
-				</div>
-
-				<div class="dt-vm-stage">
-					{{#if this.hasVideo}}
-						{{#if this.resultUrl}}
-							{{! template-lint-disable require-media-caption }}
-							<video
-								class="dt-vm-result"
-								src={{this.resultUrl}}
-								controls
-								playsinline
-								preload="metadata"
-							></video>
-						{{/if}}
+						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
-							src={{this.intake.url}}
-							hidden={{if
-								this.resultUrl
-								true
-							}}
-							controls
+							class="vm-video"
+							src={{this.playUrl}}
 							playsinline
 							preload="metadata"
 							{{this.intake.register}}
+							{{this.playback.register}}
 							{{on
 								"loadedmetadata"
-								this.intake.ready
+								this.metadata
 							}}
 							{{on
 								"error"
 								this.intake.failed
 							}}
 						></video>
-					{{else}}
-						<label class="dt-vm-drop">
-							<input
-								type="file"
-								class="dt-sr-only"
-								accept={{ACCEPT}}
-								{{on
-									"change"
-									this.intake.chooseFile
-								}}
-							/>
-							<Icon
-								@name="volume-x"
-							/>
-							<span
-								class="dt-vm-drop-title"
-							>{{DROP_TITLE}}</span>
-							{{! wording duplicated in background-remover }}
-							<span
-								class="dt-vm-drop-hint"
-							>or click to select a
-								file, or paste</span>
-						</label>
-					{{/if}}
-				</div>
-
-				{{#if this.result}}
-					<div class="dt-vm-out">
-						<span
-							class="dt-vm-out-label"
-						>Muted</span>
-						<span
-							class="dt-vm-result-label"
-						>{{this.resultLabel}}</span>
-						<button
-							type="button"
-							class="dt-vm-btn is-primary"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel />
-						</button>
-					</div>
+					</CanonCanvas>
+				{{else if this.warning}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							@text={{this.warning}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					</CanonRows>
 				{{/if}}
-
-				{{#if this.errorMessage}}
-					<p
-						class="dt-vm-error"
-						role="alert"
-					>{{this.errorMessage}}</p>
-				{{/if}}
-
-				{{#if this.busy}}
-					<span
-						class="dt-vm-progress"
-						role="progressbar"
-						aria-label="Progress"
-						aria-valuemin="0"
-						aria-valuemax="100"
-						aria-valuenow={{this.pct}}
-					>
-						<span
-							style={{this.progressStyle}}
-						></span>
-					</span>
-				{{/if}}
-			</div>
-		</div>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Container" />
+					<CanonSegmented
+						class="vm-containers"
+						@items={{containerLabels}}
+						@selected={{this.containerIndex}}
+						@disabledIndices={{this.unsupported}}
+						@disabled={{this.busy}}
+						@onChange={{this.pickContainer}}
+					/>
+					<Job
+						@title="Mute"
+						@icon={{Mute}}
+						@failure={{MUTE_ERROR}}
+						@disabled={{if
+							this.ready
+							false
+							true
+						}}
+						@busy={{this.busy}}
+						@progress={{this.progress}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.mute}}
+						@onCancel={{this.cancel}}
+						@onSave={{this.save}}
+					/>
+				</CanonRows>
+			</:main>
+			<:footer>
+				<Transport
+					@playback={{this.playback}}
+					@ready={{if
+						this.intake.duration
+						true
+						false
+					}}
+				/>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

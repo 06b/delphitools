@@ -80,6 +80,17 @@ export default class Playback {
 		this.#idle();
 	};
 
+	/** Drops the source before its object URL goes, so no load is left to fail. */
+	unload = () => {
+		const media = this.#media;
+		if (media) {
+			media.pause();
+			media.removeAttribute('src');
+			media.load();
+		}
+		this.#idle();
+	};
+
 	toggleLoop = () => (this.looping = !this.looping);
 
 	scrub = (seconds: number) => {

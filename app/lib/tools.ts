@@ -588,6 +588,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Strip the audio from a video',
 				icon: 'volume-x',
 				href: '/tools/video-muter',
+				canon: true,
 				produces: ['video/mp4', 'video/webm'],
 				accepts: VIDEO_ACCEPT,
 				new: true,
