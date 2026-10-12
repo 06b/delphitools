@@ -9,6 +9,10 @@ import BoxModeBar from 'delphitools-v2/components/errata/box-mode';
 import Organise from 'delphitools-v2/components/errata/organise';
 import CommentModeBar from 'delphitools-v2/components/errata/comment-mode';
 import PageSizePanel from 'delphitools-v2/components/errata/page-size-panel';
+import {
+	InsertPanel,
+	RotatePanel,
+} from 'delphitools-v2/components/errata/page-strips';
 import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import { Bloom } from 'delphitools-v2/components/substrata/omnibar/omnibar';
 import {
@@ -19,13 +23,13 @@ import {
 	PresetRow,
 	type PresetOption,
 } from 'delphitools-v2/components/substrata/preset-row';
-import type { ShapeKind } from 'delphitools-v2/lib/errata/doc-model';
-import { exportCurrent } from 'delphitools-v2/lib/errata/export-file';
 import {
-	insertBlankAfter,
-	rotateCurrent,
-} from 'delphitools-v2/lib/errata/page-ops';
-import { currentPage } from 'delphitools-v2/lib/errata/store';
+	cropFromDisplayed,
+	type ShapeKind,
+} from 'delphitools-v2/lib/errata/doc-model';
+import { exportCurrent } from 'delphitools-v2/lib/errata/export-file';
+import { cropPage } from 'delphitools-v2/lib/errata/page-ops';
+import { store } from 'delphitools-v2/lib/errata/store';
 import {
 	TOOL_ORDER,
 	getActiveTool,
@@ -38,11 +42,13 @@ import {
 	type ToolSettings,
 } from 'delphitools-v2/lib/errata/tool';
 import {
+	getCropDraft,
 	getMode,
 	isToolboxOpen,
 	OWN_BAR_MODES,
 	openModal,
 	pickImageFile,
+	setCropDraft,
 	setMode,
 	setToolboxOpen,
 	subscribeUi,
@@ -72,7 +78,7 @@ const FONT_SIZES: PresetOption[] = [10, 12, 14, 18].map((v) => ({
 	label: String(v),
 }));
 
-type BoxTool = 'rotate' | 'crop' | 'insert' | 'fill-sign' | 'export' | BoxMode;
+type BoxTool = 'crop' | 'fill-sign' | 'export' | BoxMode;
 
 interface BoxCell {
 	label: string;
@@ -272,6 +278,7 @@ export default class Omnibar extends Component {
 	settings = new TrackedExternal(subscribeTool, getToolSettings);
 	boxOpen = new TrackedExternal(subscribeUi, isToolboxOpen);
 	mode = new TrackedExternal(subscribeUi, getMode);
+	cropDraft = new TrackedExternal(subscribeUi, getCropDraft);
 
 	cropHint = 'Drag on the page';
 
@@ -281,6 +288,7 @@ export default class Omnibar extends Component {
 		this.settings.unsubscribe();
 		this.boxOpen.unsubscribe();
 		this.mode.unsubscribe();
+		this.cropDraft.unsubscribe();
 		setToolboxOpen(false);
 		setMode(null);
 	}
@@ -372,7 +380,21 @@ export default class Omnibar extends Component {
 
 	toggleBox = () => setToolboxOpen(!this.boxOpen.current);
 	closeBox = () => setToolboxOpen(false);
-	leaveMode = () => setActiveTool('select');
+	leaveMode = () => {
+		setCropDraft(null);
+		setActiveTool('select');
+	};
+
+	applyCrop = () => {
+		const draft = getCropDraft();
+		const page = store
+			.getSnapshot()
+			?.pages.find((p) => p.id === draft?.pageId);
+		const crop =
+			page && draft && cropFromDisplayed(page, draft.rect);
+		if (page && crop) cropPage(page.id, crop);
+		this.leaveMode();
+	};
 
 	// mousedown outside the sheet and its trigger closes it
 	outsideClose = modifier((sheet: HTMLElement, [open]: [boolean]) => {
@@ -393,16 +415,10 @@ export default class Omnibar extends Component {
 	run = (tool: BoxTool | undefined) => {
 		if (!tool) return;
 		setToolboxOpen(false);
-		const page = currentPage();
 		switch (tool) {
-			case 'rotate':
-				if (page) rotateCurrent(page.id, 1);
-				break;
 			case 'crop':
+				setCropDraft(null);
 				setActiveTool('crop');
-				break;
-			case 'insert':
-				if (page) insertBlankAfter(page.id);
 				break;
 			case 'fill-sign':
 				openModal('signature');
@@ -768,6 +784,12 @@ export default class Omnibar extends Component {
 				@icon="crop"
 				@label="Crop"
 				@onCancel={{this.leaveMode}}
+				@onApply={{this.applyCrop}}
+				@canApply={{if
+					this.cropDraft.current
+					true
+					false
+				}}
 			>
 				<span
 					class="sub-omni-tag"
@@ -784,6 +806,8 @@ export default class Omnibar extends Component {
 				@open={{eq this.mode.current "comment"}}
 			/>
 			<PageSizePanel />
+			<RotatePanel />
+			<InsertPanel />
 		</div>
 	</template>
 }

@@ -198,12 +198,12 @@ export function widgetBox(rect: UserRect, rotate: Rotation, border: number) {
 	};
 }
 
-// resized pages drop widgets
+// resized/flipped pages drop widgets
 export function sourceRectToDisplayed(
 	page: ErrataPage,
 	rect: [number, number, number, number],
 ): UserRect | null {
-	if (page.resize) return null;
+	if (page.resize || page.flipX || page.flipY) return null;
 	const c = contentBox(page);
 	const p = contentPlacement(page);
 	const u = unrotatedSize(page);

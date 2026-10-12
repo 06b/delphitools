@@ -308,6 +308,14 @@ async function rasterise(
 	ctx.fillStyle = '#fff';
 	ctx.fillRect(0, 0, flat.width, flat.height);
 	const content = await contentCanvas(page, scale);
+	ctx.setTransform(
+		page.flipX ? -1 : 1,
+		0,
+		0,
+		page.flipY ? -1 : 1,
+		page.flipX ? flat.width : 0,
+		page.flipY ? flat.height : 0,
+	);
 	if (content)
 		ctx.drawImage(
 			content,
@@ -333,7 +341,7 @@ async function rasterise(
 
 /** changes whenever the raster would */
 export function pageKey(page: ErrataPage): string {
-	return `${page.id}:${page.rotation}:${JSON.stringify(page.crop)}:${JSON.stringify(page.resize)}:${JSON.stringify(page.edits)}`;
+	return `${page.id}:${page.rotation}:${page.flipX ? 'x' : ''}${page.flipY ? 'y' : ''}:${JSON.stringify(page.crop)}:${JSON.stringify(page.resize)}:${JSON.stringify(page.edits)}`;
 }
 
 export interface TileJob {

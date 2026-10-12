@@ -156,6 +156,9 @@ export interface ErrataPage {
 	baseHeight: number;
 	crop: PageCrop | null;
 	resize: PageResize | null;
+	/** after placement, before rotation */
+	flipX?: boolean;
+	flipY?: boolean;
 	objects: PageObject[];
 	edits: ContentEdit[];
 }
@@ -302,32 +305,93 @@ export function unrotatedToDisplayed(
 	}
 }
 
+/** self-inverse */
+export function flipPoint(
+	page: ErrataPage,
+	x: number,
+	y: number,
+): { x: number; y: number } {
+	const u = unrotatedSize(page);
+	return {
+		x: page.flipX ? u.width - x : x,
+		y: page.flipY ? u.height - y : y,
+	};
+}
+
+/** self-inverse */
+export function flipAnchor(anchor: Anchor, page: ErrataPage): Anchor {
+	let [v, h] = anchor.split('-');
+	if (page.flipX) h = h === 'left' ? 'right' : h === 'right' ? 'left' : h;
+	if (page.flipY) v = v === 'top' ? 'bottom' : v === 'bottom' ? 'top' : v;
+	return `${v}-${h}` as Anchor;
+}
+
+export function displayedToSource(
+	page: ErrataPage,
+	dx: number,
+	dy: number,
+): { x: number; y: number } {
+	const u = unrotatedSize(page);
+	const c = contentBox(page);
+	const p = contentPlacement(page);
+	const r = displayedToUnrotated(
+		dx,
+		dy,
+		totalRotation(page),
+		u.width,
+		u.height,
+	);
+	const f = flipPoint(page, r.x, r.y);
+	return {
+		x: c.x + (f.x - p.x) / p.scale,
+		y: c.y + (f.y - p.y) / p.scale,
+	};
+}
+
+/** null under 4pt */
+export function cropFromDisplayed(
+	page: ErrataPage,
+	rect: PageCrop,
+): PageCrop | null {
+	const a = displayedToSource(page, rect.x, rect.y);
+	const b = displayedToSource(
+		page,
+		rect.x + rect.width,
+		rect.y + rect.height,
+	);
+	const x1 = Math.max(0, Math.min(a.x, b.x));
+	const y1 = Math.max(0, Math.min(a.y, b.y));
+	const x2 = Math.min(page.baseWidth, Math.max(a.x, b.x));
+	const y2 = Math.min(page.baseHeight, Math.max(a.y, b.y));
+	if (x2 - x1 < 4 || y2 - y1 < 4) return null;
+	return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
 /** keeps objects attached to the content when crop or resize changes */
 export function retargetObjects(
 	prev: ErrataPage,
 	next: ErrataPage,
 ): PageObject[] {
 	const r = totalRotation(prev);
-	const pu = unrotatedSize(prev);
 	const nu = unrotatedSize(next);
 	const pp = contentPlacement(prev);
 	const np = contentPlacement(next);
-	const pc = contentBox(prev);
-	const nc = contentBox(next);
 	const ratio = np.scale / pp.scale;
+	const nc = contentBox(next);
 	return prev.objects.map((o) => {
-		const u = displayedToUnrotated(
-			o.cx,
-			o.cy,
-			r,
-			pu.width,
-			pu.height,
+		const s = displayedToSource(prev, o.cx, o.cy);
+		const n = flipPoint(
+			next,
+			np.x + (s.x - nc.x) * np.scale,
+			np.y + (s.y - nc.y) * np.scale,
 		);
-		const sx = pc.x + (u.x - pp.x) / pp.scale;
-		const sy = pc.y + (u.y - pp.y) / pp.scale;
-		const nx = np.x + (sx - nc.x) * np.scale;
-		const ny = np.y + (sy - nc.y) * np.scale;
-		const d = unrotatedToDisplayed(nx, ny, r, nu.width, nu.height);
+		const d = unrotatedToDisplayed(
+			n.x,
+			n.y,
+			r,
+			nu.width,
+			nu.height,
+		);
 		return {
 			...o,
 			cx: d.x,
@@ -392,6 +456,23 @@ export function rotatePage(page: ErrataPage, quarterTurns: 1 | -1): ErrataPage {
 	};
 }
 
+export type FlipAxis = 'horizontal' | 'vertical';
+
+/** horizontal mirrors left-right */
+// ponytail: objects move but keep their orientation; mirror them via a scale sign if needed
+export function flipPage(page: ErrataPage, axis: FlipAxis): ErrataPage {
+	const { width, height } = pageSize(page);
+	const sideways = totalRotation(page) % 180 !== 0;
+	const objects = page.objects.map((o) =>
+		axis === 'horizontal'
+			? { ...o, cx: width - o.cx, angle: -o.angle }
+			: { ...o, cy: height - o.cy, angle: -o.angle },
+	);
+	return (axis === 'horizontal') !== sideways
+		? { ...page, flipX: !page.flipX, objects }
+		: { ...page, flipY: !page.flipY, objects };
+}
+
 export function blankPage(width: number, height: number): ErrataPage {
 	return {
 		id: newId(),
@@ -452,6 +533,14 @@ export function tileTransform(
 			270: [0, -1, 1, 0, 0, u.width],
 		} as Record<Rotation, Matrix>
 	)[totalRotation(page)];
+	const flip: Matrix = [
+		page.flipX ? -1 : 1,
+		0,
+		0,
+		page.flipY ? -1 : 1,
+		page.flipX ? u.width : 0,
+		page.flipY ? u.height : 0,
+	];
 	const tile: Matrix = [
 		scale,
 		0,
@@ -460,5 +549,5 @@ export function tileTransform(
 		-region.x * scale,
 		-region.y * scale,
 	];
-	return multiply(tile, multiply(rotate, place));
+	return multiply(tile, multiply(rotate, multiply(flip, place)));
 }

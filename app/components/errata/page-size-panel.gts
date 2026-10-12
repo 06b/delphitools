@@ -13,6 +13,7 @@ import ToolPanel, {
 import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
 import Switch from 'delphitools-v2/components/ui/switch';
 import {
+	flipAnchor,
 	pageSize,
 	rotateAnchor,
 	totalRotation,
@@ -125,7 +126,10 @@ export default class PageSizePanel extends Component {
 		this.placement = mode === 'anchor' ? 'anchor' : 'resample';
 		this.resample = mode === 'fill' ? 'fill' : 'fit';
 		this.anchor = page.resize
-			? rotateAnchor(page.resize.anchor, turns)
+			? rotateAnchor(
+					flipAnchor(page.resize.anchor, page),
+					turns,
+				)
 			: 'top-left';
 		this.otherId = 'custom';
 	}
@@ -240,7 +244,10 @@ export default class PageSizePanel extends Component {
 				this.placement === 'anchor'
 					? 'anchor'
 					: this.resample,
-			anchor: rotateAnchor(this.anchor, -turns),
+			anchor: flipAnchor(
+				rotateAnchor(this.anchor, -turns),
+				page,
+			),
 			...(bleed > 0 ? { bleed } : {}),
 		};
 	}

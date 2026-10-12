@@ -286,10 +286,47 @@ await page.mouse.down();
 await page.mouse.move(box3.x + box3.w / 2 + 100, box3.y + box3.h / 2 + 40, { steps: 6 });
 await page.mouse.up();
 await sleep(300);
+check('crop waits for apply', !(await doc()).pages[2].crop);
+// the draft rect, in client pixels and displayed page points
+const cropDraft = () => page.evaluate(() => {
+	const c = window.__errataCanvas;
+	const a = c.getActiveObject();
+	if (!a || !a.strokeDashArray || a.type !== 'rect') return null;
+	const r = c.upperCanvasEl.getBoundingClientRect();
+	const at = (k) => ({ x: r.left + a.oCoords[k].x, y: r.top + a.oCoords[k].y });
+	return { tl: at('tl'), br: at('br'), mr: at('mr'), rotate: a.isControlVisible('mtr'), w: a.width * a.scaleX, h: a.height * a.scaleY };
+});
+let draft = await cropDraft();
+check('crop draft shown', !!draft && !draft.rotate && Math.abs(draft.w - 200 / (box3.w / 500)) < 2, JSON.stringify(draft));
+const cropZ = box3.w / 500;
+// move by 20pt right, 10pt down
+const mid = { x: (draft.tl.x + draft.br.x) / 2, y: (draft.tl.y + draft.br.y) / 2 };
+await page.mouse.move(mid.x, mid.y);
+await page.mouse.down();
+await page.mouse.move(mid.x + 10 * cropZ, mid.y + 5 * cropZ, { steps: 4 });
+await page.mouse.move(mid.x + 20 * cropZ, mid.y + 10 * cropZ, { steps: 4 });
+await page.mouse.up();
+await sleep(250);
+const movedDraft = await cropDraft();
+check('crop draft moves', !!movedDraft && Math.abs(movedDraft.tl.x - draft.tl.x - 20 * cropZ) < 2 && Math.abs(movedDraft.tl.y - draft.tl.y - 10 * cropZ) < 2, JSON.stringify(movedDraft));
+// narrow by 40pt from the right handle
+await page.mouse.move(movedDraft.mr.x, movedDraft.mr.y);
+await page.mouse.down();
+await page.mouse.move(movedDraft.mr.x - 20 * cropZ, movedDraft.mr.y, { steps: 4 });
+await page.mouse.move(movedDraft.mr.x - 40 * cropZ, movedDraft.mr.y, { steps: 4 });
+await page.mouse.up();
+await sleep(250);
+draft = await cropDraft();
+check('crop draft resizes', !!draft && Math.abs(draft.w - movedDraft.w + 40) < 2, JSON.stringify(draft));
+check('crop still waits', !(await doc()).pages[2].crop);
+const wantCrop = { x: (draft.tl.x - box3.x) / cropZ, y: (draft.tl.y - box3.y) / cropZ, width: draft.w, height: draft.h };
+await page.evaluate(() => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === 'Apply')?.click());
+await sleep(300);
 let cropped = (await doc()).pages[2];
-check('crop stored', !!cropped.crop && cropped.crop.width > 50 && cropped.crop.height > 20, JSON.stringify(cropped.crop));
+check('crop stored', !!cropped.crop && ['x', 'y', 'width', 'height'].every((k) => Math.abs(cropped.crop[k] - wantCrop[k]) < 1.5), `${JSON.stringify(cropped.crop)} vs ${JSON.stringify(wantCrop)}`);
 check('crop inside source', cropped.crop.x >= 0 && cropped.crop.x + cropped.crop.width <= 500);
 check('mode bar gone', !(await page.$eval('.err-mode', (e) => e.classList.contains('is-open'))));
+check('crop draft gone', await page.evaluate(() => !window.__errataCanvas.getObjects().some((o) => o.type === 'rect' && o.strokeDashArray && o.evented !== false && o.selectable)));
 
 const modeOpen = (m) => page.$(`.err-mode.is-open[data-mode="${m}"]`).then((e) => !!e);
 const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l || b.getAttribute('aria-label') === l)?.click(), label);
@@ -1007,5 +1044,165 @@ check('form export values', form.getTextField('email').getText() === 'a@b.c' && 
 check('form export pages', onPage(formOut, form.getTextField('email'), 0) && onPage(formOut, form.getSignature('signature'), 0) && onPage(formOut, form.getTextField('turned'), 1) && onPage(formOut, form.getCheckBox('agree'), 1));
 const mk = form.getTextField('turned').acroField.getWidgets()[0].getAppearanceCharacteristics()?.getRotation();
 check('form turned page widget upright', mk === 90, String(mk));
+
+// rotate and flip strip, insert strip, crop cancel: a fresh two-page file
+const stripSrc = await PDFDocument.create();
+const stripFont = await stripSrc.embedFont(StandardFonts.HelveticaBold);
+stripSrc.addPage([400, 500]).drawText('MMMM', { x: 20, y: 420, size: 48, font: stripFont });
+stripSrc.addPage([300, 200]);
+await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'strips.pdf', 'application/pdf'), [...(await stripSrc.save())]);
+await page.waitForFunction(() => window.__errata.doc()?.name === 'strips', { timeout: 10000 });
+await sleep(800);
+const pagesNow = async () => (await doc()).pages;
+const undoStep = async () => {
+	await undo();
+	await sleep(300);
+};
+// centroid of dark pixels across the page, 0 left .. 1 right, 0 top .. 1 bottom
+const inkAt = (index) => page.evaluate((i) => {
+	const c = window.__errataCanvas;
+	const el = c.lowerCanvasEl;
+	const k = el.width / el.clientWidth;
+	const r = window.__errata.pageRect(i);
+	const o = el.getBoundingClientRect();
+	const x0 = Math.round((r.x - o.left) * k);
+	const y0 = Math.round((r.y - o.top) * k);
+	const w = Math.round(r.w * k);
+	const h = Math.round(r.h * k);
+	const data = el.getContext('2d').getImageData(x0, y0, w, h).data;
+	let sx = 0, sy = 0, n = 0;
+	for (let y = 0; y < h; y++)
+		for (let x = 0; x < w; x++)
+			if (data[(y * w + x) * 4 + 3] > 0 && data[(y * w + x) * 4] < 100) { sx += x; sy += y; n++; }
+	return n ? { x: sx / n / w, y: sy / n / h, n, all: n / (w * h) } : null;
+}, index);
+const thumbInk = (index) => page.evaluate(async (i) => {
+	const img = document.querySelectorAll('.err-page-thumb')[i];
+	await img.decode();
+	const c = document.createElement('canvas');
+	c.width = img.naturalWidth;
+	c.height = img.naturalHeight;
+	const g = c.getContext('2d');
+	g.drawImage(img, 0, 0);
+	const data = g.getImageData(0, 0, c.width, c.height).data;
+	let sx = 0, sy = 0, n = 0;
+	for (let y = 0; y < c.height; y++)
+		for (let x = 0; x < c.width; x++)
+			if (data[(y * c.width + x) * 4] < 100) { sx += x; sy += y; n++; }
+	return n ? { x: sx / n / c.width, y: sy / n / c.height } : null;
+}, index);
+const ink0 = await inkAt(0);
+check('strips fixture ink top-left', !!ink0 && ink0.x < 0.5 && ink0.y < 0.3, JSON.stringify(ink0));
+
+await openCell('Rotate');
+check('rotate strip', await modeOpen('rotate'));
+check('rotate strip waits for a choice', (await pagesNow()).every((p) => p.rotation === 0));
+await clickIn('Rotate right');
+await sleep(300);
+let sp = await pagesNow();
+check('rotate right current page only', sp[0].rotation === 90 && sp[1].rotation === 0, JSON.stringify(sp.map((p) => p.rotation)));
+await clickIn('Rotate left');
+await sleep(300);
+check('rotate left', (await pagesNow())[0].rotation === 0);
+await clickIn('Flip horizontal');
+await sleep(900);
+sp = await pagesNow();
+check('flip horizontal stored', sp[0].flipX === true && !sp[0].flipY && !sp[1].flipX, JSON.stringify(sp.map((p) => [p.flipX, p.flipY])));
+const inkH = await inkAt(0);
+check('flip mirrors the raster', !!inkH && inkH.x > 0.5 && inkH.y < 0.3, JSON.stringify(inkH));
+const thumbH = await thumbInk(0);
+check('flip mirrors the thumb', !!thumbH && thumbH.x > 0.5 && thumbH.y < 0.3, JSON.stringify(thumbH));
+const lineH = (await page.evaluate(() => window.__errata.content(0))).lines[0];
+check('flip mirrors content boxes', lineH && lineH.box.x > 200, JSON.stringify(lineH?.box));
+await undoStep();
+sp = await pagesNow();
+check('flip one undo step', !sp[0].flipX && sp[0].rotation === 0, JSON.stringify(sp[0]));
+await clickIn('Rotate right');
+await clickIn('Flip horizontal');
+await sleep(300);
+// turned page: a displayed left-right mirror is a source top-bottom one
+sp = await pagesNow();
+check('flip on a turned page', sp[0].rotation === 90 && sp[0].flipY === true && !sp[0].flipX, JSON.stringify(sp[0]));
+await clickIn('All');
+await clickIn('Flip vertical');
+await sleep(900);
+sp = await pagesNow();
+check('flip vertical all pages', sp[0].flipX === true && sp[0].flipY === true && sp[1].flipY === true && !sp[1].flipX, JSON.stringify(sp.map((p) => [p.flipX, p.flipY])));
+// turned then mirrored both ways: a half turn of the turned page
+const inkTurned = await inkAt(0);
+check('flipped turned raster', !!inkTurned && inkTurned.x < 0.3 && inkTurned.y > 0.5, JSON.stringify(inkTurned));
+await clickIn('Close');
+await sleep(400);
+check('rotate strip closes', !(await modeOpen('rotate')));
+
+const flipOut = await exported();
+const flipStream = (index) => {
+	const contents = flipOut.getPage(index).node.Contents();
+	const streams = contents.constructor.name === 'PDFArray' ? contents.asArray().map((r) => flipOut.context.lookup(r)) : [contents];
+	return streams.map((st) => new TextDecoder('latin1').decode(decodePDFRawStream(st).decode())).join('\n');
+};
+check('export flip matrix', /-1 0 0 -1 400 500 cm/.test(flipStream(0)), flipStream(0).slice(0, 120).replace(/\s+/g, ' '));
+check('export flip keeps rotation', flipOut.getPage(0).getRotation().angle === 90);
+check('export flip page 2', /1 0 0 -1 0 200 cm/.test(flipStream(1)), flipStream(1).slice(0, 120).replace(/\s+/g, ' '));
+const flipPdf = await getDocument({ data: new Uint8Array(await flipOut.save()), isEvalSupported: false, standardFontDataUrl: new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url).pathname }).promise;
+const flipText = await (await flipPdf.getPage(1)).getTextContent();
+const flipItem = flipText.items.find((it) => it.str === 'MMMM');
+// both flips: the run starts near the source top-right corner, drawn mirrored
+check('export flip moves the text', !!flipItem && flipItem.transform[0] < 0 && flipItem.transform[3] < 0 && flipItem.transform[4] > 300 && flipItem.transform[5] < 100, JSON.stringify(flipItem?.transform));
+
+await openCell('Insert page');
+check('insert strip', await modeOpen('insert'));
+const count0 = (await pagesNow()).length;
+check('insert strip waits for a choice', count0 === 2);
+await page.evaluate(() => window.__errata.pageIndex() === 0 || document.querySelectorAll('.err-page-cell')[0].click());
+await sleep(200);
+await clickIn('Duplicate');
+await sleep(300);
+sp = await pagesNow();
+check('insert duplicate', sp.length === 3 && sp[1].sourceIndex === 0 && sp[1].id !== sp[0].id && sp[1].flipX === sp[0].flipX && sp[1].rotation === sp[0].rotation, JSON.stringify(sp.map((p) => [p.sourceIndex, p.rotation])));
+check('insert duplicate is current', (await page.evaluate(() => window.__errata.pageIndex())) === 1);
+await clickIn('Black');
+await sleep(900);
+sp = await pagesNow();
+check('insert black', sp.length === 4 && sp[2].image?.naturalWidth === 1 && sp[2].baseWidth === 500 && sp[2].baseHeight === 400, JSON.stringify({ ...sp[2], image: !!sp[2].image }));
+const inkBlack = await inkAt(2);
+check('insert black renders black', !!inkBlack && inkBlack.all > 0.95, JSON.stringify(inkBlack));
+await clickIn('Text');
+await sleep(400);
+sp = await pagesNow();
+const word = sp[3].objects[0];
+check('insert text page', sp.length === 5 && sp[3].sourceIndex === null && !sp[3].image && word?.kind === 'text' && word.text === 'Title' && word.cx === 250 && word.cy === 200, JSON.stringify(word));
+check('insert text selected', await page.evaluate(() => window.__errataCanvas.getActiveObject()?.text === 'Title'));
+await clickIn('Blank');
+await sleep(300);
+sp = await pagesNow();
+check('insert blank', sp.length === 6 && sp[4].sourceIndex === null && !sp[4].image && sp[4].objects.length === 0 && sp[5].sourceIndex === 1);
+await undoStep();
+check('insert one undo step', (await pagesNow()).length === 5);
+const stripPng = join(tmpdir(), 'errata-strip.png');
+writeFileSync(stripPng, Buffer.from(pngData, 'base64'));
+const fileInput = await page.$('.err-mode.is-open input[type="file"]');
+await fileInput.uploadFile(stripPng);
+await sleep(600);
+sp = await pagesNow();
+const current = await page.evaluate(() => window.__errata.pageIndex());
+check('insert image page', sp.length === 6 && sp[current]?.image?.naturalWidth === 64 && current === 5, JSON.stringify({ n: sp.length, current }));
+await clickIn('Close');
+await sleep(400);
+check('insert strip closes', !(await modeOpen('insert')));
+
+// crop cancel leaves the page alone
+await openCell('Crop');
+const cr = await page.evaluate((i) => window.__errata.pageRect(i), await page.evaluate(() => window.__errata.pageIndex()));
+await page.mouse.move(cr.x + cr.w * 0.3, cr.y + cr.h * 0.3);
+await page.mouse.down();
+await page.mouse.move(cr.x + cr.w * 0.7, cr.y + cr.h * 0.7, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+check('crop cancel draft', !!(await cropDraft()));
+await clickIn('Cancel');
+await sleep(400);
+check('crop cancel', (await pagesNow()).every((p) => !p.crop) && !(await cropDraft()) && !(await page.$('.err-mode.is-open')));
+check('crop cancel removes draft', await page.evaluate(() => !window.__errataCanvas.getObjects().some((o) => o.type === 'rect' && o.strokeDashArray && o.selectable && o.evented !== false)));
 
 await finish(browser);

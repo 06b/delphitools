@@ -182,8 +182,12 @@ export async function exportPdf(
 		Awaited<ReturnType<PDFDocument['embedPng']>>
 	>();
 
+	const flipped = (p: ErrataPage) => p.flipX || p.flipY;
+	// flips need wrapping matrix
+	const copyable = (p: ErrataPage) =>
+		p.sourceIndex !== null && !p.resize && !flipped(p);
 	const copyIndices = doc.pages
-		.filter((p) => p.sourceIndex !== null && !p.resize)
+		.filter(copyable)
 		.map((p) => p.sourceIndex!);
 	const copied = source ? await out.copyPages(source, copyIndices) : [];
 	if (source) carryAcroForm(source, out, copied);
@@ -194,7 +198,7 @@ export async function exportPdf(
 		const c = contentBox(page);
 		const p = contentPlacement(page);
 		let pdfPage: PDFPage;
-		if (page.sourceIndex !== null && !page.resize) {
+		if (copyable(page)) {
 			pdfPage = out.addPage(copied[copiedAt++]);
 			if (page.crop) {
 				const box = pdfPage.getCropBox();
@@ -210,6 +214,18 @@ export async function exportPdf(
 			}
 		} else {
 			pdfPage = out.addPage([u.width, u.height]);
+			if (flipped(page))
+				pdfPage.pushOperators(
+					pushGraphicsState(),
+					concatTransformationMatrix(
+						page.flipX ? -1 : 1,
+						0,
+						0,
+						page.flipY ? -1 : 1,
+						page.flipX ? u.width : 0,
+						page.flipY ? u.height : 0,
+					),
+				);
 			// pdf-lib cannot embed a page without a content stream
 			if (
 				page.sourceIndex !== null &&
@@ -279,6 +295,8 @@ export async function exportPdf(
 				});
 				pdfPage.pushOperators(popGraphicsState());
 			}
+			if (flipped(page))
+				pdfPage.pushOperators(popGraphicsState());
 		}
 		pdfPage.setRotation(degrees(totalRotation(page)));
 		for (const object of page.objects) {

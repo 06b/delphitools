@@ -1,4 +1,4 @@
-import type { Stamped } from './doc-model';
+import type { PageCrop, Stamped } from './doc-model';
 
 export interface PageRect {
 	x: number;
@@ -114,13 +114,17 @@ export type BoxMode =
 	| 'preflight'
 	| 'comment'
 	| 'redact'
-	| 'page-size';
+	| 'page-size'
+	| 'rotate'
+	| 'insert';
 
 export const OWN_BAR_MODES: BoxMode[] = [
 	'organise',
 	'preflight',
 	'comment',
 	'page-size',
+	'rotate',
+	'insert',
 ];
 
 let mode: BoxMode | null = null;
@@ -146,5 +150,24 @@ export function getSelectedIds(): readonly string[] {
 export function setSelectedIds(ids: readonly string[]): void {
 	if (ids.join() === selectedIds.join()) return;
 	selectedIds = ids;
+	for (const l of listeners) l();
+}
+
+export interface CropDraft {
+	pageId: string;
+	/** displayed page space */
+	rect: PageCrop;
+}
+
+let cropDraft: CropDraft | null = null;
+
+/** crop rect awaiting apply */
+export function getCropDraft(): CropDraft | null {
+	return cropDraft;
+}
+
+export function setCropDraft(next: CropDraft | null): void {
+	if (next === cropDraft) return;
+	cropDraft = next;
 	for (const l of listeners) l();
 }

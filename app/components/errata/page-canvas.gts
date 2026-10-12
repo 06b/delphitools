@@ -16,15 +16,10 @@ import {
 	type TPointerEventInfo,
 } from 'fabric';
 import {
-	contentBox,
-	contentPlacement,
-	displayedToUnrotated,
+	cropFromDisplayed,
 	newId,
 	pageSize,
-	totalRotation,
-	unrotatedSize,
 	type ErrataDoc,
-	type ErrataPage,
 	type ImageObject,
 	type InkObject,
 	type PageCrop,
@@ -45,7 +40,7 @@ import {
 	store,
 	subscribePage,
 } from 'delphitools-v2/lib/errata/store';
-import { addContentEdits, cropPage } from 'delphitools-v2/lib/errata/page-ops';
+import { addContentEdits } from 'delphitools-v2/lib/errata/page-ops';
 import {
 	pageContent,
 	type PageContentView,
@@ -68,14 +63,16 @@ import {
 import {
 	getActiveTool,
 	getToolSettings,
-	setActiveTool,
 	subscribeTool,
 } from 'delphitools-v2/lib/errata/tool';
 import {
+	getCropDraft,
 	getMode,
 	registerCanvasActions,
+	setCropDraft,
 	setSelectedIds,
 	subscribeUi,
+	type CropDraft,
 } from 'delphitools-v2/lib/errata/ui';
 import { commentAuthor, newComment } from 'delphitools-v2/lib/errata/comments';
 import { redactObject } from 'delphitools-v2/lib/errata/redact';
@@ -1027,6 +1024,10 @@ export default class PageCanvas extends Component {
 		canvas.on('selection:cleared', reportSelection);
 
 		canvas.on('object:modified', (e) => {
+			if (e.target && e.target === cropRect) {
+				bakeCropRect();
+				return;
+			}
 			const targets =
 				e.target && e.target.type === 'activeselection'
 					? (
@@ -1180,48 +1181,73 @@ export default class PageCanvas extends Component {
 			};
 		};
 
-		// displayed drag rect to a crop in source box coordinates
-		const cropFromDrag = (
-			page: ErrataPage,
-			slot: Slot,
-			a: Point,
-			b: Point,
-		) => {
-			const r = totalRotation(page);
-			const u = unrotatedSize(page);
-			const c = contentBox(page);
-			const p = contentPlacement(page);
-			const local = (v: Point) =>
-				displayedToUnrotated(
-					v.x - slot.x,
-					v.y - slot.y,
-					r,
-					u.width,
-					u.height,
-				);
-			const toSource = (v: { x: number; y: number }) => ({
-				x: c.x + (v.x - p.x) / p.scale,
-				y: c.y + (v.y - p.y) / p.scale,
-			});
-			const sa = toSource(local(a));
-			const sb = toSource(local(b));
-			const x1 = Math.max(0, Math.min(sa.x, sb.x));
-			const y1 = Math.max(0, Math.min(sa.y, sb.y));
-			const x2 = Math.min(
-				page.baseWidth,
-				Math.max(sa.x, sb.x),
-			);
-			const y2 = Math.min(
-				page.baseHeight,
-				Math.max(sa.y, sb.y),
-			);
-			if (x2 - x1 < 4 || y2 - y1 < 4) return null;
+		// clamped to the page
+		const clampRect = (slot: Slot, r: PageCrop): PageCrop => {
+			const x = Math.max(0, Math.min(r.x, slot.width));
+			const y = Math.max(0, Math.min(r.y, slot.height));
 			return {
-				x: x1,
-				y: y1,
-				width: x2 - x1,
-				height: y2 - y1,
+				x,
+				y,
+				width: Math.min(r.x + r.width, slot.width) - x,
+				height:
+					Math.min(r.y + r.height, slot.height) -
+					y,
 			};
+		};
+
+		// adjustable until apply
+		let cropRect: Rect | null = null;
+		let cropShown: CropDraft | null = null;
+		const showCropDraft = () => {
+			const draft =
+				getActiveTool() === 'crop'
+					? getCropDraft()
+					: null;
+			if (draft === cropShown) return;
+			cropShown = draft;
+			const slot = draft ? slotOf(draft.pageId) : null;
+			if (!draft || !slot) {
+				if (cropRect) canvas.remove(cropRect);
+				cropRect = null;
+				return;
+			}
+			if (!cropRect) {
+				cropRect = new Rect({
+					originX: 'left',
+					originY: 'top',
+					fill: 'rgba(0,0,0,0.04)',
+					stroke: '#000',
+					strokeWidth: 1,
+					strokeUniform: true,
+					strokeDashArray: [4, 4],
+					lockRotation: true,
+					hoverCursor: 'move',
+				});
+				cropRect.setControlsVisibility({ mtr: false });
+				canvas.add(cropRect);
+			}
+			cropRect.set({
+				left: slot.x + draft.rect.x,
+				top: slot.y + draft.rect.y,
+				width: draft.rect.width,
+				height: draft.rect.height,
+				scaleX: 1,
+				scaleY: 1,
+			});
+			cropRect.setCoords();
+			canvas.setActiveObject(cropRect);
+		};
+		const bakeCropRect = () => {
+			const draft = getCropDraft();
+			const slot = draft ? slotOf(draft.pageId) : null;
+			if (!cropRect || !draft || !slot) return;
+			const rect = clampRect(slot, {
+				x: cropRect.left - slot.x,
+				y: cropRect.top - slot.y,
+				width: cropRect.width * cropRect.scaleX,
+				height: cropRect.height * cropRect.scaleY,
+			});
+			setCropDraft({ pageId: draft.pageId, rect });
 		};
 
 		const cropGhost = (a: Point, b: Point) =>
@@ -1350,7 +1376,7 @@ export default class PageCanvas extends Component {
 			if (
 				tool === 'shape' ||
 				tool === 'highlight' ||
-				tool === 'crop' ||
+				(tool === 'crop' && opt.target !== cropRect) ||
 				(tool === 'field' && !opt.target)
 			) {
 				dragStart = canvas.getScenePoint(opt.e);
@@ -1418,13 +1444,18 @@ export default class PageCanvas extends Component {
 				const page = store
 					.getSnapshot()
 					?.pages.find((pg) => pg.id === slot.id);
-				const crop = page
-					? cropFromDrag(page, slot, start, p)
-					: null;
-				if (page && crop) {
-					cropPage(page.id, crop);
-					setActiveTool('select');
-				} else canvas.requestRenderAll();
+				const rect = clampRect(slot, {
+					x: Math.min(start.x, p.x) - slot.x,
+					y: Math.min(start.y, p.y) - slot.y,
+					width: Math.abs(p.x - start.x),
+					height: Math.abs(p.y - start.y),
+				});
+				// clicks keep the draft
+				if (page && cropFromDisplayed(page, rect))
+					setCropDraft({ pageId: slot.id, rect });
+				else if (cropRect)
+					canvas.setActiveObject(cropRect);
+				canvas.requestRenderAll();
 				return;
 			}
 			const doc = store.getSnapshot();
@@ -2178,9 +2209,7 @@ export default class PageCanvas extends Component {
 			canvas.selection =
 				(interactive && !redacting) || content;
 			canvas.skipTargetFind =
-				tool === 'shape' ||
-				tool === 'highlight' ||
-				tool === 'crop';
+				tool === 'shape' || tool === 'highlight';
 			for (const { fabric, doc } of tracked.values()) {
 				fabric.selectable = redacting
 					? doc.kind === 'redact'
@@ -2194,6 +2223,9 @@ export default class PageCanvas extends Component {
 			}
 			const keep =
 				tool === 'text' ||
+				(tool === 'crop' &&
+					canvas.getActiveObject() ===
+						cropRect) ||
 				(tool === 'field' &&
 					canvas
 						.getActiveObjects()
@@ -2204,6 +2236,7 @@ export default class PageCanvas extends Component {
 					? 'default'
 					: 'crosshair';
 			refreshProxies();
+			showCropDraft();
 			canvas.requestRenderAll();
 		};
 

@@ -56,7 +56,7 @@ export function textWidth(text: string, size: number): number {
 	return width;
 }
 
-function textObject(
+export function textObject(
 	text: string,
 	size: number,
 	colour: string,
