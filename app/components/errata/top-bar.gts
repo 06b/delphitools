@@ -29,7 +29,6 @@ import {
 	store,
 	subscribePage,
 } from 'delphitools-v2/lib/errata/store';
-import { setActiveTool } from 'delphitools-v2/lib/errata/tool';
 import { deleteSelection, setMode } from 'delphitools-v2/lib/errata/ui';
 import {
 	getZoom,
@@ -173,7 +172,6 @@ export default class TopBar extends Component {
 	}
 
 	doPageSize = () => {
-		setActiveTool('select');
 		setMode('page-size');
 		this.close();
 	};

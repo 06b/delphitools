@@ -1,9 +1,10 @@
 import type * as Mupdf from 'mupdf';
-import { rawImport } from 'delphitools-v2/lib/raw-import';
+import { getMupdf } from 'delphitools-v2/lib/mupdf';
 import {
-	newId,
+	boxAt,
 	type ErrataDoc,
 	type ErrataPage,
+	type PageCrop,
 	type RedactObject,
 } from './doc-model';
 import { store } from './store';
@@ -11,23 +12,8 @@ import { store } from './store';
 // displayed space, y down
 export type Box = [number, number, number, number];
 
-export function redactObject(
-	x: number,
-	y: number,
-	w: number,
-	h: number,
-): RedactObject {
-	return {
-		id: newId(),
-		kind: 'redact',
-		cx: x + w / 2,
-		cy: y + h / 2,
-		w,
-		h,
-		scaleX: 1,
-		scaleY: 1,
-		angle: 0,
-	};
+export function redactObject(rect: PageCrop): RedactObject {
+	return { ...boxAt(rect), kind: 'redact' };
 }
 
 // mupdf rects are axis-aligned
@@ -118,7 +104,7 @@ export async function redactPdf(
 ): Promise<Uint8Array> {
 	const boxes = pages.map(redactBoxes);
 	if (boxes.every((b) => b.length === 0)) return bytes;
-	const mupdf = await rawImport<typeof Mupdf>('/mupdf/mupdf.js');
+	const mupdf = await getMupdf();
 	const { PDFPage } = mupdf;
 	const doc = new mupdf.PDFDocument(bytes);
 	try {

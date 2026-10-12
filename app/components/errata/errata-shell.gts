@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import { on } from '@ember/modifier';
+import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import CommentPopover from 'delphitools-v2/components/errata/comment-popover';
 import Omnibar from 'delphitools-v2/components/errata/omnibar';
@@ -29,23 +30,28 @@ import {
 	getPageIndex,
 	store,
 } from 'delphitools-v2/lib/errata/store';
-import { setActiveTool, type ToolId } from 'delphitools-v2/lib/errata/tool';
+import { activeTool, type ToolId } from 'delphitools-v2/lib/errata/tool';
 import {
+	boxMode,
 	debugBoxes,
 	pageRect,
 	registerImagePicker,
+	setMode,
+	type BoxMode,
 } from 'delphitools-v2/lib/errata/ui';
 import { pageContent } from 'delphitools-v2/lib/errata/content';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 export default class ErrataShell extends Component {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
+	mode = new TrackedExternal(boxMode.subscribe, boxMode.get);
 	#pdfInput: HTMLInputElement | null = null;
 	#imageInput: HTMLInputElement | null = null;
 
 	willDestroy() {
 		super.willDestroy();
 		this.doc.unsubscribe();
+		this.mode.unsubscribe();
 	}
 
 	// scripts/verify/errata.mjs drives this
@@ -60,7 +66,8 @@ export default class ErrataShell extends Component {
 			) => openFile(new File([bytes], name, { type })),
 			doc: () => store.getSnapshot(),
 			pageIndex: () => getPageIndex(),
-			setTool: (id: ToolId) => setActiveTool(id),
+			setTool: (id: ToolId) => activeTool.set(id),
+			setMode: (id: BoxMode | null) => setMode(id),
 			pageRect: (index: number) => pageRect(index),
 			activePdf: () => debugActivePdf(),
 			fontFace: async (index: number, baseFont: string) => {
@@ -259,7 +266,12 @@ export default class ErrataShell extends Component {
 					<PageCanvas />
 					{{#if this.doc.current}}
 						<Omnibar />
-						<PreflightPanel />
+						<PreflightPanel
+							@open={{eq
+								this.mode.current
+								"preflight"
+							}}
+						/>
 						<CommentPopover />
 					{{else}}
 						<div class="sub-empty-hint">

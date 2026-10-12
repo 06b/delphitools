@@ -11,16 +11,12 @@ import { modifier } from 'ember-modifier';
 import Icon from 'delphitools-v2/components/icon';
 import type { CommentObject } from 'delphitools-v2/lib/errata/doc-model';
 import {
+	findObject,
 	patchObjects,
 	removeObjects,
 	store,
 } from 'delphitools-v2/lib/errata/store';
-import {
-	getOpenNote,
-	objectRect,
-	setOpenNote,
-	subscribeUi,
-} from 'delphitools-v2/lib/errata/ui';
+import { objectRect, openNote } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 interface Open {
@@ -30,7 +26,7 @@ interface Open {
 
 export default class CommentPopover extends Component {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
-	openId = new TrackedExternal(subscribeUi, getOpenNote);
+	openId = new TrackedExternal(openNote.subscribe, openNote.get);
 
 	willDestroy() {
 		super.willDestroy();
@@ -39,14 +35,10 @@ export default class CommentPopover extends Component {
 	}
 
 	get open(): Open | null {
-		const id = this.openId.current;
-		if (!id) return null;
-		for (const page of this.doc.current?.pages ?? []) {
-			const note = page.objects.find((o) => o.id === id);
-			if (note?.kind === 'comment')
-				return { pageId: page.id, note };
-		}
-		return null;
+		const hit = findObject(this.doc.current, this.openId.current);
+		return hit?.object.kind === 'comment'
+			? { pageId: hit.page.id, note: hit.object }
+			: null;
 	}
 
 	get date(): string {
@@ -82,12 +74,12 @@ export default class CommentPopover extends Component {
 
 	close = () => {
 		this.commit();
-		setOpenNote(null);
+		openNote.set(null);
 	};
 
 	remove = () => {
 		const open = this.open;
-		setOpenNote(null);
+		openNote.set(null);
 		if (open) removeObjects(open.pageId, [open.note.id]);
 	};
 

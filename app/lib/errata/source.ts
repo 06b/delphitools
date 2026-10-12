@@ -6,6 +6,7 @@ import {
 	blankPage,
 	contentBox,
 	contentPlacement,
+	flipMatrix,
 	newId,
 	pageSize,
 	tileTransform,
@@ -308,14 +309,7 @@ async function rasterise(
 	ctx.fillStyle = '#fff';
 	ctx.fillRect(0, 0, flat.width, flat.height);
 	const content = await contentCanvas(page, scale);
-	ctx.setTransform(
-		page.flipX ? -1 : 1,
-		0,
-		0,
-		page.flipY ? -1 : 1,
-		page.flipX ? flat.width : 0,
-		page.flipY ? flat.height : 0,
-	);
+	ctx.setTransform(...flipMatrix(page, flat.width, flat.height));
 	if (content)
 		ctx.drawImage(
 			content,

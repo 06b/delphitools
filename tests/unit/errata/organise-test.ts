@@ -10,8 +10,8 @@ import {
 	movePages,
 	rotatePages,
 	updatePages,
-} from 'delphitools-v2/lib/errata/organise';
-import { addContentEdits } from 'delphitools-v2/lib/errata/page-ops';
+	addContentEdits,
+} from 'delphitools-v2/lib/errata/page-ops';
 import { store } from 'delphitools-v2/lib/errata/store';
 
 const pages = (): ErrataPage[] =>

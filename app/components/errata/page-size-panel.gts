@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import ToolPanel, {
@@ -10,7 +9,9 @@ import ToolPanel, {
 	Group,
 	InputField,
 	PageScope,
+	PageScopeState,
 	Segmented,
+	readText,
 } from 'delphitools-v2/components/errata/tool-panel';
 import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
 import Switch from 'delphitools-v2/components/ui/switch';
@@ -26,16 +27,12 @@ import {
 } from 'delphitools-v2/lib/errata/doc-model';
 import { resizePages } from 'delphitools-v2/lib/errata/page-ops';
 import {
-	scopePages,
-	type PageScope as Scope,
-} from 'delphitools-v2/lib/errata/stamps';
-import {
 	currentPage,
 	getPageIndex,
 	store,
 	subscribePage,
 } from 'delphitools-v2/lib/errata/store';
-import { getMode, setMode, subscribeUi } from 'delphitools-v2/lib/errata/ui';
+import { closeMode, onMode } from 'delphitools-v2/lib/errata/ui';
 import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
 import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
@@ -69,8 +66,9 @@ function parseMm(value: string): number | null {
 	return Number.isFinite(n) && n > 0 ? n * MM_TO_POINTS : null;
 }
 
-export default class PageSizePanel extends Component {
-	mode = new TrackedExternal(subscribeUi, getMode);
+export default class PageSizePanel extends Component<{
+	Args: { open: boolean };
+}> {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
 	pageIndex = new TrackedExternal(subscribePage, getPageIndex);
 	@tracked width = '';
@@ -80,27 +78,20 @@ export default class PageSizePanel extends Component {
 	@tracked anchor: Anchor = 'top-left';
 	@tracked bleed = false;
 	@tracked otherId = 'custom';
-	@tracked scope: Scope = 'current';
-	@tracked range = '';
+	pages = new PageScopeState('current');
+	#off = onMode('page-size', {
+		enter: () => {
+			const page = currentPage();
+			if (page) this.seed(page);
+		},
+	});
 
 	willDestroy() {
 		super.willDestroy();
-		this.mode.unsubscribe();
 		this.doc.unsubscribe();
 		this.pageIndex.unsubscribe();
+		this.#off();
 	}
-
-	get open() {
-		return this.mode.current === 'page-size';
-	}
-
-	#seeded = false;
-	// seed from the current page on every open, in displayed orientation
-	seedOnOpen = modifier((_el: HTMLElement, [open]: [boolean]) => {
-		const page = currentPage();
-		if (open && !this.#seeded && page) this.seed(page);
-		this.#seeded = open;
-	});
 
 	seed(page: ErrataPage) {
 		const { width, height } = pageSize(page);
@@ -123,20 +114,11 @@ export default class PageSizePanel extends Component {
 
 	@cached
 	get indices(): number[] | null {
-		return scopePages(
-			this.scope,
-			this.range,
+		return this.pages.indices(
 			this.doc.current?.pages.length ?? 0,
-			this.pageIndex.current,
+			this.pageIndex,
 		);
 	}
-
-	get rangeInvalid() {
-		return this.scope === 'range' && this.indices === null;
-	}
-
-	readInput = (set: (value: string) => void) => (event: Event) =>
-		set((event.target as HTMLInputElement).value);
 
 	setWidth = (v: string) => {
 		this.width = v;
@@ -199,8 +181,6 @@ export default class PageSizePanel extends Component {
 		(this.placement = placement);
 	setAnchor = (anchor: Anchor) => (this.anchor = anchor);
 	setResample = (resample: 'fit' | 'fill') => (this.resample = resample);
-	setScope = (scope: Scope) => (this.scope = scope);
-	setRange = (range: string) => (this.range = range);
 
 	get valid() {
 		return (
@@ -244,27 +224,24 @@ export default class PageSizePanel extends Component {
 		const h = parseMm(this.height);
 		if (w === null || h === null || this.indices === null) return;
 		resizePages(this.targets, (page) => this.resizeFor(page, w, h));
-		setMode(null);
+		closeMode();
 	};
 
 	reset = () => {
 		if (this.indices === null) return;
 		resizePages(this.targets, () => null);
-		setMode(null);
+		closeMode();
 	};
-
-	close = () => setMode(null);
 
 	<template>
 		<ToolPanel
-			@open={{this.open}}
+			@open={{@open}}
 			@mode="page-size"
 			@icon="scaling"
 			@label="Page size"
-			@onCancel={{this.close}}
+			@onCancel={{closeMode}}
 			@onApply={{this.apply}}
 			@canApply={{this.valid}}
-			{{this.seedOnOpen this.open}}
 		>
 			<:actions>
 				<button
@@ -302,7 +279,7 @@ export default class PageSizePanel extends Component {
 							value={{this.width}}
 							{{on
 								"input"
-								(this.readInput
+								(readText
 									this.setWidth
 								)
 							}}
@@ -332,7 +309,7 @@ export default class PageSizePanel extends Component {
 							value={{this.height}}
 							{{on
 								"input"
-								(this.readInput
+								(readText
 									this.setHeight
 								)
 							}}
@@ -375,11 +352,8 @@ export default class PageSizePanel extends Component {
 					{{/if}}
 				</Group>
 				<PageScope
-					@scope={{this.scope}}
-					@range={{this.range}}
-					@invalid={{this.rangeInvalid}}
-					@onScope={{this.setScope}}
-					@onRange={{this.setRange}}
+					@state={{this.pages}}
+					@invalid={{if this.indices false true}}
 				/>
 			</:default>
 		</ToolPanel>

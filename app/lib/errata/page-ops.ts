@@ -1,6 +1,8 @@
 import {
-	A4_POINTS,
 	blankPage,
+	boxAt,
+	flipPage,
+	insertSize,
 	newId,
 	pageSize,
 	rotatePage,
@@ -8,6 +10,7 @@ import {
 	withResize,
 	type ContentEdit,
 	type ErrataPage,
+	type FlipAxis,
 	type PageCrop,
 	type PageResize,
 } from './doc-model';
@@ -19,36 +22,116 @@ import {
 	store,
 	updatePage,
 } from './store';
-import { duplicatePages, updatePages } from './organise';
 import { imagePage } from './source';
 import { textObject } from './stamps';
-import { setActiveTool } from './tool';
+import { activeTool } from './tool';
 import { selectObject } from './ui';
 
+type Ids = ReadonlySet<string>;
+
+/** the pages in `ids`, in document order, moved to insertion index `to` of the unmoved list */
+export function movePages(
+	pages: readonly ErrataPage[],
+	ids: Ids,
+	to: number,
+): ErrataPage[] {
+	const at = pages.slice(0, to).filter((p) => !ids.has(p.id)).length;
+	const rest = pages.filter((p) => !ids.has(p.id));
+	rest.splice(at, 0, ...pages.filter((p) => ids.has(p.id)));
+	return rest;
+}
+
+export function rotatePages(
+	pages: readonly ErrataPage[],
+	ids: Ids,
+	turns: 1 | -1,
+): ErrataPage[] {
+	return pages.map((p) => (ids.has(p.id) ? rotatePage(p, turns) : p));
+}
+
+export function flipPages(
+	pages: readonly ErrataPage[],
+	ids: Ids,
+	axis: FlipAxis,
+): ErrataPage[] {
+	return pages.map((p) => (ids.has(p.id) ? flipPage(p, axis) : p));
+}
+
+/** never removes the last page */
+export function deletePages(
+	pages: readonly ErrataPage[],
+	ids: Ids,
+): ErrataPage[] {
+	const rest = pages.filter((p) => !ids.has(p.id));
+	return rest.length > 0 ? rest : pages.slice();
+}
+
+/** each page followed by its copy; content edits are shared, objects get new ids */
+export function duplicatePages(
+	pages: readonly ErrataPage[],
+	ids: Ids,
+): ErrataPage[] {
+	return pages.flatMap((p) =>
+		ids.has(p.id)
+			? [
+					p,
+					{
+						...p,
+						id: newId(),
+						objects: p.objects.map((o) => ({
+							...o,
+							id: newId(),
+						})),
+					},
+				]
+			: [p],
+	);
+}
+
+/** a blank page the size of the last selected page, after it; at the end without a selection */
+export function insertBlank(
+	pages: readonly ErrataPage[],
+	ids: Ids,
+): ErrataPage[] {
+	let at = pages.length;
+	for (let i = pages.length - 1; i >= 0; i--)
+		if (ids.has(pages[i]!.id)) {
+			at = i + 1;
+			break;
+		}
+	const { width, height } = insertSize(pages, at);
+	const next = pages.slice();
+	next.splice(at, 0, blankPage(width, height));
+	return next;
+}
+
+/** one undo step; an unchanged order is no step */
+export function updatePages(
+	op: (pages: readonly ErrataPage[]) => ErrataPage[],
+): void {
+	store.update((doc) => {
+		const pages = op(doc.pages);
+		const same =
+			pages.length === doc.pages.length &&
+			pages.every((p, i) => p === doc.pages[i]);
+		return same ? doc : { ...doc, pages };
+	});
+}
+
 export function rotateCurrent(pageId: string, turns: 1 | -1): void {
-	updatePage(pageId, (page) => rotatePage(page, turns));
+	updatePages((pages) => rotatePages(pages, new Set([pageId]), turns));
 }
 
 export function deletePage(pageId: string): void {
-	store.update((doc) => {
-		if (doc.pages.length <= 1) return doc;
-		return {
-			...doc,
-			pages: doc.pages.filter((p) => p.id !== pageId),
-		};
-	});
+	updatePages((pages) => deletePages(pages, new Set([pageId])));
 	setPageIndex(getPageIndex());
 }
 
 export function insertPageAt(index: number, page: ErrataPage): void {
-	store.update((doc) => {
-		const pages = doc.pages.slice();
-		pages.splice(
-			Math.max(0, Math.min(index, pages.length)),
-			0,
-			page,
-		);
-		return { ...doc, pages };
+	updatePages((pages) => {
+		const next = pages.slice();
+		next.splice(Math.max(0, Math.min(index, next.length)), 0, page);
+		return next;
 	});
 	const doc = store.getSnapshot();
 	if (doc) setPageIndex(doc.pages.findIndex((p) => p.id === page.id));
@@ -63,8 +146,8 @@ export function insertPageAfter(pageId: string | null, page: ErrataPage): void {
 }
 
 function sizeOf(pageId: string): { width: number; height: number } {
-	const ref = store.getSnapshot()?.pages.find((p) => p.id === pageId);
-	return ref ? pageSize(ref) : A4_POINTS;
+	const pages = store.getSnapshot()?.pages ?? [];
+	return insertSize(pages, pages.findIndex((p) => p.id === pageId) + 1);
 }
 
 export function insertBlankAfter(pageId: string): void {
@@ -110,42 +193,41 @@ export function insertTextPageAfter(pageId: string, text: string): void {
 		...blankPage(width, height),
 		objects: [object],
 	});
-	setActiveTool('select');
+	activeTool.set('select');
 	selectObject(object.id);
-}
-
-export function resizePage(pageId: string, resize: PageResize | null): void {
-	updatePage(pageId, (page) => withResize(page, resize));
 }
 
 /** one undo step */
 export function resizePages(
-	ids: ReadonlySet<string>,
+	ids: Ids,
 	resize: (page: ErrataPage) => PageResize | null,
 ): void {
-	if (ids.size === 0) return;
-	store.update((doc) => ({
-		...doc,
-		pages: doc.pages.map((p) =>
+	updatePages((pages) =>
+		pages.map((p) =>
 			ids.has(p.id) ? withResize(p, resize(p)) : p,
 		),
-	}));
+	);
+}
+
+export function resizePage(pageId: string, resize: PageResize | null): void {
+	resizePages(new Set([pageId]), () => resize);
 }
 
 export function cropPage(pageId: string, crop: PageCrop | null): void {
 	updatePage(pageId, (page) => withCrop(page, crop));
 }
 
+/** takes toId's slot */
 export function movePage(fromId: string, toId: string): void {
-	if (fromId === toId) return;
-	store.update((doc) => {
-		const from = doc.pages.findIndex((p) => p.id === fromId);
-		const to = doc.pages.findIndex((p) => p.id === toId);
-		if (from === -1 || to === -1) return doc;
-		const pages = doc.pages.slice();
-		const [moved] = pages.splice(from, 1);
-		pages.splice(to, 0, moved!);
-		return { ...doc, pages };
+	updatePages((pages) => {
+		const from = pages.findIndex((p) => p.id === fromId);
+		const to = pages.findIndex((p) => p.id === toId);
+		if (from === -1 || to === -1) return pages.slice();
+		return movePages(
+			pages,
+			new Set([fromId]),
+			from < to ? to + 1 : to,
+		);
 	});
 	const doc = store.getSnapshot();
 	if (doc) setPageIndex(doc.pages.findIndex((p) => p.id === fromId));
@@ -188,19 +270,15 @@ export async function placeImage(file: File): Promise<void> {
 		size.width / 2 / image.naturalWidth,
 		size.height / 2 / image.naturalHeight,
 	);
-	const id = newId();
-	addObject(page.id, {
-		id,
-		kind: 'image',
-		cx: size.width / 2,
-		cy: size.height / 2,
-		w: image.naturalWidth * scale,
-		h: image.naturalHeight * scale,
-		scaleX: 1,
-		scaleY: 1,
-		angle: 0,
-		dataUrl: image.dataUrl,
+	const w = image.naturalWidth * scale;
+	const h = image.naturalHeight * scale;
+	const box = boxAt({
+		x: (size.width - w) / 2,
+		y: (size.height - h) / 2,
+		width: w,
+		height: h,
 	});
-	setActiveTool('select');
-	selectObject(id);
+	addObject(page.id, { ...box, kind: 'image', dataUrl: image.dataUrl });
+	activeTool.set('select');
+	selectObject(box.id);
 }

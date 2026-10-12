@@ -6,19 +6,13 @@ import Icon from 'delphitools-v2/components/icon';
 import { newId, pageSize } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	addSignature,
-	getSignatures,
 	removeSignature,
-	subscribeSignatures,
+	signatures,
 	trimCanvas,
 } from 'delphitools-v2/lib/errata/signatures';
 import { addObject, currentPage } from 'delphitools-v2/lib/errata/store';
-import { setActiveTool } from 'delphitools-v2/lib/errata/tool';
-import {
-	closeModal,
-	getOpenModal,
-	subscribeUi,
-	selectObject,
-} from 'delphitools-v2/lib/errata/ui';
+import { activeTool } from 'delphitools-v2/lib/errata/tool';
+import { modal, selectObject } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 const PAD_W = 480;
@@ -46,7 +40,7 @@ function placeSignature(dataUrl: string): void {
 			angle: 0,
 			dataUrl,
 		});
-		setActiveTool('select');
+		activeTool.set('select');
 		selectObject(id);
 	};
 	img.src = dataUrl;
@@ -54,16 +48,16 @@ function placeSignature(dataUrl: string): void {
 
 // substrata modal-host chrome
 export default class SignatureModal extends Component {
-	modal = new TrackedExternal(subscribeUi, getOpenModal);
-	saved = new TrackedExternal(subscribeSignatures, getSignatures);
+	shown = new TrackedExternal(modal.subscribe, modal.get);
+	saved = new TrackedExternal(signatures.subscribe, signatures.get);
 	#pad: HTMLCanvasElement | null = null;
 	#input: HTMLInputElement | null = null;
 
 	willDestroy() {
 		super.willDestroy();
-		this.modal.unsubscribe();
+		this.shown.unsubscribe();
 		this.saved.unsubscribe();
-		if (getOpenModal() === 'signature') closeModal();
+		modal.set(null);
 	}
 
 	sync = modifier((dialog: HTMLDialogElement, [open]: [boolean]) => {
@@ -81,11 +75,11 @@ export default class SignatureModal extends Component {
 	});
 
 	onClose = () => {
-		if (getOpenModal() === 'signature') closeModal();
+		modal.set(null);
 	};
 
 	get open() {
-		return this.modal.current === 'signature';
+		return this.shown.current === 'signature';
 	}
 
 	dismiss = (event: Event) => {
@@ -155,7 +149,7 @@ export default class SignatureModal extends Component {
 		addSignature(dataUrl);
 		this.clear();
 		placeSignature(dataUrl);
-		closeModal();
+		modal.set(null);
 	};
 
 	registerInput = modifier((el: HTMLInputElement) => {
@@ -177,14 +171,14 @@ export default class SignatureModal extends Component {
 			const dataUrl = reader.result as string;
 			addSignature(dataUrl);
 			placeSignature(dataUrl);
-			closeModal();
+			modal.set(null);
 		};
 		reader.readAsDataURL(file);
 	};
 
 	place = (dataUrl: string) => {
 		placeSignature(dataUrl);
-		closeModal();
+		modal.set(null);
 	};
 
 	remove = (dataUrl: string) => removeSignature(dataUrl);

@@ -12,7 +12,15 @@ import { store } from 'delphitools-v2/lib/errata/store';
 module('Unit | errata | redact', function () {
 	test('boxes follow scale and quarter turns', function (assert) {
 		const page = blankPage(400, 500);
-		const mark = { ...redactObject(10, 20, 100, 40), scaleX: 2 };
+		const mark = {
+			...redactObject({
+				x: 10,
+				y: 20,
+				width: 100,
+				height: 40,
+			}),
+			scaleX: 2,
+		};
 		page.objects = [mark];
 		assert.deepEqual(redactBoxes(page), [[-40, 20, 160, 60]]);
 		const turned = rotatePage(page, 1);
@@ -27,7 +35,12 @@ module('Unit | errata | redact', function () {
 		const page = blankPage(400, 500);
 		page.objects = [
 			{
-				...redactObject(0, 0, 10, 10),
+				...redactObject({
+					x: 0,
+					y: 0,
+					width: 10,
+					height: 10,
+				}),
 				kind: 'shape',
 				shape: 'rect',
 				colour: '#000',
@@ -46,10 +59,10 @@ module('Unit | errata | redact', function () {
 	test('dropRedactions keeps earlier marks, one undo step', function (assert) {
 		const a = blankPage(400, 500);
 		const b = blankPage(400, 500);
-		const old = redactObject(0, 0, 10, 10);
+		const old = redactObject({ x: 0, y: 0, width: 10, height: 10 });
 		const fresh = [
-			redactObject(5, 5, 10, 10),
-			redactObject(1, 1, 2, 2),
+			redactObject({ x: 5, y: 5, width: 10, height: 10 }),
+			redactObject({ x: 1, y: 1, width: 2, height: 2 }),
 		];
 		a.objects = [old, fresh[0]!];
 		b.objects = [fresh[1]!];

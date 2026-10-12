@@ -4,15 +4,16 @@ import {
 	setPageIndex,
 	store,
 } from 'delphitools-v2/lib/errata/store';
-import { TOOL_ORDER, setActiveTool } from 'delphitools-v2/lib/errata/tool';
+import { TOOL_ORDER, activeTool } from 'delphitools-v2/lib/errata/tool';
 import {
+	boxMode,
+	closeMode,
 	deleteSelection,
-	getMode,
-	isToolboxOpen,
-	openModal,
+	modal,
+	modeKey,
 	pickImageFile,
 	setMode,
-	setToolboxOpen,
+	toolbox,
 } from 'delphitools-v2/lib/errata/ui';
 import { viewport } from 'delphitools-v2/lib/substrata/viewport';
 
@@ -27,6 +28,10 @@ export default modifier(() => {
 				target.tagName === 'SELECT')
 		)
 			return;
+		if (modeKey(e)) {
+			e.preventDefault();
+			return;
+		}
 
 		const mod = e.metaKey || e.ctrlKey;
 		if (!mod && !e.altKey) {
@@ -36,16 +41,16 @@ export default modifier(() => {
 				return;
 			}
 			if (e.key === 'Escape') {
-				if (isToolboxOpen()) setToolboxOpen(false);
-				else if (getMode()) setMode(null);
-				else setActiveTool('select');
+				if (toolbox.get()) toolbox.set(false);
+				else if (boxMode.get()) closeMode();
+				else activeTool.set('select');
 				return;
 			}
 			// mode bar blocks tools
-			if (getMode() && /^[a-z]$/i.test(e.key)) return;
+			if (boxMode.get() && /^[a-z]$/i.test(e.key)) return;
 			if (e.key.toLowerCase() === 'c') {
-				setToolboxOpen(false);
-				setActiveTool('crop');
+				toolbox.set(false);
+				setMode('crop');
 				return;
 			}
 			if (e.key === 'PageDown' || e.key === ']') {
@@ -62,9 +67,9 @@ export default modifier(() => {
 			);
 			if (tool) {
 				if (tool.id === 'signature')
-					openModal('signature');
+					modal.set('signature');
 				else if (tool.id === 'image') pickImageFile();
-				else setActiveTool(tool.id);
+				else activeTool.set(tool.id);
 				return;
 			}
 		}

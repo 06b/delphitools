@@ -16,6 +16,8 @@ import {
 	type TPointerEventInfo,
 } from 'fabric';
 import {
+	bounds,
+	boxAt,
 	cropFromDisplayed,
 	newId,
 	pageSize,
@@ -26,7 +28,6 @@ import {
 	type PageObject,
 	type ShapeKind,
 	type ShapeObject,
-	type TextObject,
 	applyMatrix,
 	type ContentEdit,
 	type FieldObject,
@@ -60,30 +61,20 @@ import {
 	renderTile,
 	type TileJob,
 } from 'delphitools-v2/lib/errata/source';
+import { activeTool, toolSettings } from 'delphitools-v2/lib/errata/tool';
 import {
-	getActiveTool,
-	getToolSettings,
-	subscribeTool,
-} from 'delphitools-v2/lib/errata/tool';
-import {
-	getCropDraft,
-	getMode,
+	cropDraft,
+	openNote,
 	registerCanvasActions,
-	setCropDraft,
-	setOpenNote,
-	setSelectedIds,
-	subscribeUi,
+	selection,
 	type Box,
 	type CropDraft,
 } from 'delphitools-v2/lib/errata/ui';
 import { commentAuthor, newComment } from 'delphitools-v2/lib/errata/comments';
 import { redactObject } from 'delphitools-v2/lib/errata/redact';
-import {
-	getFieldDraft,
-	newField,
-	setSelectedField,
-} from 'delphitools-v2/lib/errata/fields';
-import { fieldVisual } from 'delphitools-v2/lib/errata/field-visual';
+import { fieldDraft, newField } from 'delphitools-v2/lib/errata/fields';
+import { FONT, fieldVisual } from 'delphitools-v2/lib/errata/field-visual';
+import { STAMP_RED, textObject } from 'delphitools-v2/lib/errata/stamps';
 import { takenNames } from 'delphitools-v2/lib/errata/widgets';
 import {
 	registerViewportController,
@@ -92,7 +83,6 @@ import {
 
 // continuous scroll: every page sits in one scene, stacked with GAP between
 
-const FONT = 'Helvetica, Arial, sans-serif';
 const NOTE_PATH = 'M1 1H19V14H8L3 19V14H1Z';
 const ZMIN = 0.1;
 const ZMAX = 16;
@@ -107,7 +97,6 @@ const TILE_MARGIN = 0.5;
 const TILE_DEBOUNCE = 80;
 const K_MIN = 0.5;
 const K_MAX = 40;
-const REDACT = '#d1242f';
 const HIGHLIGHT = '#e6007e';
 
 // half-octave buckets keep zoom wobble from re-rendering
@@ -374,6 +363,7 @@ export default class PageCanvas extends Component {
 				fill: string;
 				stroke: string;
 				strokeWidth: number;
+				strokeDashArray?: number[];
 			},
 		) =>
 			new Rect({
@@ -559,7 +549,7 @@ export default class PageCanvas extends Component {
 		const hatchTile = document.createElement('canvas');
 		hatchTile.width = hatchTile.height = 8;
 		const hg = hatchTile.getContext('2d')!;
-		hg.strokeStyle = REDACT;
+		hg.strokeStyle = STAMP_RED;
 		hg.beginPath();
 		for (const d of [-8, 0, 8]) {
 			hg.moveTo(d, 8);
@@ -580,7 +570,7 @@ export default class PageCanvas extends Component {
 						width: o.w,
 						height: o.h,
 						fill: hatch,
-						stroke: REDACT,
+						stroke: STAMP_RED,
 						strokeWidth: 1,
 						strokeUniform: true,
 					});
@@ -1052,16 +1042,18 @@ export default class PageCanvas extends Component {
 			}
 		};
 
-		const reportSelection = () =>
-			setSelectedIds(
+		const onSelection = () => {
+			selection.set(
 				canvas.getActiveObjects().flatMap((f) => {
 					const id = idOf(f);
 					return id ? [id] : [];
 				}),
 			);
-		canvas.on('selection:created', reportSelection);
-		canvas.on('selection:updated', reportSelection);
-		canvas.on('selection:cleared', reportSelection);
+			showHud(activeProxy());
+		};
+		canvas.on('selection:created', onSelection);
+		canvas.on('selection:updated', onSelection);
+		canvas.on('selection:cleared', onSelection);
 
 		canvas.on('object:modified', (e) => {
 			if (e.target && e.target === cropRect) {
@@ -1145,7 +1137,7 @@ export default class PageCanvas extends Component {
 			);
 			const slot = pageAt(centre);
 			if (!slot) return;
-			const settings = getToolSettings();
+			const settings = toolSettings.get();
 			const ink: InkObject = {
 				id: newId(),
 				kind: 'ink',
@@ -1164,38 +1156,19 @@ export default class PageCanvas extends Component {
 		});
 
 		// drag-to-draw shapes and crop, in the page under the drag start
-		let dragStart: Point | null = null;
-		let dragSlot: Slot | null = null;
+		let drag: { start: Point; slot: Slot } | null = null;
 		let ghost: FabricObject | null = null;
 
-		const shapeGeometry = (a: Point, b: Point) => {
-			const tool = getActiveTool();
-			const s = getToolSettings();
-			const shape: ShapeKind =
-				tool === 'highlight' ? 'highlight' : s.shape;
-			if (shape === 'line') {
-				const dx = b.x - a.x;
-				const dy = b.y - a.y;
-				return {
-					shape,
-					cx: (a.x + b.x) / 2,
-					cy: (a.y + b.y) / 2,
-					w: Math.hypot(dx, dy),
-					h: 0,
-					angle:
-						(Math.atan2(dy, dx) * 180) /
-						Math.PI,
-				};
-			}
-			return {
-				shape,
-				cx: (a.x + b.x) / 2,
-				cy: (a.y + b.y) / 2,
-				w: Math.abs(b.x - a.x),
-				h: Math.abs(b.y - a.y),
-				angle: 0,
-			};
-		};
+		const dragRect = (
+			slot: Slot,
+			a: Point,
+			b: Point,
+		): PageCrop => ({
+			x: Math.min(a.x, b.x) - slot.x,
+			y: Math.min(a.y, b.y) - slot.y,
+			width: Math.abs(b.x - a.x),
+			height: Math.abs(b.y - a.y),
+		});
 
 		// scene points in, page-local object out
 		const shapeObject = (
@@ -1203,18 +1176,32 @@ export default class PageCanvas extends Component {
 			a: Point,
 			b: Point,
 		): ShapeObject => {
-			const s = getToolSettings();
-			const g = shapeGeometry(a, b);
+			const s = toolSettings.get();
+			const shape: ShapeKind =
+				activeTool.get() === 'highlight'
+					? 'highlight'
+					: s.shape;
+			const dx = b.x - a.x;
+			const dy = b.y - a.y;
 			return {
-				id: newId(),
+				...boxAt(dragRect(slot, a, b)),
+				...(shape === 'line'
+					? {
+							w: Math.hypot(dx, dy),
+							h: 0,
+							angle:
+								(Math.atan2(
+									dy,
+									dx,
+								) *
+									180) /
+								Math.PI,
+						}
+					: {}),
 				kind: 'shape',
-				...g,
-				cx: g.cx - slot.x,
-				cy: g.cy - slot.y,
-				scaleX: 1,
-				scaleY: 1,
+				shape,
 				colour:
-					g.shape === 'highlight'
+					shape === 'highlight'
 						? s.highlightColour
 						: s.colour,
 				strokeWidth: s.strokeWidth,
@@ -1240,8 +1227,8 @@ export default class PageCanvas extends Component {
 		let cropShown: CropDraft | null = null;
 		const showCropDraft = () => {
 			const draft =
-				getActiveTool() === 'crop'
-					? getCropDraft()
+				activeTool.get() === 'crop'
+					? cropDraft.get()
 					: null;
 			if (draft === cropShown) return;
 			cropShown = draft;
@@ -1278,7 +1265,7 @@ export default class PageCanvas extends Component {
 			canvas.setActiveObject(cropRect);
 		};
 		const bakeCropRect = () => {
-			const draft = getCropDraft();
+			const draft = cropDraft.get();
 			const slot = draft ? slotOf(draft.pageId) : null;
 			if (!cropRect || !draft || !slot) return;
 			const rect = clampRect(slot, {
@@ -1287,31 +1274,15 @@ export default class PageCanvas extends Component {
 				width: cropRect.width * cropRect.scaleX,
 				height: cropRect.height * cropRect.scaleY,
 			});
-			setCropDraft({ pageId: draft.pageId, rect });
+			cropDraft.set({ pageId: draft.pageId, rect });
 		};
 
-		const cropGhost = (a: Point, b: Point) =>
-			new Rect({
-				left: (a.x + b.x) / 2,
-				top: (a.y + b.y) / 2,
-				originX: 'center',
-				originY: 'center',
-				width: Math.abs(b.x - a.x),
-				height: Math.abs(b.y - a.y),
-				fill: 'rgba(0,0,0,0.04)',
-				stroke: '#000',
-				strokeWidth: 1,
-				strokeUniform: true,
-				strokeDashArray: [4, 4],
-			});
-
-		const redactFromDrag = (slot: Slot, a: Point, b: Point) =>
-			redactObject(
-				Math.min(a.x, b.x) - slot.x,
-				Math.min(a.y, b.y) - slot.y,
-				Math.abs(b.x - a.x),
-				Math.abs(b.y - a.y),
-			);
+		const DASHED = {
+			fill: 'rgba(0,0,0,0.04)',
+			stroke: '#000',
+			strokeWidth: 1,
+			strokeDashArray: [4, 4],
+		};
 
 		const markLine = async (slot: Slot, p: Point) => {
 			const page = store
@@ -1334,12 +1305,12 @@ export default class PageCanvas extends Component {
 			if (b)
 				addObject(
 					slot.id,
-					redactObject(
-						b.x - 1,
-						b.y - 1,
-						b.width + 2,
-						b.height + 2,
-					),
+					redactObject({
+						x: b.x - 1,
+						y: b.y - 1,
+						width: b.width + 2,
+						height: b.height + 2,
+					}),
 				);
 		};
 
@@ -1350,7 +1321,7 @@ export default class PageCanvas extends Component {
 		};
 
 		canvas.on('mouse:down', (opt: TPointerEventInfo) => {
-			const tool = getActiveTool();
+			const tool = activeTool.get();
 			if (order.length === 0) return;
 			const pressed = noteId(opt.target);
 			notePress = pressed
@@ -1361,13 +1332,6 @@ export default class PageCanvas extends Component {
 						),
 					}
 				: null;
-			if (getMode() === 'redact') {
-				// fabric moves the mark
-				if (opt.target) return;
-				dragStart = canvas.getScenePoint(opt.e);
-				dragSlot = pageAt(dragStart);
-				return;
-			}
 			// own double-click detection: pointer events carry no click count and fabric's dblclick is unreliable here
 			if (tool === 'content') {
 				const t = opt.target;
@@ -1382,11 +1346,7 @@ export default class PageCanvas extends Component {
 				lastPress = { target: t ?? null, at: now };
 				return;
 			}
-			if (
-				getMode() === 'comment' &&
-				tool === 'select' &&
-				!opt.target
-			) {
+			if (tool === 'comment' && !opt.target) {
 				const p = canvas.getScenePoint(opt.e);
 				const slot = pageAt(p);
 				if (!slot) return;
@@ -1398,7 +1358,7 @@ export default class PageCanvas extends Component {
 				addObject(slot.id, note);
 				const f = tracked.get(note.id)?.fabric;
 				if (f) canvas.setActiveObject(f);
-				setOpenNote(note.id);
+				openNote.set(note.id);
 				return;
 			}
 			if (tool === 'text') {
@@ -1406,21 +1366,15 @@ export default class PageCanvas extends Component {
 				const p = canvas.getScenePoint(opt.e);
 				const slot = pageAt(p);
 				if (!slot) return;
-				const s = getToolSettings();
-				const text: TextObject = {
-					id: newId(),
-					kind: 'text',
-					cx: p.x - slot.x,
-					cy: p.y - slot.y,
-					w: 0,
-					h: 0,
-					scaleX: 1,
-					scaleY: 1,
-					angle: 0,
-					text: '',
-					fontSize: s.fontSize,
-					colour: s.colour,
-				};
+				const s = toolSettings.get();
+				const text = textObject(
+					'',
+					s.fontSize,
+					s.colour,
+					p.x - slot.x,
+					p.y - slot.y,
+					{ w: 0, h: 0 },
+				);
 				addObject(slot.id, text);
 				const f = tracked.get(text.id)?.fabric;
 				if (f instanceof IText) {
@@ -1433,38 +1387,48 @@ export default class PageCanvas extends Component {
 				tool === 'shape' ||
 				tool === 'highlight' ||
 				(tool === 'crop' && opt.target !== cropRect) ||
-				(tool === 'field' && !opt.target)
+				((tool === 'field' || tool === 'redact') &&
+					!opt.target)
 			) {
-				dragStart = canvas.getScenePoint(opt.e);
-				dragSlot = pageAt(dragStart);
+				const start = canvas.getScenePoint(opt.e);
+				const slot = pageAt(start);
+				if (slot) drag = { start, slot };
 			}
 		});
 
 		canvas.on('mouse:move', (opt: TPointerEventInfo) => {
-			if (!dragStart || !dragSlot) return;
+			if (!drag) return;
+			const { start, slot } = drag;
 			const p = canvas.getScenePoint(opt.e);
+			const tool = activeTool.get();
 			if (ghost) canvas.remove(ghost);
 			ghost =
-				getMode() === 'redact'
-					? build(
-							redactFromDrag(
-								dragSlot,
-								dragStart,
+				tool === 'crop' || tool === 'field'
+					? outline(
+							slot,
+							dragRect(
+								slot,
+								start,
 								p,
 							),
-							dragSlot,
+							DASHED,
 						)
-					: getActiveTool() === 'crop' ||
-						  getActiveTool() === 'field'
-						? cropGhost(dragStart, p)
-						: build(
-								shapeObject(
-									dragSlot,
-									dragStart,
-									p,
-								),
-								dragSlot,
-							);
+					: build(
+							tool === 'redact'
+								? redactObject(
+										dragRect(
+											slot,
+											start,
+											p,
+										),
+									)
+								: shapeObject(
+										slot,
+										start,
+										p,
+									),
+							slot,
+						);
 			if (ghost) {
 				ghost.selectable = false;
 				ghost.evented = false;
@@ -1481,7 +1445,7 @@ export default class PageCanvas extends Component {
 					canvas.getViewportPoint(opt.e),
 				) < 4
 			)
-				setOpenNote(notePress.id);
+				openNote.set(notePress.id);
 			notePress = null;
 			if (pendingEdit) {
 				// after fabric has finished its own selection handling for this click
@@ -1490,68 +1454,52 @@ export default class PageCanvas extends Component {
 				setTimeout(() => void startTextEdit(t), 0);
 				return;
 			}
-			if (!dragStart || !dragSlot) return;
-			const p = canvas.getScenePoint(opt.e);
-			const start = dragStart;
-			const slot = dragSlot;
-			dragStart = null;
-			dragSlot = null;
+			if (!drag) return;
+			const { start, slot } = drag;
+			drag = null;
 			if (ghost) canvas.remove(ghost);
 			ghost = null;
-			if (getMode() === 'redact') {
-				const o = redactFromDrag(slot, start, p);
-				if (o.w < 2 || o.h < 2) void markLine(slot, p);
-				else addObject(slot.id, o);
-				canvas.requestRenderAll();
-				return;
-			}
-			if (getActiveTool() === 'crop') {
-				const page = store
-					.getSnapshot()
-					?.pages.find((pg) => pg.id === slot.id);
-				const rect = clampRect(slot, {
-					x: Math.min(start.x, p.x) - slot.x,
-					y: Math.min(start.y, p.y) - slot.y,
-					width: Math.abs(p.x - start.x),
-					height: Math.abs(p.y - start.y),
-				});
+			const p = canvas.getScenePoint(opt.e);
+			const rect = dragRect(slot, start, p);
+			const tool = activeTool.get();
+			const doc = store.getSnapshot();
+			let added: PageObject | null = null;
+			if (tool === 'redact') {
+				if (rect.width < 2 || rect.height < 2)
+					void markLine(slot, p);
+				else added = redactObject(rect);
+			} else if (tool === 'crop') {
+				const page = doc?.pages.find(
+					(pg) => pg.id === slot.id,
+				);
+				const clamped = clampRect(slot, rect);
 				// clicks keep the draft
-				if (page && cropFromDisplayed(page, rect))
-					setCropDraft({ pageId: slot.id, rect });
+				if (page && cropFromDisplayed(page, clamped))
+					cropDraft.set({
+						pageId: slot.id,
+						rect: clamped,
+					});
 				else if (cropRect)
 					canvas.setActiveObject(cropRect);
-				canvas.requestRenderAll();
-				return;
+			} else if (tool === 'field') {
+				added =
+					doc &&
+					newField(
+						fieldDraft.get(),
+						rect,
+						takenNames(doc),
+					);
+			} else {
+				const o = shapeObject(slot, start, p);
+				if (o.w >= 2 || o.h >= 2) added = o;
 			}
-			const doc = store.getSnapshot();
-			if (getActiveTool() === 'field' && doc) {
-				const field = newField(
-					getFieldDraft(),
-					{
-						x:
-							Math.min(start.x, p.x) -
-							slot.x,
-						y:
-							Math.min(start.y, p.y) -
-							slot.y,
-						width: Math.abs(p.x - start.x),
-						height: Math.abs(p.y - start.y),
-					},
-					takenNames(doc),
-				);
-				if (field) addObject(slot.id, field);
-				const f =
-					field && tracked.get(field.id)?.fabric;
-				if (f) canvas.setActiveObject(f);
-				canvas.requestRenderAll();
-				return;
-			}
-			const o = shapeObject(slot, start, p);
-			if (o.w < 2 && o.h < 2) {
-				canvas.requestRenderAll();
-				return;
-			}
-			addObject(slot.id, o);
+			if (added) addObject(slot.id, added);
+			const f =
+				tool === 'field' &&
+				added &&
+				tracked.get(added.id)?.fabric;
+			if (f) canvas.setActiveObject(f);
+			canvas.requestRenderAll();
 		});
 
 		// content tool: one transparent, draggable rect per line, image, path or form of the source page
@@ -1647,7 +1595,7 @@ export default class PageCanvas extends Component {
 
 		const refreshProxies = () => {
 			const doc = store.getSnapshot();
-			if (getActiveTool() !== 'content' || !doc) {
+			if (activeTool.get() !== 'content' || !doc) {
 				for (const id of [...proxies.keys()])
 					dropProxies(id);
 				return;
@@ -1676,7 +1624,7 @@ export default class PageCanvas extends Component {
 						!view ||
 						!current ||
 						current.key !== key ||
-						getActiveTool() !== 'content'
+						activeTool.get() !== 'content'
 					)
 						return;
 					const rects: FabricObject[] = [];
@@ -1785,15 +1733,12 @@ export default class PageCanvas extends Component {
 			}
 			// fabric 7 bounding rects are scene coordinates; the hud is positioned in canvas pixels
 			const vpt = canvas.viewportTransform;
-			const corners = t
-				.getCoords()
-				.map((p) => fabricUtil.transformPoint(p, vpt));
-			const left = Math.min(...corners.map((p) => p.x));
-			const top = Math.min(...corners.map((p) => p.y));
-			const bottom = Math.max(...corners.map((p) => p.y));
-			const below = top < 36;
-			hud.style.left = `${Math.max(0, left)}px`;
-			hud.style.top = `${below ? bottom + 6 : top}px`;
+			const toCanvas = (p: Point) =>
+				fabricUtil.transformPoint(p, vpt);
+			const b = bounds(t.getCoords().map(toCanvas));
+			const below = b.y < 36;
+			hud.style.left = `${Math.max(0, b.x)}px`;
+			hud.style.top = `${below ? b.y + b.height + 6 : b.y}px`;
 			hud.classList.toggle('is-below', below);
 			hud.hidden = false;
 		};
@@ -1861,21 +1806,6 @@ export default class PageCanvas extends Component {
 				canvas.requestRenderAll();
 			}
 		});
-		canvas.on('selection:created', () => showHud(activeProxy()));
-		canvas.on('selection:updated', () => showHud(activeProxy()));
-		canvas.on('selection:cleared', () => showHud(null));
-		const reportField = () => {
-			const a = canvas.getActiveObjects();
-			const id = a.length === 1 ? idOf(a[0]!) : null;
-			setSelectedField(
-				id && tracked.get(id)?.doc.kind === 'field'
-					? id
-					: null,
-			);
-		};
-		canvas.on('selection:created', reportField);
-		canvas.on('selection:updated', reportField);
-		canvas.on('selection:cleared', reportField);
 		canvas.on('after:render', placeHud);
 
 		// later op indices first, so earlier ranges stay valid while the edits replay
@@ -2027,7 +1957,7 @@ export default class PageCanvas extends Component {
 				run0.font.baseFont,
 			).catch(() => null);
 			if (
-				getActiveTool() !== 'content' ||
+				activeTool.get() !== 'content' ||
 				!canvas.contains(proxy)
 			)
 				return;
@@ -2262,17 +2192,17 @@ export default class PageCanvas extends Component {
 		};
 
 		const applyTool = () => {
-			const tool = getActiveTool();
-			const s = getToolSettings();
+			const tool = activeTool.get();
+			const s = toolSettings.get();
 			canvas.isDrawingMode = tool === 'ink';
 			brush.color = s.colour;
 			brush.width = s.strokeWidth;
-			const interactive = tool === 'select';
+			const interactive =
+				tool === 'select' || tool === 'comment';
 			const content = tool === 'content';
-			const redacting = getMode() === 'redact';
+			const redacting = tool === 'redact';
 			if (!content && editing) finishTextEdit(true);
-			canvas.selection =
-				(interactive && !redacting) || content;
+			canvas.selection = interactive || content;
 			canvas.skipTargetFind =
 				tool === 'shape' || tool === 'highlight';
 			for (const { fabric, doc } of tracked.values()) {
@@ -2291,13 +2221,13 @@ export default class PageCanvas extends Component {
 				(tool === 'crop' &&
 					canvas.getActiveObject() ===
 						cropRect) ||
-				(tool === 'field' &&
+				((tool === 'field' || redacting) &&
 					canvas
 						.getActiveObjects()
 						.every((f) => f.selectable));
 			if (!interactive && !keep) canvas.discardActiveObject();
 			canvas.defaultCursor =
-				(interactive || content) && !redacting
+				interactive || content
 					? 'default'
 					: 'crosshair';
 			refreshProxies();
@@ -2504,17 +2434,17 @@ export default class PageCanvas extends Component {
 				}));
 		}
 
-		const offDoc = store.subscribe(sync);
-		const offPage = subscribePage(onPageIndex);
-		const offTool = subscribeTool(applyTool);
-		const offUi = subscribeUi(applyTool);
+		const offs = [
+			store.subscribe(sync),
+			subscribePage(onPageIndex),
+			activeTool.subscribe(applyTool),
+			toolSettings.subscribe(applyTool),
+			cropDraft.subscribe(applyTool),
+		];
 		sync();
 
 		return () => {
-			offDoc();
-			offPage();
-			offTool();
-			offUi();
+			for (const off of offs) off();
 			if (visibleRaf) cancelAnimationFrame(visibleRaf);
 			if (tileTimer) clearTimeout(tileTimer);
 			for (const slot of slots.values()) slot.job?.cancel();
@@ -2522,7 +2452,7 @@ export default class PageCanvas extends Component {
 			wrap.removeEventListener('wheel', onWheel);
 			registerCanvasActions(null);
 			registerViewportController(null);
-			setSelectedIds([]);
+			selection.set([]);
 			void canvas.dispose();
 		};
 	});

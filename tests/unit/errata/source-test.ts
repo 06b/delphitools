@@ -13,7 +13,7 @@ import type { PageObject } from 'delphitools-v2/lib/errata/doc-model';
 
 // redact export loads mupdf
 const rect = (): PageObject => ({
-	...redactObject(10, 10, 50, 20),
+	...redactObject({ x: 10, y: 10, width: 50, height: 20 }),
 	kind: 'shape',
 	shape: 'rect',
 	colour: '#000',

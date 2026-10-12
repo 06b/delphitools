@@ -7,9 +7,8 @@ import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import {
-	A4_POINTS,
 	blankPage,
-	pageSize,
+	insertSize,
 	type ErrataPage,
 } from 'delphitools-v2/lib/errata/doc-model';
 import {
@@ -103,14 +102,8 @@ export default class PageRail extends Component {
 	rotate = (id: string) => rotateCurrent(id, 1);
 	remove = (id: string) => deletePage(id);
 
-	// new pages copy the size of the neighbour above, else the one below
-	#sizeAt(index: number) {
-		const ref = this.pages[index - 1] ?? this.pages[index];
-		return ref ? pageSize(ref) : A4_POINTS;
-	}
-
 	insertBlank = (index: number) => {
-		const { width, height } = this.#sizeAt(index);
+		const { width, height } = insertSize(this.pages, index);
 		insertPageAt(index, blankPage(width, height));
 	};
 

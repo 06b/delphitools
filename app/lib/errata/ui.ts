@@ -1,4 +1,6 @@
+import { channel, type Channel } from 'delphitools-v2/lib/channel';
 import type { PageCrop, Stamped } from './doc-model';
+import { activeTool, type ToolId } from './tool';
 
 export interface PageRect {
 	x: number;
@@ -55,6 +57,14 @@ export function objectRect(id: string): PageRect | null {
 	return actions?.objectRect(id) ?? null;
 }
 
+export function selectObject(id: string): void {
+	actions?.selectObject(id);
+}
+
+export function preview(items: Stamped[]): void {
+	actions?.preview(items);
+}
+
 const FLASH_MS = 4000;
 let clearFlash: (() => void) | null = null;
 
@@ -82,53 +92,11 @@ export function flashHighlight(index: number, boxes: Box[]): void {
 	clearFlash = off;
 }
 
-export function selectObject(id: string): void {
-	actions?.selectObject(id);
-}
-
-export function preview(items: Stamped[]): void {
-	actions?.preview(items);
-}
-
 export type ModalId = 'signature';
 
-let modal: ModalId | null = null;
-const listeners = new Set<() => void>();
+export const modal = channel<ModalId | null>(null);
 
-export function getOpenModal(): ModalId | null {
-	return modal;
-}
-
-export function openModal(id: ModalId): void {
-	if (modal === id) return;
-	modal = id;
-	for (const l of listeners) l();
-}
-
-export function closeModal(): void {
-	if (modal === null) return;
-	modal = null;
-	for (const l of listeners) l();
-}
-
-export function subscribeUi(listener: () => void): () => void {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
-}
-
-let toolboxOpen = false;
-
-export function isToolboxOpen(): boolean {
-	return toolboxOpen;
-}
-
-export function setToolboxOpen(open: boolean): void {
-	if (open === toolboxOpen) return;
-	toolboxOpen = open;
-	for (const l of listeners) l();
-}
+export const toolbox = channel(false);
 
 let imagePicker: (() => void) | null = null;
 
@@ -141,7 +109,26 @@ export function pickImageFile(): void {
 	imagePicker?.();
 }
 
+/** the comment whose popover is open */
+export const openNote = channel<string | null>(null);
+
+/** ids of the objects selected on the canvas */
+export const selection = channel<readonly string[]>(
+	[],
+	(a, b) => a.join() === b.join(),
+);
+
+export interface CropDraft {
+	pageId: string;
+	/** displayed page space */
+	rect: PageCrop;
+}
+
+/** crop rect awaiting apply */
+export const cropDraft = channel<CropDraft | null>(null);
+
 export type BoxMode =
+	| 'crop'
 	| 'page-numbers'
 	| 'watermark'
 	| 'stamp'
@@ -156,69 +143,50 @@ export type BoxMode =
 	| 'rotate'
 	| 'insert';
 
-export const OWN_BAR_MODES: BoxMode[] = [
-	'organise',
-	'preflight',
-	'comment',
-	'page-size',
-	'rotate',
-	'insert',
-];
-
-let mode: BoxMode | null = null;
-
-/** a toolbox tool running as a mode bar */
-export function getMode(): BoxMode | null {
-	return mode;
+export interface ModeHooks {
+	enter?: () => void;
+	exit?: () => void;
+	/** true when handled */
+	key?: (event: KeyboardEvent) => boolean;
 }
 
+const hooks = new Map<BoxMode, ModeHooks>();
+
+export function onMode(id: BoxMode, modeHooks: ModeHooks): () => void {
+	hooks.set(id, modeHooks);
+	return () => {
+		if (hooks.get(id) === modeHooks) hooks.delete(id);
+	};
+}
+
+const MODE_TOOL: Partial<Record<BoxMode, ToolId>> = {
+	crop: 'crop',
+	form: 'field',
+	redact: 'redact',
+	comment: 'comment',
+};
+
+const mode = channel<BoxMode | null>(null);
+
+/** written by setMode */
+export const boxMode: Pick<Channel<BoxMode | null>, 'get' | 'subscribe'> = mode;
+
+/** all exits run hooks */
 export function setMode(next: BoxMode | null): void {
-	if (next === mode) return;
-	mode = next;
-	for (const l of listeners) l();
+	const prev = mode.get();
+	if (next === prev) return;
+	if (prev) hooks.get(prev)?.exit?.();
+	actions?.preview([]);
+	activeTool.set((next && MODE_TOOL[next]) ?? 'select');
+	mode.set(next);
+	if (next) hooks.get(next)?.enter?.();
 }
 
-let openNote: string | null = null;
+export const closeMode = (): void => setMode(null);
 
-/** the comment whose popover is open */
-export function getOpenNote(): string | null {
-	return openNote;
+export function modeKey(event: KeyboardEvent): boolean {
+	const current = mode.get();
+	return !!current && !!hooks.get(current)?.key?.(event);
 }
 
-export function setOpenNote(id: string | null): void {
-	if (id === openNote) return;
-	openNote = id;
-	for (const l of listeners) l();
-}
-
-let selectedIds: readonly string[] = [];
-
-/** ids of the objects selected on the canvas */
-export function getSelectedIds(): readonly string[] {
-	return selectedIds;
-}
-
-export function setSelectedIds(ids: readonly string[]): void {
-	if (ids.join() === selectedIds.join()) return;
-	selectedIds = ids;
-	for (const l of listeners) l();
-}
-
-export interface CropDraft {
-	pageId: string;
-	/** displayed page space */
-	rect: PageCrop;
-}
-
-let cropDraft: CropDraft | null = null;
-
-/** crop rect awaiting apply */
-export function getCropDraft(): CropDraft | null {
-	return cropDraft;
-}
-
-export function setCropDraft(next: CropDraft | null): void {
-	if (next === cropDraft) return;
-	cropDraft = next;
-	for (const l of listeners) l();
-}
+onMode('crop', { exit: () => cropDraft.set(null) });

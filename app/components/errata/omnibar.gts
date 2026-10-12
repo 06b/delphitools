@@ -5,9 +5,14 @@ import type { TOC } from '@ember/component/template-only';
 import { modifier } from 'ember-modifier';
 import { eq, or } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
-import BoxModeBar from 'delphitools-v2/components/errata/box-mode';
+import StampPanel, {
+	CompressPanel,
+	ImposePanel,
+	RedactPanel,
+} from 'delphitools-v2/components/errata/box-mode';
 import Organise from 'delphitools-v2/components/errata/organise';
-import CommentModeBar from 'delphitools-v2/components/errata/comment-mode';
+import CommentPanel from 'delphitools-v2/components/errata/comment-mode';
+import FormPanel from 'delphitools-v2/components/errata/form-mode';
 import PageSizePanel from 'delphitools-v2/components/errata/page-size-panel';
 import {
 	InsertPanel,
@@ -32,26 +37,21 @@ import { cropPage } from 'delphitools-v2/lib/errata/page-ops';
 import { store } from 'delphitools-v2/lib/errata/store';
 import {
 	TOOL_ORDER,
-	getActiveTool,
-	getToolSettings,
-	setActiveTool,
-	subscribeTool,
+	activeTool,
+	toolSettings,
 	updateToolSettings,
 	type ToolEntry,
 	type ToolId,
 	type ToolSettings,
 } from 'delphitools-v2/lib/errata/tool';
 import {
-	getCropDraft,
-	getMode,
-	isToolboxOpen,
-	OWN_BAR_MODES,
-	openModal,
+	boxMode,
+	closeMode,
+	cropDraft,
+	modal,
 	pickImageFile,
-	setCropDraft,
 	setMode,
-	setToolboxOpen,
-	subscribeUi,
+	toolbox,
 	type BoxMode,
 } from 'delphitools-v2/lib/errata/ui';
 import { allTools } from 'delphitools-v2/lib/tools';
@@ -78,7 +78,9 @@ const FONT_SIZES: PresetOption[] = [10, 12, 14, 18].map((v) => ({
 	label: String(v),
 }));
 
-type BoxTool = 'crop' | 'fill-sign' | 'export' | BoxMode;
+type BoxTool = 'fill-sign' | 'export' | BoxMode;
+
+const STAMP_MODES = ['page-numbers', 'watermark', 'stamp'] as const;
 
 interface BoxCell {
 	label: string;
@@ -274,11 +276,14 @@ const ToolButton: TOC<{
 </template>;
 
 export default class Omnibar extends Component {
-	tool = new TrackedExternal(subscribeTool, getActiveTool);
-	settings = new TrackedExternal(subscribeTool, getToolSettings);
-	boxOpen = new TrackedExternal(subscribeUi, isToolboxOpen);
-	mode = new TrackedExternal(subscribeUi, getMode);
-	cropDraft = new TrackedExternal(subscribeUi, getCropDraft);
+	tool = new TrackedExternal(activeTool.subscribe, activeTool.get);
+	settings = new TrackedExternal(
+		toolSettings.subscribe,
+		toolSettings.get,
+	);
+	boxOpen = new TrackedExternal(toolbox.subscribe, toolbox.get);
+	mode = new TrackedExternal(boxMode.subscribe, boxMode.get);
+	draft = new TrackedExternal(cropDraft.subscribe, cropDraft.get);
 
 	cropHint = 'Drag on the page';
 
@@ -288,9 +293,9 @@ export default class Omnibar extends Component {
 		this.settings.unsubscribe();
 		this.boxOpen.unsubscribe();
 		this.mode.unsubscribe();
-		this.cropDraft.unsubscribe();
-		setToolboxOpen(false);
-		setMode(null);
+		this.draft.unsubscribe();
+		toolbox.set(false);
+		closeMode();
 	}
 
 	get s() {
@@ -313,59 +318,25 @@ export default class Omnibar extends Component {
 		return this.tool.current !== 'select';
 	}
 
-	// crop is a toolbox mode: the bar gives way to a mode bar
-	get inMode() {
-		return this.tool.current === 'crop';
-	}
-
 	get barHidden() {
-		return (
-			this.boxOpen.current ||
-			this.inMode ||
-			this.mode.current !== null
-		);
-	}
-
-	get organising() {
-		return this.mode.current === 'organise';
-	}
-
-	// these modes render own bars
-	get boxModeOpen() {
-		const mode = this.mode.current;
-		return mode !== null && !OWN_BAR_MODES.includes(mode);
-	}
-
-	// kept for slide-out
-	#lastMode: BoxMode | null = null;
-
-	get modeCell() {
-		const mode = this.mode.current ?? this.#lastMode;
-		const cell = BOX_GROUPS.flatMap((g) => g.cells).find(
-			(c) => c.tool === mode,
-		);
-		return {
-			mode,
-			label: cell?.label ?? '',
-			icon: cell?.icon ?? '',
-		};
+		return this.boxOpen.current || this.mode.current !== null;
 	}
 
 	pick = (id: ToolId) => {
 		if (id === 'signature') {
-			openModal('signature');
+			modal.set('signature');
 			return;
 		}
 		if (id === 'image') {
 			pickImageFile();
 			return;
 		}
-		setActiveTool(id);
+		activeTool.set(id);
 	};
 
 	pickShape = (shape: Shape) => {
 		updateToolSettings({ shape });
-		setActiveTool('shape');
+		activeTool.set('shape');
 	};
 
 	setColour = (colour: string) => {
@@ -378,22 +349,18 @@ export default class Omnibar extends Component {
 		updateToolSettings({ strokeWidth });
 	setFontSize = (fontSize: number) => updateToolSettings({ fontSize });
 
-	toggleBox = () => setToolboxOpen(!this.boxOpen.current);
-	closeBox = () => setToolboxOpen(false);
-	leaveMode = () => {
-		setCropDraft(null);
-		setActiveTool('select');
-	};
+	toggleBox = () => toolbox.set(!this.boxOpen.current);
+	closeBox = () => toolbox.set(false);
 
 	applyCrop = () => {
-		const draft = getCropDraft();
+		const draft = cropDraft.get();
 		const page = store
 			.getSnapshot()
 			?.pages.find((p) => p.id === draft?.pageId);
 		const crop =
 			page && draft && cropFromDisplayed(page, draft.rect);
 		if (page && crop) cropPage(page.id, crop);
-		this.leaveMode();
+		closeMode();
 	};
 
 	// mousedown outside the sheet and its trigger closes it
@@ -406,7 +373,7 @@ export default class Omnibar extends Component {
 				target.closest('[data-toolbox]')
 			)
 				return;
-			setToolboxOpen(false);
+			toolbox.set(false);
 		};
 		document.addEventListener('mousedown', onDown);
 		return () => document.removeEventListener('mousedown', onDown);
@@ -414,27 +381,14 @@ export default class Omnibar extends Component {
 
 	run = (tool: BoxTool | undefined) => {
 		if (!tool) return;
-		setToolboxOpen(false);
-		switch (tool) {
-			case 'crop':
-				setCropDraft(null);
-				setActiveTool('crop');
-				break;
-			case 'fill-sign':
-				openModal('signature');
-				break;
-			case 'export':
-				void exportCurrent();
-				break;
-			default:
-				setActiveTool('select');
-				this.#lastMode = tool;
-				setMode(tool);
-		}
+		toolbox.set(false);
+		if (tool === 'fill-sign') modal.set('signature');
+		else if (tool === 'export') void exportCurrent();
+		else setMode(tool);
 	};
 
 	<template>
-		{{#if this.organising}}
+		{{#if (eq this.mode.current "organise")}}
 			<Organise />
 		{{/if}}
 		<div
@@ -780,16 +734,13 @@ export default class Omnibar extends Component {
 			</div>
 
 			<ToolPanel
-				@open={{this.inMode}}
+				@open={{eq this.mode.current "crop"}}
+				@mode="crop"
 				@icon="crop"
 				@label="Crop"
-				@onCancel={{this.leaveMode}}
+				@onCancel={{closeMode}}
 				@onApply={{this.applyCrop}}
-				@canApply={{if
-					this.cropDraft.current
-					true
-					false
-				}}
+				@canApply={{if this.draft.current true false}}
 			>
 				<:status>
 					<span
@@ -798,18 +749,26 @@ export default class Omnibar extends Component {
 				</:status>
 			</ToolPanel>
 
-			<BoxModeBar
-				@mode={{this.modeCell.mode}}
-				@label={{this.modeCell.label}}
-				@icon={{this.modeCell.icon}}
-				@open={{this.boxModeOpen}}
+			{{#each STAMP_MODES as |m|}}
+				<StampPanel
+					@mode={{m}}
+					@open={{eq this.mode.current m}}
+				/>
+			{{/each}}
+			<CompressPanel
+				@open={{eq this.mode.current "compress"}}
 			/>
-			<CommentModeBar
+			<ImposePanel @open={{eq this.mode.current "impose"}} />
+			<RedactPanel @open={{eq this.mode.current "redact"}} />
+			<FormPanel @open={{eq this.mode.current "form"}} />
+			<CommentPanel
 				@open={{eq this.mode.current "comment"}}
 			/>
-			<PageSizePanel />
-			<RotatePanel />
-			<InsertPanel />
+			<PageSizePanel
+				@open={{eq this.mode.current "page-size"}}
+			/>
+			<RotatePanel @open={{eq this.mode.current "rotate"}} />
+			<InsertPanel @open={{eq this.mode.current "insert"}} />
 		</div>
 	</template>
 }

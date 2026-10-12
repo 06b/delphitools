@@ -10,18 +10,19 @@ import {
 	type PDFFont,
 	type PDFPage,
 } from 'pdf-lib';
+import { channel } from 'delphitools-v2/lib/channel';
 import {
-	contentBox,
-	contentPlacement,
+	bounds,
+	boxAt,
 	displayedToUnrotated,
 	displayedToUser,
-	newId,
+	sourceToDisplayed,
 	totalRotation,
 	unrotatedSize,
-	unrotatedToDisplayed,
 	type ErrataDoc,
 	type ErrataPage,
 	type FieldObject,
+	type PageCrop,
 	type Rotation,
 } from './doc-model';
 import { encodable } from './export';
@@ -31,44 +32,16 @@ export type FieldDraft = Pick<
 	'field' | 'name' | 'options' | 'required' | 'value'
 >;
 
-let draft: FieldDraft = {
+export const fieldDraft = channel<FieldDraft>({
 	field: 'text',
 	name: '',
 	options: [],
 	required: false,
 	value: '',
-};
-let selected: string | null = null;
-const listeners = new Set<() => void>();
-
-function emit(): void {
-	for (const l of listeners) l();
-}
-
-export function getFieldDraft(): FieldDraft {
-	return draft;
-}
+});
 
 export function setFieldDraft(patch: Partial<FieldDraft>): void {
-	draft = { ...draft, ...patch };
-	emit();
-}
-
-export function getSelectedField(): string | null {
-	return selected;
-}
-
-export function setSelectedField(id: string | null): void {
-	if (id === selected) return;
-	selected = id;
-	emit();
-}
-
-export function subscribeFields(listener: () => void): () => void {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
+	fieldDraft.set({ ...fieldDraft.get(), ...patch });
 }
 
 export function parseOptions(text: string): string[] {
@@ -92,20 +65,13 @@ export function uniqueName(base: string, taken: ReadonlySet<string>): string {
 
 export function newField(
 	d: FieldDraft,
-	rect: { x: number; y: number; width: number; height: number },
+	rect: PageCrop,
 	taken: ReadonlySet<string>,
 ): FieldObject | null {
 	if (rect.width < 4 || rect.height < 4) return null;
 	return {
-		id: newId(),
+		...boxAt(rect),
 		kind: 'field',
-		cx: rect.x + rect.width / 2,
-		cy: rect.y + rect.height / 2,
-		w: rect.width,
-		h: rect.height,
-		scaleX: 1,
-		scaleY: 1,
-		angle: 0,
 		...d,
 		name: uniqueName(d.name || d.field, taken),
 	};
@@ -125,19 +91,14 @@ export function radioLayout(w: number, h: number, count: number) {
 	};
 }
 
-export function radioChoices(o: FieldObject): string[] {
+function radioChoices(o: FieldObject): string[] {
 	return o.options.length ? o.options : ['on'];
 }
 
-export interface UserRect {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-}
+type UserRect = PageCrop;
 
 // before the crop offset
-export function localToUser(
+function localToUser(
 	page: ErrataPage,
 	o: FieldObject,
 	lx: number,
@@ -161,22 +122,14 @@ export function fieldRectToUser(
 	o: FieldObject,
 	local: UserRect = { x: 0, y: 0, width: o.w, height: o.h },
 ): UserRect {
-	const pts = [
-		[local.x, local.y],
-		[local.x + local.width, local.y],
-		[local.x, local.y + local.height],
-		[local.x + local.width, local.y + local.height],
-	].map(([x, y]) => localToUser(page, o, x!, y!));
-	const xs = pts.map((p) => p.x);
-	const ys = pts.map((p) => p.y);
-	const x = Math.min(...xs);
-	const y = Math.min(...ys);
-	return {
-		x,
-		y,
-		width: Math.max(...xs) - x,
-		height: Math.max(...ys) - y,
-	};
+	return bounds(
+		[
+			[local.x, local.y],
+			[local.x + local.width, local.y],
+			[local.x, local.y + local.height],
+			[local.x + local.width, local.y + local.height],
+		].map(([x, y]) => localToUser(page, o, x!, y!)),
+	);
 }
 
 // widget /MK /R
@@ -204,36 +157,21 @@ export function sourceRectToDisplayed(
 	rect: [number, number, number, number],
 ): UserRect | null {
 	if (page.resize || page.flipX || page.flipY) return null;
-	const c = contentBox(page);
-	const p = contentPlacement(page);
-	const u = unrotatedSize(page);
-	const pts = [
-		[rect[0], rect[1]],
-		[rect[2], rect[3]],
-	].map(([dx, dy]) => {
-		const s = displayedToUnrotated(
-			dx!,
-			dy!,
-			page.baseRotation,
-			page.baseWidth,
-			page.baseHeight,
-		);
-		return unrotatedToDisplayed(
-			p.x + (s.x - c.x) * p.scale,
-			p.y + (s.y - c.y) * p.scale,
-			totalRotation(page),
-			u.width,
-			u.height,
-		);
-	});
-	const x = Math.min(pts[0]!.x, pts[1]!.x);
-	const y = Math.min(pts[0]!.y, pts[1]!.y);
-	return {
-		x,
-		y,
-		width: Math.abs(pts[0]!.x - pts[1]!.x),
-		height: Math.abs(pts[0]!.y - pts[1]!.y),
-	};
+	return bounds(
+		[
+			[rect[0], rect[1]],
+			[rect[2], rect[3]],
+		].map(([dx, dy]) => {
+			const s = displayedToUnrotated(
+				dx!,
+				dy!,
+				page.baseRotation,
+				page.baseWidth,
+				page.baseHeight,
+			);
+			return sourceToDisplayed(page, s.x, s.y);
+		}),
+	);
 }
 
 // copyPages drops /AcroForm

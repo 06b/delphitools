@@ -175,6 +175,33 @@ export function newId(): string {
 	return crypto.randomUUID();
 }
 
+/** new object base fields */
+export function boxAt(rect: PageCrop): BaseObject {
+	return {
+		id: newId(),
+		cx: rect.x + rect.width / 2,
+		cy: rect.y + rect.height / 2,
+		w: rect.width,
+		h: rect.height,
+		scaleX: 1,
+		scaleY: 1,
+		angle: 0,
+	};
+}
+
+export function bounds(points: readonly { x: number; y: number }[]): PageCrop {
+	const xs = points.map((p) => p.x);
+	const ys = points.map((p) => p.y);
+	const x = Math.min(...xs);
+	const y = Math.min(...ys);
+	return {
+		x,
+		y,
+		width: Math.max(...xs) - x,
+		height: Math.max(...ys) - y,
+	};
+}
+
 export function totalRotation(page: ErrataPage): Rotation {
 	return ((page.baseRotation + page.rotation) % 360) as Rotation;
 }
@@ -206,7 +233,16 @@ export function pageSize(page: ErrataPage): { width: number; height: number } {
 	return swap ? { width: u.height, height: u.width } : u;
 }
 
-export const A4_POINTS = { width: 595.28, height: 841.89 };
+const A4_POINTS = { width: 595.28, height: 841.89 };
+
+/** neighbour size, else A4 */
+export function insertSize(
+	pages: readonly ErrataPage[],
+	at: number,
+): { width: number; height: number } {
+	const ref = pages[at - 1] ?? pages[at];
+	return ref ? pageSize(ref) : A4_POINTS;
+}
 
 /** where the content box lands on the unrotated page, y down */
 export interface Placement {
@@ -307,7 +343,7 @@ export function unrotatedToDisplayed(
 }
 
 /** self-inverse */
-export function flipPoint(
+function flipPoint(
 	page: ErrataPage,
 	x: number,
 	y: number,
@@ -327,7 +363,7 @@ export function flipAnchor(anchor: Anchor, page: ErrataPage): Anchor {
 	return `${v}-${h}` as Anchor;
 }
 
-export function displayedToSource(
+function displayedToSource(
 	page: ErrataPage,
 	dx: number,
 	dy: number,
@@ -368,31 +404,38 @@ export function cropFromDisplayed(
 	return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
 }
 
+export function sourceToDisplayed(
+	page: ErrataPage,
+	x: number,
+	y: number,
+): { x: number; y: number } {
+	const u = unrotatedSize(page);
+	const c = contentBox(page);
+	const p = contentPlacement(page);
+	const f = flipPoint(
+		page,
+		p.x + (x - c.x) * p.scale,
+		p.y + (y - c.y) * p.scale,
+	);
+	return unrotatedToDisplayed(
+		f.x,
+		f.y,
+		totalRotation(page),
+		u.width,
+		u.height,
+	);
+}
+
 /** keeps objects attached to the content when crop or resize changes */
 export function retargetObjects(
 	prev: ErrataPage,
 	next: ErrataPage,
 ): PageObject[] {
-	const r = totalRotation(prev);
-	const nu = unrotatedSize(next);
-	const pp = contentPlacement(prev);
-	const np = contentPlacement(next);
-	const ratio = np.scale / pp.scale;
-	const nc = contentBox(next);
+	const ratio =
+		contentPlacement(next).scale / contentPlacement(prev).scale;
 	return prev.objects.map((o) => {
 		const s = displayedToSource(prev, o.cx, o.cy);
-		const n = flipPoint(
-			next,
-			np.x + (s.x - nc.x) * np.scale,
-			np.y + (s.y - nc.y) * np.scale,
-		);
-		const d = unrotatedToDisplayed(
-			n.x,
-			n.y,
-			r,
-			nu.width,
-			nu.height,
-		);
+		const d = sourceToDisplayed(next, s.x, s.y);
 		return {
 			...o,
 			cx: d.x,
@@ -534,14 +577,6 @@ export function tileTransform(
 			270: [0, -1, 1, 0, 0, u.width],
 		} as Record<Rotation, Matrix>
 	)[totalRotation(page)];
-	const flip: Matrix = [
-		page.flipX ? -1 : 1,
-		0,
-		0,
-		page.flipY ? -1 : 1,
-		page.flipX ? u.width : 0,
-		page.flipY ? u.height : 0,
-	];
 	const tile: Matrix = [
 		scale,
 		0,
@@ -550,5 +585,26 @@ export function tileTransform(
 		-region.x * scale,
 		-region.y * scale,
 	];
-	return multiply(tile, multiply(rotate, multiply(flip, place)));
+	return multiply(
+		tile,
+		multiply(
+			rotate,
+			multiply(flipMatrix(page, u.width, u.height), place),
+		),
+	);
+}
+
+export function flipMatrix(
+	page: ErrataPage,
+	width: number,
+	height: number,
+): Matrix {
+	return [
+		page.flipX ? -1 : 1,
+		0,
+		0,
+		page.flipY ? -1 : 1,
+		page.flipX ? width : 0,
+		page.flipY ? height : 0,
+	];
 }

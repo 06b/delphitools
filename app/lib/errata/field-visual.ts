@@ -4,7 +4,7 @@ import { radioLayout } from './fields';
 
 // page raster is white
 const ACCENT = '#1f6feb';
-const FONT = 'Helvetica, Arial, sans-serif';
+export const FONT = 'Helvetica, Arial, sans-serif';
 
 function label(
 	text: string,

@@ -9,8 +9,8 @@ import {
 	type PDFPage,
 } from 'pdf-lib';
 import {
+	boxAt,
 	displayedToUser,
-	newId,
 	totalRotation,
 	unrotatedSize,
 	unrotatedToDisplayed,
@@ -19,7 +19,7 @@ import {
 } from './doc-model';
 
 /** note icon edge, points */
-export const NOTE_SIZE = 20;
+const NOTE_SIZE = 20;
 
 const TEXT = PDFName.of('Text');
 const SUBTYPE = PDFName.of('Subtype');
@@ -69,16 +69,15 @@ export function newComment(
 	cy: number,
 	author: string,
 ): CommentObject {
+	const half = NOTE_SIZE / 2;
 	return {
-		id: newId(),
+		...boxAt({
+			x: cx - half,
+			y: cy - half,
+			width: NOTE_SIZE,
+			height: NOTE_SIZE,
+		}),
 		kind: 'comment',
-		cx,
-		cy,
-		w: NOTE_SIZE,
-		h: NOTE_SIZE,
-		scaleX: 1,
-		scaleY: 1,
-		angle: 0,
 		text: '',
 		author,
 		date: new Date().toISOString(),

@@ -1,6 +1,7 @@
 import { PDFDict, PDFDocument, PDFName, type PDFPage } from 'pdf-lib';
 import {
 	applyMatrix,
+	bounds,
 	pageSize,
 	tileTransform,
 	type ContentEdit,
@@ -55,7 +56,7 @@ export function loadSourceDoc(bytes: Uint8Array): Promise<PDFDocument> {
 	});
 }
 
-export function cleanDoc(): Promise<PDFDocument> | null {
+function cleanDoc(): Promise<PDFDocument> | null {
 	if (!sourceBytes) return null;
 	if (!clean) clean = loadSourceDoc(sourceBytes);
 	return clean;
@@ -167,29 +168,15 @@ export async function pageContent(
 	);
 	const toDisplayedPoint = (ux: number, uy: number) =>
 		applyMatrix(m, ux - crop.x, crop.y + crop.height - uy);
-	const toDisplayed = (b: Box): DisplayedBox => {
-		let x0 = Infinity,
-			y0 = Infinity,
-			x1 = -Infinity,
-			y1 = -Infinity;
-		for (const [ux, uy] of [
-			[b.x0, b.y0],
-			[b.x1, b.y0],
-			[b.x0, b.y1],
-			[b.x1, b.y1],
-		]) {
-			const p = applyMatrix(
-				m,
-				ux! - crop.x,
-				crop.y + crop.height - uy!,
-			);
-			x0 = Math.min(x0, p.x);
-			y0 = Math.min(y0, p.y);
-			x1 = Math.max(x1, p.x);
-			y1 = Math.max(y1, p.y);
-		}
-		return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
-	};
+	const toDisplayed = (b: Box): DisplayedBox =>
+		bounds(
+			[
+				[b.x0, b.y0],
+				[b.x1, b.y0],
+				[b.x0, b.y1],
+				[b.x1, b.y1],
+			].map(([ux, uy]) => toDisplayedPoint(ux!, uy!)),
+		);
 	const toUserDelta = (dx: number, dy: number) => {
 		const d = invertLinear(m, dx, dy);
 		// source box space is y down

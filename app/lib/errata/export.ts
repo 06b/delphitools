@@ -18,6 +18,7 @@ import {
 	contentBox,
 	contentPlacement,
 	displayedToUser,
+	flipMatrix,
 	totalRotation,
 	unrotatedSize,
 	type ErrataDoc,
@@ -56,6 +57,13 @@ async function drawObject(
 	font: PDFFont,
 	images: Map<string, Awaited<ReturnType<PDFDocument['embedPng']>>>,
 ): Promise<void> {
+	// annotations or burnt in
+	if (
+		object.kind === 'comment' ||
+		object.kind === 'redact' ||
+		object.kind === 'field'
+	)
+		return;
 	const rotation = totalRotation(page);
 	const box = pdfPage.getCropBox();
 	const u = unrotatedSize(page);
@@ -164,6 +172,8 @@ async function drawObject(
 			});
 			break;
 		}
+		default:
+			object satisfies never;
 	}
 
 	pdfPage.pushOperators(popGraphicsState());
@@ -219,12 +229,11 @@ export async function exportPdf(
 				pdfPage.pushOperators(
 					pushGraphicsState(),
 					concatTransformationMatrix(
-						page.flipX ? -1 : 1,
-						0,
-						0,
-						page.flipY ? -1 : 1,
-						page.flipX ? u.width : 0,
-						page.flipY ? u.height : 0,
+						...flipMatrix(
+							page,
+							u.width,
+							u.height,
+						),
 					),
 				);
 			// pdf-lib cannot embed a page without a content stream
@@ -301,12 +310,6 @@ export async function exportPdf(
 		}
 		pdfPage.setRotation(degrees(totalRotation(page)));
 		for (const object of page.objects) {
-			if (
-				object.kind === 'comment' ||
-				object.kind === 'redact' ||
-				object.kind === 'field'
-			)
-				continue;
 			const face =
 				object.kind === 'text' && object.bold
 					? (bold ??= await out.embedFont(

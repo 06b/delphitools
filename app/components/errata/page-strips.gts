@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
@@ -7,203 +7,183 @@ import Icon from 'delphitools-v2/components/icon';
 import ToolPanel, {
 	Field,
 	PageScope,
+	PageScopeState,
 } from 'delphitools-v2/components/errata/tool-panel';
 import {
-	flipPage,
-	rotatePage,
-	type ErrataPage,
-} from 'delphitools-v2/lib/errata/doc-model';
-import { updatePages } from 'delphitools-v2/lib/errata/organise';
-import {
 	duplicateAfter,
+	flipPages,
 	insertBlackAfter,
 	insertBlankAfter,
 	insertPageAfter,
 	insertTextPageAfter,
+	rotatePages,
+	updatePages,
 } from 'delphitools-v2/lib/errata/page-ops';
 import { imagePage } from 'delphitools-v2/lib/errata/source';
-import {
-	scopePages,
-	type PageScope as Scope,
-} from 'delphitools-v2/lib/errata/stamps';
 import {
 	currentPage,
 	getPageIndex,
 	store,
 	subscribePage,
 } from 'delphitools-v2/lib/errata/store';
-import { getMode, setMode, subscribeUi } from 'delphitools-v2/lib/errata/ui';
+import { closeMode } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import type { ErrataPage } from 'delphitools-v2/lib/errata/doc-model';
 
-const close = () => setMode(null);
+type Turn = (pages: readonly ErrataPage[], ids: Set<string>) => ErrataPage[];
+type Insert = (pageId: string) => void;
 
-type Turn = 'left' | 'right' | 'horizontal' | 'vertical';
+interface Strip<T> {
+	icon: string;
+	text: string;
+	run: T;
+	label?: string;
+}
 
-const TURNS: Record<Turn, (page: ErrataPage) => ErrataPage> = {
-	left: (p) => rotatePage(p, -1),
-	right: (p) => rotatePage(p, 1),
-	horizontal: (p) => flipPage(p, 'horizontal'),
-	vertical: (p) => flipPage(p, 'vertical'),
-};
+const ROTATE: Strip<Turn>[] = [
+	{
+		label: 'Rotate left',
+		icon: 'rotate-ccw',
+		text: 'Left',
+		run: (p, ids) => rotatePages(p, ids, -1),
+	},
+	{
+		label: 'Rotate right',
+		icon: 'rotate-cw',
+		text: 'Right',
+		run: (p, ids) => rotatePages(p, ids, 1),
+	},
+];
 
-export class RotatePanel extends Component {
-	mode = new TrackedExternal(subscribeUi, getMode);
+const FLIP: Strip<Turn>[] = [
+	{
+		label: 'Flip horizontal',
+		icon: 'flip-horizontal-2',
+		text: 'Horizontal',
+		run: (p, ids) => flipPages(p, ids, 'horizontal'),
+	},
+	{
+		label: 'Flip vertical',
+		icon: 'flip-vertical-2',
+		text: 'Vertical',
+		run: (p, ids) => flipPages(p, ids, 'vertical'),
+	},
+];
+
+interface Signature {
+	Args: { open: boolean };
+}
+
+class Strips<T> extends Component<{
+	Args: {
+		strips: readonly Strip<T>[];
+		onRun: (run: T) => void;
+		disabled?: boolean;
+	};
+	Blocks: { default: [] };
+}> {
+	<template>
+		<span class="segmented err-mode-seg">
+			{{#each @strips key="text" as |s|}}
+				<button
+					type="button"
+					class="sub-seg-cell err-strip-cell"
+					aria-label={{s.label}}
+					disabled={{@disabled}}
+					{{on "click" (fn @onRun s.run)}}
+				>
+					<Icon @name={{s.icon}} />
+					{{s.text}}
+				</button>
+			{{/each}}
+			{{yield}}
+		</span>
+	</template>
+}
+
+export class RotatePanel extends Component<Signature> {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
 	pageIndex = new TrackedExternal(subscribePage, getPageIndex);
-	@tracked scope: Scope = 'current';
-	@tracked range = '';
+	pages = new PageScopeState('current');
 
 	willDestroy() {
 		super.willDestroy();
-		this.mode.unsubscribe();
 		this.doc.unsubscribe();
 		this.pageIndex.unsubscribe();
 	}
 
-	get open() {
-		return this.mode.current === 'rotate';
-	}
-
 	@cached
 	get indices(): number[] | null {
-		return scopePages(
-			this.scope,
-			this.range,
+		return this.pages.indices(
 			this.doc.current?.pages.length ?? 0,
-			this.pageIndex.current,
+			this.pageIndex,
 		);
 	}
 
-	get rangeInvalid() {
-		return this.scope === 'range' && this.indices === null;
+	get invalid() {
+		return this.indices === null;
 	}
-
-	setScope = (scope: Scope) => (this.scope = scope);
-	setRange = (range: string) => (this.range = range);
 
 	// one undo step
-	turn = (kind: Turn) => {
-		const at = new Set(this.indices ?? []);
-		if (at.size === 0) return;
-		updatePages((pages) =>
-			pages.map((p, i) => (at.has(i) ? TURNS[kind](p) : p)),
+	turn = (run: Turn) => {
+		const pages = this.doc.current?.pages ?? [];
+		const ids = new Set(
+			(this.indices ?? []).flatMap((i) =>
+				pages[i] ? [pages[i].id] : [],
+			),
 		);
+		if (ids.size > 0) updatePages((p) => run(p, ids));
 	};
 
 	<template>
 		<ToolPanel
-			@open={{this.open}}
+			@open={{@open}}
 			@mode="rotate"
 			@icon="rotate-cw"
 			@label="Rotate"
-			@onCancel={{close}}
+			@onCancel={{closeMode}}
 			@cancelLabel="Close"
 		>
 			<Field @label="Rotate">
-				<span class="segmented err-mode-seg">
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						aria-label="Rotate left"
-						disabled={{this.rangeInvalid}}
-						{{on
-							"click"
-							(fn this.turn "left")
-						}}
-					>
-						<Icon @name="rotate-ccw" />
-						Left
-					</button>
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						aria-label="Rotate right"
-						disabled={{this.rangeInvalid}}
-						{{on
-							"click"
-							(fn this.turn "right")
-						}}
-					>
-						<Icon @name="rotate-cw" />
-						Right
-					</button>
-				</span>
+				<Strips
+					@strips={{ROTATE}}
+					@disabled={{this.invalid}}
+					@onRun={{this.turn}}
+				/>
 			</Field>
 			<Field @label="Flip">
-				<span class="segmented err-mode-seg">
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						aria-label="Flip horizontal"
-						disabled={{this.rangeInvalid}}
-						{{on
-							"click"
-							(fn
-								this.turn
-								"horizontal"
-							)
-						}}
-					>
-						<Icon
-							@name="flip-horizontal-2"
-						/>
-						Horizontal
-					</button>
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						aria-label="Flip vertical"
-						disabled={{this.rangeInvalid}}
-						{{on
-							"click"
-							(fn
-								this.turn
-								"vertical"
-							)
-						}}
-					>
-						<Icon @name="flip-vertical-2" />
-						Vertical
-					</button>
-				</span>
+				<Strips
+					@strips={{FLIP}}
+					@disabled={{this.invalid}}
+					@onRun={{this.turn}}
+				/>
 			</Field>
 			<PageScope
-				@scope={{this.scope}}
-				@range={{this.range}}
-				@invalid={{this.rangeInvalid}}
-				@onScope={{this.setScope}}
-				@onRange={{this.setRange}}
+				@state={{this.pages}}
+				@invalid={{this.invalid}}
 			/>
 		</ToolPanel>
 	</template>
 }
 
-type Insert = 'blank' | 'duplicate' | 'black' | 'text';
-
-const INSERTS: Record<Insert, (pageId: string) => void> = {
-	blank: insertBlankAfter,
-	duplicate: duplicateAfter,
-	black: insertBlackAfter,
-	text: (id) => insertTextPageAfter(id, 'Title'),
-};
+const INSERTS: Strip<Insert>[] = [
+	{ icon: 'file-plus', text: 'Blank', run: insertBlankAfter },
+	{ icon: 'copy', text: 'Duplicate', run: duplicateAfter },
+	{ icon: 'square', text: 'Black', run: insertBlackAfter },
+	{
+		icon: 'type',
+		text: 'Text',
+		run: (id) => insertTextPageAfter(id, 'Title'),
+	},
+];
 
 /** inserts after current page */
-export class InsertPanel extends Component {
-	mode = new TrackedExternal(subscribeUi, getMode);
+export class InsertPanel extends Component<Signature> {
 	#input: HTMLInputElement | null = null;
 
-	willDestroy() {
-		super.willDestroy();
-		this.mode.unsubscribe();
-	}
-
-	get open() {
-		return this.mode.current === 'insert';
-	}
-
-	insert = (kind: Insert) => {
+	insert = (run: Insert) => {
 		const page = currentPage();
-		if (page) INSERTS[kind](page.id);
+		if (page) run(page.id);
 	};
 
 	pickImage = () => this.#input?.click();
@@ -225,62 +205,18 @@ export class InsertPanel extends Component {
 
 	<template>
 		<ToolPanel
-			@open={{this.open}}
+			@open={{@open}}
 			@mode="insert"
 			@icon="file-plus"
 			@label="Insert page"
-			@onCancel={{close}}
+			@onCancel={{closeMode}}
 			@cancelLabel="Close"
 		>
 			<Field @label="Page">
-				<span class="segmented err-mode-seg">
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						{{on
-							"click"
-							(fn this.insert "blank")
-						}}
-					>
-						<Icon @name="file-plus" />
-						Blank
-					</button>
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						{{on
-							"click"
-							(fn
-								this.insert
-								"duplicate"
-							)
-						}}
-					>
-						<Icon @name="copy" />
-						Duplicate
-					</button>
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						{{on
-							"click"
-							(fn this.insert "black")
-						}}
-					>
-						<Icon @name="square" />
-						Black
-					</button>
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						{{on
-							"click"
-							(fn this.insert "text")
-						}}
-					>
-						<Icon @name="type" />
-						Text
-					</button>
+				<Strips
+					@strips={{INSERTS}}
+					@onRun={{this.insert}}
+				>
 					<button
 						type="button"
 						class="sub-seg-cell err-strip-cell"
@@ -289,7 +225,7 @@ export class InsertPanel extends Component {
 						<Icon @name="file-image" />
 						Image
 					</button>
-				</span>
+				</Strips>
 				<input
 					type="file"
 					accept="image/*"

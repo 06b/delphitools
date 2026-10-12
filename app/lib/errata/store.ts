@@ -75,3 +75,14 @@ export function removeObjects(pageId: string, ids: readonly string[]): void {
 		objects: page.objects.filter((o) => !gone.has(o.id)),
 	}));
 }
+
+export function findObject(
+	doc: ErrataDoc | null,
+	id: string | null | undefined,
+): { page: ErrataPage; object: PageObject } | null {
+	for (const page of doc?.pages ?? []) {
+		const object = page.objects.find((o) => o.id === id);
+		if (object) return { page, object };
+	}
+	return null;
+}

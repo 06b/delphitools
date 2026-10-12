@@ -11,12 +11,7 @@ import type { ErrataDoc } from 'delphitools-v2/lib/errata/doc-model';
 import { exportPdf } from 'delphitools-v2/lib/errata/export';
 import { getSourceBytes } from 'delphitools-v2/lib/errata/source';
 import { setPageIndex, store } from 'delphitools-v2/lib/errata/store';
-import {
-	flashHighlight,
-	getMode,
-	setMode,
-	subscribeUi,
-} from 'delphitools-v2/lib/errata/ui';
+import { closeMode, flashHighlight } from 'delphitools-v2/lib/errata/ui';
 import {
 	SEVERITY_ICON,
 	badges,
@@ -27,9 +22,10 @@ import {
 } from 'delphitools-v2/lib/pdf-preflight';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
-export default class PreflightPanel extends Component {
+export default class PreflightPanel extends Component<{
+	Args: { open: boolean };
+}> {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
-	mode = new TrackedExternal(subscribeUi, getMode);
 
 	@tracked report: PreflightReport | null = null;
 	@tracked busy = false;
@@ -40,12 +36,7 @@ export default class PreflightPanel extends Component {
 	willDestroy() {
 		super.willDestroy();
 		this.doc.unsubscribe();
-		this.mode.unsubscribe();
 		this.#runId++;
-	}
-
-	get open() {
-		return this.mode.current === 'preflight';
 	}
 
 	get badges() {
@@ -120,19 +111,17 @@ export default class PreflightPanel extends Component {
 		flashHighlight(issue.page - 1, issue.rects ?? []);
 	};
 
-	close = () => setMode(null);
-
 	<template>
 		<ToolPanel
-			@open={{this.open}}
+			@open={{@open}}
 			@mode="preflight"
 			@icon="list-checks"
 			@label="Preflight"
-			@onCancel={{this.close}}
+			@onCancel={{closeMode}}
 			@cancelLabel="Close"
 			@failed={{this.failed}}
 			class="z-40"
-			{{this.run (if this.open this.doc.current)}}
+			{{this.run (if @open this.doc.current)}}
 		>
 			<:status>
 				{{#each this.badges key="severity" as |b|}}
@@ -152,7 +141,7 @@ export default class PreflightPanel extends Component {
 
 		<div
 			class="err-preflight z-40 shadow-lg
-				{{if (and this.open this.report) 'is-open'}}"
+				{{if (and @open this.report) 'is-open'}}"
 		>
 			{{#each this.groups key="page" as |g|}}
 				<section class="err-preflight-group">

@@ -4,6 +4,8 @@ export class TrackedExternal<T> {
 	@tracked current: T;
 
 	#read: () => T;
+	// reading current mid-render asserts
+	#last: T;
 	#unsubscribe: () => void;
 
 	constructor(
@@ -11,9 +13,11 @@ export class TrackedExternal<T> {
 		read: () => T,
 	) {
 		this.#read = read;
-		this.current = read();
+		this.current = this.#last = read();
 		this.#unsubscribe = subscribe(() => {
-			this.current = this.#read();
+			const next = this.#read();
+			if (Object.is(next, this.#last)) return;
+			this.current = this.#last = next;
 		});
 	}
 

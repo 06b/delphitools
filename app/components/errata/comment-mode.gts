@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import ToolPanel, {
 	Field,
 	InputField,
+	readText,
 } from 'delphitools-v2/components/errata/tool-panel';
 import {
 	Select,
@@ -18,11 +19,10 @@ import {
 } from 'delphitools-v2/lib/errata/comments';
 import { setPageIndex, store } from 'delphitools-v2/lib/errata/store';
 import {
-	getSelectedIds,
+	closeMode,
+	openNote,
 	selectObject,
-	setMode,
-	setOpenNote,
-	subscribeUi,
+	selection,
 } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
@@ -37,17 +37,17 @@ function excerpt(text: string): string {
 	return flat.length > 32 ? `${flat.slice(0, 31)}…` : flat;
 }
 
-export default class CommentModeBar extends Component<{
+export default class CommentPanel extends Component<{
 	Args: { open: boolean };
 }> {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
-	selection = new TrackedExternal(subscribeUi, getSelectedIds);
+	selected = new TrackedExternal(selection.subscribe, selection.get);
 	@tracked author = commentAuthor();
 
 	willDestroy() {
 		super.willDestroy();
 		this.doc.unsubscribe();
-		this.selection.unsubscribe();
+		this.selected.unsubscribe();
 	}
 
 	@cached
@@ -67,8 +67,8 @@ export default class CommentModeBar extends Component<{
 		);
 	}
 
-	get selected(): Entry | null {
-		const ids = this.selection.current;
+	get entry(): Entry | null {
+		const ids = this.selected.current;
 		if (ids.length !== 1) return null;
 		return this.entries.find((e) => e.id === ids[0]) ?? null;
 	}
@@ -78,15 +78,13 @@ export default class CommentModeBar extends Component<{
 		if (!entry) return;
 		setPageIndex(entry.index);
 		selectObject(id);
-		setOpenNote(id);
+		openNote.set(id);
 	};
 
-	setAuthor = (event: Event) => {
-		this.author = (event.target as HTMLInputElement).value;
-		setCommentAuthor(this.author);
+	setAuthor = (author: string) => {
+		this.author = author;
+		setCommentAuthor(author);
 	};
-
-	done = () => setMode(null);
 
 	<template>
 		<ToolPanel
@@ -94,7 +92,7 @@ export default class CommentModeBar extends Component<{
 			@mode="comment"
 			@icon="message-square"
 			@label="Comment"
-			@onApply={{this.done}}
+			@onApply={{closeMode}}
 			@applyLabel="Done"
 		>
 			<:status>
@@ -106,12 +104,17 @@ export default class CommentModeBar extends Component<{
 						class="err-mode-input"
 						aria-label="Author"
 						value={{this.author}}
-						{{on "input" this.setAuthor}}
+						{{on
+							"input"
+							(readText
+								this.setAuthor
+							)
+						}}
 					/>
 				</InputField>
 				<Field @label="List">
 					<Select
-						@value={{this.selected.id}}
+						@value={{this.entry.id}}
 						@onValueChange={{this.pick}}
 					>
 						<SelectTrigger
@@ -119,9 +122,9 @@ export default class CommentModeBar extends Component<{
 						>
 							<SelectValue>
 								{{#if
-									this.selected
+									this.entry
 								}}
-									{{this.selected.label}}
+									{{this.entry.label}}
 								{{else}}
 									{{this.entries.length}}
 								{{/if}}

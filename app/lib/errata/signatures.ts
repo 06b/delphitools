@@ -1,6 +1,7 @@
+import { channel } from 'delphitools-v2/lib/channel';
+
 const KEY = 'errata:signatures';
 const LIMIT = 6;
-const listeners = new Set<() => void>();
 
 function read(): string[] {
 	try {
@@ -17,41 +18,28 @@ function read(): string[] {
 	}
 }
 
-let cache: string[] | null = null;
-
-export function getSignatures(): string[] {
-	cache ??= read();
-	return cache;
-}
+export const signatures = channel(read());
 
 function write(next: string[]): void {
-	cache = next;
+	signatures.set(next);
 	try {
 		localStorage.setItem(KEY, JSON.stringify(next));
 	} catch {
 		// quota or private mode: keep the in-memory list
 	}
-	for (const l of listeners) l();
 }
 
 export function addSignature(dataUrl: string): void {
 	write(
 		[
 			dataUrl,
-			...getSignatures().filter((s) => s !== dataUrl),
+			...signatures.get().filter((s) => s !== dataUrl),
 		].slice(0, LIMIT),
 	);
 }
 
 export function removeSignature(dataUrl: string): void {
-	write(getSignatures().filter((s) => s !== dataUrl));
-}
-
-export function subscribeSignatures(listener: () => void): () => void {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
+	write(signatures.get().filter((s) => s !== dataUrl));
 }
 
 /** crops a drawn canvas to its ink, returns null when empty */

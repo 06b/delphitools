@@ -1,11 +1,18 @@
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
-import { eq } from 'ember-truth-helpers';
+import { modifier } from 'ember-modifier';
+import { eq, or } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
 import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import type { PageScope as Scope } from 'delphitools-v2/lib/errata/stamps';
+import type { Stamped } from 'delphitools-v2/lib/errata/doc-model';
+import {
+	scopePages,
+	type PageScope as Scope,
+} from 'delphitools-v2/lib/errata/stamps';
+import { preview } from 'delphitools-v2/lib/errata/ui';
 import { ANCHORS, type Anchor } from 'delphitools-v2/lib/pdf-stamp';
 
 export interface ToolPanelSignature {
@@ -148,7 +155,7 @@ export const InputField: TOC<{
 export interface SegmentedOption<V> {
 	value: V;
 	label?: string;
-	/** icon only; value labels */
+	/** icon only */
 	icon?: string;
 }
 
@@ -169,13 +176,16 @@ export class Segmented<V extends string | number> extends Component<{
 							(eq @value o.value)
 							'is-active'
 						}}"
-					aria-label={{if o.icon o.value}}
+					aria-label={{if
+						o.icon
+						(or o.label o.value)
+					}}
 					aria-pressed={{if
 						(eq @value o.value)
 						"true"
 						"false"
 					}}
-					title={{if o.icon o.value}}
+					title={{if o.icon (or o.label o.value)}}
 					{{on "click" (fn @onChange o.value)}}
 				>
 					{{#if o.icon}}
@@ -189,10 +199,22 @@ export class Segmented<V extends string | number> extends Component<{
 	</template>
 }
 
-function readNumber(onChange: (value: number) => void) {
+export function readNumber(onChange: (value: number) => void) {
 	return (event: Event) =>
 		onChange(Number((event.target as HTMLInputElement).value));
 }
+
+export function readText(onChange: (value: string) => void) {
+	return (event: Event) =>
+		onChange((event.target as HTMLInputElement).value);
+}
+
+/** setMode clears these */
+export const livePreview = modifier(
+	(_el: Element, [items]: [Stamped[] | undefined]) => {
+		if (items) preview(items);
+	},
+);
 
 export const Slider: TOC<{
 	Args: {
@@ -226,36 +248,49 @@ const SCOPES: SegmentedOption<Scope>[] = [
 	{ value: 'range', label: 'Range' },
 ];
 
-function readText(onChange: (value: string) => void) {
-	return (event: Event) =>
-		onChange((event.target as HTMLInputElement).value);
+export class PageScopeState {
+	@tracked scope: Scope;
+	@tracked range = '';
+
+	constructor(scope: Scope) {
+		this.scope = scope;
+	}
+
+	setScope = (scope: Scope) => (this.scope = scope);
+	setRange = (range: string) => (this.range = range);
+
+	/** null on bad range */
+	indices(pageCount: number, pageIndex: { current: number }) {
+		return scopePages(
+			this.scope,
+			this.range,
+			pageCount,
+			this.scope === 'current' ? pageIndex.current : 0,
+		);
+	}
 }
 
-/** resolve with scopePages */
 export const PageScope: TOC<{
 	Args: {
-		scope: Scope;
-		range: string;
+		state: PageScopeState;
 		/** range fails to parse */
 		invalid: boolean;
-		onScope: (scope: Scope) => void;
-		onRange: (range: string) => void;
 	};
 }> = <template>
 	<Field @label="Pages">
 		<Segmented
 			@options={{SCOPES}}
-			@value={{@scope}}
-			@onChange={{@onScope}}
+			@value={{@state.scope}}
+			@onChange={{@state.setScope}}
 		/>
-		{{#if (eq @scope "range")}}
+		{{#if (eq @state.scope "range")}}
 			<input
 				class="err-mode-input is-narrow"
 				aria-label="Range"
 				aria-invalid={{if @invalid "true" "false"}}
 				placeholder="1-3, 5"
-				value={{@range}}
-				{{on "input" (readText @onRange)}}
+				value={{@state.range}}
+				{{on "input" (readText @state.setRange)}}
 			/>
 		{{/if}}
 	</Field>
@@ -266,15 +301,13 @@ export const AnchorPicker: TOC<{
 	Args: {
 		value: Anchor;
 		onChange: (anchor: Anchor) => void;
-		/** default Position */
-		label?: string;
 	};
 }> = <template>
-	<Field @label={{if @label @label "Position"}} class="is-tall">
+	<Field @label="Position" class="is-tall">
 		<span
 			class="err-anchor-page"
 			role="radiogroup"
-			aria-label={{if @label @label "Position"}}
+			aria-label="Position"
 		>
 			{{#each ANCHORS as |a|}}
 				<button

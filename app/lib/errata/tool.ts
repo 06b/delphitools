@@ -1,3 +1,4 @@
+import { channel } from 'delphitools-v2/lib/channel';
 import type { ShapeKind } from './doc-model';
 
 export type ToolId =
@@ -10,7 +11,9 @@ export type ToolId =
 	| 'highlight'
 	| 'image'
 	| 'signature'
-	| 'field';
+	| 'field'
+	| 'redact'
+	| 'comment';
 
 export interface ToolSettings {
 	colour: string;
@@ -43,42 +46,16 @@ export const TOOL_ORDER: readonly ToolEntry[] = [
 	{ id: 'signature', icon: 'signature', key: 'G', label: 'Signature' },
 ];
 
-let active: ToolId = 'select';
-let settings: ToolSettings = {
+export const activeTool = channel<ToolId>('select');
+
+export const toolSettings = channel<ToolSettings>({
 	colour: '#d1242f',
 	highlightColour: '#ffe600',
 	strokeWidth: 3,
 	fontSize: 14,
 	shape: 'rect',
-};
-const listeners = new Set<() => void>();
-
-function emit(): void {
-	for (const l of listeners) l();
-}
-
-export function getActiveTool(): ToolId {
-	return active;
-}
-
-export function setActiveTool(tool: ToolId): void {
-	if (tool === active) return;
-	active = tool;
-	emit();
-}
-
-export function getToolSettings(): ToolSettings {
-	return settings;
-}
+});
 
 export function updateToolSettings(patch: Partial<ToolSettings>): void {
-	settings = { ...settings, ...patch };
-	emit();
-}
-
-export function subscribeTool(listener: () => void): () => void {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
+	toolSettings.set({ ...toolSettings.get(), ...patch });
 }

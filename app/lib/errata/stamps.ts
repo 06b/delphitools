@@ -2,7 +2,7 @@ import { StandardFontEmbedder, StandardFonts } from 'pdf-lib';
 import { parsePageRanges } from '../pdf-pages';
 import { expandNumber, placeText, type Anchor } from '../pdf-stamp';
 import {
-	newId,
+	boxAt,
 	pageSize,
 	type ErrataDoc,
 	type ErrataPage,
@@ -71,16 +71,10 @@ export function textObject(
 	extra: Partial<TextObject> = {},
 	w = textWidth(text, size),
 ): TextObject {
+	const h = size * LINE;
 	return {
-		id: newId(),
+		...boxAt({ x: cx - w / 2, y: cy - h / 2, width: w, height: h }),
 		kind: 'text',
-		cx,
-		cy,
-		w,
-		h: size * LINE,
-		scaleX: 1,
-		scaleY: 1,
-		angle: 0,
 		text,
 		fontSize: size,
 		colour,

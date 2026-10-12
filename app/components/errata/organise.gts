@@ -14,9 +14,9 @@ import {
 	movePages,
 	rotatePages,
 	updatePages,
-} from 'delphitools-v2/lib/errata/organise';
+} from 'delphitools-v2/lib/errata/page-ops';
 import { setPageIndex, store } from 'delphitools-v2/lib/errata/store';
-import { setMode } from 'delphitools-v2/lib/errata/ui';
+import { closeMode, onMode } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
 // 2x the 140px frame
@@ -28,10 +28,25 @@ export default class Organise extends Component {
 	@tracked dropAt: number | null = null;
 	#anchor: string | null = null;
 	#dragging = false;
+	#off = onMode('organise', {
+		key: (e) => {
+			const mod = e.metaKey || e.ctrlKey;
+			if (
+				!mod &&
+				(e.key === 'Delete' || e.key === 'Backspace')
+			)
+				this.remove();
+			else if (mod && e.key.toLowerCase() === 'a')
+				this.selectAll();
+			else return false;
+			return true;
+		},
+	});
 
 	willDestroy() {
 		super.willDestroy();
 		this.doc.unsubscribe();
+		this.#off();
 		// canvas opens first selection
 		const first = this.pages.findIndex((p) =>
 			this.selected.has(p.id),
@@ -67,6 +82,42 @@ export default class Organise extends Component {
 		return this.none || this.count === this.pages.length;
 	}
 
+	get actions() {
+		const none = this.none;
+		return [
+			{
+				label: 'Rotate left',
+				icon: 'rotate-ccw',
+				run: () => this.rotate(-1),
+				disabled: none,
+			},
+			{
+				label: 'Rotate right',
+				icon: 'rotate-cw',
+				run: () => this.rotate(1),
+				disabled: none,
+			},
+			{
+				label: 'Duplicate',
+				icon: 'copy',
+				run: this.duplicate,
+				disabled: none,
+			},
+			{
+				label: 'Insert blank page',
+				icon: 'file-plus',
+				run: this.insert,
+				disabled: false,
+			},
+			{
+				label: 'Delete',
+				icon: 'trash-2',
+				run: this.remove,
+				disabled: this.cannotDelete,
+			},
+		];
+	}
+
 	select = (index: number, event: MouseEvent) => {
 		const id = this.pages[index]!.id;
 		const anchor = this.pages.findIndex(
@@ -93,10 +144,8 @@ export default class Organise extends Component {
 
 	open = (index: number) => {
 		this.selected = new Set([this.pages[index]!.id]);
-		setMode(null);
+		closeMode();
 	};
-
-	done = () => setMode(null);
 
 	rotate = (turns: 1 | -1) =>
 		updatePages((p) => rotatePages(p, this.selected, turns));
@@ -167,42 +216,18 @@ export default class Organise extends Component {
 		this.dropAt = null;
 	};
 
-	// capture: preempts errata-shortcuts
-	behaviour = modifier((grid: HTMLElement) => {
-		const onKey = (e: KeyboardEvent) => {
-			const t = e.target as HTMLElement | null;
-			if (
-				t?.closest(
-					'input, textarea, select, [contenteditable]',
-				)
-			)
-				return;
-			const mod = e.metaKey || e.ctrlKey;
-			if (
-				!mod &&
-				(e.key === 'Delete' || e.key === 'Backspace')
-			)
-				this.remove();
-			else if (mod && e.key.toLowerCase() === 'a')
-				this.selectAll();
-			else return;
-			e.preventDefault();
-			e.stopPropagation();
-		};
+	// clicks between cells
+	deselect = modifier((grid: HTMLElement) => {
 		const onClick = (e: MouseEvent) => {
 			if (e.target === grid) this.selected = new Set();
 		};
-		window.addEventListener('keydown', onKey, true);
 		grid.addEventListener('click', onClick);
-		return () => {
-			window.removeEventListener('keydown', onKey, true);
-			grid.removeEventListener('click', onClick);
-		};
+		return () => grid.removeEventListener('click', onClick);
 	});
 
 	<template>
 		<div class="err-organise">
-			<div class="err-organise-grid" {{this.behaviour}}>
+			<div class="err-organise-grid" {{this.deselect}}>
 				{{#each this.rows key="page.id" as |row|}}
 					<button
 						type="button"
@@ -278,7 +303,7 @@ export default class Organise extends Component {
 				@mode="organise"
 				@icon="layout-grid"
 				@label="Organise"
-				@onApply={{this.done}}
+				@onApply={{closeMode}}
 				@applyLabel="Done"
 			>
 				<:status>
@@ -288,61 +313,23 @@ export default class Organise extends Component {
 						selected</span>
 				</:status>
 				<:actions>
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost is-icon"
-						title="Rotate left"
-						aria-label="Rotate left"
-						disabled={{this.none}}
-						{{on
-							"click"
-							(fn this.rotate -1)
-						}}
-					>
-						<Icon @name="rotate-ccw" />
-					</button>
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost is-icon"
-						title="Rotate right"
-						aria-label="Rotate right"
-						disabled={{this.none}}
-						{{on
-							"click"
-							(fn this.rotate 1)
-						}}
-					>
-						<Icon @name="rotate-cw" />
-					</button>
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost is-icon"
-						title="Duplicate"
-						aria-label="Duplicate"
-						disabled={{this.none}}
-						{{on "click" this.duplicate}}
-					>
-						<Icon @name="copy" />
-					</button>
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost is-icon"
-						title="Insert blank page"
-						aria-label="Insert blank page"
-						{{on "click" this.insert}}
-					>
-						<Icon @name="file-plus" />
-					</button>
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost is-icon"
-						title="Delete"
-						aria-label="Delete"
-						disabled={{this.cannotDelete}}
-						{{on "click" this.remove}}
-					>
-						<Icon @name="trash-2" />
-					</button>
+					{{#each
+						this.actions key="label"
+						as |a|
+					}}
+						<button
+							type="button"
+							class="sub-modal-btn is-ghost is-icon"
+							title={{a.label}}
+							aria-label={{a.label}}
+							disabled={{a.disabled}}
+							{{on "click" a.run}}
+						>
+							<Icon
+								@name={{a.icon}}
+							/>
+						</button>
+					{{/each}}
 				</:actions>
 			</ToolPanel>
 		</div>

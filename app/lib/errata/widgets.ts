@@ -1,27 +1,10 @@
-import { rawImport } from 'delphitools-v2/lib/raw-import';
+import { channel } from 'delphitools-v2/lib/channel';
+import { getMupdf } from 'delphitools-v2/lib/mupdf';
 import { type ErrataDoc, type FieldType, type Stamped } from './doc-model';
 import { newField, sourceRectToDisplayed } from './fields';
 import { getSourceBytes } from './source';
 
-interface MupdfWidget {
-	getFieldType(): string;
-	getName(): string;
-	getRect(): [number, number, number, number];
-	getOptions(): string[];
-}
-
-interface MupdfModule {
-	PDFDocument: new (data: Uint8Array) => {
-		countPages(): number;
-		loadPage(index: number): {
-			getWidgets(): MupdfWidget[];
-			destroy(): void;
-		};
-		destroy(): void;
-	};
-}
-
-export interface SourceWidget {
+interface SourceWidget {
 	page: number;
 	name: string;
 	field: FieldType;
@@ -44,12 +27,12 @@ interface Loaded {
 	widgets: SourceWidget[] | null;
 }
 
-let state: Loaded | null = null;
-const listeners = new Set<() => void>();
+const loaded = channel<Loaded | null>(null);
+
+export const subscribeWidgets = loaded.subscribe;
 
 async function read(bytes: Uint8Array): Promise<SourceWidget[]> {
-	// self-hosted, outside bundling
-	const mupdf = await rawImport<MupdfModule>('/mupdf/mupdf.js');
+	const mupdf = await getMupdf();
 	const doc = new mupdf.PDFDocument(bytes.slice());
 	try {
 		const out: SourceWidget[] = [];
@@ -75,19 +58,19 @@ async function read(bytes: Uint8Array): Promise<SourceWidget[]> {
 }
 
 export function getSourceWidgets(): SourceWidget[] | null {
+	const state = loaded.get();
 	return state?.bytes === getSourceBytes() ? state.widgets : null;
 }
 
 export function loadSourceWidgets(): void {
 	const bytes = getSourceBytes();
-	if (!bytes || state?.bytes === bytes) return;
+	if (!bytes || loaded.get()?.bytes === bytes) return;
 	const current: Loaded = { bytes, widgets: null };
-	state = current;
+	loaded.set(current);
 	read(bytes).then(
 		(widgets) => {
-			if (state !== current) return;
-			current.widgets = widgets;
-			for (const l of listeners) l();
+			if (loaded.get() === current)
+				loaded.set({ bytes, widgets });
 		},
 		(error) => console.error(error),
 	);
@@ -102,13 +85,6 @@ export function takenNames(doc: ErrataDoc): Set<string> {
 		),
 		...(getSourceWidgets() ?? []).map((w) => w.name),
 	]);
-}
-
-export function subscribeWidgets(listener: () => void): () => void {
-	listeners.add(listener);
-	return () => {
-		listeners.delete(listener);
-	};
 }
 
 export function widgetStandIns(
