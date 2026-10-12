@@ -477,6 +477,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Everything about one video file',
 				icon: 'clapperboard',
 				href: '/tools/video-atlas',
+				canon: true,
 				atlas: true,
 				accepts: VIDEO_ACCEPT,
 				new: true,

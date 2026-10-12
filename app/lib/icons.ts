@@ -177,6 +177,7 @@ import iPen from 'lucide-static/icons/pen.svg?raw';
 import iPenLine from 'lucide-static/icons/pen-line.svg?raw';
 import iPencil from 'lucide-static/icons/pencil.svg?raw';
 import iPentagon from 'lucide-static/icons/pentagon.svg?raw';
+import iPictureInPicture2 from 'lucide-static/icons/picture-in-picture-2.svg?raw';
 import iPin from 'lucide-static/icons/pin.svg?raw';
 import iPinOff from 'lucide-static/icons/pin-off.svg?raw';
 import iPipette from 'lucide-static/icons/pipette.svg?raw';
@@ -436,6 +437,7 @@ export const icons: Record<string, string> = {
 	'pen-line': iPenLine,
 	pencil: iPencil,
 	pentagon: iPentagon,
+	'picture-in-picture-2': iPictureInPicture2,
 	pin: iPin,
 	'pin-off': iPinOff,
 	pipette: iPipette,

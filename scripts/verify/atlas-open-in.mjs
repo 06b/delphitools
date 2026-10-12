@@ -69,7 +69,7 @@ const handed = await page
 check('image-atlas: picking a tool hands the file over', handed.startsWith('IMG_2041'));
 
 await visit(page, '/tools/video-atlas');
-await dropFile('.dt-va-frame', 'clip.mp4', 'video/mp4');
+await dropFile('.video-atlas', 'clip.mp4', 'video/mp4');
 check('video-atlas: open-in lists video tools', (await openInIds()).includes('video-muter'));
 
 await visit(page, '/tools/audio-atlas');
