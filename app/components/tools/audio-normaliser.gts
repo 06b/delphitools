@@ -329,7 +329,6 @@ export default class AudioNormaliser extends Component {
 							true
 						}}
 						@busy={{this.busy}}
-						@progress={{0}}
 						@failed={{this.failed}}
 						@result={{this.resultRow}}
 						@onRun={{this.normalise}}

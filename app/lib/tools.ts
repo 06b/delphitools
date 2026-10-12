@@ -818,6 +818,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Shrink PDF filesizes',
 				icon: 'shrink',
 				href: '/tools/pdf-compressor',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},

@@ -23,8 +23,8 @@ export interface JobSignature {
 		failure: string;
 		disabled?: boolean;
 		busy: boolean;
-		/** 0 to 1 while busy. */
-		progress: number;
+		/** 0 to 1 while busy; none for a job that cannot tell, which shows the loader alone. */
+		progress?: number;
 		failed: boolean;
 		result?: JobResult | null;
 		onRun: () => void;
@@ -43,8 +43,15 @@ const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
  * passes it along) in place of Preview and Share.
  */
 export default class Job extends Component<JobSignature> {
+	get share() {
+		return this.args.progress ?? 0;
+	}
+
 	get percent() {
-		return `${Math.round(this.args.progress * 100)}%`;
+		const { progress } = this.args;
+		return progress === undefined
+			? ''
+			: `${Math.round(progress * 100)}%`;
 	}
 
 	<template>
@@ -60,7 +67,12 @@ export default class Job extends Component<JobSignature> {
 					>{{this.percent}}</span>
 				</span>
 			</CanonRow>
-			<CanonBar class="media-job-bar" @share={{@progress}} />
+			{{#if this.percent}}
+				<CanonBar
+					class="media-job-bar"
+					@share={{this.share}}
+				/>
+			{{/if}}
 			{{#if @onCancel}}
 				<CanonButton
 					class="media-job-cancel"
