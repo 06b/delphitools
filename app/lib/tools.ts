@@ -180,6 +180,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Browse curated colour palettes',
 				icon: 'library',
 				href: '/tools/palette-collection',
+				canon: true,
 			},
 			{
 				id: 'palette-extractor',

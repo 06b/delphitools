@@ -66,23 +66,16 @@ for (const { label, query, expect } of CASES) {
 	await browser.close();
 }
 
-// in-app: the collection card must carry ?colors= through the transition
+// in-app: the collection's open link must carry ?colors= through the transition
 {
 	const { browser, page } = await launch();
 	await visit(page, '/tools/palette-collection');
 
-	const strip = await page.$$eval(
-		'.dt-collection-cell:first-child .dt-collection-swatch',
-		(els) =>
-			els.map((el) =>
-				(el.getAttribute('style') ?? '')
-					.replace('background-color:', '')
-					.trim()
-					.toLowerCase(),
-			),
+	const strip = await page.$$eval('.pc-chip[data-hex]', (els) =>
+		els.map((el) => el.dataset.hex.toLowerCase()),
 	);
 
-	await page.click('.dt-collection-card');
+	await page.click('.pc-open');
 	await sleep(800);
 
 	check(

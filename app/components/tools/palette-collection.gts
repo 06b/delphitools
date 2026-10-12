@@ -1,19 +1,23 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { fn, hash } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import { LinkTo } from '@ember/routing';
+import type Owner from '@ember/owner';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourCard from 'delphicanon/components/canon-colour-card';
+import CanonDetentWheel from 'delphicanon/components/canon-detent-wheel';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import { parseHex } from 'delphicanon/lib/colour';
 import Icon from 'delphitools-v2/components/icon';
-import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
+import { getColourName } from 'delphitools-v2/lib/colour-names';
 import {
 	COLLECTION_CATEGORIES,
 	CURATED_PALETTES,
@@ -22,323 +26,369 @@ import {
 	type PaletteCollectionCategory,
 } from 'delphitools-v2/lib/palette-collection';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import { kitFormat } from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import Deck from 'delphitools-v2/components/tools/palette-collection/deck';
+import './palette-collection/palette-collection.css';
 
-type CategoryFilter = PaletteCollectionCategory | 'all';
+const rowHeight = 46;
+const wheelHeight = rowHeight * 8;
 
-const COLOUR_COUNTS = [
-	...new Set(CURATED_PALETTES.map((p) => p.colors.length)),
-].sort((a, b) => a - b);
+const shelves = Object.keys(
+	COLLECTION_CATEGORIES,
+) as PaletteCollectionCategory[];
+const byCategory = getPalettesByCategory();
+const sizes = [...new Set(CURATED_PALETTES.map((p) => p.colors.length))].sort(
+	(a, b) => a - b,
+);
+const sizeTitles = ['Any size', ...sizes.map((n) => `${n} colours`)];
 
-const CATEGORIES = Object.entries(COLLECTION_CATEGORIES) as [
-	PaletteCollectionCategory,
-	{ label: string; description: string },
-][];
+/**
+ * The iOS launch arguments as query flags: ?collectionCategory=<key or
+ * label> ?collectionPalette=<id> ?collectionSearch=<text>.
+ */
+function launchFlags(search: string) {
+	const query = new URLSearchParams(search);
+	const asked = query.get('collectionCategory')?.toLowerCase();
+	const found = CURATED_PALETTES.find(
+		(p) => p.id === query.get('collectionPalette'),
+	);
+	const shelf = found
+		? shelves.indexOf(found.category)
+		: shelves.findIndex(
+				(key) =>
+					key === asked ||
+					COLLECTION_CATEGORIES[
+						key
+					].label.toLowerCase() === asked,
+			);
+	return {
+		shelf: Math.max(shelf, 0),
+		palette: found ? byCategory[found.category].indexOf(found) : 0,
+		search: query.get('collectionSearch') ?? '',
+	};
+}
 
-export default class PaletteCollectionTool extends Component {
+/** The port of PaletteCollectionViewController, without saved palettes. */
+export default class PaletteCollection extends Component {
 	@service declare colourNotation: ColourNotationService;
 
-	@tracked selectedCategory: CategoryFilter = 'all';
-	@tracked selectedCount = 'all';
-	@tracked searchQuery = '';
+	@tracked shelf: number;
+	@tracked selected: number;
+	@tracked query: string;
+	@tracked size = 0;
 
-	total = CURATED_PALETTES.length;
-
-	categories = CATEGORIES.map(([key, meta]) => ({
-		key,
-		label: meta.label,
-	}));
-
-	// constant list, compute once
-	palettesByCategory = getPalettesByCategory();
-
-	get activeCategory() {
-		return this.selectedCategory === 'all'
-			? null
-			: COLLECTION_CATEGORIES[this.selectedCategory];
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		this.shelf = flags.shelf;
+		this.selected = flags.palette;
+		this.query = flags.search;
 	}
 
-	get hasActiveFilter(): boolean {
+	get searching() {
+		return this.query.trim() !== '';
+	}
+
+	#fits = (palette: CuratedPalette) =>
+		this.size === 0 ||
+		palette.colors.length === sizes[this.size - 1];
+
+	// match displayed notation too
+	#matches = (palette: CuratedPalette) => {
+		const query = this.query.trim().toLowerCase();
 		return (
-			this.selectedCategory !== 'all' ||
-			this.selectedCount !== 'all' ||
-			this.searchQuery.trim() !== ''
+			palette.name.toLowerCase().includes(query) ||
+			COLLECTION_CATEGORIES[palette.category].label
+				.toLowerCase()
+				.includes(query) ||
+			palette.colors.some(
+				(c) =>
+					c.toLowerCase().includes(query) ||
+					this.colourNotation
+						.format(c)
+						.toLowerCase()
+						.includes(query),
+			)
 		);
+	};
+
+	shelfPalettes = (index: number) =>
+		byCategory[shelves[index]!].filter(this.#fits);
+
+	/** Palettes on the second wheel: the shelf's, or every match for the search. */
+	@cached
+	get shown(): CuratedPalette[] {
+		return this.searching
+			? CURATED_PALETTES.filter(this.#fits).filter(
+					this.#matches,
+				)
+			: this.shelfPalettes(this.shelf);
 	}
 
-	@cached
-	get filteredPalettes(): CuratedPalette[] {
-		const category = this.selectedCategory;
-		const inCategory =
-			category === 'all'
-				? CURATED_PALETTES
-				: this.palettesByCategory[category];
+	get palette(): CuratedPalette | undefined {
+		return this.shown[
+			Math.min(this.selected, this.shown.length - 1)
+		];
+	}
 
-		const inCount =
-			this.selectedCount === 'all'
-				? inCategory
-				: inCategory.filter(
-						(p) =>
-							String(
-								p.colors.length,
-							) ===
-							this.selectedCount,
-					);
+	get colours() {
+		return (this.palette?.colors ?? []).map((c) => parseHex(c)!);
+	}
 
-		const query = this.searchQuery.trim().toLowerCase();
-		if (!query) return inCount;
+	get detail() {
+		const { palette } = this;
+		return palette
+			? `${COLLECTION_CATEGORIES[palette.category].label} · ${palette.colors.length}`
+			: undefined;
+	}
 
-		// match displayed notation too
-		return inCount.filter(
-			(p) =>
-				p.name.toLowerCase().includes(query) ||
-				p.colors.some(
-					(c) =>
-						c
-							.toLowerCase()
-							.includes(query) ||
-						this.colourNotation
-							.format(c)
-							.toLowerCase()
-							.includes(query),
-				),
-		);
+	get category() {
+		return COLLECTION_CATEGORIES[shelves[this.shelf]!];
+	}
+
+	get emptyTitle() {
+		return this.searching ? this.query : this.category.label;
 	}
 
 	get countLabel() {
-		if (!this.hasActiveFilter) return `${this.total} palettes`;
-		const found = this.filteredPalettes.length;
+		if (!this.searching && this.size === 0)
+			return `${CURATED_PALETTES.length} palettes`;
+		const found = this.shown.length;
 		return `${found} ${found === 1 ? 'result' : 'results'}`;
 	}
 
-	get cards() {
-		return this.filteredPalettes.map((palette) => ({
-			id: palette.id,
-			name: palette.name,
-			colourCount: palette.colors.length,
-			// LinkTo encodes this
-			coloursParam: palette.colors.join(','),
-			swatches: palette.colors.map((hex, index) => ({
-				key: `${palette.id}-${index}`,
-				value: this.colourNotation.format(hex),
-				// style-concatenation: curated hex trusted
-				fillStyle: htmlSafe(`background-color: ${hex}`),
-			})),
-		}));
+	get format() {
+		return kitFormat(this.colourNotation.notation);
 	}
 
-	selectCategory = (category: CategoryFilter) => {
-		this.selectedCategory = category;
-	};
-
-	countOptions = COLOUR_COUNTS.map((count) => ({
-		value: String(count),
-		label: `${count} colours`,
-	}));
-
-	get countName(): string {
-		return this.selectedCount === 'all'
-			? 'Any size'
-			: `${this.selectedCount} colours`;
+	get colorsQuery() {
+		return this.palette?.colors.join(',') ?? '';
 	}
 
-	chooseCount = (value: string) => {
-		this.selectedCount = value;
+	shelfText = (index: number) =>
+		COLLECTION_CATEGORIES[shelves[index]!].label;
+
+	shelfRow = (index: number, focus: number) => ({
+		title: this.shelfText(index),
+		count: this.shelfPalettes(index).length,
+		style: focusStyle(focus),
+	});
+
+	paletteText = (index: number) => this.shown[index]?.name ?? '';
+
+	paletteRow = (index: number, focus: number) => {
+		const palette = this.shown[index];
+		return {
+			title: palette?.name ?? '',
+			style: focusStyle(focus),
+			ribbon: htmlSafe(
+				`block-size: ${3 + 4 * focus}px; background: linear-gradient(to right, ${(
+					palette?.colors ?? []
+				)
+					.map(
+						(c, i, all) =>
+							`${c} ${(i / all.length) * 100}% ${((i + 1) / all.length) * 100}%`,
+					)
+					.join(', ')})`,
+			),
+		};
 	};
 
-	setSearch = (event: Event) => {
-		this.searchQuery = (event.target as HTMLInputElement).value;
+	pickShelf = (index: number) => {
+		this.shelf = index;
+		this.selected = 0;
+	};
+
+	pickPalette = (index: number) => (this.selected = index);
+
+	pickSize = (index: number) => {
+		this.size = index;
+		this.selected = 0;
+	};
+
+	search = (event: Event) => {
+		this.query = (event.target as HTMLInputElement).value;
+		this.selected = 0;
 	};
 
 	<template>
-		<div class="dt-collection">
-			<div class="dt-collection-search">
-				<div class="dt-collection-field">
-					<Icon @name="search" />
-					<input
-						type="text"
-						aria-label="Search palettes"
-						placeholder="Search palettes…"
-						value={{this.searchQuery}}
-						{{on "input" this.setSearch}}
+		<CanonSplit
+			class="palette-collection"
+			@halves={{true}}
+			@collapsesTo={{240}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1.2}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					<Deck
+						@palette={{this.palette}}
+						@detail={{this.detail}}
+						@emptyTitle={{this.emptyTitle}}
 					/>
-				</div>
-				<span class="dt-collection-size">
-					<span
-						class="dt-collection-label"
-					>Colours</span>
-					<Select
-						@value={{this.selectedCount}}
-						@onValueChange={{this.chooseCount}}
-					>
-						<SelectTrigger>
-							<SelectValue
-							>{{this.countName}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem
-								@value="all"
-							>Any size</SelectItem>
-							{{#each
-								this.countOptions
-								key="value"
-								as |option|
-							}}
-								<SelectItem
-									@value={{option.value}}
-								>{{option.label}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
-				</span>
-				<div
-					class="dt-collection-count"
-				>{{this.countLabel}}</div>
-			</div>
-
-			<div class="dt-collection-filter">
-				<div class="segmented dt-collection-cats">
-					<button
-						type="button"
-						class="dt-collection-cat is-all
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					@height={{wheelHeight}}
+					@background="var(--canon-muted)"
+				>
+					<div
+						class="pc-wheels
 							{{if
-								(eq
-									this.selectedCategory
-									'all'
-								)
-								'is-on'
+								this.searching
+								'pc-wheels--searching'
 							}}"
-						{{on
-							"click"
-							(fn
-								this.selectCategory
-								"all"
-							)
-						}}
-					>All</button>
-					{{#each
-						this.categories key="key"
-						as |cat|
-					}}
-						<button
-							type="button"
-							class="dt-collection-cat
-								{{if
-									(eq
-										this.selectedCategory
-										cat.key
-									)
-									'is-on'
-								}}"
-							{{on
-								"click"
-								(fn
-									this.selectCategory
-									cat.key
-								)
-							}}
-						>{{cat.label}}</button>
-					{{/each}}
-				</div>
-			</div>
-
-			{{#if this.activeCategory}}
-				<div class="dt-collection-desc">
-					<span
-						class="dt-collection-desc-label"
-					>{{this.activeCategory.label}}:</span>
-					{{this.activeCategory.description}}
-				</div>
-			{{/if}}
-
-			<div class="dt-collection-body">
-				{{#let this.cards as |cards|}}
-					{{#if cards}}
-						<div class="dt-collection-grid">
-							{{#each
-								cards key="id"
-								as |card|
-							}}
-								<div
-									class="dt-collection-cell"
-								>
-									<LinkTo
-										@route="tools.tool"
-										@model="palette-genny"
-										@query={{hash
-											colors=card.coloursParam
-										}}
-										class="dt-collection-card"
-									>
-										<span
-											class="dt-collection-strip"
-										>
-											{{#each
-												card.swatches
-												key="key"
-												as |swatch|
-											}}
-												<span
-													class="dt-collection-swatch"
-													style={{swatch.fillStyle}}
-													title={{swatch.value}}
-												></span>
-											{{/each}}
-										</span>
-
-										<span
-											class="dt-collection-info"
-										>
-											<span
-												class="dt-collection-meta"
-											>
-												<span
-													class="dt-collection-name"
-												>{{card.name}}</span>
-												<span
-													class="dt-collection-tally"
-												>{{card.colourCount}}
-													colours</span>
-											</span>
-											<span
-												class="dt-collection-go"
-											>
-												<Icon
-													@name="arrow-right"
-												/>
-											</span>
-										</span>
-									</LinkTo>
-								</div>
-							{{/each}}
-						</div>
-					{{else}}
-						<div
-							class="dt-collection-empty"
+					>
+						<span
+							class="pc-window"
+							aria-hidden="true"
+						></span>
+						<CanonDetentWheel
+							class="pc-shelves"
+							@count={{shelves.length}}
+							@selected={{this.shelf}}
+							@rowHeight={{rowHeight}}
+							@onSelect={{this.pickShelf}}
+							@text={{this.shelfText}}
+							@label="Category"
+							as |index focus|
 						>
-							<Icon
-								@name="palette"
-								class="dt-collection-empty-icon"
-							/>
-							<p>No palettes found
+							{{#let
+								(this.shelfRow
+									index
+									focus
+								)
+								as |row|
+							}}
+								<span
+									class="pc-row"
+									style={{row.style}}
+								>
+									<span
+										class="pc-row-title"
+									>{{row.title}}</span>
+									<span
+										class="pc-row-count"
+									>{{row.count}}</span>
+								</span>
+							{{/let}}
+						</CanonDetentWheel>
+						<CanonDetentWheel
+							class="pc-palettes"
+							@count={{this.shown.length}}
+							@selected={{this.selected}}
+							@rowHeight={{rowHeight}}
+							@onSelect={{this.pickPalette}}
+							@text={{this.paletteText}}
+							@label="Palette"
+							as |index focus|
+						>
+							{{#let
+								(this.paletteRow
+									index
+									focus
+								)
+								as |row|
+							}}
+								<span
+									class="pc-row pc-row--palette"
+									style={{row.style}}
+								>
+									<span
+										class="pc-row-title"
+									>{{row.title}}</span>
+									<span
+										class="pc-ribbon"
+										style={{row.ribbon}}
+									></span>
+								</span>
+							{{/let}}
+						</CanonDetentWheel>
+						{{#unless this.shown.length}}
+							<p class="pc-empty">No
+								palettes found
 								matching your
 								filters.</p>
-						</div>
-					{{/if}}
-				{{/let}}
-			</div>
-
-			<div class="dt-collection-foot">
-				<div class="dt-collection-foot-text">Want to
-					create your own palette?</div>
-				<LinkTo
-					@route="tools.tool"
-					@model="palette-genny"
-					class="dt-collection-foot-link"
-				>
-					<Icon @name="palette" />
-					Open Palette Generator
-				</LinkTo>
-			</div>
-		</div>
+						{{/unless}}
+					</div>
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<label class="pc-search">
+						<Icon @name="search" />
+						<CanonTextCell
+							class="pc-search-field"
+							@value={{this.query}}
+							@placeholder="Search palettes…"
+							aria-label="Search palettes"
+							spellcheck="false"
+							autocomplete="off"
+							{{on
+								"input"
+								this.search
+							}}
+						/>
+						<span
+							class="pc-count"
+						>{{this.countLabel}}</span>
+					</label>
+					<CanonRow
+						@title="Colours"
+						@form="stacked"
+					>
+						<CanonSegmented
+							@items={{sizeTitles}}
+							@selected={{this.size}}
+							@columns={{3}}
+							@onChange={{this.pickSize}}
+						/>
+					</CanonRow>
+					{{#unless this.searching}}
+						<p
+							class="pc-description"
+						>{{this.category.label}}:
+							{{this.category.description}}</p>
+					{{/unless}}
+				</CanonRows>
+				{{#if this.palette}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text={{this.palette.name}}
+						/>
+						{{#each
+							this.colours
+							as |colour|
+						}}
+							<CanonColourCard
+								@colour={{colour}}
+								@layout="row"
+								@nameOf={{getColourName}}
+								@primaryFormat={{this.format}}
+							/>
+						{{/each}}
+						<LinkTo
+							@route="tools.tool"
+							@model="palette-genny"
+							@query={{hash
+								colors=this.colorsQuery
+							}}
+							class="pc-open"
+						>
+							<Icon @name="palette" />
+							Open Palette Generator
+						</LinkTo>
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+/** Titles grow, darken and gain weight towards the centre line. */
+function focusStyle(focus: number) {
+	return htmlSafe(
+		`--pc-focus: ${focus}; font-size: ${15 + 5 * focus}px; font-weight: ${400 + Math.round(200 * focus)}`,
+	);
 }

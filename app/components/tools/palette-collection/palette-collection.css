@@ -1,0 +1,293 @@
+/* the deck: chips hang from a rivet near the top leading corner */
+.pc-deck {
+	position: relative;
+	container-type: size;
+	block-size: 100%;
+	overflow: hidden;
+	font-family: var(--canon-font);
+}
+
+.pc-deck-fan {
+	--pc-len: calc(min(100cqi, 100cqb) * 0.8 - 12px);
+	--pc-chip: calc(var(--pc-len) * 0.19);
+	--pc-tail: calc(var(--pc-chip) * 0.62);
+
+	position: absolute;
+	inset-block-start: calc(14px + var(--pc-len) * 0.15);
+	inset-inline-start: calc(16px + var(--pc-len) * 0.15);
+}
+
+.pc-chip {
+	position: absolute;
+	inset-block-start: calc(var(--pc-len) * -1);
+	inset-inline-start: calc(var(--pc-chip) / -2);
+	display: flex;
+	box-sizing: border-box;
+	justify-content: center;
+	inline-size: var(--pc-chip);
+	block-size: calc(var(--pc-len) + var(--pc-tail));
+	margin: 0;
+	padding: 10px 0 0;
+	border: 0;
+	border-radius: 3px;
+	box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+	cursor: pointer;
+	transform-origin: 50% var(--pc-len);
+	rotate: var(--pc-angle);
+	animation: pc-fan 520ms cubic-bezier(0.34, 1.5, 0.64, 1) var(--pc-delay)
+		backwards;
+	appearance: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.pc-chip:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+@keyframes pc-fan {
+	from {
+		rotate: 97deg;
+	}
+}
+
+.pc-chip-hex {
+	rotate: 180deg;
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	writing-mode: vertical-rl;
+}
+
+.pc-chip--cover {
+	padding: 12px 0 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	cursor: default;
+	animation: none;
+}
+
+.pc-cover-text {
+	rotate: 180deg;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: center;
+	overflow: hidden;
+	writing-mode: vertical-rl;
+	white-space: nowrap;
+}
+
+.pc-cover-title {
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.pc-cover-detail {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.pc-rivet {
+	position: absolute;
+	z-index: 100;
+	box-sizing: border-box;
+	inline-size: 10px;
+	block-size: 10px;
+	border: 3px solid
+		color-mix(in srgb, var(--canon-foreground) 55%, transparent);
+	border-radius: 50%;
+	background: var(--canon-muted);
+	translate: -50% -50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pc-chip {
+		animation: none;
+	}
+}
+
+/* the wheels: categories beside their palettes, behind one reading window */
+.pc-wheels {
+	position: relative;
+	display: grid;
+	grid-template-columns: clamp(112px, 36%, 210px) 1fr;
+	gap: var(--canon-hairline);
+	block-size: 100%;
+	font-family: var(--canon-font);
+}
+
+.pc-window {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-start: calc(50% - 23px);
+	block-size: 46px;
+	border-block: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	pointer-events: none;
+}
+
+.pc-window::before,
+.pc-window::after {
+	position: absolute;
+	inset-block-start: calc(50% - 5px);
+	border-block: 5px solid transparent;
+	content: "";
+}
+
+.pc-window::before {
+	inset-inline-start: 2px;
+	border-inline-start: 7px solid var(--canon-primary);
+}
+
+.pc-window::after {
+	inset-inline-end: 2px;
+	border-inline-end: 7px solid var(--canon-primary);
+}
+
+.pc-shelves {
+	border-inline-end: var(--canon-hairline) solid var(--canon-border);
+	transition: opacity 250ms;
+}
+
+.pc-wheels--searching .pc-shelves {
+	opacity: 0.25;
+	pointer-events: none;
+}
+
+.pc-row {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	block-size: 100%;
+	padding-inline: 20px 12px;
+	color: color-mix(
+		in srgb,
+		var(--canon-foreground) calc(var(--pc-focus) * 100%),
+		var(--canon-muted-foreground)
+	);
+	line-height: 1.15;
+}
+
+.pc-shelves .pc-row {
+	flex-direction: row;
+	gap: 8px;
+	align-items: center;
+}
+
+.pc-row-title {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pc-row-count {
+	opacity: calc(0.5 + var(--pc-focus) * 0.5);
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	font-weight: var(--canon-weight-regular);
+}
+
+.pc-row--palette {
+	gap: 2px;
+	padding-inline: 16px 20px;
+}
+
+.pc-ribbon {
+	flex: none;
+	inline-size: 100%;
+}
+
+.pc-empty {
+	position: absolute;
+	inset: 0 0 0 clamp(112px, 36%, 210px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 16px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-subheadline);
+	text-align: center;
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pc-shelves {
+		transition: none;
+	}
+}
+
+/* search: magnifier, field, count */
+.pc-search {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	min-block-size: var(--canon-row-height);
+	padding-inline: var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+}
+
+.pc-search .dt-icon {
+	display: flex;
+	inline-size: var(--canon-icon-inline);
+	block-size: var(--canon-icon-inline);
+}
+
+.palette-collection .pc-search-field {
+	flex: 1;
+	min-inline-size: 0;
+	padding-inline: 0;
+}
+
+.pc-count {
+	flex: none;
+	font-size: var(--canon-text-footnote);
+	font-variant-numeric: tabular-nums;
+}
+
+.pc-description {
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.3;
+}
+
+/* the open cell, as a kit cell */
+.pc-open {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	min-block-size: var(--canon-control-height);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	text-decoration: none;
+}
+
+.pc-open .dt-icon {
+	display: flex;
+	inline-size: var(--canon-icon-inline);
+	block-size: var(--canon-icon-inline);
+	color: var(--canon-primary);
+}
+
+.pc-open:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+@media (hover: hover) {
+	.pc-open:hover {
+		background: var(--canon-accent-bg);
+	}
+}
