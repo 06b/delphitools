@@ -79,6 +79,7 @@ import iContrast from 'lucide-static/icons/contrast.svg?raw';
 import iCookingPot from 'lucide-static/icons/cooking-pot.svg?raw';
 import iCopy from 'lucide-static/icons/copy.svg?raw';
 import iCopyPlus from 'lucide-static/icons/copy-plus.svg?raw';
+import iCornerLeftUp from 'lucide-static/icons/corner-left-up.svg?raw';
 import iCrop from 'lucide-static/icons/crop.svg?raw';
 import iCrosshair from 'lucide-static/icons/crosshair.svg?raw';
 import iDices from 'lucide-static/icons/dices.svg?raw';
@@ -337,6 +338,7 @@ export const icons: Record<string, string> = {
 	'cooking-pot': iCookingPot,
 	copy: iCopy,
 	'copy-plus': iCopyPlus,
+	'corner-left-up': iCornerLeftUp,
 	crop: iCrop,
 	crosshair: iCrosshair,
 	dices: iDices,

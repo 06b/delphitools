@@ -277,7 +277,7 @@ async function algebraAnswers(input: string): Promise<OmniAnswer[]> {
 		return [];
 
 	const { compute } =
-		await import('delphitools-v2/components/tools/algebra-calc');
+		await import('delphitools-v2/components/tools/algebra-calc/algebra');
 	const math = await import('mathjs');
 	// infer first variable
 	const variable = /[a-zA-Z]/.exec(input)?.[0] ?? 'x';

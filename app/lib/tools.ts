@@ -1001,6 +1001,7 @@ export const toolCategories: ToolCategory[] = [
 					'Symbolic algebra: simplify, factor, solve, derivatives',
 				icon: 'variable',
 				href: '/tools/algebra-calc',
+				canon: true,
 			},
 			{
 				id: 'base-converter',
