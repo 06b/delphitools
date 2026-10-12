@@ -539,6 +539,12 @@
 	grid-auto-flow: column;
 }
 
+// icon beside label
+.err-strip-cell {
+	grid-auto-flow: column;
+	gap: 5px;
+}
+
 .err-mode-input {
 	inline-size: 140px;
 	block-size: 24px;

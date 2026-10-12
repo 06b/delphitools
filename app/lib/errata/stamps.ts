@@ -62,7 +62,7 @@ export function textWidth(text: string, size: number, bold = false): number {
 	return width;
 }
 
-function textObject(
+export function textObject(
 	text: string,
 	size: number,
 	colour: string,

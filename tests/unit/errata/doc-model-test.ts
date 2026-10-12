@@ -3,8 +3,11 @@ import {
 	applyMatrix,
 	blankPage,
 	contentPlacement,
+	cropFromDisplayed,
 	displayedToUnrotated,
 	displayedToUser,
+	flipAnchor,
+	flipPage,
 	pageSize,
 	rotateAnchor,
 	rotatePage,
@@ -13,6 +16,7 @@ import {
 	unrotatedToDisplayed,
 	withCrop,
 	withResize,
+	type ErrataPage,
 	type Rotation,
 } from 'delphitools-v2/lib/errata/doc-model';
 import { ANCHORS } from 'delphitools-v2/lib/pdf-stamp';
@@ -312,5 +316,186 @@ module('Unit | errata | doc-model | tiles', function () {
 			Math.round((800 - 400 * s) / 2),
 		);
 		assert.strictEqual(p.y, 0);
+	});
+});
+
+module('Unit | errata | doc-model | flip', function () {
+	const textAt = (cx: number, cy: number, angle = 0) => ({
+		id: 'a',
+		kind: 'text' as const,
+		cx,
+		cy,
+		w: 10,
+		h: 10,
+		scaleX: 1,
+		scaleY: 1,
+		angle,
+		text: 'x',
+		fontSize: 12,
+		colour: '#000',
+	});
+	const displayed = (page: ErrataPage, x: number, y: number) => {
+		const { width, height } = pageSize(page);
+		const m = tileTransform(page, { x: 0, y: 0, width, height }, 1);
+		return applyMatrix(m, x, y);
+	};
+	const near = (
+		assert: Assert,
+		a: { x: number; y: number },
+		b: { x: number; y: number },
+		label: string,
+	) =>
+		assert.ok(
+			Math.abs(a.x - b.x) < 1e-9 &&
+				Math.abs(a.y - b.y) < 1e-9,
+			`${label}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`,
+		);
+
+	test('flipPage mirrors objects and round trips', function (assert) {
+		const page = {
+			...blankPage(600, 800),
+			objects: [textAt(100, 50, 30)],
+		};
+		const h = flipPage(page, 'horizontal');
+		assert.true(h.flipX);
+		assert.notOk(h.flipY);
+		const o = h.objects[0]!;
+		assert.deepEqual([o.cx, o.cy, o.angle], [500, 50, -30]);
+		const v = flipPage(page, 'vertical');
+		assert.true(v.flipY);
+		assert.deepEqual(
+			[v.objects[0]!.cx, v.objects[0]!.cy],
+			[100, 750],
+		);
+		const back = flipPage(h, 'horizontal');
+		assert.notOk(back.flipX);
+		assert.deepEqual(back.objects[0], page.objects[0]);
+	});
+
+	test('a displayed flip on a turned page mirrors the display', function (assert) {
+		for (const turns of [0, 1, 2, 3]) {
+			let page = blankPage(400, 600);
+			for (let i = 0; i < turns; i++)
+				page = rotatePage(page, 1);
+			const { width, height } = pageSize(page);
+			const h = flipPage(page, 'horizontal');
+			const v = flipPage(page, 'vertical');
+			assert.strictEqual(
+				!!h.flipX,
+				turns % 2 === 0,
+				`turns ${turns}`,
+			);
+			for (const [x, y] of [
+				[0, 0],
+				[30, 70],
+				[400, 600],
+			] as const) {
+				const d = displayed(page, x, y);
+				near(
+					assert,
+					displayed(h, x, y),
+					{ x: width - d.x, y: d.y },
+					`h ${turns}`,
+				);
+				near(
+					assert,
+					displayed(v, x, y),
+					{ x: d.x, y: height - d.y },
+					`v ${turns}`,
+				);
+			}
+		}
+	});
+
+	test('rotating after a flip keeps the content mirrored', function (assert) {
+		const page = rotatePage(
+			flipPage(blankPage(400, 600), 'horizontal'),
+			1,
+		);
+		// mirrored to top-right, turned to bottom-right
+		near(
+			assert,
+			displayed(page, 0, 0),
+			{ x: 600, y: 400 },
+			'corner',
+		);
+	});
+
+	test('objects stay on the content through crop on a flipped page', function (assert) {
+		const base = rotatePage(
+			flipPage(
+				flipPage(blankPage(400, 600), 'horizontal'),
+				'vertical',
+			),
+			1,
+		);
+		const s = { x: 120, y: 200 };
+		const d = displayed(base, s.x, s.y);
+		const page = { ...base, objects: [textAt(d.x, d.y)] };
+		const cropped = withCrop(page, {
+			x: 100,
+			y: 150,
+			width: 200,
+			height: 300,
+		});
+		const o = cropped.objects[0]!;
+		near(
+			assert,
+			{ x: o.cx, y: o.cy },
+			displayed(cropped, s.x, s.y),
+			'crop',
+		);
+		const resized = withResize(cropped, {
+			width: 500,
+			height: 500,
+			mode: 'fit',
+			anchor: 'top-left',
+		});
+		const r = resized.objects[0]!;
+		near(
+			assert,
+			{ x: r.cx, y: r.cy },
+			displayed(resized, s.x, s.y),
+			'resize',
+		);
+	});
+
+	test('cropFromDisplayed reads through the flip', function (assert) {
+		const page = flipPage(blankPage(600, 800), 'horizontal');
+		assert.deepEqual(
+			cropFromDisplayed(page, {
+				x: 0,
+				y: 0,
+				width: 100,
+				height: 50,
+			}),
+			{ x: 500, y: 0, width: 100, height: 50 },
+		);
+		assert.strictEqual(
+			cropFromDisplayed(page, {
+				x: 10,
+				y: 10,
+				width: 2,
+				height: 50,
+			}),
+			null,
+		);
+	});
+
+	test('flipAnchor', function (assert) {
+		const page = blankPage(10, 10);
+		const x = { ...page, flipX: true };
+		const y = { ...page, flipY: true };
+		const xy = { ...page, flipX: true, flipY: true };
+		assert.strictEqual(flipAnchor('top-left', x), 'top-right');
+		assert.strictEqual(flipAnchor('top-left', y), 'bottom-left');
+		assert.strictEqual(
+			flipAnchor('top-center', xy),
+			'bottom-center',
+		);
+		assert.strictEqual(
+			flipAnchor('middle-center', x),
+			'middle-center',
+		);
 	});
 });

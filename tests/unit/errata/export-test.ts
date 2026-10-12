@@ -1,7 +1,15 @@
 import { module, test } from 'qunit';
-import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
+import {
+	PDFArray,
+	PDFDict,
+	PDFDocument,
+	PDFName,
+	decodePDFRawStream,
+	type PDFRawStream,
+} from 'pdf-lib';
 import {
 	blankPage,
+	flipPage,
 	rotatePage,
 	withCrop,
 	withResize,
@@ -204,5 +212,45 @@ module('Unit | errata | export', function () {
 			[50, 100, 100, 200],
 		);
 		assert.deepEqual([p2!.getWidth(), p2!.getHeight()], [100, 100]);
+	});
+
+	test('a flipped page draws its source through a mirror matrix', async function (assert) {
+		const source = await PDFDocument.create();
+		source.addPage([300, 400]).drawText('a', { x: 10, y: 10 });
+		const bytes = await source.save();
+		const page = flipPage(
+			{ ...blankPage(300, 400), sourceIndex: 0 },
+			'horizontal',
+		);
+		const result = await PDFDocument.load(
+			await exportPdf({ name: 'x', pages: [page] }, bytes),
+		);
+		const p0 = result.getPage(0);
+		assert.deepEqual([p0.getWidth(), p0.getHeight()], [300, 400]);
+		const contents = p0.node.Contents();
+		const streams =
+			contents instanceof PDFArray
+				? contents
+						.asArray()
+						.map((r) =>
+							result.context.lookup(
+								r,
+							),
+						)
+				: [contents];
+		const text = streams
+			.map((s) =>
+				new TextDecoder('latin1').decode(
+					decodePDFRawStream(
+						s as PDFRawStream,
+					).decode(),
+				),
+			)
+			.join('\n');
+		assert.ok(/-1 0 0 1 300 0 cm/.test(text), text);
+		assert.ok(
+			p0.node.Resources()?.lookup(PDFName.of('XObject')),
+			'embedded page xobject',
+		);
 	});
 });

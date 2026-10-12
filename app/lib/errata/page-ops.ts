@@ -19,7 +19,9 @@ import {
 	store,
 	updatePage,
 } from './store';
+import { duplicatePages, updatePages } from './organise';
 import { imagePage } from './source';
+import { textObject } from './stamps';
 import { setActiveTool } from './tool';
 import { selectObject } from './ui';
 
@@ -60,11 +62,56 @@ export function insertPageAfter(pageId: string | null, page: ErrataPage): void {
 	insertPageAt(at + 1, page);
 }
 
+function sizeOf(pageId: string): { width: number; height: number } {
+	const ref = store.getSnapshot()?.pages.find((p) => p.id === pageId);
+	return ref ? pageSize(ref) : A4_POINTS;
+}
+
 export function insertBlankAfter(pageId: string): void {
+	const { width, height } = sizeOf(pageId);
+	insertPageAfter(pageId, blankPage(width, height));
+}
+
+export function duplicateAfter(pageId: string): void {
+	updatePages((pages) => duplicatePages(pages, new Set([pageId])));
 	const doc = store.getSnapshot();
-	const ref = doc?.pages.find((p) => p.id === pageId);
-	const size = ref ? pageSize(ref) : A4_POINTS;
-	insertPageAfter(pageId, blankPage(size.width, size.height));
+	if (doc) setPageIndex(doc.pages.findIndex((p) => p.id === pageId) + 1);
+}
+
+/** one black pixel image */
+export function insertBlackAfter(pageId: string): void {
+	const { width, height } = sizeOf(pageId);
+	const pixel = document.createElement('canvas');
+	pixel.width = pixel.height = 1;
+	pixel.getContext('2d')!.fillRect(0, 0, 1, 1);
+	insertPageAfter(pageId, {
+		...blankPage(width, height),
+		image: {
+			dataUrl: pixel.toDataURL('image/png'),
+			naturalWidth: 1,
+			naturalHeight: 1,
+		},
+	});
+}
+
+const TEXT_PAGE_SIZE = 48;
+
+/** centred, selected text */
+export function insertTextPageAfter(pageId: string, text: string): void {
+	const { width, height } = sizeOf(pageId);
+	const object = textObject(
+		text,
+		TEXT_PAGE_SIZE,
+		'#000000',
+		width / 2,
+		height / 2,
+	);
+	insertPageAfter(pageId, {
+		...blankPage(width, height),
+		objects: [object],
+	});
+	setActiveTool('select');
+	selectObject(object.id);
 }
 
 export function resizePage(pageId: string, resize: PageResize | null): void {
