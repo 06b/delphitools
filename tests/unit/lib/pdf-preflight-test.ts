@@ -6,6 +6,7 @@ import {
 	colourIssues,
 	formatSize,
 	groupByPage,
+	imagePlacements,
 	type PreflightIssue,
 } from 'delphitools-v2/lib/pdf-preflight';
 
@@ -118,5 +119,61 @@ module('Unit | lib | pdf-preflight', function () {
 		assert.true(
 			messages().includes('Mixed page orientations detected'),
 		);
+	});
+
+	test('imagePlacements follows the ctm', function (assert) {
+		const ops = {
+			save: 1,
+			restore: 2,
+			transform: 3,
+			paintFormXObjectBegin: 4,
+			paintFormXObjectEnd: 5,
+			beginAnnotation: 6,
+			endAnnotation: 7,
+			paintImageXObject: 8,
+			paintImageXObjectRepeat: 9,
+		};
+		const fns = [1, 3, 8, 2, 4, 3, 8, 5, 8, 6, 8, 7, 9];
+		const args: unknown[][] = [
+			[],
+			[100, 0, 0, 50, 10, 20],
+			['a'],
+			[],
+			[
+				[2, 0, 0, 2, 0, 0],
+				[0, 0, 10, 10],
+			],
+			[0, 10, -10, 0, 5, 5],
+			['b'],
+			[],
+			['c'],
+			[
+				'x',
+				[0, 0, 1, 1],
+				[1, 0, 0, 1, 30, 40],
+				[10, 0, 0, 10, 0, 0],
+			],
+			['d'],
+			[],
+			['e', 4, 4, [0, 0, 100, 100]],
+		];
+		const placed = imagePlacements(fns, args, ops);
+		assert.deepEqual(placed.get('a'), [
+			{ x: 10, y: 20, width: 100, height: 50 },
+		]);
+		// form matrix then rotation
+		assert.deepEqual(placed.get('b'), [
+			{ x: -10, y: 10, width: 20, height: 20 },
+		]);
+		assert.deepEqual(placed.get('c'), [
+			{ x: 0, y: 0, width: 1, height: 1 },
+		]);
+		assert.deepEqual(placed.get('d'), [
+			{ x: 30, y: 40, width: 10, height: 10 },
+		]);
+		assert.deepEqual(placed.get('e'), [
+			{ x: 0, y: 0, width: 4, height: 4 },
+			{ x: 100, y: 100, width: 4, height: 4 },
+		]);
 	});
 });

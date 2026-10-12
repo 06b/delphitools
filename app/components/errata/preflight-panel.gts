@@ -11,12 +11,18 @@ import type { ErrataDoc } from 'delphitools-v2/lib/errata/doc-model';
 import { exportPdf } from 'delphitools-v2/lib/errata/export';
 import { getSourceBytes } from 'delphitools-v2/lib/errata/source';
 import { setPageIndex, store } from 'delphitools-v2/lib/errata/store';
-import { getMode, setMode, subscribeUi } from 'delphitools-v2/lib/errata/ui';
+import {
+	flashHighlight,
+	getMode,
+	setMode,
+	subscribeUi,
+} from 'delphitools-v2/lib/errata/ui';
 import {
 	SEVERITY_ICON,
 	badges,
 	groupByPage,
 	runPreflight,
+	type PreflightIssue,
 	type PreflightReport,
 } from 'delphitools-v2/lib/pdf-preflight';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
@@ -108,6 +114,12 @@ export default class PreflightPanel extends Component {
 
 	goTo = (page: number) => setPageIndex(page - 1);
 
+	showIssue = (issue: PreflightIssue) => {
+		if (!issue.page) return;
+		this.goTo(issue.page);
+		flashHighlight(issue.page - 1, issue.rects ?? []);
+	};
+
 	close = () => setMode(null);
 
 	<template>
@@ -178,8 +190,8 @@ export default class PreflightPanel extends Component {
 							{{on
 								"click"
 								(fn
-									this.goTo
-									g.page
+									this.showIssue
+									issue
 								)
 							}}
 						>

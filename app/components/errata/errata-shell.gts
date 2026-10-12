@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import { on } from '@ember/modifier';
 import Icon from 'delphitools-v2/components/icon';
+import CommentPopover from 'delphitools-v2/components/errata/comment-popover';
 import Omnibar from 'delphitools-v2/components/errata/omnibar';
 import PageCanvas from 'delphitools-v2/components/errata/page-canvas';
 import PageRail from 'delphitools-v2/components/errata/page-rail';
@@ -259,6 +260,7 @@ export default class ErrataShell extends Component {
 					{{#if this.doc.current}}
 						<Omnibar />
 						<PreflightPanel />
+						<CommentPopover />
 					{{else}}
 						<div class="sub-empty-hint">
 							<div

@@ -31,6 +31,8 @@ export interface PreflightIssue {
 	message: string;
 	page?: number;
 	details?: string;
+	/** object bounds, viewport points at scale 1 */
+	rects?: PageBox[];
 }
 
 export interface PageBox {
@@ -665,6 +667,120 @@ export function colourIssues(spaces: string[], page: number): PreflightIssue[] {
 	return issues;
 }
 
+type Matrix = [number, number, number, number, number, number];
+
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
+
+function multiply(m: Matrix, n: ArrayLike<number>): Matrix {
+	const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = Array.from(n);
+	return [
+		m[0] * a + m[2] * b,
+		m[1] * a + m[3] * b,
+		m[0] * c + m[2] * d,
+		m[1] * c + m[3] * d,
+		m[0] * e + m[2] * f + m[4],
+		m[1] * e + m[3] * f + m[5],
+	];
+}
+
+function unitSquareBounds(m: Matrix): PageBox {
+	const xs = [m[4], m[0] + m[4], m[2] + m[4], m[0] + m[2] + m[4]];
+	const ys = [m[5], m[1] + m[5], m[3] + m[5], m[1] + m[3] + m[5]];
+	const x = Math.min(...xs);
+	const y = Math.min(...ys);
+	return {
+		x,
+		y,
+		width: Math.max(...xs) - x,
+		height: Math.max(...ys) - y,
+	};
+}
+
+export type PlacementOps = Record<
+	| 'save'
+	| 'restore'
+	| 'transform'
+	| 'paintFormXObjectBegin'
+	| 'paintFormXObjectEnd'
+	| 'beginAnnotation'
+	| 'endAnnotation'
+	| 'paintImageXObject'
+	| 'paintImageXObjectRepeat',
+	number
+>;
+
+/** user-space bounds of every placement of each named image in a pdf.js operator list */
+export function imagePlacements(
+	fnArray: readonly number[],
+	argsArray: readonly unknown[][],
+	ops: PlacementOps,
+): Map<string, PageBox[]> {
+	const out = new Map<string, PageBox[]>();
+	const stack: Matrix[] = [];
+	let ctm = IDENTITY;
+	const place = (name: unknown, m: Matrix) => {
+		if (typeof name !== 'string') return;
+		out.set(name, [...(out.get(name) ?? []), unitSquareBounds(m)]);
+	};
+	for (const [i, fn] of fnArray.entries()) {
+		const args = argsArray[i] ?? [];
+		switch (fn) {
+			case ops.save:
+				stack.push(ctm);
+				break;
+			case ops.restore:
+			case ops.paintFormXObjectEnd:
+			case ops.endAnnotation:
+				ctm = stack.pop() ?? IDENTITY;
+				break;
+			case ops.transform:
+				ctm = multiply(ctm, args as number[]);
+				break;
+			case ops.paintFormXObjectBegin:
+				stack.push(ctm);
+				if (args[0])
+					ctm = multiply(
+						ctm,
+						args[0] as number[],
+					);
+				break;
+			// resets to page space
+			case ops.beginAnnotation:
+				stack.push(ctm);
+				ctm = multiply(
+					multiply(IDENTITY, args[2] as number[]),
+					args[3] as number[],
+				);
+				break;
+			case ops.paintImageXObject:
+				place(args[0], ctm);
+				break;
+			case ops.paintImageXObjectRepeat: {
+				const [name, sx, sy, at] = args as [
+					unknown,
+					number,
+					number,
+					ArrayLike<number>,
+				];
+				for (let p = 0; p + 1 < at.length; p += 2)
+					place(
+						name,
+						multiply(ctm, [
+							sx,
+							0,
+							0,
+							sy,
+							at[p]!,
+							at[p + 1]!,
+						]),
+					);
+				break;
+			}
+		}
+	}
+	return out;
+}
+
 // pdf.js image may never resolve
 function imageSize(
 	objs: {
@@ -754,6 +870,29 @@ export async function analyseWithPdfJs(
 
 		issues.push(...colourIssues([...colourSpaces], i));
 
+		const viewport = page.getViewport({ scale: 1 });
+		const placements = imagePlacements(
+			opList.fnArray,
+			argsArray,
+			OPS,
+		);
+		const rectsOf = (boxes: PageBox[]) =>
+			boxes.map((b) => {
+				const [x1, y1, x2, y2] =
+					viewport.convertToViewportRectangle([
+						b.x,
+						b.y,
+						b.x + b.width,
+						b.y + b.height,
+					]) as [number, number, number, number];
+				return {
+					x: Math.min(x1, x2),
+					y: Math.min(y1, y2),
+					width: Math.abs(x2 - x1),
+					height: Math.abs(y2 - y1),
+				};
+			});
+
 		if (imageCount > 0) {
 			issues.push({
 				severity: 'info',
@@ -761,11 +900,11 @@ export async function analyseWithPdfJs(
 				message: `${imageCount} image${plural(imageCount)} found`,
 				page: i,
 				details: 'Ensure images are at least 300 DPI for print. Low-resolution images may appear pixelated.',
+				rects: rectsOf([...placements.values()].flat()),
 			});
 		}
 
-		// no ctm; assume full-page
-		const viewport = page.getViewport({ scale: 1 });
+		// dpi assumes full page
 		const pageWidthInches = viewport.width / 72;
 		const pageHeightInches = viewport.height / 72;
 
@@ -778,6 +917,7 @@ export async function analyseWithPdfJs(
 				img.height / pageHeightInches,
 			);
 			const rounded = Math.round(effectiveDpi);
+			const rects = rectsOf(placements.get(imgName) ?? []);
 
 			if (effectiveDpi < 72) {
 				issues.push({
@@ -786,6 +926,7 @@ export async function analyseWithPdfJs(
 					message: `Very low resolution image (~${rounded} DPI at full page)`,
 					page: i,
 					details: `Image "${imgName}" is ${img.width}x${img.height}px (~${rounded} DPI if filling the page). This will appear pixelated in print.`,
+					rects,
 				});
 			} else if (effectiveDpi < 150) {
 				issues.push({
@@ -794,6 +935,7 @@ export async function analyseWithPdfJs(
 					message: `Low resolution image (~${rounded} DPI at full page)`,
 					page: i,
 					details: `Image "${imgName}" is ${img.width}x${img.height}px (~${rounded} DPI if filling the page). For best quality, use 300 DPI or higher.`,
+					rects,
 				});
 			}
 		}
