@@ -307,7 +307,7 @@ check(
 );
 await page.click('.media-job-save');
 await page.waitForFunction(
-	() => document.querySelectorAll('.dt-an-cell').length === 4,
+	() => document.querySelectorAll('.an-readings .canon-tiles-tile').length === 4,
 	{ timeout: 20000 },
 );
 await flowSettled();
@@ -317,15 +317,15 @@ check(
 	state.path === '/tools/audio-normaliser' && state.steps.join() === 'done,current',
 	JSON.stringify(state),
 );
-await page.click('.dt-an-go');
-await page.waitForSelector('.dt-an-out', { timeout: 30000 });
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 });
 check(
 	'the last step control reads Pass along too',
-	(await buttonText('.dt-an-btn.is-primary')) === 'Pass along',
-	await buttonText('.dt-an-btn.is-primary'),
+	(await buttonText('.media-job-save')) === 'Pass along',
+	await buttonText('.media-job-save'),
 );
 await captureObjectUrl(page);
-await page.click('.dt-an-btn.is-primary');
+await page.click('.media-job-save');
 await page.waitForSelector('.dt-flow-next.is-done', { timeout: 10000 });
 await page.evaluate(() => {
 	window.__result = undefined;

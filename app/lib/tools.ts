@@ -504,6 +504,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Normalise audio loudness',
 				icon: 'gauge',
 				href: '/tools/audio-normaliser',
+				canon: true,
 				produces: ['audio/wav'],
 				accepts: AUDIO_ACCEPT,
 				new: true,
