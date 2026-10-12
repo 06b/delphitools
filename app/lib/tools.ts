@@ -152,6 +152,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'contrast',
 				href: '/tools/contrast-checker',
 				carryColour: true,
+				canon: true,
 			},
 			{
 				id: 'gradient-genny',

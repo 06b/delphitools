@@ -32,6 +32,7 @@ import iAudioWaveform from 'lucide-static/icons/audio-waveform.svg?raw';
 import iAxis3d from 'lucide-static/icons/axis-3d.svg?raw';
 import iBanana from 'lucide-static/icons/banana.svg?raw';
 import iBarcode from 'lucide-static/icons/barcode.svg?raw';
+import iBell from 'lucide-static/icons/bell.svg?raw';
 import iBinary from 'lucide-static/icons/binary.svg?raw';
 import iBlend from 'lucide-static/icons/blend.svg?raw';
 import iBold from 'lucide-static/icons/bold.svg?raw';
@@ -233,6 +234,7 @@ import iTag from 'lucide-static/icons/tag.svg?raw';
 import iTerminal from 'lucide-static/icons/terminal.svg?raw';
 import iTextCursorInput from 'lucide-static/icons/text-cursor-input.svg?raw';
 import iThermometer from 'lucide-static/icons/thermometer.svg?raw';
+import iToggleRight from 'lucide-static/icons/toggle-right.svg?raw';
 import iTrash2 from 'lucide-static/icons/trash-2.svg?raw';
 import iTriangle from 'lucide-static/icons/triangle.svg?raw';
 import iTriangleAlert from 'lucide-static/icons/triangle-alert.svg?raw';
@@ -245,6 +247,7 @@ import iVariable from 'lucide-static/icons/variable.svg?raw';
 import iVectorSquare from 'lucide-static/icons/vector-square.svg?raw';
 import iVolumeX from 'lucide-static/icons/volume-x.svg?raw';
 import iWand2 from 'lucide-static/icons/wand-2.svg?raw';
+import iWandSparkles from 'lucide-static/icons/wand-sparkles.svg?raw';
 import iWind from 'lucide-static/icons/wind.svg?raw';
 import iWorkflow from 'lucide-static/icons/workflow.svg?raw';
 import iWrench from 'lucide-static/icons/wrench.svg?raw';
@@ -287,6 +290,7 @@ export const icons: Record<string, string> = {
 	'axis-3d': iAxis3d,
 	banana: iBanana,
 	barcode: iBarcode,
+	bell: iBell,
 	binary: iBinary,
 	blend: iBlend,
 	bold: iBold,
@@ -488,6 +492,7 @@ export const icons: Record<string, string> = {
 	terminal: iTerminal,
 	'text-cursor-input': iTextCursorInput,
 	thermometer: iThermometer,
+	'toggle-right': iToggleRight,
 	'trash-2': iTrash2,
 	triangle: iTriangle,
 	'triangle-alert': iTriangleAlert,
@@ -500,6 +505,7 @@ export const icons: Record<string, string> = {
 	'vector-square': iVectorSquare,
 	'volume-x': iVolumeX,
 	'wand-2': iWand2,
+	'wand-sparkles': iWandSparkles,
 	wind: iWind,
 	workflow: iWorkflow,
 	wrench: iWrench,
