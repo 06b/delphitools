@@ -145,7 +145,7 @@ check(
 	'body text uses the self-hosted face',
 	await page.evaluate(() =>
 		getComputedStyle(document.body).fontFamily.includes(
-			'iA Writer',
+			'Open Sans Condensed',
 		),
 	),
 	await page.evaluate(

@@ -119,7 +119,24 @@
 @use "errata";
 @use "errata-organise";
 
-// weight axis 400–700, self-hosted
+// open sans pinned wdth 75, wght 400–700
+@font-face {
+	font-family: "Open Sans Condensed";
+	src: url("/fonts/OpenSansCondensedV.woff2") format("woff2");
+	font-weight: 400 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Open Sans Condensed";
+	src: url("/fonts/OpenSansCondensedV-Italic.woff2") format("woff2");
+	font-weight: 400 700;
+	font-style: italic;
+	font-display: swap;
+}
+
+// subtitle burn-in and recipe export
 @font-face {
 	font-family: "iA Writer Quattro";
 	src: url("/fonts/iAWriterQuattroV.woff2") format("woff2");

@@ -2390,7 +2390,7 @@ export default class FabricCanvas extends Component {
 					);
 					ctx.save();
 					ctx.font =
-						'bold 9.5px "iA Writer Quattro", ui-monospace, monospace';
+						'bold 9.5px "Open Sans Condensed", system-ui, sans-serif';
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
 					for (const neighbour of [
@@ -2576,7 +2576,7 @@ export default class FabricCanvas extends Component {
 				}
 				ctx.save();
 				ctx.font =
-					'10.5px "iA Writer Quattro", ui-monospace, monospace';
+					'10.5px "Open Sans Condensed", system-ui, sans-serif';
 				const w = ctx.measureText(text).width + 14;
 				const h = 17;
 				let bx = dragBadge.px + 14;
@@ -2644,7 +2644,7 @@ export default class FabricCanvas extends Component {
 				ctx.stroke();
 				ctx.fillStyle = muted;
 				ctx.font =
-					'9px "iA Writer Quattro", ui-monospace, monospace';
+					'9px "Open Sans Condensed", system-ui, sans-serif';
 				ctx.textBaseline = 'top';
 				ctx.textAlign = 'left';
 				for (

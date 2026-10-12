@@ -56,6 +56,10 @@ own licences, which continue to apply to them:
       MediaInfoLib, BSD-2-Clause; see LICENSE.mediainfo.txt in that
       directory.
 
+  public/fonts/OpenSansCondensedV.woff2, OpenSansCondensedV-Italic.woff2
+      Open Sans (The Open Sans Project Authors), SIL Open Font License
+      1.1; instanced at width 75, weight 400 to 700.
+
   public/fonts/iAWriterQuattroV.woff2, iAWriterQuattroV-Italic.woff2
       iA Writer Quattro (Information Architects), SIL Open Font License 1.1.
 

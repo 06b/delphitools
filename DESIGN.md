@@ -59,8 +59,8 @@ where `n` is 0.25rem units: `size(4)` = 1rem = 16px, `size(10)` = 2.5rem = 40px,
 - `font-size("xs" | "sm" | "base" | "lg" | "xl" | "2xl" | … "5xl")`. The UI runs
   small: `sm` and `xs` dominate; `lg` is a section heading.
 - `font-weight("normal" | "medium" | "semibold" | "bold")`.
-- `font-family("mono" | "sans" | "serif")` — mono and sans both resolve to iA
-  Writer Quattro (section 4).
+- `font-family("mono" | "sans" | "serif")` — sans is Open Sans Condensed, mono
+  the system monospace stack (section 4).
 - `color("amber-500", …)` — the Tailwind palette, for the rare fixed colour that
   is not a theme token.
 - `tracking(...)`, `leading(...)`, `rounded(...)` — letter-spacing, line-height,
@@ -82,16 +82,19 @@ where `n` is 0.25rem units: `size(4)` = 1rem = 16px, `size(10)` = 2.5rem = 40px,
 
 ## 4. Typography
 
-- One UI typeface: **iA Writer Quattro**, a self-hosted variable font
-  (`public/fonts/…`, weight axis 400–700), declared as an `@font-face` pair in
-  `app.scss`. Do not add another face.
-- Crayon's `$font-families` maps **both** `mono` and `sans` to iA Writer Quattro,
-  and `$default-font` is `mono`, so the whole UI reads as one monospaced-feeling
-  family. `serif` stays a real serif stack (Georgia) for the rare serif need.
-- Body text is Quattro by default. For a specific element, `font-family:
-var(--font-mono)` also resolves to Quattro. Quattro is duospaced, not strictly
-  monospaced; for columnar number alignment add `font-variant-numeric:
-tabular-nums` (used throughout for page counts, readouts, sizes).
+- One UI typeface: **Open Sans Condensed**, Open Sans instanced at width 75 as a
+  self-hosted variable font (`public/fonts/OpenSansCondensedV*.woff2`, weight axis
+  400–700), declared as an `@font-face` pair in `app.scss`. It is the Canon kit's
+  typeface and stands in for the iOS app's SF condensed width.
+- Crayon's `$font-families` maps `sans` (the default, on `body`) to Open Sans
+  Condensed and `mono` to the system monospace stack (`ui-monospace`, Menlo, ...),
+  as iOS pairs its condensed sans with the monospaced system face for code and
+  figures. `serif` stays a real serif stack (Georgia) for the rare serif need.
+- Open Sans is proportional; for columnar number alignment add
+  `font-variant-numeric: tabular-nums` (used throughout for page counts,
+  readouts, sizes).
+- iA Writer Quattro is still self-hosted for the subtitle burn-in font choice and
+  the recipe export; the UI does not use it.
 
 ---
 
