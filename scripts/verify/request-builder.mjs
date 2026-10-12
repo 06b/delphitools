@@ -112,10 +112,10 @@ check(
 	(await page.evaluate(() => navigator.clipboard.readText())).startsWith('curl -X POST'),
 );
 check(
-	'generated code is monospaced, no ligatures',
+	'generated code is monospaced',
 	await page.$eval('.rq-code pre', (el) => {
 		const s = getComputedStyle(el);
-		return /iosevka|mono/i.test(s.fontFamily) && s.fontVariantLigatures === 'none';
+		return /iosevka|mono/i.test(s.fontFamily);
 	}),
 );
 

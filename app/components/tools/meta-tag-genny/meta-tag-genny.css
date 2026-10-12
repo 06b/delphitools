@@ -243,7 +243,6 @@
 .canon-text-cell.mt-cell--url {
 	inline-size: 300px;
 	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
 }
 
 .canon-text-area.mt-description {
@@ -254,8 +253,3 @@
 	color: var(--canon-destructive);
 }
 
-/* code reads as code */
-.meta-tag-genny .mt-code {
-	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
-}

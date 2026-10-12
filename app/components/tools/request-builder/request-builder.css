@@ -106,7 +106,6 @@
 .rq-listing {
 	font-family: var(--canon-mono-font);
 	font-size: 12px;
-	font-variant-ligatures: none;
 	line-height: 18px;
 }
 
@@ -163,7 +162,6 @@
 .canon-text-cell.rq-url {
 	inline-size: 100%;
 	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
 }
 
 .rq-pairs {
@@ -182,7 +180,6 @@
 	inline-size: auto;
 	font-family: var(--canon-mono-font);
 	font-size: 14px;
-	font-variant-ligatures: none;
 }
 
 .canon-button.rq-pair-remove {
@@ -198,12 +195,10 @@
 
 .canon-text-area.rq-body {
 	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
 }
 
 /* the outputs read as code */
 .request-builder .rq-code,
 .request-builder .rq-target .canon-value-line-value {
 	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
 }

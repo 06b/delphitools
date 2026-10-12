@@ -64,7 +64,6 @@
 .jwt-token {
 	display: grid;
 	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
 	font-size: 15px;
 	line-height: 1.5;
 }
@@ -287,8 +286,3 @@
 	background: var(--jwt-state);
 }
 
-/* code reads as code */
-.jwt-decoder .jwt-code {
-	font-family: var(--canon-mono-font);
-	font-variant-ligatures: none;
-}

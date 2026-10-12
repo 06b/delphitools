@@ -77,10 +77,10 @@ check(
 	s.scale,
 );
 check(
-	'the code is monospaced, no ligatures',
+	'the code is monospaced',
 	await page.$eval('.so-code pre', (el) => {
 		const style = getComputedStyle(el);
-		return /iosevka|mono/i.test(style.fontFamily) && style.fontVariantLigatures === 'none';
+		return /iosevka|mono/i.test(style.fontFamily);
 	}),
 );
 check(

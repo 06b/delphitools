@@ -171,11 +171,6 @@
 	line-height: 1.3;
 }
 
-/* code is monospaced; the kit block sets the text face */
-.tailwind-shades .canon-code-block-code {
-	font-family: var(--canon-mono-font);
-}
-
 .tw-ramp-reading {
 	position: absolute;
 	inline-size: 1px;

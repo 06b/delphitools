@@ -65,7 +65,7 @@ own licences, which continue to apply to them:
 
   public/fonts/Iosevka-400.woff2, Iosevka-700.woff2
       Iosevka (Renzhi Li), SIL Open Font License 1.1; subset to Latin-1,
-      punctuation, arrows and box drawing.
+      punctuation, arrows and box drawing, ligature features removed.
 
   public/fonts/NotoSansShavian-Regular.woff2
       Noto Sans Shavian (Google), SIL Open Font License 1.1.

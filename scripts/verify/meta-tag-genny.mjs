@@ -113,10 +113,10 @@ await sleep(300);
 check('Copy copies the tags', (await page.evaluate(() => navigator.clipboard.readText())) === tags);
 check('and the toast confirms', await page.$eval('.canon-toast', (t) => t.style.opacity === '1'));
 check(
-	'generated code is monospaced, no ligatures',
+	'generated code is monospaced',
 	await page.$eval('.mt-code pre', (el) => {
 		const style = getComputedStyle(el);
-		return /iosevka|mono/i.test(style.fontFamily) && style.fontVariantLigatures === 'none';
+		return /iosevka|mono/i.test(style.fontFamily);
 	}),
 );
 

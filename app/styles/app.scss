@@ -99,7 +99,7 @@
 }
 
 // beats the kit's later :root; iOS sizes, kit scaled them for quattro
-// Iosevka 400 and 700, subset to Latin-1, punctuation, arrows, box drawing
+// Iosevka 400 and 700: Latin-1, punctuation, arrows, box drawing; no ligatures
 @font-face {
 	font-family: Iosevka;
 	src: url("/fonts/Iosevka-400.woff2") format("woff2");
@@ -1054,6 +1054,11 @@ body {
 	--canon-sidebar-cell: transparent;
 
 	gap: 0;
+}
+
+// the kit sets code in --canon-font, which is the sans here
+.dt-sheet .canon-code-block-code {
+	font-family: var(--canon-mono-font);
 }
 
 // porting progress: tools already on the canon kit

@@ -43,7 +43,3 @@
 	padding-inline: var(--canon-panel-padding);
 }
 
-/* the kit code block sets code in the text face */
-.placeholder-genny .canon-code-block-code {
-	font-family: var(--canon-mono-font);
-}
