@@ -13,6 +13,8 @@ export interface HistoryStore<T> {
 	canRedo: () => boolean;
 	undo: () => void;
 	redo: () => void;
+	/** all reachable states, current included */
+	states: () => T[];
 }
 
 const HISTORY_LIMIT = 100;
@@ -81,6 +83,13 @@ export function createHistoryStore<T>(): HistoryStore<T> {
 			if (!state || !base || state === base) return;
 			pushUndo(base);
 		},
+		states: () =>
+			[
+				state,
+				transientBase,
+				...undoStack,
+				...redoStack,
+			].filter((s): s is T => s !== null),
 		canUndo: () => undoStack.length > 0,
 		canRedo: () => redoStack.length > 0,
 		undo() {

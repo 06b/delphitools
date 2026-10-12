@@ -1,3 +1,4 @@
+import type { PDFDocument } from 'pdf-lib';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { getPdfJs, loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
 import { PX_TO_POINTS } from 'delphitools-v2/lib/pdf-pages';
@@ -10,28 +11,50 @@ import {
 	tileTransform,
 	totalRotation,
 	unrotatedSize,
+	type ErrataDoc,
 	type ErrataPage,
 	type PageCrop,
 	type Rotation,
 } from './doc-model';
 import { store, setPageIndex } from './store';
-import { cleanDoc, editedBytes, setContentSource } from './content';
+import { editedBytes, loadSourceDoc, setContentSource } from './content';
 import { readComments } from './comments';
+import { exportPdf } from './export';
 
+// doc.source keys this
+const versions = new Map<string, Uint8Array>();
+let sourceId: string | undefined;
 let sourceBytes: Uint8Array | null = null;
-let sourcePdf: PDFDocumentProxy | null = null;
+let sourcePdf: Promise<PDFDocumentProxy | null> = Promise.resolve(null);
 
 export function getSourceBytes(): Uint8Array | null {
 	return sourceBytes;
 }
 
-async function setSource(bytes: Uint8Array | null): Promise<void> {
-	await sourcePdf?.destroy();
-	sourcePdf = null;
+function useSource(
+	id: string | undefined,
+	preloaded?: { pdf: PDFDocumentProxy; lib: Promise<PDFDocument> },
+): void {
+	if (id === sourceId) return;
+	sourceId = id;
+	const bytes = (id && versions.get(id)) || null;
+	const previous = sourcePdf;
+	sourcePdf = preloaded
+		? Promise.resolve(preloaded.pdf)
+		: bytes
+			? loadPdfDocument(bytes.slice())
+			: Promise.resolve(null);
+	void previous.then((pdf) => pdf?.destroy()).catch(() => undefined);
 	sourceBytes = bytes;
-	setContentSource(bytes);
+	setContentSource(bytes, preloaded?.lib);
 	thumbCache.clear();
-	if (bytes) sourcePdf = await loadPdfDocument(bytes.slice());
+}
+
+// ponytail: one full pdf per held version; bounded by the 100-step history
+function pruneVersions(): void {
+	const live = new Set(store.states().map((d) => d.source));
+	for (const id of versions.keys())
+		if (!live.has(id)) versions.delete(id);
 }
 
 // content edits render from a rebuilt PDF; the build is keyed on the edits alone
@@ -41,13 +64,16 @@ let edited: { sig: string; pdf: Promise<PDFDocumentProxy | null> } | null =
 function editSig(): string {
 	const doc = store.getSnapshot();
 	if (!doc) return '';
-	return doc.pages
+	const edits = doc.pages
 		.filter((p) => p.edits.length > 0)
 		.map((p) => `${p.sourceIndex}:${JSON.stringify(p.edits)}`)
 		.join('|');
+	return edits && `${doc.source}#${edits}`;
 }
 
 store.subscribe(() => {
+	useSource(store.getSnapshot()?.source);
+	pruneVersions();
 	const sig = editSig();
 	if (edited?.sig === sig) return;
 	const previous = edited;
@@ -72,12 +98,17 @@ function stripExt(name: string): string {
 	return name.replace(/\.[^.]+$/, '');
 }
 
-export async function openPdf(file: File): Promise<void> {
-	const bytes = new Uint8Array(await file.arrayBuffer());
-	await setSource(bytes);
-	const pdf = sourcePdf!;
+interface ReadSource {
+	pdf: PDFDocumentProxy;
+	lib: Promise<PDFDocument>;
+	pages: ErrataPage[];
+}
+
+async function readSource(bytes: Uint8Array): Promise<ReadSource> {
+	const pdf = await loadPdfDocument(bytes.slice());
+	const lib = loadSourceDoc(bytes);
 	// pdf-lib stricter than pdf.js
-	const lib = await cleanDoc()?.catch(() => null);
+	const parsed = await lib.catch(() => null);
 	const pages: ErrataPage[] = [];
 	for (let i = 1; i <= pdf.numPages; i++) {
 		const page = await pdf.getPage(i);
@@ -96,12 +127,63 @@ export async function openPdf(file: File): Promise<void> {
 			objects: [],
 			edits: [],
 		};
-		if (lib && !lib.isEncrypted)
-			added.objects = readComments(lib.getPage(i - 1), added);
+		if (parsed && !parsed.isEncrypted)
+			added.objects = readComments(
+				parsed.getPage(i - 1),
+				added,
+			);
 		pages.push(added);
 	}
-	store.setDoc({ name: stripExt(file.name), pages });
+	return { pdf, lib, pages };
+}
+
+// sync with store write
+function adopt(bytes: Uint8Array, read: ReadSource): string {
+	const id = newId();
+	versions.set(id, bytes);
+	useSource(id, read);
+	return id;
+}
+
+export async function openPdf(file: File): Promise<void> {
+	const bytes = new Uint8Array(await file.arrayBuffer());
+	const read = await readSource(bytes);
+	const source = adopt(bytes, read);
+	store.setDoc({ name: stripExt(file.name), pages: read.pages, source });
 	setPageIndex(0);
+}
+
+let replacing = false;
+
+/** undoable; false when unchanged */
+export async function replaceDocument(
+	transform: (bytes: Uint8Array) => Promise<Uint8Array> | Uint8Array,
+): Promise<boolean> {
+	const doc = store.getSnapshot();
+	if (!doc || replacing) return false;
+	replacing = true;
+	try {
+		const bytes = await transform(
+			await exportPdf(doc, getSourceBytes()),
+		);
+		const read = await readSource(bytes);
+		if (store.getSnapshot() !== doc) {
+			void read.pdf.destroy();
+			return false;
+		}
+		const source = adopt(bytes, read);
+		store.update((d): ErrataDoc => ({
+			...d,
+			pages: read.pages,
+			source,
+		}));
+		return true;
+	} catch (error) {
+		console.error(error);
+		return false;
+	} finally {
+		replacing = false;
+	}
 }
 
 export async function imagePage(file: File): Promise<ErrataPage> {
@@ -129,7 +211,6 @@ export async function imagePage(file: File): Promise<ErrataPage> {
 
 export async function openImage(file: File): Promise<void> {
 	const page = await imagePage(file);
-	await setSource(null);
 	store.setDoc({ name: stripExt(file.name), pages: [page] });
 	setPageIndex(0);
 }
@@ -141,7 +222,6 @@ export async function openFile(file: File): Promise<void> {
 }
 
 export function closeDoc(): void {
-	void setSource(null);
 	store.setDoc(null);
 }
 
@@ -199,12 +279,21 @@ async function contentCanvas(
 	const src = await pdf.getPage(page.sourceIndex + 1);
 	const viewport = src.getViewport({ scale, rotation: 0 });
 	const canvas = blank(viewport.width, viewport.height);
-	await src.render({
-		canvasContext: canvas.getContext('2d')!,
-		viewport,
-		canvas,
-	}).promise;
+	try {
+		await src.render({
+			canvasContext: canvas.getContext('2d')!,
+			viewport,
+			canvas,
+		}).promise;
+	} catch (error) {
+		if (!outgoing(error)) throw error;
+	}
 	return canvas;
+}
+
+// source switch destroyed it
+function outgoing(error: unknown): boolean {
+	return (error as Error | null)?.name === 'RenderingCancelledException';
 }
 
 async function rasterise(
@@ -300,7 +389,7 @@ export function renderTile(
 		try {
 			await render.promise;
 		} catch (error) {
-			if (!cancelled) throw error;
+			if (!cancelled && !outgoing(error)) throw error;
 		}
 		return canvas;
 	})();
@@ -356,8 +445,9 @@ export async function pageFontFace(
 	sourceIndex: number,
 	baseFont: string,
 ): Promise<PageFontFace | null> {
-	if (!sourcePdf) return null;
-	const page = await sourcePdf.getPage(sourceIndex + 1);
+	const pdf = await sourcePdf;
+	if (!pdf) return null;
+	const page = await pdf.getPage(sourceIndex + 1);
 	const { OPS } = await getPdfJs();
 	// building the operator list loads the page's fonts into commonObjs and the document
 	const ops = await page.getOperatorList();
@@ -419,7 +509,7 @@ export async function debugActivePdf(): Promise<{
 	const page = await pdf.getPage(1);
 	const ops = await page.getOperatorList();
 	return {
-		edited: pdf !== sourcePdf,
+		edited: pdf !== (await sourcePdf),
 		pages: pdf.numPages,
 		firstPageOps: ops.fnArray.length,
 	};

@@ -163,6 +163,8 @@ export interface ErrataPage {
 export interface ErrataDoc {
 	name: string;
 	pages: ErrataPage[];
+	/** source.ts version id */
+	source?: string;
 }
 
 export function newId(): string {

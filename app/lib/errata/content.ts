@@ -39,13 +39,16 @@ let clean: Promise<PDFDocument> | null = null;
 const cache = new Map<string, PageContent>();
 
 /** source.ts hands the open PDF's bytes over; null closes it */
-export function setContentSource(bytes: Uint8Array | null): void {
+export function setContentSource(
+	bytes: Uint8Array | null,
+	loaded?: Promise<PDFDocument>,
+): void {
 	sourceBytes = bytes;
-	clean = null;
+	clean = loaded ?? null;
 	cache.clear();
 }
 
-function load(bytes: Uint8Array): Promise<PDFDocument> {
+export function loadSourceDoc(bytes: Uint8Array): Promise<PDFDocument> {
 	return PDFDocument.load(bytes, {
 		ignoreEncryption: true,
 		updateMetadata: false,
@@ -54,7 +57,7 @@ function load(bytes: Uint8Array): Promise<PDFDocument> {
 
 export function cleanDoc(): Promise<PDFDocument> | null {
 	if (!sourceBytes) return null;
-	if (!clean) clean = load(sourceBytes);
+	if (!clean) clean = loadSourceDoc(sourceBytes);
 	return clean;
 }
 
@@ -255,7 +258,7 @@ export async function editedBytes(
 ): Promise<Uint8Array | null> {
 	if (!sourceBytes) return null;
 	// ponytail: a fresh load per build; cache the document and restore streams if this is slow on big files
-	const doc = await load(sourceBytes);
+	const doc = await loadSourceDoc(sourceBytes);
 	applyEditsToDoc(doc, pages);
 	return doc.save({ useObjectStreams: false });
 }
