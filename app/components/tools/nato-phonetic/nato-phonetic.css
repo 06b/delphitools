@@ -1,0 +1,230 @@
+/* hoist */
+.np-hoist {
+	block-size: 100%;
+	background: var(--canon-card);
+}
+
+.np-halyard {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline: calc(-1 * var(--np-reach));
+	block-size: 1px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 60%,
+		transparent
+	);
+}
+
+.np-halyard--tackline {
+	background: repeating-linear-gradient(
+		to right,
+		color-mix(
+				in srgb,
+				var(--canon-muted-foreground) 45%,
+				transparent
+			)
+			0 3px,
+		transparent 3px 6px
+	);
+}
+
+.np-hoist .canon-glyph-flow-empty {
+	display: flex;
+	align-items: center;
+}
+
+.np-halyard--empty {
+	position: static;
+	flex: 1;
+	margin-block-end: 33px;
+}
+
+/* the toggles run from the halyard to the flag's top corners */
+.np-flag-box {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: calc(50% - 22px);
+	box-sizing: border-box;
+	inline-size: 44px;
+	block-size: 40px;
+	padding-block-start: 7px;
+	border-inline: 1px solid
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 60%,
+			transparent
+		);
+	border-image: linear-gradient(
+			to bottom,
+			color-mix(
+					in srgb,
+					var(--canon-muted-foreground) 60%,
+					transparent
+				)
+				7px,
+			transparent 7px
+		)
+		1;
+}
+
+.np-flag-box .np-flag {
+	display: block;
+	inline-size: 44px;
+	block-size: 33px;
+}
+
+.np-flag path {
+	stroke-width: 2px;
+	vector-effect: non-scaling-stroke;
+}
+
+.np-plain {
+	display: grid;
+	place-items: center;
+	block-size: 33px;
+	box-shadow: inset 0 0 0 1px var(--canon-border);
+	background: var(--canon-muted);
+	color: var(--canon-foreground);
+	font-size: 17px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+}
+
+.np-word {
+	position: absolute;
+	inset-block-start: 44px;
+	inset-inline: -20px;
+	color: var(--canon-foreground);
+	font-size: 13px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1;
+	text-align: center;
+	white-space: pre;
+}
+
+/* chart: hairlines drawn by each tile, the outer ones clipped by the frame */
+.np-chart {
+	display: grid;
+	grid-template-columns: repeat(
+		auto-fill,
+		minmax(min(108px, calc((100% - 2px) / 3)), 1fr)
+	);
+	gap: 1px;
+	margin: 0 -1px -1px 0;
+	background: var(--canon-card);
+}
+
+.np-chart-rows {
+	overflow: hidden;
+}
+
+.np-tile {
+	display: grid;
+	grid-template:
+		"letter morse" auto
+		"signs signs" 1fr
+		"word word" auto / 1fr auto;
+	gap: 6px;
+	min-block-size: 104px;
+	box-sizing: border-box;
+	padding: 10px;
+	border: 0;
+	box-shadow:
+		1px 0 0 var(--canon-border),
+		0 1px 0 var(--canon-border),
+		1px 1px 0 var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+}
+
+.np-tile--used {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	.np-tile:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.np-tile:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.np-tile-letter {
+	grid-area: letter;
+	font-size: 22px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+}
+
+.np-tile-morse {
+	display: flex;
+	grid-area: morse;
+	gap: 2px;
+	align-self: start;
+	margin-block-start: 6px;
+}
+
+.np-dit,
+.np-dah {
+	block-size: 3px;
+	background: var(--canon-primary);
+}
+
+.np-dit {
+	inline-size: 3px;
+}
+
+.np-dah {
+	inline-size: 10px;
+}
+
+.np-tile-signs {
+	display: flex;
+	grid-area: signs;
+	gap: 8px;
+	align-items: end;
+}
+
+.np-sem {
+	inline-size: 26px;
+	block-size: 26px;
+}
+
+.np-sem circle {
+	fill: none;
+	stroke: var(--canon-foreground);
+	stroke-width: 1.5;
+}
+
+.np-sem line {
+	stroke: var(--canon-foreground);
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.np-tile-signs .np-flag {
+	inline-size: 29px;
+	block-size: 22px;
+	margin-block-end: 2px;
+}
+
+.np-tile-word {
+	overflow: hidden;
+	grid-area: word;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-medium);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.np-result .tt-result-text {
+	font-weight: var(--canon-weight-medium);
+}

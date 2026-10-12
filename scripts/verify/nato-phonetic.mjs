@@ -1,146 +1,130 @@
-// clipboard reads need permission override
+// nato-phonetic: the canon port
+//
+// Usage: npm start, then node scripts/verify/nato-phonetic.mjs
+
+import { launch, visit, check, finish } from './harness.mjs';
 import {
-	launch,
-	visit,
-	check,
-	finish,
-	sleep,
-	BASE,
-	captureObjectUrl,
-} from './harness.mjs';
+	checkActions,
+	checkLayout,
+	checkNarrow,
+	checkPaste,
+	grantClipboard,
+	headings,
+	result,
+	setSource,
+	typeSource,
+} from './text-tool.mjs';
 
 const { browser, page } = await launch();
-await browser
-	.defaultBrowserContext()
-	.overridePermissions(BASE, [
-		'clipboard-read',
-		'clipboard-write',
-		'clipboard-sanitized-write',
-	]);
+await grantClipboard(page);
 
-await visit(page, '/tools/nato-phonetic');
-const cdp = await page.createCDPSession();
-await cdp.send('Browser.setDownloadBehavior', { behavior: 'deny' });
-await captureObjectUrl(page);
-
-const pairs = () =>
-	page.$$eval('.dt-nato-pair', (els) =>
-		els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
-	);
-const clickLabel = async (label) => {
-	await page.$$eval(
-		'.dt-nato-seg',
-		(els, label) => els.find((el) => el.textContent.trim() === label).click(),
+const hoist = () =>
+	page.evaluate(() => ({
+		flags: document.querySelectorAll('.np-flag-box .np-flag').length,
+		plain: [...document.querySelectorAll('.np-plain')].map(
+			(p) => p.textContent,
+		),
+		words: [...document.querySelectorAll('.np-word')]
+			.map((w) => w.textContent)
+			.join(' '),
+		tacklines: document.querySelectorAll('.np-halyard--tackline').length,
+		name: document
+			.querySelector('.np-hoist .canon-glyph-flow')
+			.getAttribute('aria-label'),
+	}));
+const clickSegment = (label) =>
+	page.$$eval(
+		'.canon-segmented button',
+		(buttons, text) =>
+			buttons.find((x) => x.textContent.trim() === text)?.click(),
 		label,
 	);
-	await sleep(100);
-};
-const setInput = async (text) => {
-	await page.$eval('.dt-nato-input', (el) => el.select());
-	await page.keyboard.press('Backspace');
-	await page.type('.dt-nato-input', text);
-	await sleep(100);
-};
+const used = () =>
+	page.$$eval('.np-tile--used', (tiles) =>
+		tiles.map((t) => t.querySelector('.np-tile-letter').textContent).join(''),
+	);
 
-check('three alphabets', (await page.$$('.dt-nato-alphabets .dt-nato-seg')).length === 3);
-
-await setInput('Hi 5');
-let got = await pairs();
+await visit(page, '/tools/nato-phonetic');
+await checkLayout(page, '.nato-phonetic');
+check('an empty hoist is a bare halyard', !!(await page.$('.np-halyard--empty')));
 check(
-	'Hi 5 spells H Hotel, i India, 5 Five',
-	got.join(', ') === 'H Hotel, i India, 5 Five',
-	got.join(', '),
-);
-check(
-	'the space is a word break',
-	(await page.$$('.dt-nato-break')).length === 1,
+	'the chart has 26 named tiles',
+	(await page.$$eval('.np-tile', (els) =>
+		els.filter((e) => e.getAttribute('aria-label')).length,
+	)) === 26,
 );
 
-await clickLabel('DIN 5009');
-got = await pairs();
+await typeSource(page, 'Hi 5');
+check('text spells, live', (await result(page)) === 'Hotel India / Five', await result(page));
 check(
-	'DIN 5009 spells Hamburg Ingelheim Fünf',
-	got.join(', ') === 'H Hamburg, i Ingelheim, 5 Fünf',
-	got.join(', '),
+	'the direction reads Text to Spelled',
+	(await headings(page)).join(' > ') === 'Text > Spelled',
+);
+let h = await hoist();
+check('two flags hoisted', h.flags === 2, `${h.flags}`);
+check('a digit gets a plain box', h.plain.join() === '5', h.plain.join());
+check('words under the flags', h.words === 'Hotel India Five', h.words);
+check('a tackline between words', h.tacklines === 1);
+check('the hoist is named by the spelling', h.name === 'Hotel India / Five', h.name);
+check('used letters light their tiles', (await used()) === 'HI', await used());
+
+// a fresh load: fading glyphs of the last text would count
+await visit(page, '/tools/nato-phonetic?natoText=Alfa%20Bravo%20%2F%20Charlie');
+check('Auto reads a spelling back', (await result(page)) === 'AB C', await result(page));
+check(
+	'and the headings swap to Spelled > Text',
+	(await headings(page)).join(' > ') === 'Spelled > Text',
+);
+h = await hoist();
+check('the hoist shows the letters read', h.flags === 3, `${h.flags}`);
+check('reading lights no tiles', (await used()) === '');
+
+await page.click('.np-tile[aria-label="Delta"]');
+check(
+	'a tile spells its letter: Spell takes over and the letter is added',
+	(await page.$eval('.tt-source', (el) => el.value)) ===
+		'Alfa Bravo / CharlieD' &&
+		(await page.$eval('.canon-segmented[aria-label="Direction"] [aria-checked="true"]', (el) =>
+			el.textContent.trim(),
+		)) === 'Spell',
 );
 
-await clickLabel('German (1996)');
-got = await pairs();
+await clickSegment('DIN 5009');
+await setSource(page, 'Köln');
+check('DIN 5009 spells cities', (await result(page)) === 'Köln Umlaut Offenbach Leipzig Nürnberg', await result(page));
 check(
-	'German (1996) spells Heinrich Ida Fünf',
-	got.join(', ') === 'H Heinrich, i Ida, 5 Fünf',
-	got.join(', '),
+	'and the chart follows the alphabet',
+	(await page.$eval('.np-tile[aria-label="Aachen"] .np-tile-word', (el) =>
+		el.textContent.trim(),
+	)) === 'Aachen',
+);
+await clickSegment('NATO');
+
+await clickSegment('Read');
+await setSource(page, 'Echo Xray');
+check('Read reads, hyphen or not', (await result(page)) === 'EX', await result(page));
+await clickSegment('Auto');
+
+await setSource(page, 'SOS');
+await checkActions(page, 'Sierra Oscar Sierra', 'spelled.txt');
+await checkPaste(page, 'Zulu Yankee');
+check('the pasted spelling reads', (await result(page)) === 'ZY');
+
+await page.focus('.np-tile[aria-label="Alfa"]');
+await page.keyboard.press('Enter');
+check(
+	'a tile works from the keyboard',
+	(await page.$eval('.tt-source', (el) => el.value)) === 'Zulu YankeeA',
 );
 
-await clickLabel('NATO');
-await setInput('tango echo');
-const read = await page.$eval('.dt-nato-read', (el) => el.textContent.trim());
-check('Auto reads tango echo as TE', read === 'TE', read);
-
-await clickLabel('Spell');
-got = await pairs();
+await visit(page, '/tools/nato-phonetic?natoText=Delphi&natoAlphabet=1&natoMode=1');
 check(
-	'Spell forces the spelled view',
-	got.length === 9 && got[0] === 't Tango',
-	got.join(', '),
-);
-await clickLabel('Auto');
-
-await page.click('.dt-nato-copy');
-await sleep(150);
-const copyLabel = await page.$eval('.dt-nato-copy', (el) => el.textContent.trim());
-check('Copy shows Copied', copyLabel === 'Copied', copyLabel);
-check(
-	'and lands TE on the clipboard',
-	(await page.evaluate(() => navigator.clipboard.readText())) === 'TE',
+	'?natoAlphabet= and ?natoMode= set up the tool',
+	(await result(page)) ===
+		'Düsseldorf Essen Leipzig Potsdam Hamburg Ingelheim',
+	await result(page),
 );
 
-await page.click('.dt-nato-download');
-await sleep(150);
-const saved = await page.evaluate(() => window.__result?.text());
-check('Download saves the read text', saved === 'TE', String(saved));
-
-check('chart has 26 tiles', (await page.$$('.dt-nato-tile')).length === 26);
-await setInput('');
-await page.$$eval('.dt-nato-tile', (els) => {
-	els[7].click();
-	els[8].click();
-});
-await sleep(150);
-got = await pairs();
-check(
-	'clicking H and I spells Hotel India',
-	got.join(', ') === 'H Hotel, I India',
-	got.join(', '),
-);
-check(
-	'used tiles highlight',
-	(await page.$$eval('.dt-nato-tile.is-used', (els) => els.length)) === 2,
-);
-const qFlag = await page.$eval(
-	'.dt-nato-tile:nth-child(17) .dt-nato-flag',
-	(el) => el.innerHTML,
-);
-check(
-	'Quebec flag is one yellow rectangle',
-	(qFlag.match(/<rect/g) || []).length === 1 && qFlag.includes('#f5c928'),
-	qFlag.slice(0, 60),
-);
-check(
-	'every tile has morse marks and a semaphore',
-	await page.$$eval('.dt-nato-tile', (els) =>
-		els.every(
-			(el) =>
-				el.querySelector('.dt-nato-dit, .dt-nato-dah') &&
-				el.querySelector('.dt-nato-sem circle'),
-		),
-	),
-);
-await clickLabel('DIN 5009');
-const hWord = await page.$eval(
-	'.dt-nato-tile:nth-child(8) .dt-nato-tile-word',
-	(el) => el.textContent.trim(),
-);
-check('tile words follow the alphabet', hWord === 'Hamburg', hWord);
+await checkNarrow(page, '/tools/nato-phonetic?natoText=Delphi%20tools');
 
 await finish(browser);

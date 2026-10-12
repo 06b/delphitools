@@ -1083,6 +1083,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/nato-phonetic',
 				produces: ['text/plain'],
 				new: true,
+				canon: true,
 			},
 		],
 	},
