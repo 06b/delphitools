@@ -26,10 +26,12 @@ for (const id of toolIds) {
 	await sleep(150);
 
 	const seen = await page.evaluate(() => {
-		const body = document.querySelector('.dt-tool-body');
+		// a canon tool has no header beside it
+		const body = document.querySelector('.dt-tool-body, .dt-canon-tool');
+		const header = body?.classList.contains('dt-tool-body') ? 1 : 0;
 		return {
 			placeholder: !!document.querySelector('.dt-tool-soon'),
-			rendered: (body?.children.length ?? 0) > 1,
+			rendered: (body?.children.length ?? 0) > header,
 			markup: (body?.lastElementChild?.className ?? '').slice(
 				0,
 				40,

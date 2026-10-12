@@ -870,6 +870,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Test regular expressions',
 				icon: 'regex',
 				href: '/tools/regex-tester',
+				canon: true,
 			},
 			{
 				id: 'request-builder',

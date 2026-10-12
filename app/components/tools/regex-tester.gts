@@ -1,256 +1,154 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonTextInput from 'delphicanon/components/canon-text-input';
+import CanonToast from 'delphicanon/components/canon-toast';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Picture from 'delphitools-v2/components/tools/regex-tester/picture';
+import {
+	matchesHeading,
+	matchLines,
+	runRegex,
+	type RegexOutcome,
+} from 'delphitools-v2/components/tools/regex-tester/regex';
+import './regex-tester/regex-tester.css';
 
-export interface RegexMatch {
-	match: string;
-	index: number;
-	groups: string[];
-}
-
-export interface RegexResult {
-	valid: boolean;
-	matches: RegexMatch[];
-	error: string | null;
-	// set when limit cut the match list
-	truncated: boolean;
-}
-
-export interface HighlightPart {
-	text: string;
-	isMatch: boolean;
-}
-
-// stringified into a worker; no module-scope refs allowed
-export function runRegex(
-	pattern: string,
-	flags: string,
-	testString: string,
-	limit = 1000,
-): RegexResult {
-	if (!pattern)
-		return {
-			valid: true,
-			matches: [],
-			error: null,
-			truncated: false,
-		};
-
-	let regex: RegExp;
-	try {
-		regex = new RegExp(pattern, flags);
-	} catch (error) {
-		return {
-			valid: false,
-			matches: [],
-			error:
-				error instanceof Error
-					? error.message
-					: 'Invalid regex',
-			truncated: false,
-		};
-	}
-
-	const matches: RegexMatch[] = [];
-	let truncated = false;
-
-	if (!flags.includes('g')) {
-		const match = regex.exec(testString);
-		if (match)
-			matches.push({
-				match: match[0],
-				index: match.index,
-				groups: match.slice(1).map((g) => g ?? ''),
-			});
-		return { valid: true, matches, error: null, truncated };
-	}
-
-	for (
-		let match = regex.exec(testString);
-		match !== null;
-		match = regex.exec(testString)
-	) {
-		if (matches.length >= limit) {
-			truncated = true;
-			break;
-		}
-		matches.push({
-			match: match[0],
-			index: match.index,
-			groups: match.slice(1).map((g) => g ?? ''),
-		});
-		// zero-width match would loop forever; bump lastIndex
-		if (match[0].length === 0) regex.lastIndex++;
-	}
-
-	return { valid: true, matches, error: null, truncated };
-}
-
-// one pass over matches; rendered as text nodes, never markup
-export function highlightParts(
-	testString: string,
-	matches: RegexMatch[],
-): HighlightPart[] {
-	const parts: HighlightPart[] = [];
-	let lastIndex = 0;
-
-	for (const m of matches) {
-		if (m.index > lastIndex)
-			parts.push({
-				text: testString.slice(lastIndex, m.index),
-				isMatch: false,
-			});
-		// zero-width match would make an empty mark
-		if (m.match) parts.push({ text: m.match, isMatch: true });
-		lastIndex = m.index + m.match.length;
-	}
-
-	if (lastIndex < testString.length)
-		parts.push({
-			text: testString.slice(lastIndex),
-			isMatch: false,
-		});
-
-	return parts;
-}
-
-export interface MatchRow {
-	key: string;
-	number: number;
-	value: string;
-	isEmpty: boolean;
-	position: string;
-	groups: { key: string; label: string; value: string }[];
-}
-
-export function matchRows(matches: RegexMatch[]): MatchRow[] {
-	return matches.map((m, i) => ({
-		key: `${i}-${m.index}`,
-		number: i + 1,
-		value: m.match,
-		isEmpty: m.match.length === 0,
-		// next app wording
-		position: `index: ${m.index}`,
-		groups: m.groups.map((value, gi) => ({
-			key: `${i}-${gi}`,
-			label: `$${gi + 1}:`,
-			value,
-		})),
-	}));
-}
-
-// next app wording: "1 Match", "4 Matches"
-export function matchLabel(count: number, truncated = false): string {
-	if (truncated) return `${count}+ Matches`;
-	return `${count} Match${count === 1 ? '' : 'es'}`;
-}
-
-const EMPTY_RESULT: RegexResult = {
-	valid: true,
-	matches: [],
-	error: null,
-	truncated: false,
-};
-
+const typingDelay = 400;
 // runaway exec() can't be killed except by terminating its thread
-const TIMEOUT_MS = 400;
-const COPIED_MS = 1500;
+const timeLimit = 400;
 
 const WORKER_SOURCE = `const run = ${runRegex.toString()};
 self.onmessage = (event) => {
-	const { seq, pattern, flags, testString } = event.data;
-	self.postMessage({ seq, result: run(pattern, flags, testString) });
+	const { seq, pattern, flags, text } = event.data;
+	self.postMessage({ seq, outcome: run(pattern, flags, text) });
 };`;
 
-// long attr values wrap; placeholder text held here
-const PATTERN_PLACEHOLDER = 'Enter regex pattern…';
-const TEST_PLACEHOLDER = 'Enter text to test against…';
-
-const TIMEOUT_ERROR = 'Pattern timed out';
-
-const FLAG_OPTIONS: { flag: string; label: string }[] = [
+const flagOptions = [
 	{ flag: 'g', label: 'Global' },
 	{ flag: 'i', label: 'Case insensitive' },
 	{ flag: 'm', label: 'Multiline' },
 	{ flag: 's', label: 'Dotall' },
 ];
 
-const PRESETS: { label: string; pattern: string }[] = [
+// iOS presets; the flags are g for all four
+const presets = [
 	{
-		label: 'Email',
+		name: 'Email',
 		pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}',
 	},
-	{
-		label: 'URL',
-		pattern: "https?:\\/\\/[\\w\\-._~:/?#[\\]@!$&'()*+,;=%]+",
-	},
-	{ label: 'Phone', pattern: '\\+?[\\d\\s\\-().]{10,}' },
-	{ label: 'Date', pattern: '\\d{4}-\\d{2}-\\d{2}' },
+	{ name: 'URL', pattern: 'https?://[^\\s]+' },
+	{ name: 'Phone', pattern: '\\+?[\\d\\s()-]{7,}' },
+	{ name: 'Date', pattern: '\\d{1,4}[-/.]\\d{1,2}[-/.]\\d{1,4}' },
 ];
 
-export default class RegexTesterTool extends Component {
+// iOS -regexSample launch argument
+const samplePattern = String.raw`([\w.]+)@([\w-]+\.\w+)`;
+const sampleText = `Ruby <ruby@delphi.tools> filed this on 2026-09-25, cc bob.smith@example.org.
+Call +44 20 7946 0958 or visit https://delphi.tools/regex-tester today.
+Invoice #4471 is due 2026-10-01; support@delphi-tools.co.uk has a copy.`;
+
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+
+/** The port of RegexTesterViewController. */
+export default class RegexTester extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
 	@tracked pattern = '';
 	@tracked flags = 'g';
-	@tracked testString = '';
-	@tracked copied = false;
-	@tracked result: RegexResult = EMPTY_RESULT;
+	@tracked text = '';
+	@tracked outcome: RegexOutcome = { kind: 'empty' };
+	// the text the outcome was run on
+	@tracked shownText = '';
+	@tracked pictureHeight?: number;
 
 	#worker?: Worker;
 	#workerUrl?: string;
 	#seq = 0;
-	#runTimer?: ReturnType<typeof setTimeout>;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	#sentText = '';
+	#runTimer?: number;
+	#typingTimer?: number;
+
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?regexSample ?regexPattern= ?regexFlags= ?regexText=: the iOS launch arguments
+		const query = new URLSearchParams(window.location.search);
+		const sample = query.has('regexSample');
+		this.pattern =
+			query.get('regexPattern') ??
+			(sample ? samplePattern : '');
+		this.flags = (query.get('regexFlags') ?? 'g').replace(
+			/[^gims]/g,
+			'',
+		);
+		this.text =
+			query.get('regexText') ?? (sample ? sampleText : '');
+		this.refresh();
+	}
 
 	willDestroy() {
 		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+		window.clearTimeout(this.#typingTimer);
 		this.#stopWorker();
 	}
 
-	get patternPlaceholder() {
-		return PATTERN_PLACEHOLDER;
-	}
-
-	get testPlaceholder() {
-		return TEST_PLACEHOLDER;
-	}
-
-	get flagOptions() {
-		return FLAG_OPTIONS.map((option) => ({
+	get flagCells() {
+		return flagOptions.map((option) => ({
 			...option,
+			title: `${option.flag}  ${option.label}`,
 			active: this.flags.includes(option.flag),
 		}));
 	}
 
 	get presets() {
-		return PRESETS;
+		return presets;
 	}
 
-	get showHighlight() {
-		return Boolean(
-			this.testString && this.pattern && this.result.valid,
-		);
+	get error() {
+		const { outcome } = this;
+		if (outcome.kind === 'invalid') return outcome.message;
+		if (outcome.kind === 'timedOut') return 'Pattern timed out';
+		return undefined;
 	}
 
-	get highlight() {
-		return highlightParts(this.testString, this.result.matches);
+	get matched() {
+		const { outcome } = this;
+		return outcome.kind === 'matched' && this.shownText
+			? outcome
+			: undefined;
 	}
 
-	get rows() {
-		return matchRows(this.result.matches);
+	get heading() {
+		const { matched } = this;
+		return matched
+			? matchesHeading(
+					matched.matches.length,
+					matched.truncated,
+				)
+			: 'Matches';
 	}
 
-	get countLabel() {
-		return matchLabel(
-			this.result.matches.length,
-			this.result.truncated,
-		);
+	get lines() {
+		const { matched } = this;
+		return matched
+			? matchLines(this.shownText, matched.matches)
+			: [];
 	}
 
 	#stopWorker() {
-		clearTimeout(this.#runTimer);
+		window.clearTimeout(this.#runTimer);
 		this.#worker?.terminate();
 		this.#worker = undefined;
 		if (this.#workerUrl) URL.revokeObjectURL(this.#workerUrl);
@@ -259,329 +157,211 @@ export default class RegexTesterTool extends Component {
 
 	#ensureWorker(): Worker {
 		if (this.#worker) return this.#worker;
-
 		this.#workerUrl = URL.createObjectURL(
 			new Blob([WORKER_SOURCE], { type: 'text/javascript' }),
 		);
 		const worker = new Worker(this.#workerUrl);
 		worker.onmessage = (event: MessageEvent) => {
-			const { seq, result } = event.data as {
+			const { seq, outcome } = event.data as {
 				seq: number;
-				result: RegexResult;
+				outcome: RegexOutcome;
 			};
 			if (seq !== this.#seq) return;
-			clearTimeout(this.#runTimer);
-			this.result = result;
+			window.clearTimeout(this.#runTimer);
+			this.shownText = this.#sentText;
+			this.outcome = outcome;
 		};
 		this.#worker = worker;
 		return worker;
 	}
 
-	#evaluate() {
+	refresh() {
+		window.clearTimeout(this.#typingTimer);
 		const seq = ++this.#seq;
-		clearTimeout(this.#runTimer);
-
+		window.clearTimeout(this.#runTimer);
 		if (!this.pattern) {
-			this.result = EMPTY_RESULT;
+			this.shownText = this.text;
+			this.outcome = { kind: 'empty' };
 			return;
 		}
-
+		this.#sentText = this.text;
 		this.#ensureWorker().postMessage({
 			seq,
 			pattern: this.pattern,
 			flags: this.flags,
-			testString: this.testString,
+			text: this.text,
 		});
-
-		this.#runTimer = setTimeout(() => {
+		this.#runTimer = window.setTimeout(() => {
 			if (seq !== this.#seq) return;
 			this.#stopWorker();
-			this.result = {
-				valid: false,
-				matches: [],
-				error: TIMEOUT_ERROR,
-				truncated: false,
-			};
-		}, TIMEOUT_MS);
+			this.shownText = this.#sentText;
+			this.outcome = { kind: 'timedOut' };
+		}, timeLimit);
 	}
 
-	setPattern = (event: Event) => {
-		this.pattern = (event.target as HTMLInputElement).value;
-		this.#evaluate();
+	typePattern = (value: string) => {
+		this.pattern = value;
+		window.clearTimeout(this.#typingTimer);
+		this.#typingTimer = window.setTimeout(
+			() => this.refresh(),
+			typingDelay,
+		);
 	};
 
-	setFlags = (event: Event) => {
-		this.flags = (event.target as HTMLInputElement).value;
-		this.#evaluate();
+	// CanonTextInput waits for typing to pause
+	setText = (text: string) => {
+		this.text = text;
+		this.refresh();
 	};
 
-	setTestString = (event: Event) => {
-		this.testString = (event.target as HTMLTextAreaElement).value;
-		this.#evaluate();
-	};
-
-	// replaceAll not replace; "gg" would leave a duplicate flag
-	toggleFlag = (flag: string) => {
+	toggle = (flag: string) => {
 		this.flags = this.flags.includes(flag)
 			? this.flags.replaceAll(flag, '')
 			: this.flags + flag;
-		this.#evaluate();
+		this.refresh();
 	};
 
 	usePreset = (pattern: string) => {
 		this.pattern = pattern;
-		this.#evaluate();
+		this.flags = 'g';
+		this.refresh();
 	};
 
-	copyPattern = () => void this.copy();
+	copyPattern = () =>
+		void this.toast.copy(`/${this.pattern}/${this.flags}`);
 
-	async copy() {
-		await navigator.clipboard.writeText(
-			`/${this.pattern}/${this.flags}`,
-		);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
-	}
+	measured = (height: number) => {
+		// 2 px rule under the picture
+		if (height + 2 !== this.pictureHeight)
+			this.pictureHeight = height + 2;
+	};
 
 	<template>
-		<div class="dt-rx">
-			<div class="dt-rx-section">
-				{{! next app wording }}
-				<label
-					class="dt-rx-label"
-					for="dt-rx-pattern"
-				>Regular Expression</label>
-				<div class="dt-rx-pattern">
-					<span class="dt-rx-slash">/</span>
-					<input
-						id="dt-rx-pattern"
-						type="text"
-						class="dt-rx-input"
-						spellcheck="false"
-						autocomplete="off"
-						value={{this.pattern}}
-						placeholder={{this.patternPlaceholder}}
-						{{on "input" this.setPattern}}
+		<CanonSplit
+			class="regex-tester"
+			@halves={{true}}
+			@collapsesTo={{150}}
+		>
+			<:sidebar>
+				<CanonCanvas @height={{this.pictureHeight}}>
+					<Picture
+						@text={{this.shownText}}
+						@outcome={{this.outcome}}
+						@onHeight={{this.measured}}
 					/>
-					<span class="dt-rx-slash">/</span>
-					<span class="dt-rx-flags-cell">
-						<input
-							type="text"
-							class="dt-rx-flags-input"
-							spellcheck="false"
-							autocomplete="off"
-							aria-label="Flags"
-							value={{this.flags}}
-							{{on
-								"input"
-								this.setFlags
-							}}
-						/>
-					</span>
-				</div>
-			</div>
-
-			<div class="dt-rx-section">
-				{{! next app wording }}
-				<span class="dt-rx-label">Flags</span>
-				<div class="segmented dt-rx-options">
-					{{#each
-						this.flagOptions key="flag"
-						as |option|
-					}}
-						<button
-							type="button"
-							class="dt-rx-option
-								{{if
-									option.active
-									'is-active'
-								}}"
-							aria-pressed={{if
-								option.active
-								"true"
-								"false"
-							}}
-							{{on
-								"click"
-								(fn
-									this.toggleFlag
-									option.flag
-								)
-							}}
-						>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Pattern" />
+					<div class="rx-pattern">
+						<label class="rx-pattern-cell">
 							<span
-								class="dt-rx-flag-letter"
-							>{{option.flag}}</span>
-							{{! next app wording }}
-							{{option.label}}
-						</button>
-					{{/each}}
-				</div>
-			</div>
-
-			<div class="dt-rx-section">
-				{{! next app wording }}
-				<span class="dt-rx-label">Presets</span>
-				<div class="segmented dt-rx-options">
-					{{#each
-						this.presets key="label"
-						as |preset|
-					}}
-						<button
-							type="button"
-							class="dt-rx-option"
-							{{on
-								"click"
-								(fn
-									this.usePreset
-									preset.pattern
-								)
-							}}
-						>
-							{{! next app wording }}
-							{{preset.label}}
-						</button>
-					{{/each}}
-				</div>
-			</div>
-
-			{{#if this.result.error}}
-				<div class="dt-rx-error" role="alert">
-					<Icon @name="circle-alert" />
-					<span
-						class="dt-rx-error-text"
-					>{{this.result.error}}</span>
-				</div>
-			{{/if}}
-
-			<div class="dt-rx-section">
-				{{! next app wording }}
-				<label class="dt-rx-label" for="dt-rx-test">Test
-					String</label>
-				<textarea
-					id="dt-rx-test"
-					class="dt-rx-textarea"
-					spellcheck="false"
-					placeholder={{this.testPlaceholder}}
-					value={{this.testString}}
-					{{on "input" this.setTestString}}
-				></textarea>
-			</div>
-
-			{{#if this.showHighlight}}
-				<div class="dt-rx-section">
-					{{! next app wording }}
-					<span class="dt-rx-label">Highlighted
-						Matches</span>
-					<div class="dt-rx-preview">
-						{{#each
-							this.highlight
-							key="@index"
-							as |part|
-						}}
-							{{#if part.isMatch}}
-								<mark
-									class="dt-rx-mark"
-								>{{part.text}}</mark>
-							{{else}}
-								<span
-								>{{part.text}}</span>
-							{{/if}}
-						{{/each}}
+								class="rx-slash"
+								aria-hidden="true"
+							>/</span>
+							<CanonTextCell
+								class="rx-pattern-field"
+								@value={{this.pattern}}
+								@placeholder="Pattern"
+								@onChange={{this.typePattern}}
+								aria-label="Pattern"
+								autocomplete="off"
+								autocapitalize="off"
+								spellcheck="false"
+							/>
+							<span
+								class="rx-slash"
+								aria-hidden="true"
+							>/</span>
+							<span
+								class="rx-pattern-flags"
+							>{{this.flags}}</span>
+						</label>
+						<CanonButton
+							@kind="cell"
+							@icon={{CopyIcon}}
+							@label="Copy Pattern"
+							@onClick={{this.copyPattern}}
+						/>
 					</div>
-				</div>
-			{{/if}}
-
-			{{#if this.rows}}
-				<div class="dt-rx-results">
-					<div class="dt-rx-results-head">
-						<span
-							class="dt-rx-label"
-						>{{this.countLabel}}</span>
-						<button
-							type="button"
-							class="dt-rx-copy"
-							{{on
-								"click"
-								this.copyPattern
-							}}
-						>
-							<Icon
-								@name={{if
-									this.copied
-									"check"
-									"copy"
+					{{#if this.error}}
+						<CanonStatus
+							@text={{this.error}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonHeading @text="Options" />
+					<CanonGrid
+						class="rx-flags"
+						@columns={{2}}
+					>
+						{{#each
+							this.flagCells
+							as |cell|
+						}}
+							<CanonButton
+								@kind="segment"
+								@text={{cell.title}}
+								@selected={{cell.active}}
+								@onClick={{fn
+									this.toggle
+									cell.flag
+								}}
+								aria-pressed={{if
+									cell.active
+									"true"
+									"false"
 								}}
 							/>
-							{{! next app wording }}
-							{{if
-								this.copied
-								"Copied!"
-								"Copy pattern"
-							}}
-						</button>
-					</div>
-
-					{{#each this.rows key="key" as |row|}}
-						<div class="dt-rx-match">
-							<div
-								class="dt-rx-match-row"
-							>
-								<span
-									class="dt-rx-match-num"
-								>{{row.number}}</span>
-								<span
-									class="dt-rx-match-value"
-								>
-									{{#if
-										row.isEmpty
-									}}
-										{{! next app wording }}
-										<span
-											class="dt-rx-match-blank"
-										>empty</span>
-									{{else}}
-										{{row.value}}
-									{{/if}}
-								</span>
-								<span
-									class="dt-rx-match-pos"
-								>{{row.position}}</span>
-							</div>
-
-							{{#if row.groups}}
-								<div
-									class="dt-rx-groups"
-								>
-									{{! next app wording }}
-									<span
-										class="dt-rx-group-heading"
-									>Groups:</span>
-									{{#each
-										row.groups
-										key="key"
-										as |group|
-									}}
-										<span
-											class="dt-rx-group"
-										>
-											<span
-												class="dt-rx-group-label"
-											>{{group.label}}</span>
-											<strong
-											>{{group.value}}</strong>
-										</span>
-									{{/each}}
-								</div>
-							{{/if}}
-						</div>
+						{{/each}}
+					</CanonGrid>
+					<CanonHeading @text="Presets" />
+					<CanonGrid @columns={{4}}>
+						{{#each
+							this.presets
+							as |preset|
+						}}
+							<CanonButton
+								@kind="cell"
+								@text={{preset.name}}
+								@onClick={{fn
+									this.usePreset
+									preset.pattern
+								}}
+							/>
+						{{/each}}
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Test String" />
+					<CanonTextInput
+						@value={{this.text}}
+						@height={{150}}
+						@label="Test String"
+						@onChange={{this.setText}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text={{this.heading}} />
+					{{#each
+						this.lines key="@index"
+						as |line|
+					}}
+						<CanonValueLine
+							class="rx-line rx-line--{{line.tint}}"
+							@layout="numbered"
+							@wraps={{true}}
+							@label={{line.label}}
+							@value={{line.value}}
+						/>
+					{{else}}
+						<CanonEmptyRow @text="None" />
 					{{/each}}
-				</div>
-			{{/if}}
-		</div>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
+		<CanonToast />
 	</template>
 }
