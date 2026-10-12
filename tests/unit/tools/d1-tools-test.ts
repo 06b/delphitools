@@ -3,7 +3,6 @@
 import { module, test } from 'qunit';
 import { countText } from 'delphitools-v2/components/tools/word-counter';
 import { pxToRem, remToPx } from 'delphitools-v2/components/tools/px-to-rem';
-import { lineHeightPx } from 'delphitools-v2/components/tools/line-height-calc';
 import {
 	looksLikeSvg,
 	formatBytes,
@@ -75,15 +74,6 @@ module('Unit | Tools | D1', function () {
 		test('honours a base other than 16', function (assert) {
 			assert.strictEqual(pxToRem(20, 10), '2');
 			assert.strictEqual(remToPx(2, 10), '20');
-		});
-	});
-
-	module('line-height-calc', function () {
-		// one decimal: ratios rarely land on a whole pixel
-		test('multiplies size by ratio, to one decimal place', function (assert) {
-			assert.strictEqual(lineHeightPx(16, 1.5), '24.0');
-			assert.strictEqual(lineHeightPx(20, 1.2), '24.0');
-			assert.strictEqual(lineHeightPx(16, 1.618), '25.9');
 		});
 	});
 

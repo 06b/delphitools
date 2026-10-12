@@ -676,6 +676,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Calculate optimal line heights',
 				icon: 'type',
 				href: '/tools/line-height-calc',
+				canon: true,
 			},
 			{
 				id: 'paper-sizes',

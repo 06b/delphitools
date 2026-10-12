@@ -1,0 +1,204 @@
+/* the picture: columns as LineHeightPicture, text measure 560, figure column 132, bracket column 20 */
+.line-height-calc-picture {
+	--line-height-calc-pad: var(--canon-panel-padding);
+	--line-height-calc-measure: max(
+		0px,
+		min(560px, 100% - 2 * var(--line-height-calc-pad) - 132px)
+	);
+	--line-height-calc-bracket: calc(
+		var(--line-height-calc-pad) + var(--line-height-calc-measure) +
+			122px
+	);
+
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--canon-card);
+	font-family: var(--canon-font);
+	font-weight: var(--canon-weight-regular);
+}
+
+.line-height-calc-picture p {
+	min-block-size: 100%;
+	margin: 0;
+	overflow-wrap: normal;
+}
+
+.line-height-calc-rules {
+	position: absolute;
+	inset-block: var(--line-height-calc-pad) 0;
+	inset-inline-start: 0;
+	inline-size: calc(
+		var(--line-height-calc-pad) + var(--line-height-calc-measure)
+	);
+	background: repeating-linear-gradient(
+		to bottom in srgb,
+		var(--canon-border) 0 var(--canon-hairline),
+		transparent 0 var(--line-height-calc-box)
+	);
+}
+
+/* line-height normal makes 1lh the content area, centred in each box with half the leading either side */
+.line-height-calc-lit {
+	position: absolute;
+	inset-block: var(--line-height-calc-pad) 0;
+	inset-inline-start: var(--line-height-calc-pad);
+	inline-size: var(--line-height-calc-measure);
+	background: repeating-linear-gradient(
+		to bottom in srgb,
+		transparent 0 calc((var(--line-height-calc-box) - 1lh) / 2),
+		color-mix(in srgb, var(--canon-primary) 10%, transparent) 0
+			calc((var(--line-height-calc-box) + 1lh) / 2),
+		transparent 0 var(--line-height-calc-box)
+	);
+	color: var(--canon-foreground);
+	font-size: var(--line-height-calc-font);
+	line-height: normal;
+}
+
+.line-height-calc-lit p {
+	line-height: var(--line-height-calc-box);
+}
+
+.line-height-calc-bracket {
+	position: absolute;
+	inset-block-start: var(--line-height-calc-pad);
+	inset-inline-start: calc(
+		var(--line-height-calc-bracket) - var(--canon-frame) / 2
+	);
+	inline-size: var(--canon-frame);
+	block-size: var(--line-height-calc-box);
+	background: var(--canon-primary);
+}
+
+.line-height-calc-bracket::before,
+.line-height-calc-bracket::after {
+	position: absolute;
+	inset-inline-start: calc(var(--canon-frame) / 2 - 6px);
+	inline-size: 12px;
+	block-size: var(--canon-frame);
+	background: var(--canon-primary);
+	content: "";
+}
+
+.line-height-calc-bracket::before {
+	inset-block-start: 0;
+}
+
+.line-height-calc-bracket::after {
+	inset-block-end: 0;
+}
+
+/* columns that do not fit wrap onto a line below the band and are clipped */
+.line-height-calc-others {
+	position: absolute;
+	inset-block: var(--line-height-calc-pad) 0;
+	inset-inline: calc(var(--line-height-calc-bracket) + 52px)
+		var(--line-height-calc-pad);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 100vh 32px;
+	overflow: hidden;
+}
+
+.line-height-calc-other {
+	display: flex;
+	flex: 1 1 150px;
+	flex-direction: column;
+	block-size: 100%;
+	min-inline-size: 150px;
+}
+
+.line-height-calc-caption {
+	flex: none;
+	block-size: 22px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+
+.line-height-calc-other p {
+	flex: 1;
+	overflow: hidden;
+	background: repeating-linear-gradient(
+		to bottom in srgb,
+		var(--canon-border) 0 var(--canon-hairline),
+		transparent 0 1lh
+	);
+	color: var(--canon-muted-foreground);
+	font-size: var(--line-height-calc-font);
+	line-height: calc(
+		var(--line-height-calc-font) * var(--line-height-calc-ratio)
+	);
+}
+
+.line-height-calc-figure {
+	position: absolute;
+	inset-block-end: calc(var(--line-height-calc-pad) - 4px);
+	inset-inline-start: 0;
+	display: flex;
+	justify-content: flex-end;
+	inline-size: calc(var(--line-height-calc-bracket) + 6px);
+}
+
+.line-height-calc-row {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	align-items: center;
+	box-sizing: border-box;
+	min-block-size: var(--canon-control-height);
+	margin: 0;
+	padding: 0 var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	font-variant-numeric: tabular-nums;
+	text-align: start;
+	appearance: none;
+}
+
+button.line-height-calc-row {
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+button.line-height-calc-row[aria-current="true"] {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	button.line-height-calc-row:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+button.line-height-calc-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.line-height-calc-row-height {
+	color: var(--canon-primary);
+	text-align: center;
+}
+
+.line-height-calc-row-leading {
+	color: var(--canon-muted-foreground);
+	text-align: end;
+}
+
+.line-height-calc-row--header {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.line-height-calc-row--header .line-height-calc-row-height {
+	color: var(--canon-muted-foreground);
+}
