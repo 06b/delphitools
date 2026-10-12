@@ -7,6 +7,8 @@ import {
 	addStamped,
 	pageNumberObjects,
 	scopePages,
+	STAMP_RED,
+	stampObjects,
 	textWidth,
 	watermarkObjects,
 } from 'delphitools-v2/lib/errata/stamps';
@@ -80,6 +82,32 @@ module('Unit | errata | stamps', function () {
 			assert.strictEqual(o.opacity, 0.15);
 			assert.strictEqual(o.cx, page.baseWidth / 2);
 		}
+	});
+
+	test('stamps take colour and bold, measured in bold', function (assert) {
+		const [item] = stampObjects(
+			doc(),
+			[0],
+			'Seen ok',
+			'bottom-left',
+			24,
+			'#0550ae',
+			true,
+		);
+		const o = item!.object as TextObject;
+		assert.strictEqual(o.colour, '#0550ae');
+		assert.true(o.bold);
+		assert.strictEqual(o.w, textWidth('Seen ok', 24, true));
+		assert.true(o.w > textWidth('Seen ok', 24));
+		assert.strictEqual(o.cx - o.w / 2, 24);
+		const plain = stampObjects(doc(), [0], 'X', 'top-left', 24)[0]!
+			.object as TextObject;
+		assert.strictEqual(plain.colour, STAMP_RED);
+		assert.false('bold' in plain);
+		assert.deepEqual(
+			stampObjects(doc(), [0, 1], ' ', 'top-left', 24),
+			[],
+		);
 	});
 
 	test('addStamped is one undo step', function (assert) {

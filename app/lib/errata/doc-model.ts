@@ -23,6 +23,7 @@ export interface TextObject extends BaseObject {
 	colour: string;
 	/** 0..1, absent is opaque */
 	opacity?: number;
+	bold?: boolean;
 }
 
 /** d is in local coords, 0..w by 0..h */

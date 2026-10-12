@@ -35,16 +35,22 @@ export function scopePages(
 	}
 }
 
-let helvetica: StandardFontEmbedder | undefined;
+const embedders = new Map<boolean, StandardFontEmbedder>();
 
 // export uses helvetica widths
-export function textWidth(text: string, size: number): number {
-	// same strings, cast safe
-	const font = (helvetica ??= StandardFontEmbedder.for(
-		StandardFonts.Helvetica as unknown as Parameters<
-			typeof StandardFontEmbedder.for
-		>[0],
-	));
+export function textWidth(text: string, size: number, bold = false): number {
+	let font = embedders.get(bold);
+	if (!font) {
+		font = StandardFontEmbedder.for(
+			// same strings, cast safe
+			(bold
+				? StandardFonts.HelveticaBold
+				: StandardFonts.Helvetica) as unknown as Parameters<
+				typeof StandardFontEmbedder.for
+			>[0],
+		);
+		embedders.set(bold, font);
+	}
 	let width = 0;
 	for (const ch of text) {
 		try {
@@ -89,9 +95,10 @@ function anchored(
 	size: number,
 	anchor: Anchor,
 	colour: string,
+	bold = false,
 ): TextObject {
 	const { width, height } = pageSize(page);
-	const w = textWidth(text, size);
+	const w = textWidth(text, size, bold);
 	const { x, y } = placeText(width, height, w, size, anchor, MARGIN);
 	const top = height - y - size * LINE * BASELINE;
 	return textObject(
@@ -100,7 +107,7 @@ function anchored(
 		colour,
 		x + w / 2,
 		top + (size * LINE) / 2,
-		{},
+		bold ? { bold } : {},
 		w,
 	);
 }
@@ -164,13 +171,18 @@ export function watermarkObjects(
 	});
 }
 
+export const STAMP_RED = '#d1242f';
+
 export function stampObjects(
 	doc: ErrataDoc,
 	indices: number[],
 	label: string,
 	anchor: Anchor,
 	size: number,
+	colour = STAMP_RED,
+	bold = false,
 ): Stamped[] {
+	if (label.trim() === '') return [];
 	return indices.map((index) => ({
 		index,
 		object: anchored(
@@ -178,7 +190,8 @@ export function stampObjects(
 			label,
 			size,
 			anchor,
-			'#d1242f',
+			colour,
+			bold,
 		),
 	}));
 }

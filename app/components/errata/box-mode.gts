@@ -5,7 +5,9 @@ import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import FormFields from 'delphitools-v2/components/errata/form-mode';
+import { htmlSafe } from '@ember/template';
 import ToolPanel, {
+	AnchorPicker,
 	Field,
 	PageScope,
 	Segmented,
@@ -30,6 +32,7 @@ import {
 	addStamped,
 	pageNumberObjects,
 	scopePages,
+	STAMP_RED,
 	stampObjects,
 	watermarkObjects,
 	type PageScope as Scope,
@@ -57,11 +60,7 @@ import {
 	type ImpositionConfig,
 } from 'delphitools-v2/lib/imposition';
 import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
-import {
-	ANCHORS,
-	ANCHOR_ICON,
-	type Anchor,
-} from 'delphitools-v2/lib/pdf-stamp';
+import type { Anchor } from 'delphitools-v2/lib/pdf-stamp';
 import {
 	MAX_SIZES,
 	compressPdf,
@@ -74,19 +73,21 @@ import {
 	widgetStandIns,
 } from 'delphitools-v2/lib/errata/widgets';
 
-const EDGE_ANCHORS = ANCHORS.filter((a) => !a.startsWith('middle')).map(
-	(value) => ({ value, icon: ANCHOR_ICON[value] }),
-);
+const CUSTOM = 'Custom';
+const STAMPS = ['Approved', 'Draft', 'Final', 'Confidential', 'Void', CUSTOM];
 
-const STAMPS = ['Approved', 'Draft', 'Final', 'Confidential', 'Void'];
+const STAMP_COLOURS = [
+	{ value: STAMP_RED, label: 'Red' },
+	{ value: '#000000', label: 'Black' },
+	{ value: '#0550ae', label: 'Blue' },
+	{ value: '#1a7f37', label: 'Green' },
+].map((c) => ({ ...c, style: htmlSafe(`background-color: ${c.value}`) }));
 
 const numbers = (values: number[], unit = ''): PresetOption[] =>
 	values.map((v) => ({ value: v, label: `${v}${unit}` }));
 
 const NUMBER_SIZES = numbers([8, 10, 12]);
 const STAMP_SIZES = numbers([18, 24, 36]);
-const OPACITIES = numbers([10, 15, 25, 40]);
-const ANGLES = numbers([0, -30, -45], '°');
 
 type Orientation = ImpositionConfig['orientation'];
 type Flip = NonNullable<ImpositionConfig['duplexFlip']>;
@@ -147,6 +148,9 @@ export default class BoxModeBar extends Component<Signature> {
 	@tracked opacity = 15;
 	@tracked angle = -45;
 	@tracked stamp = 'Approved';
+	@tracked stampText = '';
+	@tracked stampBold = false;
+	@tracked stampColour = STAMP_RED;
 	@tracked stampAnchor: Anchor = 'top-right';
 	@tracked stampSize = 24;
 	@tracked quality = 65;
@@ -244,9 +248,13 @@ export default class BoxModeBar extends Component<Signature> {
 				return stampObjects(
 					doc,
 					indices,
-					this.stamp.toUpperCase(),
+					this.stamp === CUSTOM
+						? this.stampText
+						: this.stamp.toUpperCase(),
 					this.stampAnchor,
 					this.stampSize,
+					this.stampColour,
+					this.stampBold,
 				);
 			default:
 				return [];
@@ -447,16 +455,13 @@ export default class BoxModeBar extends Component<Signature> {
 						}}
 					/>
 				</label>
-				<Field @label="Position">
-					<Segmented
-						@options={{EDGE_ANCHORS}}
-						@value={{this.numberAnchor}}
-						@onChange={{fn
-							this.pick
-							"numberAnchor"
-						}}
-					/>
-				</Field>
+				<AnchorPicker
+					@value={{this.numberAnchor}}
+					@onChange={{fn
+						this.pick
+						"numberAnchor"
+					}}
+				/>
 				<Field @label="Size">
 					<PresetRow
 						@options={{NUMBER_SIZES}}
@@ -487,32 +492,22 @@ export default class BoxModeBar extends Component<Signature> {
 						}}
 					/>
 				</label>
-				<Field @label="Opacity">
-					<PresetRow
-						@options={{OPACITIES}}
-						@value={{this.opacity}}
-						@onChange={{fn
-							this.pick
-							"opacity"
-						}}
-						@min={{1}}
-						@max={{100}}
-						@unit="%"
-					/>
-				</Field>
-				<Field @label="Angle">
-					<PresetRow
-						@options={{ANGLES}}
-						@value={{this.angle}}
-						@onChange={{fn
-							this.pick
-							"angle"
-						}}
-						@min={{-90}}
-						@max={{90}}
-						@unit="°"
-					/>
-				</Field>
+				<Slider
+					@label="Opacity"
+					@value={{this.opacity}}
+					@min={{5}}
+					@max={{100}}
+					@unit="%"
+					@onChange={{fn this.pick "opacity"}}
+				/>
+				<Slider
+					@label="Angle"
+					@value={{this.angle}}
+					@min={{-90}}
+					@max={{90}}
+					@unit="°"
+					@onChange={{fn this.pick "angle"}}
+				/>
 			{{else if (eq @mode "stamp")}}
 				<Field @label="Label">
 					<Select
@@ -537,17 +532,71 @@ export default class BoxModeBar extends Component<Signature> {
 							{{/each}}
 						</SelectContent>
 					</Select>
+					{{#if (eq this.stamp CUSTOM)}}
+						<input
+							class="err-mode-input"
+							aria-label="Custom label"
+							value={{this.stampText}}
+							{{on
+								"input"
+								(fn
+									this.setText
+									"stampText"
+								)
+							}}
+						/>
+					{{/if}}
 				</Field>
-				<Field @label="Position">
-					<Segmented
-						@options={{EDGE_ANCHORS}}
-						@value={{this.stampAnchor}}
+				<Field @label="Bold">
+					<Switch
+						@checked={{this.stampBold}}
 						@onChange={{fn
 							this.pick
-							"stampAnchor"
+							"stampBold"
 						}}
+						@label="Bold"
 					/>
 				</Field>
+				<Field @label="Colour">
+					<span class="err-swatches">
+						{{#each STAMP_COLOURS as |c|}}
+							<button
+								type="button"
+								class="err-swatch
+									{{if
+										(eq
+											this.stampColour
+											c.value
+										)
+										'is-active'
+									}}"
+								style={{c.style}}
+								aria-label={{c.label}}
+								aria-pressed={{if
+									(eq
+										this.stampColour
+										c.value
+									)
+									"true"
+									"false"
+								}}
+								title={{c.label}}
+								{{on
+									"click"
+									(fn
+										this.pick
+										"stampColour"
+										c.value
+									)
+								}}
+							></button>
+						{{/each}}
+					</span>
+				</Field>
+				<AnchorPicker
+					@value={{this.stampAnchor}}
+					@onChange={{fn this.pick "stampAnchor"}}
+				/>
 				<Field @label="Size">
 					<PresetRow
 						@options={{STAMP_SIZES}}
