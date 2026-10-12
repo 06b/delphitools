@@ -949,6 +949,7 @@ export const toolCategories: ToolCategory[] = [
 					'Generate strong passwords or multi-word passphrases',
 				icon: 'key-square',
 				href: '/tools/password-genny',
+				canon: true,
 				new: true,
 			},
 			{

@@ -1,60 +1,85 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import type Owner from '@ember/owner';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import Switch from 'delphitools-v2/components/ui/switch';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadText } from 'delphitools-v2/lib/download';
 import {
-	PASSWORD_MAX_LENGTH,
-	PASSWORD_MIN_LENGTH,
+	AMBIGUOUS_CHARS,
 	PASSPHRASE_MAX_WORDS,
 	PASSPHRASE_MIN_WORDS,
+	PASSWORD_MAX_LENGTH,
+	PASSWORD_MIN_LENGTH,
 	buildCharset,
 	buildPassphrase,
-	charKind,
 	generatePassword,
+	parseRolls,
 	parseWordlist,
 	passphraseEntropy,
 	passwordEntropy,
-	strengthBand,
 } from 'delphitools-v2/lib/password';
+import Picture, {
+	phraseTint,
+	tint,
+} from 'delphitools-v2/components/tools/password-genny/picture';
+import './password-genny/password-genny.css';
 
 const WORDLIST_URL = '/data/eff-large-wordlist.txt';
 // eff list fixed size, pre-fetch entropy
 const EFF_LIST_SIZE = 7776;
-const COPIED_MS = 2000;
+const WORDLIST_ERROR =
+	'The word list failed to load, password mode still works.';
 
-type Mode = 'password' | 'passphrase';
 type ClassKey = 'lowercase' | 'uppercase' | 'digits' | 'symbols';
 type WordStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-const MODES: { id: Mode; label: string }[] = [
-	{ id: 'password', label: 'Password' },
-	{ id: 'passphrase', label: 'Passphrase' },
-];
-
+const MODES = ['Password', 'Passphrase'];
 const BULK_COUNTS = [5, 10, 20];
+const COUNT_TITLES = BULK_COUNTS.map(String);
+const SEPARATORS = [
+	{ value: '-', label: 'Hyphen' },
+	{ value: ' ', label: 'Space' },
+	{ value: '.', label: 'Period' },
+	{ value: '_', label: 'Underscore' },
+];
+// labels match the web tool: the mark itself, Space spelt out
+const SEPARATOR_TITLES = SEPARATORS.map((s) =>
+	s.value === ' ' ? s.label : s.value,
+);
+const CLASSES: { key: ClassKey; title: string }[] = [
+	{ key: 'lowercase', title: 'Lowercase' },
+	{ key: 'uppercase', title: 'Uppercase' },
+	{ key: 'digits', title: 'Digits' },
+	{ key: 'symbols', title: 'Symbols' },
+];
+// fade the first screenful only
+const FADE_ROWS = 24;
+const FADE_STEP = 0.018;
 
-const SEPARATORS: { id: string; value: string; label: string; text: string }[] =
-	[
-		{ id: 'hyphen', value: '-', label: 'Hyphen', text: '-' },
-		{ id: 'space', value: ' ', label: 'Space', text: 'Space' },
-		{ id: 'period', value: '.', label: 'Period', text: '.' },
-		{
-			id: 'underscore',
-			value: '_',
-			label: 'Underscore',
-			text: '_',
-		},
-	];
+interface Wordlist {
+	words: string[];
+	rolls: Map<string, string>;
+}
 
 // lazy fetch, catch resets for retry
-let wordlistPromise: Promise<string[]> | null = null;
+let wordlistPromise: Promise<Wordlist> | null = null;
 
-function loadWordlist(): Promise<string[]> {
+function loadWordlist(): Promise<Wordlist> {
 	wordlistPromise ??= fetch(WORDLIST_URL)
 		.then((response) => {
 			// fetch resolves on 404
@@ -62,14 +87,13 @@ function loadWordlist(): Promise<string[]> {
 				throw new Error(`HTTP ${response.status}`);
 			return response.text();
 		})
-		.then(parseWordlist)
-		.then((words) => {
-			if (words.length < EFF_LIST_SIZE / 2) {
+		.then((text) => {
+			const words = parseWordlist(text);
+			if (words.length < EFF_LIST_SIZE / 2)
 				throw new Error(
 					`only ${words.length} words parsed`,
 				);
-			}
-			return words;
+			return { words, rolls: parseRolls(text) };
 		})
 		.catch((error: unknown) => {
 			wordlistPromise = null;
@@ -78,143 +102,230 @@ function loadWordlist(): Promise<string[]> {
 	return wordlistPromise;
 }
 
-const WORDLIST_ERROR =
-	'The word list failed to load, password mode still works.';
+const Refresh = <template><IconSvg @name="refresh-cw" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Download = <template><IconSvg @name="download" /></template>;
 
-export default class PasswordGeneratorTool extends Component {
-	@tracked mode: Mode = 'password';
+/** The port of PasswordGeneratorViewController. */
+export default class PasswordGennyTool extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
+	@tracked phrase = false;
 	@tracked length = 16;
 	@tracked lowercase = true;
 	@tracked uppercase = true;
 	@tracked digits = true;
 	@tracked symbols = true;
 	@tracked excludeAmbiguous = true;
-	@tracked wordCount = 5;
-	@tracked separator = '-';
+	@tracked words = 5;
+	@tracked separator = 0;
 	@tracked capitaliseFirst = true;
 	@tracked trailingDigit = true;
-	@tracked bulkCount = 10;
+	@tracked count = 10;
 	@tracked list: string[] = [];
-	@tracked copiedKey: string | number | null = null;
+	@tracked selected = 0;
+	@tracked fades = false;
+	@tracked scrambleKey = 0;
 	@tracked wordStatus: WordStatus = 'idle';
-
-	#wordlist: string[] | null = null;
-	#copiedTimer: ReturnType<typeof setTimeout> | undefined;
+	@tracked wordlist?: Wordlist;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
-		this.regenerate();
+		// ?pwPhrase=1 ?pwLength=<n> ?pwSymbols=0 ?pwSelect=<row>: the iOS -pwPhrase, -pwLength, -pwSymbols, -pwSelect flags
+		const query = new URLSearchParams(window.location.search);
+		const length = Number(query.get('pwLength'));
+		if (length)
+			this.length = this.#clamp(
+				length,
+				PASSWORD_MIN_LENGTH,
+				PASSWORD_MAX_LENGTH,
+			);
+		if (query.get('pwSymbols') === '0') this.symbols = false;
+		this.selected = Number(query.get('pwSelect')) || 0;
+		// first fill writes without the scramble; tracked state read here may not change in this render
+		if (query.get('pwPhrase')) {
+			this.phrase = true;
+			queueMicrotask(() => void this.#ensureWordlist());
+		} else this.#fill();
 	}
 
-	get pool(): string {
-		return buildCharset(this);
+	#clamp(value: number, min: number, max: number) {
+		return Math.min(max, Math.max(min, Math.round(value)));
 	}
 
-	get bits(): number {
-		if (this.mode === 'password') {
-			return passwordEntropy(this.length, this.pool.length);
+	get spec() {
+		return {
+			length: this.length,
+			lowercase: this.lowercase,
+			uppercase: this.uppercase,
+			digits: this.digits,
+			symbols: this.symbols,
+			excludeAmbiguous: this.excludeAmbiguous,
+		};
+	}
+
+	get phraseSpec() {
+		return {
+			words: this.words,
+			separator: SEPARATORS[this.separator]?.value ?? '-',
+			capitaliseFirst: this.capitaliseFirst,
+			trailingDigit: this.trailingDigit,
+		};
+	}
+
+	get bits() {
+		return this.phrase
+			? passphraseEntropy(
+					this.words,
+					this.wordlist?.words.length ??
+						EFF_LIST_SIZE,
+					this.trailingDigit,
+				)
+			: passwordEntropy(
+					this.length,
+					buildCharset(this.spec).length,
+				);
+	}
+
+	get modeIndex() {
+		return this.phrase ? 1 : 0;
+	}
+
+	get countIndex() {
+		return BULK_COUNTS.indexOf(this.count);
+	}
+
+	// the last class on stays on: the pool must not be empty
+	get classes() {
+		const last = CLASSES.filter((c) => this[c.key]).length === 1;
+		return CLASSES.map((c) => ({
+			...c,
+			on: this[c.key],
+			locked: last && this[c.key],
+		}));
+	}
+
+	get loading() {
+		return this.phrase && this.wordStatus === 'loading';
+	}
+
+	get failed() {
+		return this.phrase && this.wordStatus === 'error';
+	}
+
+	get blocked() {
+		return this.phrase && this.wordStatus !== 'ready';
+	}
+
+	get empty() {
+		return this.list.length === 0;
+	}
+
+	get shownIndex() {
+		return Math.min(
+			Math.max(this.selected, 0),
+			this.list.length - 1,
+		);
+	}
+
+	get shown() {
+		return this.list[this.shownIndex];
+	}
+
+	get rows() {
+		const colour = this.phrase ? phraseTint : tint;
+		return this.list.map((value, index) => ({
+			value,
+			number: String(index + 1).padStart(2, '0'),
+			lit: index === this.shownIndex,
+			fadeDelay:
+				this.fades && index < FADE_ROWS
+					? index * FADE_STEP
+					: undefined,
+			tint: colour,
+		}));
+	}
+
+	regenerate = () => {
+		this.fades = true;
+		this.scrambleKey += 1;
+		this.#fill();
+	};
+
+	#fill() {
+		if (this.phrase) {
+			const list = this.wordlist?.words;
+			this.list = list
+				? Array.from({ length: this.count }, () =>
+						buildPassphrase(
+							list,
+							this.phraseSpec,
+						),
+					)
+				: [];
+			return;
 		}
-		return passphraseEntropy(
-			this.wordCount,
-			this.#wordlist?.length ?? EFF_LIST_SIZE,
-			this.trailingDigit,
+		this.list = Array.from({ length: this.count }, () =>
+			generatePassword(this.spec),
 		);
 	}
 
-	get strength(): string {
-		return `${this.bits.toFixed(1)} bits · ${strengthBand(this.bits)}`;
-	}
-
-	get generateDisabled(): boolean {
-		return (
-			this.mode === 'passphrase' &&
-			this.wordStatus !== 'ready'
-		);
-	}
-
-	get wordError(): string {
-		return WORDLIST_ERROR;
-	}
-
-	get modes() {
-		return MODES;
-	}
-
-	get bulkCounts() {
-		return BULK_COUNTS;
-	}
-
-	get separators() {
-		return SEPARATORS;
-	}
-
-	get passwordMode(): boolean {
-		return this.mode === 'password';
-	}
-
-	setMode = (mode: Mode) => {
-		if (mode === this.mode) return;
-		this.mode = mode;
-		if (mode === 'passphrase') {
-			if (this.wordStatus !== 'ready') this.list = [];
+	setMode = (index: number) => {
+		this.phrase = index === 1;
+		if (this.phrase && !this.wordlist) {
+			this.list = [];
 			void this.#ensureWordlist();
 			return;
 		}
 		this.regenerate();
 	};
 
-	setLength = (event: Event) => {
-		this.length = Number((event.target as HTMLInputElement).value);
-		this.regenerate();
-	};
+	retry = () => void this.#ensureWordlist();
 
-	setWordCount = (event: Event) => {
-		this.wordCount = Number(
-			(event.target as HTMLInputElement).value,
-		);
-		this.regenerate();
-	};
-
-	setSeparator = (value: string) => {
-		this.separator = value;
-		this.regenerate();
-	};
-
-	setBulkCount = (count: number) => {
-		this.bulkCount = count;
-		this.regenerate();
-	};
-
-	#setClass(key: ClassKey, on: boolean) {
-		const state: Record<ClassKey, boolean> = {
-			lowercase: this.lowercase,
-			uppercase: this.uppercase,
-			digits: this.digits,
-			symbols: this.symbols,
-		};
-		// pool must not be empty
-		if (
-			!on &&
-			!Object.keys(state).some(
-				(k) => state[k as ClassKey] && k !== key,
-			)
-		)
+	async #ensureWordlist() {
+		if (this.wordStatus === 'loading') return;
+		this.wordStatus = 'loading';
+		try {
+			this.wordlist = await loadWordlist();
+		} catch (error) {
+			console.error(
+				'password-genny: wordlist fetch failed',
+				error,
+			);
+			if (!this.isDestroyed) this.wordStatus = 'error';
 			return;
-		this[key] = on;
-		this.regenerate();
+		}
+		if (this.isDestroyed) return;
+		this.wordStatus = 'ready';
+		if (this.phrase) this.regenerate();
 	}
 
-	setLowercase = (on: boolean) => this.#setClass('lowercase', on);
-	setUppercase = (on: boolean) => this.#setClass('uppercase', on);
-	setDigits = (on: boolean) => this.#setClass('digits', on);
-	setSymbols = (on: boolean) => this.#setClass('symbols', on);
+	setLength = (value: number) => {
+		this.length = value;
+		this.regenerate();
+	};
 
-	setExcludeAmbiguous = (on: boolean) => {
+	setClass = (key: ClassKey, on: boolean) => {
+		this[key] = on;
+		this.regenerate();
+	};
+
+	setAmbiguous = (on: boolean) => {
 		this.excludeAmbiguous = on;
 		this.regenerate();
 	};
 
-	setCapitaliseFirst = (on: boolean) => {
+	setWords = (value: number) => {
+		this.words = value;
+		this.regenerate();
+	};
+
+	setSeparator = (index: number) => {
+		this.separator = index;
+		this.regenerate();
+	};
+
+	setCapitalise = (on: boolean) => {
 		this.capitaliseFirst = on;
 		this.regenerate();
 	};
@@ -224,435 +335,225 @@ export default class PasswordGeneratorTool extends Component {
 		this.regenerate();
 	};
 
-	regenerate = () => {
-		if (this.mode === 'passphrase') {
-			if (this.wordStatus !== 'ready' || !this.#wordlist)
-				return;
-			const words = this.#wordlist;
-			const spec = {
-				words: this.wordCount,
-				separator: this.separator,
-				capitaliseFirst: this.capitaliseFirst,
-				trailingDigit: this.trailingDigit,
-			};
-			this.list = Array.from({ length: this.bulkCount }, () =>
-				buildPassphrase(words, spec),
-			);
-			return;
-		}
-		this.list = Array.from({ length: this.bulkCount }, () =>
-			generatePassword(this),
-		);
+	setCount = (index: number) => {
+		this.count = BULK_COUNTS[index] ?? 10;
+		this.regenerate();
 	};
 
-	retryWordlist = () => {
-		void this.#ensureWordlist();
+	select = (index: number) => {
+		this.fades = false;
+		if (index === this.shownIndex) return;
+		this.selected = index;
+		this.scrambleKey += 1;
 	};
 
-	async #ensureWordlist() {
-		if (this.#wordlist) {
-			if (this.mode === 'passphrase') this.regenerate();
-			return;
-		}
-		if (this.wordStatus === 'loading') return;
-		this.wordStatus = 'loading';
-		try {
-			this.#wordlist = await loadWordlist();
-		} catch (error) {
-			console.error(
-				'password-genny: wordlist fetch failed',
-				error,
-			);
-			if (this.isDestroyed) return;
-			this.wordStatus = 'error';
-			return;
-		}
-		if (this.isDestroyed) return;
-		this.wordStatus = 'ready';
-		if (this.mode === 'passphrase') this.regenerate();
-	}
+	copyAll = () => void this.toast.copy(this.list.join('\n'));
 
-	charSpans = (text: string) =>
-		[...text].map((ch) => {
-			const kind = charKind(ch);
-			return {
-				ch,
-				cls:
-					kind === 'letter'
-						? 'dt-pg-ch'
-						: `dt-pg-ch is-${kind}`,
-			};
-		});
-
-	copy = async (value: string, key: string | number) => {
-		await navigator.clipboard.writeText(value);
-		this.copiedKey = key;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copiedKey = null),
-			COPIED_MS,
-		);
-	};
-
-	copyAll = () => {
-		void this.copy(this.list.join('\n'), 'all');
-	};
+	download = () => downloadText(this.list.join('\n'), 'passwords.txt');
 
 	<template>
-		<div class="dt-pg">
-			<div class="dt-pg-frame">
-				<div class="dt-pg-bar">
-					<div
-						class="segmented dt-pg-modes"
+		<CanonSplit class="password-genny">
+			<:banner>
+				<CanonCanvas
+					@fitting={{true}}
+					@animated={{true}}
+				>
+					<Picture
+						@text={{this.shown}}
+						@phrase={{this.phrase}}
+						@spec={{this.spec}}
+						@phraseSpec={{this.phraseSpec}}
+						@rolls={{this.wordlist.rolls}}
+						@bits={{this.bits}}
+						@scrambleKey={{this.scrambleKey}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Mode" />
+					<CanonSegmented
+						@items={{MODES}}
+						@selected={{this.modeIndex}}
+						@onChange={{this.setMode}}
 						aria-label="Mode"
-					>
-						{{#each
-							this.modes key="id"
-							as |mode|
-						}}
-							<button
-								type="button"
-								class="dt-pg-mode
-									{{if
-										(eq
-											this.mode
-											mode.id
-										)
-										'is-active'
-									}}"
-								aria-pressed={{if
-									(eq
-										this.mode
-										mode.id
-									)
-									"true"
-									"false"
-								}}
-								{{on
-									"click"
-									(fn
-										this.setMode
-										mode.id
-									)
-								}}
-							>{{mode.label}}</button>
-						{{/each}}
-					</div>
-					<span
-						class="dt-pg-strength"
-						aria-live="polite"
-					>{{this.strength}}</span>
-					<div
-						class="segmented dt-pg-count"
-						aria-label="List size"
-					>
-						{{#each
-							this.bulkCounts
-							as |count|
-						}}
-							<button
-								type="button"
-								class="dt-pg-countbtn
-									{{if
-										(eq
-											this.bulkCount
-											count
-										)
-										'is-active'
-									}}"
-								aria-pressed={{if
-									(eq
-										this.bulkCount
-										count
-									)
-									"true"
-									"false"
-								}}
-								{{on
-									"click"
-									(fn
-										this.setBulkCount
-										count
-									)
-								}}
-							>{{count}}</button>
-						{{/each}}
-					</div>
-					<button
-						type="button"
-						class="dt-pg-generate is-primary"
-						disabled={{this.generateDisabled}}
-						{{on "click" this.regenerate}}
-					>
-						<Icon @name="refresh-cw" />
-						Generate
-					</button>
-				</div>
-
-				{{#if this.passwordMode}}
-					<div class="dt-pg-settings">
-						<label
-							class="dt-pg-field is-length"
+					/>
+					{{#if this.phrase}}
+						<CanonRow
+							@title="Words"
+							@form="flush"
+							as |titleId|
 						>
-							<span>Length</span>
-							<span
-								class="dt-pg-slider"
-							>
-								<input
-									type="range"
-									min={{PASSWORD_MIN_LENGTH}}
-									max={{PASSWORD_MAX_LENGTH}}
-									value={{this.length}}
-									{{on
-										"input"
-										this.setLength
-									}}
-								/>
-								<span
-									class="dt-pg-readout"
-								>{{this.length}}</span>
-							</span>
-						</label>
-						<div class="dt-pg-field">
-							<span>Lowercase</span>
-							<Switch
-								@checked={{this.lowercase}}
-								@onChange={{this.setLowercase}}
-								@label="Lowercase"
+							<CanonNumberField
+								@value={{this.words}}
+								@min={{PASSPHRASE_MIN_WORDS}}
+								@max={{PASSPHRASE_MAX_WORDS}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setWords}}
 							/>
-						</div>
-						<div class="dt-pg-field">
-							<span>Uppercase</span>
-							<Switch
-								@checked={{this.uppercase}}
-								@onChange={{this.setUppercase}}
-								@label="Uppercase"
-							/>
-						</div>
-						<div class="dt-pg-field">
-							<span>Digits</span>
-							<Switch
-								@checked={{this.digits}}
-								@onChange={{this.setDigits}}
-								@label="Digits"
-							/>
-						</div>
-						<div class="dt-pg-field">
-							<span>Symbols</span>
-							<Switch
-								@checked={{this.symbols}}
-								@onChange={{this.setSymbols}}
-								@label="Symbols"
-							/>
-						</div>
-						<div class="dt-pg-field">
-							<span>No lookalikes</span>
-							<Switch
-								@checked={{this.excludeAmbiguous}}
-								@onChange={{this.setExcludeAmbiguous}}
-								@label="No lookalikes"
-							/>
-						</div>
-					</div>
-				{{else}}
-					<div class="dt-pg-settings">
-						<label
-							class="dt-pg-field is-length"
+						</CanonRow>
+						<CanonHeading
+							@text="Separator"
+						/>
+						<CanonSegmented
+							@items={{SEPARATOR_TITLES}}
+							@selected={{this.separator}}
+							@onChange={{this.setSeparator}}
+							aria-label="Separator"
+						/>
+						<CanonRow
+							@title="Capitalise first"
+							as |titleId|
 						>
-							<span>Words</span>
-							<span
-								class="dt-pg-slider"
-							>
-								<input
-									type="range"
-									min={{PASSPHRASE_MIN_WORDS}}
-									max={{PASSPHRASE_MAX_WORDS}}
-									value={{this.wordCount}}
-									{{on
-										"input"
-										this.setWordCount
-									}}
-								/>
-								<span
-									class="dt-pg-readout"
-								>{{this.wordCount}}</span>
-							</span>
-						</label>
-						<div
-							class="dt-pg-field is-separator"
-						>
-							<span>Separator</span>
-							<span
-								class="segmented dt-pg-seps"
-							>
-								{{#each
-									this.separators
-									key="id"
-									as |sep|
-								}}
-									<button
-										type="button"
-										class="dt-pg-sep
-											{{if
-												(eq
-													this.separator
-													sep.value
-												)
-												'is-active'
-											}}"
-										aria-label={{sep.label}}
-										aria-pressed={{if
-											(eq
-												this.separator
-												sep.value
-											)
-											"true"
-											"false"
-										}}
-										{{on
-											"click"
-											(fn
-												this.setSeparator
-												sep.value
-											)
-										}}
-									>{{sep.text}}</button>
-								{{/each}}
-							</span>
-						</div>
-						<div class="dt-pg-field">
-							<span>Capitalise</span>
-							<Switch
-								@checked={{this.capitaliseFirst}}
-								@onChange={{this.setCapitaliseFirst}}
-								@label="Capitalise"
+							<CanonSwitch
+								@on={{this.capitaliseFirst}}
+								@onChange={{this.setCapitalise}}
+								aria-labelledby={{titleId}}
 							/>
-						</div>
-						<div class="dt-pg-field">
-							<span>Trailing digit</span>
-							<Switch
-								@checked={{this.trailingDigit}}
+						</CanonRow>
+						<CanonRow
+							@title="Trailing digit"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.trailingDigit}}
 								@onChange={{this.setTrailingDigit}}
-								@label="Trailing digit"
+								aria-labelledby={{titleId}}
 							/>
-						</div>
-						{{#if
-							(eq
-								this.wordStatus
-								"loading"
-							)
-						}}
-							<div
-								class="dt-pg-wordloading"
-							>
-								<NdsLoader
-									class="is-stage"
-								/>
-								Loading…
-							</div>
+						</CanonRow>
+						{{#if this.loading}}
+							<CanonStatus
+								@text="Loading…"
+								@tone="muted"
+								@row={{true}}
+							/>
 						{{/if}}
-						{{#if
-							(eq
-								this.wordStatus
-								"error"
-							)
-						}}
-							<div
-								class="dt-pg-worderror"
+						{{#if this.failed}}
+							<CanonStatus
+								class="pw-error"
+								@text={{WORDLIST_ERROR}}
+								@tone="warn"
+								@row={{true}}
 								role="alert"
-							>
-								<span
-								>{{this.wordError}}</span>
-								<button
-									type="button"
-									class="dt-pg-retry"
-									{{on
-										"click"
-										this.retryWordlist
-									}}
-								>
-									<Icon
-										@name="refresh-cw"
-									/>
-									Retry
-								</button>
-							</div>
+							/>
+							<CanonButton
+								class="pw-retry"
+								@text="Retry"
+								@icon={{Refresh}}
+								@onClick={{this.retry}}
+							/>
 						{{/if}}
-					</div>
-				{{/if}}
-
-				{{#if this.list.length}}
-					<div class="dt-pg-listhead">
-						<span>List ·
-							{{this.list.length}}</span>
-						<button
-							type="button"
-							class="dt-pg-copyall"
+					{{else}}
+						<CanonRow
+							@title="Length"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.length}}
+								@min={{PASSWORD_MIN_LENGTH}}
+								@max={{PASSWORD_MAX_LENGTH}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setLength}}
+							/>
+						</CanonRow>
+						<CanonHeading
+							@text="Characters"
+						/>
+						<CanonGrid @columns={{2}}>
+							{{#each
+								this.classes
+								key="key"
+								as |c|
+							}}
+								<CanonRow
+									@title={{c.title}}
+									@sizingTitle="Lowercase"
+									as |titleId|
+								>
+									<CanonSwitch
+										@on={{c.on}}
+										@disabled={{c.locked}}
+										@onChange={{fn
+											this.setClass
+											c.key
+										}}
+										aria-labelledby={{titleId}}
+									/>
+								</CanonRow>
+							{{/each}}
+						</CanonGrid>
+						<CanonRow
+							class="pw-ambiguous"
+							@title="Exclude ambiguous"
+							@detail={{AMBIGUOUS_CHARS}}
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.excludeAmbiguous}}
+								@onChange={{this.setAmbiguous}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonHeading @text="Count" />
+					<CanonSegmented
+						@items={{COUNT_TITLES}}
+						@selected={{this.countIndex}}
+						@onChange={{this.setCount}}
+						aria-label="Count"
+					/>
+					<CanonButton
+						@kind="primary"
+						@text="Generate"
+						@icon={{Refresh}}
+						@iconStyle="oversized"
+						@disabled={{this.blocked}}
+						@onClick={{this.regenerate}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Generated" />
+					<CanonGrid>
+						<CanonButton
+							@text="Copy all"
+							@icon={{Copy}}
+							@disabled={{this.empty}}
+							@onClick={{this.copyAll}}
+						/>
+						<CanonButton
+							@text="Download"
+							@icon={{Download}}
+							@disabled={{this.empty}}
+							@onClick={{this.download}}
+						/>
+					</CanonGrid>
+					{{#each
+						this.rows key="@index"
+						as |row index|
+					}}
+						<CanonValueLine
+							class="pw-row"
+							@layout="numbered"
+							@wraps={{true}}
+							@label={{row.number}}
+							@value={{row.value}}
+							@lit={{row.lit}}
+							@fadeDelay={{row.fadeDelay}}
+							@tint={{row.tint}}
 							{{on
 								"click"
-								this.copyAll
+								(fn
+									this.select
+									index
+								)
 							}}
-						>
-							<Icon
-								@name={{if
-									(eq
-										this.copiedKey
-										"all"
-									)
-									"check"
-									"copy"
-								}}
-							/>
-							Copy all
-						</button>
-					</div>
-					<ul class="dt-pg-list">
-						{{#each
-							this.list key="@index"
-							as |item index|
-						}}
-							<li class="dt-pg-item">
-								<span
-									class="dt-pg-value"
-									aria-label={{item}}
-								>{{#each
-										(this.charSpans
-											item
-										)
-										as |c|
-									}}<span
-											class={{c.cls}}
-											aria-hidden="true"
-										>{{c.ch}}</span>{{/each}}</span>
-								<button
-									type="button"
-									class="dt-pg-itemcopy"
-									aria-label="Copy"
-									{{on
-										"click"
-										(fn
-											this.copy
-											item
-											index
-										)
-									}}
-								>
-									<Icon
-										@name={{if
-											(eq
-												this.copiedKey
-												index
-											)
-											"check"
-											"copy"
-										}}
-									/>
-								</button>
-							</li>
-						{{/each}}
-					</ul>
-				{{/if}}
-			</div>
-		</div>
+						/>
+					{{/each}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

@@ -151,6 +151,16 @@ export function parseWordlist(text: string): string[] {
 		.filter((word) => /^[a-z]+$/.test(word));
 }
 
+/** Word to its five-dice roll code, from the same EFF list. */
+export function parseRolls(text: string): Map<string, string> {
+	const rolls = new Map<string, string>();
+	for (const line of text.split('\n')) {
+		const match = /^\s*([1-6]{5})\s+([a-z]+)\s*$/.exec(line);
+		if (match) rolls.set(match[2]!, match[1]!);
+	}
+	return rolls;
+}
+
 export function buildPassphrase(
 	wordlist: readonly string[],
 	spec: PassphraseSpec,
