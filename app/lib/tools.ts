@@ -46,6 +46,8 @@ export interface Tool {
 	wide?: boolean;
 	// built on the delphicanon kit; fills the sheet without the tool header
 	canon?: boolean;
+	// a canon tool whose picture may grow past the 1200 px column
+	expands?: boolean;
 	accepts?: string[];
 	carryColour?: boolean;
 	// same vocabulary as accepts
@@ -991,6 +993,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'line-chart',
 				href: '/tools/graph-calc',
 				canon: true,
+				expands: true,
 			},
 			{
 				id: 'sci-calc',

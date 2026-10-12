@@ -1,5 +1,6 @@
 import RouteTemplate from 'ember-route-template';
 import { pageTitle } from 'ember-page-title';
+import CanonTool from 'delphitools-v2/components/canon-tool';
 import Icon from 'delphitools-v2/components/icon';
 import { PeelSticker } from 'delphitools-v2/components/sticker-wall';
 import { EXPERIMENTS_ID, type ToolCategory } from 'delphitools-v2/lib/tools';
@@ -13,11 +14,10 @@ export default RouteTemplate<{ Args: { model: ToolModel } }>(
 
 		{{#if @model.tool.canon}}
 			<h1 class="dt-sr-only">{{@model.tool.name}}</h1>
-			<div class="dt-canon-tool">
-				{{#if @model.component}}
-					<@model.component />
-				{{/if}}
-			</div>
+			<CanonTool
+				@tool={{@model.tool}}
+				@component={{@model.component}}
+			/>
 		{{else}}
 			<div class="dt-tool-page">
 				<div

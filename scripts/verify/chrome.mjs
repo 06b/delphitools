@@ -163,4 +163,25 @@ await sleep(500);
 await visit(page, '/tools/px-to-rem');
 check('a phone width keeps the page beside the band', await page.$eval('.dt-sheet', (el) => Math.round(el.getBoundingClientRect().width)) === 390 - 56);
 
+await page.setViewport({ width: 2200, height: 1100 });
+await visit(page, '/tools/graph-calc');
+const panes = () =>
+	page.evaluate(() =>
+		['.dt-canon-tool > .canon-split', '.canon-split-main'].map((s) =>
+			Math.round(document.querySelector(s).getBoundingClientRect().width),
+		),
+	);
+const [column] = await panes();
+check('a canon tool stops at 1200 px', column === 1200, `${column}`);
+await page.click('.dt-canon-edge.is-start');
+await sleep(400);
+const [wide, settings] = await panes();
+check('expanding gives the picture the room', wide > 1900, `${wide}`);
+check('and keeps the settings at 600 px', settings === 600, `${settings}`);
+await page.reload({ waitUntil: 'networkidle2' });
+await sleep(600);
+check('and survives a reload', (await panes())[0] > 1900);
+await visit(page, '/tools/regex-tester');
+check('only expands tools get the chevrons', !(await page.$('.dt-canon-edge.is-start')));
+
 await finish(browser);

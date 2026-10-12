@@ -1080,6 +1080,7 @@ body {
 
 // a CanonSplit or CanonPage fills it, as CanonWindow's main does
 .dt-canon-tool {
+	position: relative;
 	display: grid;
 	block-size: 100%;
 	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
@@ -1087,17 +1088,95 @@ body {
 	container-type: inline-size;
 
 	// ipad widths, not a 2000 px desktop
-	> * {
+	> :not(.dt-canon-edge) {
 		box-sizing: border-box;
 		inline-size: 100%;
 		max-inline-size: 1200px;
+		transition: max-inline-size 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+		@media (prefers-reduced-motion: reduce) {
+			transition: none;
+		}
 	}
 }
 
 // hairlines only once the column stops short of the sheet's edges
 @container (width > 1200px) {
-	.dt-canon-tool > * {
+	.dt-canon-tool > :not(.dt-canon-edge) {
 		border-inline: var(--canon-hairline) solid var(--canon-border);
+	}
+}
+
+.dt-canon-edge {
+	position: absolute;
+	z-index: 1;
+	inset-block-start: 50%;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 32px;
+	block-size: 88px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	opacity: 0.3;
+	cursor: pointer;
+	translate: 0 -50%;
+	transition: opacity 150ms ease-out;
+
+	@include crayon.hover {
+		opacity: 0.7;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--canon-primary);
+		outline-offset: -2px;
+		opacity: 0.7;
+	}
+
+	&.is-start {
+		inset-inline-start: calc(50% - 600px - 12px - 32px);
+	}
+
+	&.is-end {
+		inset-inline-end: calc(50% - 600px - 12px - 32px);
+	}
+
+	.is-expanded > &.is-start {
+		inset-inline-start: 4px;
+	}
+}
+
+.dt-canon-chevron {
+	inline-size: 12px;
+	block-size: 40px;
+	fill: none;
+	stroke: currentcolor;
+	stroke-width: 2.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+
+	&.is-end {
+		scale: -1 1;
+	}
+}
+
+// a matte wide enough for a chevron and its gap on each side
+@container (width > 1300px) {
+	.dt-canon-tool .dt-canon-edge {
+		display: flex;
+	}
+
+	.dt-canon-tool.is-expanded > :not(.dt-canon-edge) {
+		max-inline-size: 100cqi;
+		border-inline-color: transparent;
+	}
+
+	// the settings keep their half of 1200; only the picture grows
+	.dt-canon-tool.is-expandable .canon-split-body {
+		--canon-split-columns: minmax(0, 1fr) var(--canon-hairline)
+			600px;
 	}
 }
 
