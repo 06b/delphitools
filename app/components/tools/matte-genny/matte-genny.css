@@ -1,0 +1,121 @@
+.matte-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.matte-area {
+	position: absolute;
+	inset: calc(var(--canon-panel-padding) / 2) var(--canon-panel-padding)
+		var(--canon-panel-padding);
+}
+
+.matte-sheet,
+.matte-sheet > *,
+.matte-dimension {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.matte-picture--placed .matte-sheet,
+.matte-picture--placed .matte-sheet > *,
+.matte-picture--placed .matte-dimension {
+	transition-duration: 500ms;
+	transition-property:
+		inset-inline-start, inset-block-start, inline-size, block-size,
+		opacity, background-color, filter;
+	transition-timing-function: var(--matte-spring);
+}
+
+.matte-sheet {
+	overflow: hidden;
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.matte-gradient {
+	inset: 0;
+}
+
+.matte-backdrop,
+.matte-photo {
+	display: block;
+	max-inline-size: none;
+	object-fit: fill;
+}
+
+.matte-slot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	padding: 0;
+	border: 0;
+	background: var(--canon-muted);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+}
+
+.matte-slot:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.matte-slot--over {
+	background: var(--canon-accent-bg);
+	color: var(--canon-primary);
+}
+
+.matte-slot-icon {
+	display: flex;
+	opacity: 0.6;
+}
+
+.matte-slot-icon svg {
+	inline-size: 28px;
+	block-size: 28px;
+}
+
+/* the picture's transitions would otherwise drag the guides' fade to 500 ms */
+.matte-picture--placed .matte-sheet > .matte-guide {
+	opacity: 0;
+	background: color-mix(in srgb, var(--canon-paper) 60%, transparent);
+	mix-blend-mode: difference;
+	transition:
+		opacity 500ms ease-out,
+		inset-inline-start 500ms var(--matte-spring),
+		inset-block-start 500ms var(--matte-spring),
+		inline-size 500ms var(--matte-spring),
+		block-size 500ms var(--matte-spring);
+}
+
+.matte-picture--placed .matte-sheet > .matte-guide--shown {
+	opacity: 1;
+	transition-duration: 150ms, 500ms, 500ms, 500ms, 500ms;
+}
+
+.matte-loader {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+	color: var(--canon-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.matte-picture--placed .matte-sheet,
+	.matte-picture--placed .matte-sheet > *,
+	.matte-picture--placed .matte-dimension {
+		transition: none;
+	}
+}
+
+/* five titles in Quattro fit a 390 px phone only with narrow insets */
+.matte-ratios .canon-button {
+	padding-inline: 4px;
+}

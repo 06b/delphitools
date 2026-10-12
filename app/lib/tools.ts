@@ -72,6 +72,8 @@ export const toolCategories: ToolCategory[] = [
 					'Put non-square images on a square matte',
 				icon: 'square',
 				href: '/tools/matte-genny',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
