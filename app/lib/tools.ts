@@ -136,6 +136,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/colorblind-sim',
 				accepts: ['image/*'],
 				carryColour: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'colour-converter',
