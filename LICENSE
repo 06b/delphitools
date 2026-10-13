@@ -67,6 +67,10 @@ own licences, which continue to apply to them:
       Iosevka (Renzhi Li), SIL Open Font License 1.1; subset to Latin-1,
       punctuation, arrows and box drawing, ligature features removed.
 
+  public/fonts/fluoWrite-Regular.otf
+      FluoWrite (Speak the Sky, https://speakthesky.com), proprietary;
+      free for print and digital use, not for redistribution as a font.
+
   public/fonts/NotoSansShavian-Regular.woff2
       Noto Sans Shavian (Google), SIL Open Font License 1.1.
 

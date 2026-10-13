@@ -56,6 +56,24 @@ export const BUILT_WITH = [
 	{ name: 'Lucide', url: 'https://lucide.dev' },
 ];
 
+const FONTS = [
+	{
+		name: 'Open Sans',
+		by: 'Steve Matteson',
+		url: 'https://fonts.google.com/specimen/Open+Sans',
+	},
+	{
+		name: 'Iosevka',
+		by: 'Renzhi Li',
+		url: 'https://typeof.net/Iosevka/',
+	},
+	{
+		name: 'FluoWrite',
+		by: 'Speak the Sky',
+		url: 'https://speakthesky.com',
+	},
+];
+
 const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 	<div class="dt-about-body" ...attributes>
 		<div class="dt-about-lede">
@@ -192,6 +210,25 @@ const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 					>(opens in new tab)</span>
 				</a>.
 			</p>
+		</div>
+
+		<div class="dt-about-block">
+			<h3>Fonts used</h3>
+			<div class="dt-chips">
+				{{#each FONTS as |font|}}
+					<a
+						href={{font.url}}
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{{font.name}}
+						·
+						{{font.by}}<span
+							class="dt-sr-only"
+						>(opens in new tab)</span>
+					</a>
+				{{/each}}
+			</div>
 		</div>
 	</div>
 </template>;
