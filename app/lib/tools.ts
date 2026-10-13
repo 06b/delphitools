@@ -1027,6 +1027,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between decimal, hex, binary, and octal',
 				icon: 'binary',
 				href: '/tools/base-converter',
+				canon: true,
 			},
 			{
 				id: 'encoder',

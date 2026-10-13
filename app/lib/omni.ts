@@ -208,12 +208,11 @@ async function integerAnswers(input: string): Promise<OmniAnswer[]> {
 	const num = Number(input);
 	if (!Number.isSafeInteger(num) || num < 0) return [];
 
-	const { convertAll } =
-		await import('delphitools-v2/components/tools/base-converter');
-	const bases = convertAll(num);
+	const { allBases } =
+		await import('delphitools-v2/components/tools/base-converter/base-number');
 	const answers: OmniAnswer[] = [];
 	push(answers, 'base-converter', {
-		value: `${bases.dec} · 0x${bases.hex} · 0b${bases.bin} · 0o${bases.oct}`,
+		value: allBases(BigInt(num)).join(' · '),
 	});
 	return answers;
 }
