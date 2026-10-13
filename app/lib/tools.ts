@@ -60,6 +60,8 @@ export interface ToolCategory {
 	tools: Tool[];
 }
 
+export const CANON_KIT_ID = 'canon-ui-kit';
+
 export const toolCategories: ToolCategory[] = [
 	{
 		id: 'social-media',
@@ -1141,6 +1143,17 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'square-terminal',
 				href: 'https://github.com/1612elphi/delphitools-cli',
 				external: true,
+			},
+			{
+				id: CANON_KIT_ID,
+				name: "Delphi's Canon UI Kit",
+				// ∑CG: Elsewhere entry for the Canon kit docs, sidebar search text and share description
+				//   spec: one short line, ≤ 60 chars, sentence case, no period, says it is the component kit delphitools is built on
+				//   sample: "The components delphitools is built from"
+				description: '∑CG',
+				icon: 'component',
+				href: '/canon',
+				route: 'canon',
 			},
 		],
 	},

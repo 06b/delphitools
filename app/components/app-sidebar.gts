@@ -28,7 +28,8 @@ const PAGES = [
 const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 	...cat,
 	tools: cat.tools
-		.filter((t) => !t.route)
+		// a routed tool with its own page row is listed once
+		.filter((t) => !PAGES.some((page) => page.href === t.href))
 		.sort(
 			(a, b) =>
 				Number(!!b.atlas) - Number(!!a.atlas) ||

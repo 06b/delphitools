@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import { htmlSafe } from '@ember/template';
 import { BUILT_WITH } from 'delphitools-v2/components/about-delphitools';
 
@@ -20,6 +21,10 @@ function withUrl(name: string) {
 	return BUILT_WITH.find((lib) => lib.name === name)?.url;
 }
 
+function withRoute(name: string) {
+	return BUILT_WITH.find((lib) => lib.name === name)?.route;
+}
+
 const STACK = [
 	{ name: 'Ember', url: withUrl('Ember'), icon: EMBER_ICON, wide: false },
 	{
@@ -30,7 +35,7 @@ const STACK = [
 	},
 	{
 		name: 'Canon',
-		url: withUrl("Delphi's Canon UI Kit"),
+		route: withRoute("Delphi's Canon UI Kit"),
 		icon: CANON_ICON,
 		wide: false,
 	},
@@ -108,7 +113,22 @@ export default class HeroCopy extends Component {
 						>Built with</p>
 						<div class="dt-hero-tiles">
 							{{#each STACK as |lib|}}
-								{{#if lib.url}}
+								{{#if
+									lib.route
+								}}
+									<LinkTo
+										@route={{lib.route}}
+										class="dt-hero-tile"
+									>
+										<span
+											class="dt-icon"
+											aria-hidden="true"
+										>{{lib.icon}}</span>
+										{{lib.name}}
+									</LinkTo>
+								{{else if
+									lib.url
+								}}
 									<a
 										href={{lib.url}}
 										target="_blank"

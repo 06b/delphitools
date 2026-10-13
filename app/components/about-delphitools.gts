@@ -1,4 +1,6 @@
 import type { TOC } from '@ember/component/template-only';
+import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import CastLineup from 'delphitools-v2/components/cast-lineup';
 import ColourPaletteDialog from 'delphitools-v2/components/colour-palette-dialog';
 
@@ -40,8 +42,8 @@ const DONORS = [
 	},
 ];
 
-// a url is optional: the kit has no public page yet
-export const BUILT_WITH: { name: string; url?: string }[] = [
+// a route is a page in the app, opened in place
+export const BUILT_WITH: { name: string; url?: string; route?: string }[] = [
 	{ name: 'Ember', url: 'https://emberjs.com' },
 	{ name: 'Glimmer', url: 'https://github.com/glimmerjs/glimmer-vm' },
 	{
@@ -50,7 +52,7 @@ export const BUILT_WITH: { name: string; url?: string }[] = [
 	},
 	{ name: 'Vite', url: 'https://vite.dev' },
 	{ name: 'Crayon', url: 'https://crayoncss.com' },
-	{ name: "Delphi's Canon UI Kit" },
+	{ name: "Delphi's Canon UI Kit", route: 'canon' },
 	{ name: 'Lucide', url: 'https://lucide.dev' },
 ];
 
@@ -71,6 +73,10 @@ const FONTS = [
 		url: 'https://speakthesky.com',
 	},
 ];
+
+// the about text sits in a modal dialog; a page link leaves it
+const closeDialog = (event: MouseEvent) =>
+	(event.currentTarget as HTMLElement).closest('dialog')?.close();
 
 const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 	<div class="dt-about-body" ...attributes>
@@ -185,7 +191,15 @@ const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 			<h3>Built with</h3>
 			<div class="dt-chips">
 				{{#each BUILT_WITH as |lib|}}
-					{{#if lib.url}}
+					{{#if lib.route}}
+						<LinkTo
+							@route={{lib.route}}
+							{{on
+								"click"
+								closeDialog
+							}}
+						>{{lib.name}}</LinkTo>
+					{{else if lib.url}}
 						<a
 							href={{lib.url}}
 							target="_blank"

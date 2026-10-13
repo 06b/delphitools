@@ -198,6 +198,15 @@ export const toolCard = (name) =>
 		SiteUrl(),
 	]);
 
+export const canonCard = (name) =>
+	Frame([
+		TileBand(),
+		Mark(),
+		Title(name),
+		Subtitle("Delphi's Canon UI Kit"),
+		SiteUrl(),
+	]);
+
 export const siteCard = () => Frame([Hero(), SiteUrl(0)]);
 
 export async function renderPng(element) {
@@ -217,5 +226,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		await renderPng(toolCard('PX to REM')),
 	);
 	writeFileSync(join(outDir, 'site.png'), await renderPng(siteCard()));
+	writeFileSync(
+		join(outDir, 'canon.png'),
+		await renderPng(canonCard('CanonSlider')),
+	);
 	console.log('wrote', outDir);
 }
