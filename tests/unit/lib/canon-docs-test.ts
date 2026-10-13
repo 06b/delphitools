@@ -1,14 +1,18 @@
 import { module, test } from 'qunit';
 import {
 	className,
+	componentGroups,
 	componentNames,
+	groupSlug,
+	navIdFor,
+	navSections,
+	slugOf,
 	docsPages,
 	docsSections,
 	importLine,
 	docsPatterns,
 	docsScreens,
 	neighbours,
-	opensSection,
 	pageFor,
 	searchDocs,
 } from 'delphitools-v2/lib/canon-docs';
@@ -145,30 +149,84 @@ module('Unit | Lib | canon-docs', function () {
 		}
 	});
 
-	test('the nav: sections in order, icons on the rows that open one', function (assert) {
-		assert.deepEqual(docsSections.map((s) => s.title).slice(0, 3), [
-			'',
-			'Components',
-			'Layout',
-		]);
+	test('the nav: the top pages, then one row per component group', function (assert) {
 		assert.deepEqual(
-			docsSections.slice(-2).map((s) => s.title),
-			['Patterns', 'Screens'],
+			navSections.map((section) => [
+				section.title,
+				section.pages.map((p) => p.id),
+			]),
+			[
+				[
+					'',
+					[
+						'overview',
+						'installation',
+						'patterns',
+						'screens',
+					],
+				],
+				[
+					'Components',
+					componentGroups.map(
+						(group) =>
+							`group-${groupSlug(group)}`,
+					),
+				],
+			],
 		);
 		assert.deepEqual(
-			docsPages.filter(opensSection).map((p) => p.id),
-			[
-				'overview',
-				'installation',
-				'components',
-				'patterns',
-				'screens',
-			],
+			docsSections.slice(0, 2).map((s) => s.title),
+			['', 'Patterns'],
+			'patterns come before the components',
+		);
+	});
+
+	test('a group shares the component route; entries light their section row', function (assert) {
+		const slugs = componentNames.map(slugOf);
+		for (const group of componentGroups)
+			assert.false(
+				slugs.includes(groupSlug(group)),
+				groupSlug(group),
+			);
+		const params = (name: string) => ({ name });
+		assert.strictEqual(
+			pageFor(
+				'canon.components.component',
+				params('controls'),
+			)?.id,
+			'group-controls',
+		);
+		assert.strictEqual(
+			navIdFor(
+				pageFor(
+					'canon.components.component',
+					params('slider'),
+				),
+			),
+			'group-controls',
+		);
+		assert.strictEqual(
+			navIdFor(
+				pageFor(
+					'canon.patterns.pattern',
+					params('tone'),
+				),
+			),
+			'patterns',
+		);
+		assert.strictEqual(
+			navIdFor(
+				pageFor(
+					'canon.screens.screen',
+					params('settings'),
+				),
+			),
+			'screens',
 		);
 	});
 
 	test('search keeps the matching pages under their headings', function (assert) {
-		assert.strictEqual(searchDocs('  '), docsSections);
+		assert.strictEqual(searchDocs('  '), navSections);
 		assert.deepEqual(
 			searchDocs('colour well').map((s) => [
 				s.title,

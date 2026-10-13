@@ -14,6 +14,7 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { brands } from 'delphitools-v2/components/canon-docs/brands/index';
 import {
 	patternParts,
 	type Part,
@@ -56,12 +57,48 @@ const portList = (name: string) => {
 
 const groups = componentGroups.map((group) => ({
 	title: group.title,
+	page: docsPages.find(
+		(page) => page.kind === 'group' && page.heading === group.title,
+	)!,
 	pages: docsPages.filter(
 		(page) =>
 			page.kind === 'component' &&
 			group.names.includes(page.name),
 	),
 }));
+const componentsOf = (slug: string) =>
+	docsPages.filter(
+		(page) =>
+			page.kind === 'component' &&
+			page.section.toLowerCase() === slug,
+	);
+const brandOf = (port: string) => brands[port];
+
+/** Which platforms have a component: brand marks, lit where it exists. */
+const Ports: TOC<{ Args: { name: string; labels?: boolean } }> = <template>
+	<span class="cd-ports {{if @labels 'cd-ports--labels'}}">
+		{{#each (portList @name) as |entry|}}
+			<span
+				class="cd-port"
+				data-has={{if entry.has "true" "false"}}
+				title={{entry.port}}
+			>
+				<span
+					class="cd-brand"
+					aria-hidden="true"
+				>{{brandOf entry.port}}</span>
+				{{#if @labels}}
+					{{entry.port}}
+				{{else}}
+					<span
+						class="dt-sr-only"
+					>{{entry.port}}</span>
+				{{/if}}
+			</span>
+		{{/each}}
+	</span>
+</template>;
+
 const isCard = new Map(docsPatterns.map((entry) => [entry.id, entry.card]));
 const patternPages = docsPages.filter((page) => page.kind === 'pattern');
 const cardPages = patternPages.filter((page) => isCard.get(page.name));
@@ -178,12 +215,33 @@ const Installation: TOC<object> = <template>
 	</CanonRows>
 	<CanonRows @framed={{true}}>
 		<CanonHeading @text="Platforms" />
-		<CanonRow
-			@title="The Web"
-			@detail="Ember, React, Vue, Svelte"
-		/>
-		<CanonRow @title="UIKit" />
+		<CanonRow @title="The Web">
+			<span class="cd-brands" aria-hidden="true">
+				<span class="cd-brand">{{brandOf
+						"Ember"
+					}}</span>
+				<span class="cd-brand">{{brandOf
+						"React"
+					}}</span>
+				<span class="cd-brand">{{brandOf "Vue"}}</span>
+				<span class="cd-brand">{{brandOf
+						"Svelte"
+					}}</span>
+			</span>
+		</CanonRow>
+		<CanonRow @title="UIKit">
+			<span class="cd-brands" aria-hidden="true">
+				<span class="cd-brand">{{brandOf
+						"UIKit"
+					}}</span>
+			</span>
+		</CanonRow>
 		<CanonRow @title="Jetpack Compose">
+			<span class="cd-brands" aria-hidden="true">
+				<span class="cd-brand">{{brandOf
+						"Jetpack Compose"
+					}}</span>
+			</span>
 			<CanonStatus @text="Planned" @tone="muted" />
 		</CanonRow>
 	</CanonRows>
@@ -199,7 +257,17 @@ const Components: TOC<{ Args: { go: DocsGo } }> = <template>
 	</header>
 	{{#each groups as |group|}}
 		<CanonRows @framed={{true}}>
-			<CanonHeading @text={{group.title}} />
+			<a
+				class="cd-card-head"
+				href={{group.page.url}}
+				{{on "click" @go}}
+			>
+				<IconSvg @name={{group.page.icon}} />
+				<span
+					class="cd-card-title"
+				>{{group.title}}</span>
+				<IconSvg @name="arrow-up-right" />
+			</a>
 			<Links @pages={{group.pages}} @go={{@go}} />
 		</CanonRows>
 	{{/each}}
@@ -228,16 +296,49 @@ const ComponentPage: TOC<{ Args: { page: DocsPage } }> = <template>
 	</CanonRows>
 	<CanonRows @framed={{true}}>
 		<CanonHeading @text="Platforms" />
-		<div class="cd-ports">
-			{{#each (portList @page.name) as |entry|}}
-				<CanonStatus
-					@text={{entry.port}}
-					@tone={{if entry.has "ok" "muted"}}
-					data-has={{if entry.has "true" "false"}}
-				/>
-			{{/each}}
+		<div class="cd-ports-row">
+			<Ports @name={{@page.name}} @labels={{true}} />
 		</div>
 	</CanonRows>
+</template>;
+
+/** A component group: every component in it, live, in a masonry grid. */
+const GroupPage: TOC<{ Args: { page: DocsPage; go: DocsGo } }> = <template>
+	<header class="cd-head">
+		<h1 class="cd-title">{{@page.heading}}</h1>
+	</header>
+	<div class="cd-masonry cd-group">
+		{{#each (componentsOf @page.name) as |entry|}}
+			<CanonRows
+				@framed={{true}}
+				class="cd-card"
+				data-component={{entry.name}}
+			>
+				<a
+					class="cd-card-head"
+					href={{entry.url}}
+					{{on "click" @go}}
+				>
+					<span
+						class="cd-card-title"
+					>{{entry.heading}}</span>
+					<Ports @name={{entry.name}} />
+					<IconSvg @name="arrow-up-right" />
+				</a>
+				{{#let (tileOf entry.name) as |tile|}}
+					{{#if tile}}
+						<tile.Live />
+					{{/if}}
+				{{/let}}
+				<CanonValueLine
+					class="cd-import"
+					@label="Import"
+					@value={{importLine entry.name}}
+					@layout="wrapping"
+				/>
+			</CanonRows>
+		{{/each}}
+	</div>
 </template>;
 
 const Patterns: TOC<{ Args: { go: DocsGo } }> = <template>
@@ -346,6 +447,8 @@ const DocsBody: TOC<{ Args: { page: DocsPage; go: DocsGo } }> = <template>
 		<Installation />
 	{{else if (eq @page.kind "components")}}
 		<Components @go={{@go}} />
+	{{else if (eq @page.kind "group")}}
+		<GroupPage @page={{@page}} @go={{@go}} />
 	{{else if (eq @page.kind "component")}}
 		<ComponentPage @page={{@page}} />
 	{{else if (eq @page.kind "patterns")}}

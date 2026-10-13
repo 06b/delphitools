@@ -37,12 +37,60 @@
 	background: var(--canon-border);
 }
 
+/* platform marks (Simple Icons): lit where the component exists */
 .cd-ports {
-	display: flex;
+	display: inline-flex;
+	flex: none;
+	gap: 6px;
+	align-items: center;
+}
+
+.cd-ports--labels {
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: 8px 16px;
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.cd-ports-row {
 	padding: var(--canon-panel-padding);
 	background: var(--canon-card);
+}
+
+.cd-port {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--canon-foreground);
+}
+
+.cd-port[data-has="false"] {
+	opacity: 0.25;
+}
+
+.cd-brands {
+	display: inline-flex;
+	gap: 8px;
+	margin-inline-end: 8px;
+}
+
+.cd-brand {
+	display: inline-flex;
+}
+
+.cd-brand svg,
+.cd-card-head .cd-brand svg {
+	inline-size: 14px;
+	block-size: 14px;
+	color: currentcolor;
+	fill: currentcolor;
+	translate: none;
+}
+
+.cd-ports--labels .cd-brand svg,
+.cd-brands .cd-brand svg {
+	inline-size: 18px;
+	block-size: 18px;
 }
 
 .cd-block {

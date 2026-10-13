@@ -74,6 +74,10 @@ own licences, which continue to apply to them:
   public/fonts/NotoSansShavian-Regular.woff2
       Noto Sans Shavian (Google), SIL Open Font License 1.1.
 
+  app/components/canon-docs/brands/
+      Simple Icons 16.35.0 (simpleicons.org), CC0 1.0; the marks
+      belong to their owners.
+
   public/flags/
       circle-flags (HatScripts), MIT.
 

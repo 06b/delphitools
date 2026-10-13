@@ -10,6 +10,7 @@ export type DocsKind =
 	| 'overview'
 	| 'installation'
 	| 'components'
+	| 'group'
 	| 'component'
 	| 'patterns'
 	| 'pattern'
@@ -26,7 +27,7 @@ export interface DocsPage {
 	section: string;
 	url: string;
 	icon: string;
-	/** The kit module (`canon-slider`), the pattern or screen id (`halves`), else empty. */
+	/** The kit module (`canon-slider`), the group, pattern or screen id (`halves`), else empty. */
 	name: string;
 }
 
@@ -224,6 +225,9 @@ export const importLine = (name: string) =>
 
 export const componentNames = componentGroups.flatMap((group) => group.names);
 
+// a group's page shares the component route: no component slug is a group's
+export const groupSlug = (group: DocsGroup) => group.title.toLowerCase();
+
 const entryPages = (
 	entries: DocsEntry[],
 	kind: 'pattern' | 'screen',
@@ -262,31 +266,9 @@ export const docsPages: DocsPage[] = [
 		name: '',
 	},
 	{
-		id: 'components',
-		kind: 'components',
-		title: 'All components',
-		heading: 'Components',
-		section: 'Components',
-		url: '/canon/components',
-		icon: 'component',
-		name: '',
-	},
-	...componentGroups.flatMap((group) =>
-		group.names.map((name): DocsPage => ({
-			id: name,
-			kind: 'component',
-			title: className(name).replace(/^Canon/, ''),
-			heading: className(name),
-			section: group.title,
-			url: `/canon/components/${slugOf(name)}`,
-			icon: group.icon,
-			name,
-		})),
-	),
-	{
 		id: 'patterns',
 		kind: 'patterns',
-		title: 'All patterns',
+		title: 'Patterns',
 		heading: 'Patterns',
 		section: 'Patterns',
 		url: '/canon/patterns',
@@ -297,7 +279,7 @@ export const docsPages: DocsPage[] = [
 	{
 		id: 'screens',
 		kind: 'screens',
-		title: 'All screens',
+		title: 'Screens',
 		heading: 'Screens',
 		section: 'Screens',
 		url: '/canon/screens',
@@ -305,13 +287,71 @@ export const docsPages: DocsPage[] = [
 		name: '',
 	},
 	...entryPages(docsScreens, 'screen', 'Screens'),
+	{
+		id: 'components',
+		kind: 'components',
+		title: 'All components',
+		heading: 'Components',
+		section: 'Components',
+		url: '/canon/components',
+		icon: 'component',
+		name: '',
+	},
+	...componentGroups.flatMap((group): DocsPage[] => [
+		{
+			id: `group-${groupSlug(group)}`,
+			kind: 'group',
+			title: group.title,
+			heading: group.title,
+			section: 'Components',
+			url: `/canon/components/${groupSlug(group)}`,
+			icon: group.icon,
+			name: groupSlug(group),
+		},
+		...group.names.map((name): DocsPage => ({
+			id: name,
+			kind: 'component',
+			title: className(name).replace(/^Canon/, ''),
+			heading: className(name),
+			section: group.title,
+			url: `/canon/components/${slugOf(name)}`,
+			icon: group.icon,
+			name,
+		})),
+	]),
 ];
 
 /** Rows that open a section carry its icon; the entries inside are text only. */
 export const opensSection = (page: DocsPage) =>
 	!['component', 'pattern', 'screen'].includes(page.kind);
 
-/** The nav's headed runs, in page order; the first has no heading. */
+const byId = new Map(docsPages.map((page) => [page.id, page]));
+
+/** The drawer's rows: the top pages, then one row per component group. */
+export const navSections: { title: string; pages: DocsPage[] }[] = [
+	{
+		title: '',
+		pages: ['overview', 'installation', 'patterns', 'screens'].map(
+			(id) => byId.get(id)!,
+		),
+	},
+	{
+		title: 'Components',
+		pages: docsPages.filter((page) => page.kind === 'group'),
+	},
+];
+
+/** The nav row that stands for a page: entries light their section's row. */
+export function navIdFor(page: DocsPage | undefined) {
+	if (!page) return undefined;
+	if (page.kind === 'pattern') return 'patterns';
+	if (page.kind === 'screen') return 'screens';
+	if (page.kind === 'component')
+		return `group-${page.section.toLowerCase()}`;
+	return page.id;
+}
+
+/** Every page in headed runs, in page order, for search; the first has no heading. */
 export const docsSections: { title: string; pages: DocsPage[] }[] = [];
 for (const page of docsPages) {
 	const last = docsSections[docsSections.length - 1];
@@ -322,7 +362,7 @@ for (const page of docsPages) {
 /** The nav's runs, keeping the pages whose title, heading or section holds every word. */
 export function searchDocs(query: string) {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-	if (!words.length) return docsSections;
+	if (!words.length) return navSections;
 	return docsSections.flatMap((section) => {
 		const pages = section.pages.filter((page) => {
 			const text =
@@ -332,8 +372,6 @@ export function searchDocs(query: string) {
 		return pages.length ? [{ title: section.title, pages }] : [];
 	});
 }
-
-const byId = new Map(docsPages.map((page) => [page.id, page]));
 
 export function pageFor(
 	routeName: string | null | undefined,
@@ -348,7 +386,10 @@ export function pageFor(
 		case 'canon.components.index':
 			return byId.get('components');
 		case 'canon.components.component':
-			return byId.get(`canon-${name}`);
+			return (
+				byId.get(`group-${name}`) ??
+				byId.get(`canon-${name}`)
+			);
 		case 'canon.patterns.index':
 			return byId.get('patterns');
 		case 'canon.patterns.pattern':

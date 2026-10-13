@@ -17,6 +17,7 @@ import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
 import type SidebarService from 'delphitools-v2/services/sidebar';
 import {
+	navIdFor,
 	opensSection,
 	pageFor,
 	searchDocs,
@@ -49,6 +50,8 @@ interface NavRowSignature {
 		href: string;
 		external?: boolean;
 		canon?: boolean;
+		/** Overrides the URL match, for a row that stands for many pages. */
+		current?: boolean;
 	};
 	Element: HTMLElement;
 }
@@ -57,7 +60,10 @@ class NavRow extends Component<NavRowSignature> {
 	@service declare router: RouterService;
 
 	get selected() {
-		return this.router.currentURL?.split('?')[0] === this.args.href;
+		return (
+			this.args.current ??
+			this.router.currentURL?.split('?')[0] === this.args.href
+		);
 	}
 
 	// canon rows are plain links
@@ -132,11 +138,17 @@ export default class AppSidebar extends Component {
 	}
 
 	get docsPage() {
-		return pageFor(
-			this.router.currentRouteName,
-			this.router.currentRoute?.params,
-		)?.id;
+		return navIdFor(
+			pageFor(
+				this.router.currentRouteName,
+				this.router.currentRoute?.params,
+			),
+		);
 	}
+
+	// while searching, rows match by URL; otherwise a section row stands for its pages
+	isCurrent = (id: string) =>
+		this.docsSearch.trim() ? undefined : id === this.docsPage;
 
 	// keeps the current docs row in the drawer's view
 	reveal = modifier((nav: HTMLElement, [id]: [string | undefined]) => {
@@ -351,6 +363,9 @@ export default class AppSidebar extends Component {
 									page.icon
 								}}
 								@href={{page.url}}
+								@current={{this.isCurrent
+									page.id
+								}}
 							/>
 						{{/each}}
 					{{else}}

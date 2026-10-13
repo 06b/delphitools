@@ -3,16 +3,12 @@
 import { BASE, launch, visit, check, finish, sleep } from './harness.mjs';
 
 // node strips typescript
-const { docsPages, docsPatterns, docsScreens, importLine, searchDocs } =
+const { docsPages, docsPatterns, docsScreens, importLine, navSections, searchDocs } =
 	await import('../../app/lib/canon-docs.ts');
 
 const KIT = "Delphi's Canon UI Kit";
 const cards = docsPatterns.filter((p) => p.card);
-const sectionRows = docsPages.filter((p) =>
-	['overview', 'installation', 'components', 'patterns', 'screens'].includes(
-		p.kind,
-	),
-);
+const navRows = navSections.flatMap((section) => section.pages.map((p) => p.url));
 
 const { browser, page } = await launch();
 await page
@@ -55,8 +51,15 @@ const layout = () =>
 			(el) => el.scrollWidth <= el.clientWidth,
 		),
 	}));
-const navClick = (url) =>
-	page.click(`.dt-sidebar .canon-sidebar-rows a[href="${url}"]`);
+// a drawer row when the nav has one, else in-app history (entries live in their section's page)
+const navClick = async (url) => {
+	const row = await page.$(`.dt-sidebar .canon-sidebar-rows a[href="${url}"]`);
+	if (row) return row.click();
+	return page.evaluate((u) => {
+		history.pushState({}, '', u);
+		dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+	}, url);
+};
 const settle = (text) =>
 	page
 		.waitForFunction(
@@ -81,12 +84,8 @@ check('the home heading is the kit name', (await heading()) === KIT);
 
 seen = await drawer();
 check('on /canon the drawer swaps to the docs nav', seen.label === 'Docs' && seen.back && !seen.tools);
-check('the docs nav lists every page in order', seen.rows.join() === docsPages.map((p) => p.url).join(), `${seen.rows.length} rows`);
-check(
-	'only the section rows carry icons',
-	seen.iconed.join() === sectionRows.map((p) => p.url).join(),
-	seen.iconed.join(' '),
-);
+check('the docs nav lists the top pages and the component groups', seen.rows.join() === navRows.join(), seen.rows.join(' '));
+check('every nav row carries its icon', seen.iconed.join() === navRows.join(), seen.iconed.join(' '));
 check('the docs leave no nav column inside the sheet', !(await page.$('.dt-sheet .canon-sidebar')));
 
 // the home grid
@@ -159,7 +158,7 @@ await page.click(`${card('tone')} .cd-card-head`);
 await settle('Tone');
 check('a card title opens its pattern page', where() === '/canon/patterns/tone', where());
 
-// every route, through the drawer
+// every route: nav pages through the drawer, the rest through in-app history
 let walked = 0;
 const missed = [];
 for (const docs of docsPages) {
@@ -169,7 +168,7 @@ for (const docs of docsPages) {
 	else missed.push(`${docs.url} -> ${where()} "${await heading()}"`);
 }
 check(
-	'every docs page renders through the drawer',
+	'every docs page renders in the app',
 	walked === docsPages.length,
 	missed.length ? missed.slice(0, 3).join('; ') : `${walked} pages`,
 );
@@ -277,7 +276,7 @@ const expected = searchDocs('colour well').flatMap((s) => s.pages.map((p) => p.u
 check('the drawer search filters the docs pages', seen.rows.join() === expected.join(), seen.rows.join(' '));
 await page.click('.dt-search-clear');
 await sleep(150);
-check('and clearing it lists every page again', (await drawer()).rows.length === docsPages.length);
+check('and clearing it shows the nav again', (await drawer()).rows.join() === navRows.join());
 
 // the back row stays put and goes back to the app
 await visit(page, '/tools/px-to-rem');
@@ -285,6 +284,10 @@ await page.click('.dt-sidebar a[href="/canon"]');
 await page.waitForSelector('.dt-docs-back', { timeout: 10000 }).catch(() => {});
 await navClick('/canon/components/slider');
 await sleep(300);
+// the nav is short: a short window makes the drawer scroll
+const tall = page.viewport();
+await page.setViewport({ ...tall, height: 360 });
+await sleep(200);
 await page.evaluate(() => {
 	const scroller = document.querySelector('.dt-sidebar .canon-sidebar-scroll');
 	scroller.scrollTop = scroller.scrollHeight;
@@ -299,6 +302,8 @@ const back = await page.evaluate(() => {
 	};
 });
 check('the back row stays in view after the drawer scrolls', back.scrolled && back.visible, JSON.stringify(back));
+await page.setViewport(tall);
+await sleep(200);
 await page.click('.dt-docs-back');
 await sleep(500);
 check('the back row returns to the last app page', where() === '/tools/px-to-rem', where());

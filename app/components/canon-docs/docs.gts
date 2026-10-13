@@ -44,7 +44,7 @@ const paletteStyle = htmlSafe('--canon-dialog-width: 640px');
 const PreviousIcon = iconFor('arrow-left');
 const NextIcon = iconFor('arrow-right');
 // the showcase pages take the width the grid can use
-const wide = ['overview', 'patterns', 'screens'];
+const wide = ['overview', 'patterns', 'screens', 'group'];
 
 /** A plain click navigates in the app; modified clicks keep the link's own behaviour. */
 export type DocsGo = (event: MouseEvent) => void;
