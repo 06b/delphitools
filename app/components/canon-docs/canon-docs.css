@@ -1,0 +1,328 @@
+/* the docs: nav beside the page, one sheet tall */
+.cd-docs {
+	display: flex;
+	block-size: 100%;
+	container: cd-docs / inline-size;
+	background: var(--canon-background);
+}
+
+.cd-pane {
+	display: grid;
+	flex: 1;
+	min-inline-size: 0;
+	grid-template-rows: auto minmax(0, 1fr);
+	min-block-size: 0;
+}
+
+.cd-toolbar {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 6px var(--canon-panel-padding);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.cd-menu {
+	margin-inline-end: auto;
+}
+
+.cd-key {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+}
+
+/* the nav's 240 px beside a 528 px page */
+@container cd-docs (width < 768px) {
+	.cd-nav,
+	.cd-key {
+		display: none;
+	}
+}
+
+@container cd-docs (width >= 768px) {
+	.cd-menu {
+		display: none;
+	}
+}
+
+.cd-sheet-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-frame);
+	background: var(--canon-border);
+}
+
+.cd-head {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-block: 8px 4px;
+}
+
+.cd-title {
+	margin: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title2);
+	font-weight: var(--canon-weight-bold);
+	overflow-wrap: anywhere;
+}
+
+.cd-lede {
+	margin: 0;
+	color: var(--canon-secondary-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	line-height: 1.45;
+}
+
+.cd-links {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: var(--canon-frame);
+	background: var(--canon-border);
+}
+
+.cd-ports {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.cd-block {
+	block-size: 600px;
+	border: var(--canon-frame) solid var(--canon-border);
+	overflow: hidden;
+}
+
+.cd-pager {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--canon-frame);
+}
+
+/* the row's cell gap shows its own background, as between sidebar rows */
+.cd-pager > .canon-sidebar-row {
+	background: var(--canon-border);
+}
+
+.cd-next {
+	grid-column: 2;
+	flex-direction: row-reverse;
+}
+
+.cd-next > .canon-sidebar-row-title {
+	justify-content: flex-end;
+	padding-inline: 0 10px;
+}
+
+/* blocks */
+.cd-halves-picture {
+	display: grid;
+	place-items: center;
+	block-size: 100%;
+}
+
+.cd-halves-shape {
+	inline-size: 50%;
+	aspect-ratio: 1;
+}
+
+.cd-banner-figure {
+	display: grid;
+	place-items: center;
+	block-size: 100%;
+}
+
+.cd-drop-image {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: contain;
+}
+
+/* the component demos, from the kit showcase and gallery */
+.cd-stage {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	align-items: center;
+	justify-content: space-around;
+	padding: var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.cd-icons svg {
+	inline-size: 24px;
+	block-size: 24px;
+}
+
+.cd-rules {
+	align-items: stretch;
+	justify-content: center;
+}
+
+.cd-rule-across {
+	inline-size: 100%;
+}
+
+.cd-swatches {
+	display: flex;
+	block-size: 64px;
+}
+
+.cd-swatches > .canon-swatch {
+	flex: 1;
+}
+
+.cd-wheel-rows {
+	display: grid;
+	grid-auto-rows: 44px;
+	background: var(--canon-card);
+}
+
+.cd-editor {
+	display: flex;
+	block-size: 112px;
+	background: var(--canon-card);
+}
+
+.cd-sidebar-box {
+	display: flex;
+	block-size: 400px;
+	background: var(--canon-card);
+}
+
+.cd-sidebar-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-frame);
+	background: var(--canon-border);
+}
+
+.cd-box {
+	block-size: 220px;
+}
+
+.cd-box--split {
+	block-size: 320px;
+}
+
+.cd-bar {
+	inline-size: 100%;
+	max-inline-size: 120px;
+	block-size: 6px;
+}
+
+.cd-art {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	block-size: 100%;
+	background: linear-gradient(
+		to right,
+		var(--canon-primary),
+		var(--canon-destructive)
+	);
+	color: var(--canon-primary-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title2);
+	font-weight: var(--canon-weight-bold);
+}
+
+.cd-loupe {
+	position: absolute;
+}
+
+.cd-fit {
+	display: flex;
+	flex-direction: column;
+	inline-size: 100%;
+	margin: 0;
+	padding: 16px;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-semibold);
+	text-align: start;
+	cursor: pointer;
+}
+
+.cd-swatch {
+	aspect-ratio: 16 / 9;
+	background: var(--canon-primary);
+}
+
+.cd-glyph {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	block-size: 100%;
+	border: var(--canon-hairline) solid var(--canon-border);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-bold);
+}
+
+.cd-inline {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+}
+
+.cd-loaders {
+	gap: 16px;
+}
+
+.cd-popover {
+	inline-size: 280px;
+}
+
+.cd-context-area:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.cd-shell-window {
+	block-size: 480px;
+}
+
+.cd-shell--zoomed {
+	block-size: 600px;
+}
+
+.cd-shell--minimised {
+	block-size: auto;
+}
+
+.cd-shell--minimised > :not(.canon-window-bar) {
+	display: none;
+}
+
+.cd-shell-hero {
+	inline-size: 100%;
+	block-size: 56px;
+}
+
+.cd-dimension {
+	position: relative;
+	block-size: 100%;
+}
+
+.cd-dimension-box {
+	position: absolute;
+	background: var(--canon-card);
+	outline: var(--canon-hairline) solid var(--canon-border);
+}

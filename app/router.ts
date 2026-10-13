@@ -15,6 +15,15 @@ Router.map(function () {
 	this.route('workflows');
 	this.route('workflow', { path: '/w/:steps' });
 	this.route('experiments');
+	this.route('canon', function () {
+		this.route('installation');
+		this.route('components', function () {
+			this.route('component', { path: '/:name' });
+		});
+		this.route('blocks', function () {
+			this.route('block', { path: '/:name' });
+		});
+	});
 	this.route('privacy');
 	this.route('not-found', { path: '/*path' });
 });

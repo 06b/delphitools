@@ -12,7 +12,11 @@ import AppTab from 'delphitools-v2/components/app-tab';
 import ColourNotationSelector from 'delphitools-v2/components/colour-notation-selector';
 import FlowState from 'delphitools-v2/components/flow-state';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import { getToolById, getCategoryByToolId } from 'delphitools-v2/lib/tools';
+import {
+	CANON_KIT_ID,
+	getToolById,
+	getCategoryByToolId,
+} from 'delphitools-v2/lib/tools';
 
 const PAGES: Record<string, { title: string; icon: string }> = {
 	index: { title: 'Home', icon: 'home' },
@@ -44,10 +48,15 @@ export default class ApplicationTemplate extends Component {
 	}
 
 	get page() {
-		const tool = this.toolId ? getToolById(this.toolId) : undefined;
+		const route = this.router.currentRouteName ?? '';
+		const tool = this.toolId
+			? getToolById(this.toolId)
+			: route.startsWith('canon.')
+				? getToolById(CANON_KIT_ID)
+				: undefined;
 		if (tool) return { title: tool.name, icon: tool.icon };
 		return (
-			PAGES[this.router.currentRouteName ?? ''] ?? {
+			PAGES[route] ?? {
 				title: 'delphitools',
 				icon: 'layout-grid',
 			}
