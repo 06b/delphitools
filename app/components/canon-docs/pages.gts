@@ -21,15 +21,10 @@ import {
 	type DocsPage,
 } from 'delphitools-v2/lib/canon-docs';
 
-// ∑CG: Canon docs overview, lede under the kit name
-//   spec: one or two sentences, ≤ 200 chars, plain, says what the kit is (the delphitools look as components for the web and iOS)
-//   sample: "The components behind delphitools, built for the web and for iOS from one design."
-const LEDE = '∑CG';
+const LEDE =
+	'A collection of web, iOS and Android components for making your own Delphi-style apps.';
 
-// ∑CG: Canon docs installation page, not-yet-published note
-//   spec: one sentence, ≤ 90 chars, plain, says the kit has no public package yet
-//   sample: "The kit is not published yet; it ships inside delphitools for now."
-const INSTALL_NOTE = '∑CG';
+const INSTALL_NOTE = '(Not available just yet, sorry, ironing out)';
 
 const KIT_NAME = "Delphi's Canon UI Kit";
 const PORTS = ['Ember', 'React', 'Vue', 'Svelte', 'UIKit'];

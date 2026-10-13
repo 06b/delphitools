@@ -18,10 +18,7 @@ const { docsPages } = await import('../app/lib/canon-docs.ts');
 
 const canonKit = allTools.find((t) => t.id === CANON_KIT_ID);
 
-// ∑CG: share image alt text for the Canon kit docs pages
-//   spec: ≤ 80 chars, plain, describes the card (a share card for a page of the Canon UI kit docs on delphitools)
-//   sample: "A share card for Delphi's Canon UI Kit on delphitools"
-const canonCardAlt = '∑CG';
+const canonCardAlt = "A share card for Delphi's Canon UI Kit on delphitools";
 
 const toolRoutes = allTools.filter(
 	(t) => !t.external && t.href.startsWith('/tools/'),
