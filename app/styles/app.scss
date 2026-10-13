@@ -1046,12 +1046,16 @@ body {
 	background: transparent;
 }
 
-.dt-drawer .canon-sidebar-rows {
+.dt-drawer .canon-sidebar-rows,
+.cd-nav .canon-sidebar-rows,
+.cd-sheet-rows {
 	gap: 0;
 	background: transparent;
 }
 
-.dt-drawer .canon-sidebar-row {
+.dt-drawer .canon-sidebar-row,
+.cd-nav .canon-sidebar-row,
+.cd-sheet-rows .canon-sidebar-row {
 	--canon-sidebar-cell: transparent;
 
 	gap: 0;
@@ -1079,7 +1083,9 @@ body {
 	color: var(--canon-primary-foreground);
 }
 
-.dt-drawer .canon-heading {
+.dt-drawer .canon-heading,
+.cd-nav .canon-heading,
+.cd-sheet-rows .canon-heading {
 	padding-block: 16px 4px;
 	background: transparent;
 }

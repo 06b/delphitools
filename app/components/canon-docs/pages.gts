@@ -103,7 +103,7 @@ const Installation: TOC<object> = <template>
 		<h1 class="cd-title">Installation</h1>
 		<p class="cd-lede">{{INSTALL_NOTE}}</p>
 	</header>
-	<CanonRows @framed={{true}}>
+	<CanonRows class="cd-import" @framed={{true}}>
 		<CanonHeading @text="Imports" />
 		<CanonValueLine
 			@label="Component"

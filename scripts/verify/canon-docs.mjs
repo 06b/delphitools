@@ -34,10 +34,10 @@ check('/canon renders the docs', !!(await page.$('.cd-docs')));
 check('the bar names the kit', (await page.$eval('.dt-bar-title', (el) => el.textContent.trim())) === KIT);
 check('the overview heading is the kit name', (await heading()) === KIT);
 
-const bare = await page.$$eval('.cd-nav .canon-sidebar-row', (rows) =>
-	rows.filter((r) => !r.querySelector('svg')).map((r) => r.textContent.trim()),
+const iconed = await page.$$eval('.cd-nav .canon-sidebar-row', (rows) =>
+	rows.filter((r) => r.querySelector('svg')).map((r) => r.textContent.trim()),
 );
-check('every nav row has its icon', bare.length === 0, bare.join(' '));
+check('the nav is text only, flat like the app drawer', iconed.length === 0, iconed.join(' '));
 
 let walked = 0;
 const missed = [];

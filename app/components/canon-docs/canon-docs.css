@@ -326,3 +326,13 @@
 	background: var(--canon-card);
 	outline: var(--canon-hairline) solid var(--canon-border);
 }
+
+/* the docs nav is text only; the group icons repeated on every row */
+.cd-nav .canon-sidebar-row-icon,
+.cd-sheet-rows .canon-sidebar-row-icon {
+	display: none;
+}
+
+.cd-page .cd-import .canon-value-line-value {
+	font-family: var(--canon-mono-font);
+}

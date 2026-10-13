@@ -68,7 +68,6 @@ const Nav: TOC<{
 		{{#each section.pages as |page|}}
 			<CanonSidebarRow
 				@title={{page.title}}
-				@icon={{component IconSvg name=page.icon}}
 				@href={{page.url}}
 				@selected={{eq page.id @current}}
 				@onClick={{@go}}
