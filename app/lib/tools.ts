@@ -205,6 +205,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'pen-line',
 				href: '/tools/palette-genny',
 				produces: ['image/png'],
+				canon: true,
 			},
 			{
 				id: 'pixel-picker',

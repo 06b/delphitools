@@ -8,9 +8,9 @@ const { browser, page } = await launch({
 });
 await visit(page, '/tools/palette-genny');
 
-const panel = () => page.$('.dt-export-panel');
+const panel = () => page.$('.pg-dev');
 const json = () =>
-	page.$eval('.dt-export-json pre', (el) => el.textContent.trim());
+	page.$eval('.pg-dev-json .canon-code-block-code', (el) => el.textContent.trim());
 const parsed = async () => {
 	try {
 		return JSON.parse((await json()).replace(/,$/, ''));
@@ -28,19 +28,19 @@ check(
 await page.keyboard.press('KeyP');
 await sleep(400);
 check('P opens it', await panel());
-check('with no JSON until it is named', !(await page.$('.dt-export-json')));
+check('with no JSON until it is named', !(await page.$('.pg-dev-json')));
 check(
 	'and the import button disabled',
-	await page.$eval('.dt-export-import-row button', (el) => el.disabled),
+	await page.$eval('.pg-dev-load', (el) => el.disabled),
 );
-await page.type('#dt-export-name', NAME);
+await page.type('#pg-dev-name', NAME);
 await sleep(400);
 check(
 	'the name is slugged into an id',
-	(await page.$eval('.dt-export-note code', (el) =>
+	(await page.$eval('.pg-dev-note code', (el) =>
 		el.textContent.trim(),
 	)) === 'ocean-sunset',
-	await page.$eval('.dt-export-note code', (el) => el.textContent.trim()),
+	await page.$eval('.pg-dev-note code', (el) => el.textContent.trim()),
 );
 
 const named = await json();
@@ -55,7 +55,7 @@ check(
 	'and the palette on screen',
 	entry?.colors?.join() ===
 		(
-			await page.$$eval('.dt-swatch-value', (els) =>
+			await page.$$eval('.pg-col-value', (els) =>
 				els.map((el) => el.textContent.trim()),
 			)
 		).join(),
@@ -64,7 +64,7 @@ check(
 // paste into array literal
 check('it ends with a comma', named.endsWith(','), named.slice(-20));
 
-await page.select('#dt-export-cat', 'keycaps');
+await page.select('#pg-dev-category', 'keycaps');
 await sleep(400);
 check(
 	'the category select reaches the JSON',
@@ -72,21 +72,21 @@ check(
 	(await parsed())?.category,
 );
 await page.type(
-	'#dt-export-import',
+	'#pg-dev-import',
 	IMPORTED.map((h) => h.slice(1)).join('\n'),
 );
 await sleep(300);
 check(
 	'text enables the import button',
 	!(await page.$eval(
-		'.dt-export-import-row button',
+		'.pg-dev-load',
 		(el) => el.disabled,
 	)),
 );
 
-await page.click('.dt-export-import-row button');
+await page.click('.pg-dev-load');
 await sleep(500);
-const swatches = await page.$$eval('.dt-swatch-value', (els) =>
+const swatches = await page.$$eval('.pg-col-value', (els) =>
 	els.map((el) => el.textContent.trim().toLowerCase()),
 );
 check(
@@ -96,8 +96,8 @@ check(
 );
 check(
 	'the textarea is emptied',
-	(await page.$eval('#dt-export-import', (el) => el.value)) === '',
-	await page.$eval('#dt-export-import', (el) => el.value),
+	(await page.$eval('#pg-dev-import', (el) => el.value)) === '',
+	await page.$eval('#pg-dev-import', (el) => el.value),
 );
 check(
 	'and the JSON follows the import',
@@ -110,7 +110,7 @@ check('P closes it again', !(await panel()));
 check(
 	'the imported palette outlives the panel',
 	(
-		await page.$$eval('.dt-swatch-value', (els) =>
+		await page.$$eval('.pg-col-value', (els) =>
 			els.map((el) => el.textContent.trim().toLowerCase()),
 		)
 	).join() === IMPORTED.join(),

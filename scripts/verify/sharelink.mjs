@@ -28,7 +28,7 @@ for (const { label, query, expect } of CASES) {
 	await visit(page, `/tools/palette-genny${query}`);
 	await sleep(600);
 
-	const swatches = await page.$$eval('.dt-swatch-value', (els) =>
+	const swatches = await page.$$eval('.pg-col-value', (els) =>
 		els.map((el) => el.textContent.trim().toLowerCase()),
 	);
 
@@ -53,13 +53,13 @@ for (const { label, query, expect } of CASES) {
 
 	check(
 		`${label}: the list matches the swatches`,
-		(await page.$$eval('.dt-colour-row', (els) => els.length)) ===
+		(await page.$$eval('.pg-row', (els) => els.length)) ===
 			swatches.length,
 	);
 	check(
 		`${label}: the stepper agrees`,
-		(await page.$eval('.dt-count > span', (el) =>
-			el.textContent.trim(),
+		(await page.$eval('.pg-count input', (el) =>
+			el.value,
 		)) === `${swatches.length}`,
 	);
 
@@ -84,7 +84,7 @@ for (const { label, query, expect } of CASES) {
 		page.url(),
 	);
 
-	const swatches = await page.$$eval('.dt-swatch-value', (els) =>
+	const swatches = await page.$$eval('.pg-col-value', (els) =>
 		els.map((el) => el.textContent.trim().toLowerCase()),
 	);
 	check(

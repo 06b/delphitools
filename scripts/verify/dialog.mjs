@@ -97,7 +97,7 @@ await page.evaluate(() => {
 await sleep(700);
 check(
 	'navigating with it open tears down cleanly',
-	await page.$('.dt-palette-frame'),
+	await page.$('.palette-genny'),
 	'console errors would have failed above',
 );
 

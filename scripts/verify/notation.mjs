@@ -4,7 +4,7 @@ const { browser, page } = await launch();
 
 const trigger = '.dt-notation-trigger';
 const swatchValue = () =>
-	page.$eval('.dt-swatch-value', (el) => el.textContent.trim());
+	page.$eval('.pg-col-value', (el) => el.textContent.trim());
 
 await visit(page, '/tools/palette-genny');
 check('a Colour tool shows the selector', await page.$(trigger));
