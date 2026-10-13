@@ -2,7 +2,7 @@ import { BASE, check, finish, launch, sleep, visit } from "./harness.mjs";
 
 const { browser, page } = await launch();
 
-await visit(page, "/tools/code-genny");
+await visit(page, "/tools/gradient-genny");
 await page.evaluate(() => {
 	const el = document.querySelector(".dt-tool-sticker");
 	if (el) el.scrollIntoView({ block: "center" });
@@ -25,7 +25,7 @@ const qrVisible = await page.evaluate(
 			".dt-tool-sticker .dt-sticker-lift.is-hidden",
 		),
 );
-check("code-genny per-tool sticker renders and loads", hasQrBtn && qrVisible);
+check("gradient-genny per-tool sticker renders and loads", hasQrBtn && qrVisible);
 
 // no lousy art: image 404 removes whole sticker block
 await visit(page, "/tools/audio-atlas");

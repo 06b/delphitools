@@ -962,6 +962,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'barcode',
 				href: '/tools/code-genny',
 				produces: ['image/png', 'application/zip'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'decoder',

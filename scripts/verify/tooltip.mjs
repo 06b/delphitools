@@ -2,12 +2,16 @@
 
 import { launch, visit, check, sleep, finish } from './harness.mjs';
 
-const TRIGGER = '.dt-code-type';
+const TRIGGER = '.dt-trace-info';
 
 const { browser, page } = await launch({
 	viewport: { width: 1400, height: 900 },
 });
-await visit(page, '/tools/code-genny');
+await visit(page, '/tools/image-tracer');
+// the option tips show once an image is in
+const file = await page.$('input[type=file]');
+await file.uploadFile('public/stickers/marker.png');
+await page.waitForSelector(TRIGGER, { timeout: 10000 });
 
 const count = () =>
 	page.$$eval('.dt-tooltip', (els) => els.length).catch(() => 0);
@@ -31,9 +35,9 @@ const shown = await page.evaluate(() => {
 	};
 });
 check('a hover shows one', shown, JSON.stringify(shown));
-const name = await page.$eval(TRIGGER, (el) => el.textContent.trim());
+const name = await page.$eval(TRIGGER, (el) => el.getAttribute('aria-label'));
 check('naming its trigger', shown?.text.startsWith(name), shown?.text);
-check('placed on the requested side', shown?.side === 'bottom', shown?.side);
+check('placed on the requested side', shown?.side === 'top', shown?.side);
 check('portalled to the body', shown?.inBody);
 check(
 	'positioned on screen',

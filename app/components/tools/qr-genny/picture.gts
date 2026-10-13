@@ -20,6 +20,7 @@ import {
 	type CodeSheet,
 	type Rect,
 } from './code-sheet';
+import './code-sheet.css';
 
 interface CodeSheetPictureSignature {
 	Args: {

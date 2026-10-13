@@ -1,0 +1,83 @@
+/* the picture: the sheet on a canvas, the caption row under it */
+.code-sheet {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.code-sheet-canvas {
+	display: block;
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+/* room for the sheet: clear of the crop marks (gap 5, length 10, slack 6) and over the caption */
+.code-sheet-area {
+	display: flex;
+	position: absolute;
+	inset: calc(var(--canon-panel-padding) + 21px)
+		calc(var(--canon-panel-padding) + 21px) calc(36px + 21px);
+	align-items: center;
+	justify-content: center;
+	container-type: size;
+	pointer-events: none;
+}
+
+.code-sheet-empty {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	inline-size: calc(min(100cqw, 100cqh) * 0.62);
+	block-size: calc(min(100cqw, 100cqh) * 0.62);
+	padding: 12px;
+	color: var(--canon-muted-foreground);
+	text-align: center;
+}
+
+.code-sheet-empty-icon {
+	display: flex;
+	opacity: 0.35;
+}
+
+.code-sheet-empty-icon svg {
+	inline-size: calc(min(100cqw, 100cqh) * 0.62 * 0.28);
+	block-size: auto;
+	stroke-width: 1;
+}
+
+.code-sheet-empty-text {
+	font-size: var(--canon-text-footnote);
+}
+
+.code-sheet-caption {
+	display: flex;
+	position: absolute;
+	inset-inline: 0;
+	inset-block-end: 0;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	box-sizing: border-box;
+	block-size: 36px;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.code-sheet-name {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.code-sheet-figure {
+	flex: none;
+}
