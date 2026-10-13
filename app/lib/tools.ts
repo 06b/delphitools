@@ -1071,6 +1071,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between units of length, weight, data, and more',
 				icon: 'scale',
 				href: '/tools/unit-converter',
+				canon: true,
 			},
 		],
 	},

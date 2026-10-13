@@ -12,7 +12,6 @@ import { simulateHex, type SimulationType } from './colour-vision';
 import { formatScientific } from './math-constants';
 import { acceptsFile } from 'delphitools-v2/modifiers/file-paste';
 import { matchesQuery } from './tool-search';
-import type { CategoryKey } from 'delphitools-v2/components/tools/unit-converter';
 
 export interface OmniAnswer {
 	toolId: string;
@@ -156,46 +155,31 @@ async function unitAnswers(input: string): Promise<OmniAnswer[]> {
 	const value = parseFloat(generalMatch[1]!);
 	const symbol = generalMatch[2]!.trim();
 
-	const { UNIT_CATEGORIES, convertUnit, formatNumber } =
-		await import('delphitools-v2/components/tools/unit-converter');
+	const { categories, convert, format } =
+		await import('delphitools-v2/components/tools/unit-converter/units');
 
-	for (const category of Object.keys(UNIT_CATEGORIES) as CategoryKey[]) {
-		const units = UNIT_CATEGORIES[category].units;
-		const baseKey = UNIT_CATEGORIES[category].baseUnit;
-		for (const key of Object.keys(units)) {
-			if (
-				units[key]!.symbol.toLowerCase() !==
-				symbol.toLowerCase()
-			)
-				continue;
-
-			const baseValue = units[key]!.toBase(value);
-			const targetKeys = Object.keys(units).filter(
-				(k) => k !== key && k !== baseKey,
-			);
-			const extras = targetKeys.slice(0, 2);
-			const parts = [
-				`${formatNumber(baseValue)} ${units[baseKey]!.symbol}`,
-			];
-			for (const target of extras) {
-				parts.push(
-					`${formatNumber(
-						convertUnit(
-							category,
-							value,
-							key,
-							target,
-						),
-					)} ${units[target]!.symbol}`,
-				);
-			}
-
-			const answers: OmniAnswer[] = [];
-			push(answers, 'unit-converter', {
-				value: parts.join(' · '),
-			});
-			return answers;
-		}
+	for (const { units } of categories) {
+		const unit = units.find(
+			(u) => u.symbol.toLowerCase() === symbol.toLowerCase(),
+		);
+		if (!unit) continue;
+		// the category's first unit, then two siblings
+		const targets = [
+			units[0]!,
+			...units
+				.filter((u) => u !== unit && u !== units[0])
+				.slice(0, 2),
+		];
+		const answers: OmniAnswer[] = [];
+		push(answers, 'unit-converter', {
+			value: targets
+				.map(
+					(t) =>
+						`${format(convert(value, unit, t))} ${t.symbol}`,
+				)
+				.join(' · '),
+		});
+		return answers;
 	}
 
 	return [];

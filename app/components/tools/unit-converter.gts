@@ -1,578 +1,357 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
-import { Tabs, TabsList, TabsTrigger } from 'delphitools-v2/components/ui/tabs';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import type { TOC } from '@ember/component/template-only';
+import { modifier } from 'ember-modifier';
+import CanonBigNumberField from 'delphicanon/components/canon-big-number-field';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonFromTo from 'delphicanon/components/canon-from-to';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import press from 'delphicanon/modifiers/canon-press';
+import { formatDecimal } from 'delphicanon/lib/number';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Picture, {
+	pictureHeight,
+} from 'delphitools-v2/components/tools/unit-converter/picture';
+import {
+	categories,
+	convert,
+	format,
+	formula,
+	fromBase,
+	instrumentFor,
+	openingPairs,
+} from 'delphitools-v2/components/tools/unit-converter/units';
+import './unit-converter/unit-converter.css';
 
-export interface Unit {
-	name: string;
-	symbol: string;
-	toBase: (value: number) => number;
-	fromBase: (value: number) => number;
+const categoryNames = categories.map((c) => c.name);
+
+const SwapIcon = <template><IconSvg @name="arrow-left-right" /></template>;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+
+type Role = 'from' | 'to' | 'other';
+
+interface UnitRowSignature {
+	Args: {
+		label: string;
+		symbol: string;
+		value: string;
+		role: Role;
+		onPick: () => void;
+	};
 }
 
-export interface UnitCategory {
-	name: string;
-	baseUnit: string;
-	units: Record<string, Unit>;
+/** Both picked rows are lit; the plate tells them apart: ink for the from unit, primary for the result. */
+const UnitRow: TOC<UnitRowSignature> = <template>
+	<button
+		type="button"
+		class="uc-row uc-row--{{@role}}"
+		aria-label="{{@label}}{{if @value ', '}}{{@value}}{{if
+			@value
+			' '
+		}}{{if @value @symbol}}"
+		aria-current={{if (lit @role) "true"}}
+		{{press}}
+		{{on "click" @onPick}}
+	>
+		<span class="uc-plate">{{@symbol}}</span>
+		<span class="uc-name">{{@label}}</span>
+		<span class="uc-value">{{@value}}</span>
+	</button>
+</template>;
+
+function lit(role: Role) {
+	return role !== 'other';
 }
 
-export type CategoryKey =
-	| 'length'
-	| 'weight'
-	| 'data'
-	| 'temperature'
-	| 'speed'
-	| 'area'
-	| 'volume';
+const inputMode = modifier((element: HTMLElement, [mode]: [string]) => {
+	const input = element.querySelector('input');
+	if (input) input.inputMode = mode;
+});
 
-export const UNIT_CATEGORIES: Record<CategoryKey, UnitCategory> = {
-	length: {
-		name: 'Length',
-		baseUnit: 'meter',
-		units: {
-			meter: {
-				name: 'Metre',
-				symbol: 'm',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			kilometer: {
-				name: 'Kilometre',
-				symbol: 'km',
-				toBase: (v) => v * 1000,
-				fromBase: (v) => v / 1000,
-			},
-			centimeter: {
-				name: 'Centimetre',
-				symbol: 'cm',
-				toBase: (v) => v / 100,
-				fromBase: (v) => v * 100,
-			},
-			millimeter: {
-				name: 'Millimetre',
-				symbol: 'mm',
-				toBase: (v) => v / 1000,
-				fromBase: (v) => v * 1000,
-			},
-			mile: {
-				name: 'Mile',
-				symbol: 'mi',
-				toBase: (v) => v * 1609.344,
-				fromBase: (v) => v / 1609.344,
-			},
-			yard: {
-				name: 'Yard',
-				symbol: 'yd',
-				toBase: (v) => v * 0.9144,
-				fromBase: (v) => v / 0.9144,
-			},
-			foot: {
-				name: 'Foot',
-				symbol: 'ft',
-				toBase: (v) => v * 0.3048,
-				fromBase: (v) => v / 0.3048,
-			},
-			inch: {
-				name: 'Inch',
-				symbol: 'in',
-				toBase: (v) => v * 0.0254,
-				fromBase: (v) => v / 0.0254,
-			},
-			nauticalMile: {
-				name: 'Nautical Mile',
-				symbol: 'nmi',
-				toBase: (v) => v * 1852,
-				fromBase: (v) => v / 1852,
-			},
-		},
-	},
-	weight: {
-		name: 'Weight',
-		baseUnit: 'kilogram',
-		units: {
-			kilogram: {
-				name: 'Kilogram',
-				symbol: 'kg',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			gram: {
-				name: 'Gram',
-				symbol: 'g',
-				toBase: (v) => v / 1000,
-				fromBase: (v) => v * 1000,
-			},
-			milligram: {
-				name: 'Milligram',
-				symbol: 'mg',
-				toBase: (v) => v / 1000000,
-				fromBase: (v) => v * 1000000,
-			},
-			pound: {
-				name: 'Pound',
-				symbol: 'lb',
-				toBase: (v) => v * 0.453592,
-				fromBase: (v) => v / 0.453592,
-			},
-			ounce: {
-				name: 'Ounce',
-				symbol: 'oz',
-				toBase: (v) => v * 0.0283495,
-				fromBase: (v) => v / 0.0283495,
-			},
-			stone: {
-				name: 'Stone',
-				symbol: 'st',
-				toBase: (v) => v * 6.35029,
-				fromBase: (v) => v / 6.35029,
-			},
-			tonne: {
-				name: 'Tonne',
-				symbol: 't',
-				toBase: (v) => v * 1000,
-				fromBase: (v) => v / 1000,
-			},
-		},
-	},
-	data: {
-		name: 'Data',
-		baseUnit: 'byte',
-		units: {
-			byte: {
-				name: 'Byte',
-				symbol: 'B',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			kilobyte: {
-				name: 'Kilobyte',
-				symbol: 'KB',
-				toBase: (v) => v * 1024,
-				fromBase: (v) => v / 1024,
-			},
-			megabyte: {
-				name: 'Megabyte',
-				symbol: 'MB',
-				toBase: (v) => v * 1024 ** 2,
-				fromBase: (v) => v / 1024 ** 2,
-			},
-			gigabyte: {
-				name: 'Gigabyte',
-				symbol: 'GB',
-				toBase: (v) => v * 1024 ** 3,
-				fromBase: (v) => v / 1024 ** 3,
-			},
-			terabyte: {
-				name: 'Terabyte',
-				symbol: 'TB',
-				toBase: (v) => v * 1024 ** 4,
-				fromBase: (v) => v / 1024 ** 4,
-			},
-			petabyte: {
-				name: 'Petabyte',
-				symbol: 'PB',
-				toBase: (v) => v * 1024 ** 5,
-				fromBase: (v) => v / 1024 ** 5,
-			},
-			bit: {
-				name: 'Bit',
-				symbol: 'b',
-				toBase: (v) => v / 8,
-				fromBase: (v) => v * 8,
-			},
-			kilobit: {
-				name: 'Kilobit',
-				symbol: 'Kb',
-				toBase: (v) => (v * 1024) / 8,
-				fromBase: (v) => (v * 8) / 1024,
-			},
-			megabit: {
-				name: 'Megabit',
-				symbol: 'Mb',
-				toBase: (v) => (v * 1024 ** 2) / 8,
-				fromBase: (v) => (v * 8) / 1024 ** 2,
-			},
-			gigabit: {
-				name: 'Gigabit',
-				symbol: 'Gb',
-				toBase: (v) => (v * 1024 ** 3) / 8,
-				fromBase: (v) => (v * 8) / 1024 ** 3,
-			},
-		},
-	},
-	temperature: {
-		name: 'Temp',
-		baseUnit: 'celsius',
-		units: {
-			celsius: {
-				name: 'Celsius',
-				symbol: '°C',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			fahrenheit: {
-				name: 'Fahrenheit',
-				symbol: '°F',
-				toBase: (v) => ((v - 32) * 5) / 9,
-				fromBase: (v) => (v * 9) / 5 + 32,
-			},
-			kelvin: {
-				name: 'Kelvin',
-				symbol: 'K',
-				toBase: (v) => v - 273.15,
-				fromBase: (v) => v + 273.15,
-			},
-		},
-	},
-	speed: {
-		name: 'Speed',
-		baseUnit: 'mps',
-		units: {
-			mps: {
-				name: 'Metres/sec',
-				symbol: 'm/s',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			kmph: {
-				name: 'km/hour',
-				symbol: 'km/h',
-				toBase: (v) => v / 3.6,
-				fromBase: (v) => v * 3.6,
-			},
-			mph: {
-				name: 'Miles/hour',
-				symbol: 'mph',
-				toBase: (v) => v * 0.44704,
-				fromBase: (v) => v / 0.44704,
-			},
-			knot: {
-				name: 'Knot',
-				symbol: 'kn',
-				toBase: (v) => v * 0.514444,
-				fromBase: (v) => v / 0.514444,
-			},
-			fps: {
-				name: 'Feet/sec',
-				symbol: 'ft/s',
-				toBase: (v) => v * 0.3048,
-				fromBase: (v) => v / 0.3048,
-			},
-		},
-	},
-	area: {
-		name: 'Area',
-		baseUnit: 'sqm',
-		units: {
-			sqm: {
-				name: 'Square metre',
-				symbol: 'm²',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			sqkm: {
-				name: 'Square km',
-				symbol: 'km²',
-				toBase: (v) => v * 1000000,
-				fromBase: (v) => v / 1000000,
-			},
-			sqft: {
-				name: 'Square foot',
-				symbol: 'ft²',
-				toBase: (v) => v * 0.092903,
-				fromBase: (v) => v / 0.092903,
-			},
-			sqyd: {
-				name: 'Square yard',
-				symbol: 'yd²',
-				toBase: (v) => v * 0.836127,
-				fromBase: (v) => v / 0.836127,
-			},
-			acre: {
-				name: 'Acre',
-				symbol: 'ac',
-				toBase: (v) => v * 4046.86,
-				fromBase: (v) => v / 4046.86,
-			},
-			hectare: {
-				name: 'Hectare',
-				symbol: 'ha',
-				toBase: (v) => v * 10000,
-				fromBase: (v) => v / 10000,
-			},
-			sqmi: {
-				name: 'Square mile',
-				symbol: 'mi²',
-				toBase: (v) => v * 2589988.11,
-				fromBase: (v) => v / 2589988.11,
-			},
-		},
-	},
-	volume: {
-		name: 'Volume',
-		baseUnit: 'liter',
-		units: {
-			liter: {
-				name: 'Litre',
-				symbol: 'L',
-				toBase: (v) => v,
-				fromBase: (v) => v,
-			},
-			milliliter: {
-				name: 'Millilitre',
-				symbol: 'mL',
-				toBase: (v) => v / 1000,
-				fromBase: (v) => v * 1000,
-			},
-			cubicMeter: {
-				name: 'Cubic metre',
-				symbol: 'm³',
-				toBase: (v) => v * 1000,
-				fromBase: (v) => v / 1000,
-			},
-			gallon: {
-				name: 'Gallon (US)',
-				symbol: 'gal',
-				toBase: (v) => v * 3.78541,
-				fromBase: (v) => v / 3.78541,
-			},
-			gallonUK: {
-				name: 'Gallon (UK)',
-				symbol: 'gal UK',
-				toBase: (v) => v * 4.54609,
-				fromBase: (v) => v / 4.54609,
-			},
-			quart: {
-				name: 'Quart (US)',
-				symbol: 'qt',
-				toBase: (v) => v * 0.946353,
-				fromBase: (v) => v / 0.946353,
-			},
-			pint: {
-				name: 'Pint (US)',
-				symbol: 'pt',
-				toBase: (v) => v * 0.473176,
-				fromBase: (v) => v / 0.473176,
-			},
-			cup: {
-				name: 'Cup (US)',
-				symbol: 'cup',
-				toBase: (v) => v * 0.236588,
-				fromBase: (v) => v / 0.236588,
-			},
-			fluidOz: {
-				name: 'Fluid oz (US)',
-				symbol: 'fl oz',
-				toBase: (v) => v * 0.0295735,
-				fromBase: (v) => v / 0.0295735,
-			},
-		},
-	},
-};
-
-export const CATEGORY_KEYS = Object.keys(UNIT_CATEGORIES) as CategoryKey[];
-
-const COPIED_MS = 1500;
-
-// zero for unknown units
-export function convertUnit(
-	category: CategoryKey,
-	value: number,
-	from: string,
-	to: string,
-): number {
-	const units = UNIT_CATEGORIES[category].units;
-	const fromDef = units[from];
-	const toDef = units[to];
-	if (!fromDef || !toDef) return 0;
-
-	return toDef.fromBase(fromDef.toBase(value));
+// a click places the caret after focus, so select on the next frame
+function selectAll(event: FocusEvent) {
+	const field = event.target;
+	if (field instanceof HTMLInputElement)
+		requestAnimationFrame(() => field.select());
 }
 
-export function conversions(
-	category: CategoryKey,
-	value: string,
-	from: string | null,
-): Record<string, number> | null {
-	const num = Number.parseFloat(value);
-	if (Number.isNaN(num) || !from) return null;
-
-	const results: Record<string, number> = {};
-	for (const key of Object.keys(UNIT_CATEGORIES[category].units)) {
-		results[key] = convertUnit(category, num, from, key);
-	}
-	return results;
+/** A decimal comma and a minus sign read as the plain characters. */
+function clean(text: string) {
+	return text.replace(/,/g, '.').replace(/−/g, '-');
 }
 
-export function formatNumber(num: number): string {
-	if (num === 0) return '0';
-	if (Math.abs(num) < 0.0001 || Math.abs(num) >= 1e9) {
-		return num.toExponential(4);
-	}
-	return Number.parseFloat(num.toPrecision(8)).toString();
-}
+/** The port of UnitConverterViewController with its picture. */
+export default class UnitConverter extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 
-export default class UnitConverterTool extends Component {
-	@tracked category: CategoryKey = 'length';
-	@tracked inputUnit: string | null = null;
-	@tracked inputValue = '';
-	@tracked copied: string | null = null;
+	@tracked category = 'Length';
+	@tracked text = '1';
+	@tracked fromIndex = 0;
+	@tracked toIndex = 1;
+	/** Row clicks fill from, then to, then from again. */
+	#tapsFrom = true;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	// ?ucCategory= ?ucFrom=<symbol> ?ucTo=<symbol> ?ucValue=: the iOS launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const name = query.get('ucCategory');
+		this.choose(
+			name && categoryNames.includes(name) ? name : 'Length',
+		);
+		const find = (key: string) =>
+			this.units.findIndex(
+				(u) => u.symbol === query.get(key),
+			);
+		const from = find('ucFrom');
+		const to = find('ucTo');
+		if (from >= 0) this.fromIndex = from;
+		if (to >= 0) this.toIndex = to;
+		const value = query.get('ucValue');
+		if (value !== null) this.text = clean(value);
 	}
 
-	get categories() {
-		return CATEGORY_KEYS.map((key) => ({
-			key,
-			name: UNIT_CATEGORIES[key].name,
-		}));
+	get categoryNames() {
+		return categoryNames;
 	}
 
-	get hasValue() {
-		return this.inputValue !== '' && this.inputUnit !== null;
+	get bandHeight() {
+		return pictureHeight;
+	}
+
+	get units() {
+		return categories.find((c) => c.name === this.category)!.units;
+	}
+
+	get labels() {
+		return this.units.map((u) => u.label);
+	}
+
+	get from() {
+		return this.units[this.fromIndex]!;
+	}
+
+	get to() {
+		return this.units[this.toIndex]!;
+	}
+
+	get instrument() {
+		return instrumentFor(this.category);
+	}
+
+	get value() {
+		const typed = clean(this.text).trim();
+		const value = typed === '' ? NaN : Number(typed);
+		return Number.isFinite(value) ? value : undefined;
+	}
+
+	get categoryIndex() {
+		return categoryNames.indexOf(this.category);
+	}
+
+	get inputMode() {
+		// a minus sign for temperatures
+		return this.category === 'Temperature' ? 'text' : 'decimal';
 	}
 
 	get rows() {
-		const results = conversions(
-			this.category,
-			this.inputValue,
-			this.inputUnit,
-		);
-		const units = UNIT_CATEGORIES[this.category].units;
-
-		return Object.keys(units).map((key) => {
-			const unit = units[key]!;
-			const isActive =
-				this.inputUnit === key && this.hasValue;
-			const converted = results?.[key];
-			const display =
-				converted === undefined
+		const { value } = this;
+		return this.units.map((unit, index) => ({
+			index,
+			label: unit.label,
+			symbol: unit.symbol,
+			value:
+				value === undefined
 					? ''
-					: formatNumber(converted);
-
-			return {
-				key,
-				name: unit.name,
-				symbol: unit.symbol,
-				isActive,
-				// half-typed "1." stays
-				value: isActive ? this.inputValue : display,
-				copyText: display || this.inputValue,
-				isEmpty: !display && !this.inputValue,
-				isCopied: this.copied === key,
-			};
-		});
+					: format(
+							convert(
+								value,
+								this.from,
+								unit,
+							),
+						),
+			role: this.roleOf(index),
+		}));
 	}
 
-	chooseCategory = (key: string) => {
-		this.category = key as CategoryKey;
-		this.inputUnit = null;
-		this.inputValue = '';
+	roleOf(index: number): Role {
+		if (index === this.fromIndex) return 'from';
+		return index === this.toIndex ? 'to' : 'other';
+	}
+
+	get reference() {
+		const { from, to } = this;
+		if (this.category === 'Temperature')
+			return [
+				{ label: to.symbol, value: formula(from, to) },
+				{
+					label: from.symbol,
+					value: formula(to, from),
+				},
+			];
+		return [
+			{
+				label: `1 ${from.symbol}`,
+				value: `${format(convert(1, from, to))} ${to.symbol}`,
+			},
+			{
+				label: `1 ${to.symbol}`,
+				value: `${format(convert(1, to, from))} ${from.symbol}`,
+			},
+		];
+	}
+
+	get copyDisabled() {
+		return this.value === undefined;
+	}
+
+	choose(name: string) {
+		this.category = name;
+		const [from, to] = openingPairs[name] ?? [];
+		const index = (symbol?: string) =>
+			this.units.findIndex((u) => u.symbol === symbol);
+		this.fromIndex = Math.max(0, index(from));
+		const toIndex = index(to);
+		this.toIndex =
+			toIndex >= 0
+				? toIndex
+				: Math.min(1, this.units.length - 1);
+		this.#tapsFrom = true;
+	}
+
+	pickCategory = (index: number) => this.choose(categoryNames[index]!);
+
+	typed = (text: string) => (this.text = clean(text));
+
+	/** Whole steps, tenths below one; temperatures stop at absolute zero, everything else at zero. */
+	nudge = (direction: -1 | 1) => {
+		const current = this.value ?? 0;
+		const step = current !== 0 && Math.abs(current) < 1 ? 0.1 : 1;
+		const next = (Math.round(current / step) + direction) * step;
+		const floor =
+			this.category === 'Temperature'
+				? fromBase(this.from, 0)
+				: 0;
+		this.text = formatDecimal(Math.max(floor, next), 4);
 	};
 
-	setUnitValue = (key: string, event: Event) => {
-		this.inputUnit = key;
-		this.inputValue = (event.target as HTMLInputElement).value;
+	// a unit picked twice swaps the pair
+	pickFrom = (index: number) => {
+		if (index === this.toIndex) this.toIndex = this.fromIndex;
+		this.fromIndex = index;
 	};
 
-	copy = async (value: string, key: string) => {
-		if (!value) return;
-		await navigator.clipboard.writeText(value);
-		this.copied = key;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
+	pickTo = (index: number) => {
+		if (index === this.fromIndex) this.fromIndex = this.toIndex;
+		this.toIndex = index;
 	};
 
-	copyRow = (value: string, key: string) => void this.copy(value, key);
+	tap = (index: number) => {
+		if (this.#tapsFrom) this.pickFrom(index);
+		else this.pickTo(index);
+		this.#tapsFrom = !this.#tapsFrom;
+	};
+
+	swap = () => {
+		[this.fromIndex, this.toIndex] = [this.toIndex, this.fromIndex];
+	};
+
+	copy = () => {
+		const { value } = this;
+		if (value === undefined) return;
+		const result = convert(value, this.from, this.to);
+		void this.toast.copy(String(Number(result.toPrecision(10))));
+	};
 
 	<template>
-		<div class="dt-uc">
-			<Tabs
-				@value={{this.category}}
-				@onValueChange={{this.chooseCategory}}
-			>
-				<TabsList class="dt-uc-tabs">
-					{{#each
-						this.categories key="key"
-						as |option|
-					}}
-						<TabsTrigger
-							class="dt-uc-tab"
-							@value={{option.key}}
-						>{{option.name}}</TabsTrigger>
-					{{/each}}
-				</TabsList>
-			</Tabs>
-
-			<div class="dt-uc-table">
-				{{#each this.rows key="key" as |row|}}
-					<div
-						class="dt-uc-row
-							{{if
-								row.isActive
-								'is-active'
-							}}"
-					>
-						<span class="dt-uc-name">
-							<span
-								class="dt-uc-unit"
-							>{{row.name}}</span>
-							<span
-								class="dt-uc-symbol"
-							>{{row.symbol}}</span>
-						</span>
-						<input
-							type="number"
-							class="dt-uc-input"
-							value={{row.value}}
-							placeholder="0"
-							aria-label={{row.name}}
-							{{on
-								"input"
-								(fn
-									this.setUnitValue
-									row.key
-								)
+		<CanonSplit class="unit-converter">
+			<:banner>
+				<CanonCanvas @height={{this.bandHeight}}>
+					<Picture
+						@instrument={{this.instrument}}
+						@value={{this.value}}
+						@from={{this.from}}
+						@to={{this.to}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonBigNumberField
+						class="uc-field"
+						@value={{this.text}}
+						@placeholder="0"
+						@unit={{this.from.symbol}}
+						@label="Value"
+						@onStep={{this.nudge}}
+						@onInput={{this.typed}}
+						{{inputMode this.inputMode}}
+						{{on "focusin" selectAll}}
+					/>
+					<CanonFromTo
+						@items={{this.labels}}
+						@from={{this.fromIndex}}
+						@to={{this.toIndex}}
+						@onFromChange={{this.pickFrom}}
+						@onToChange={{this.pickTo}}
+					/>
+					<CanonGrid @columns={{2}}>
+						<CanonButton
+							@text="Swap"
+							@icon={{SwapIcon}}
+							@onClick={{this.swap}}
+						/>
+						<CanonButton
+							@text="Copy"
+							@icon={{CopyIcon}}
+							@disabled={{this.copyDisabled}}
+							@onClick={{this.copy}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Category" />
+					<CanonSegmented
+						aria-label="Category"
+						@items={{this.categoryNames}}
+						@columns={{3}}
+						@selected={{this.categoryIndex}}
+						@onChange={{this.pickCategory}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Units" />
+					{{#each this.rows as |row|}}
+						<UnitRow
+							@label={{row.label}}
+							@symbol={{row.symbol}}
+							@value={{row.value}}
+							@role={{row.role}}
+							@onPick={{fn
+								this.tap
+								row.index
 							}}
 						/>
-						<button
-							type="button"
-							class="dt-uc-copy
-								{{if
-									row.isCopied
-									'is-copied'
-								}}"
-							disabled={{row.isEmpty}}
-							aria-label="Copy {{row.name}}"
-							{{on
-								"click"
-								(fn
-									this.copyRow
-									row.copyText
-									row.key
-								)
-							}}
-						>
-							<Icon
-								@name={{if
-									row.isCopied
-									"check"
-									"copy"
-								}}
-							/>
-						</button>
-					</div>
-				{{/each}}
-			</div>
-		</div>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Quick Reference" />
+					<CanonTiles @items={{this.reference}} />
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }
