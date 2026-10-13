@@ -194,6 +194,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'palette',
 				href: '/tools/palette-extractor',
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'palette-genny',

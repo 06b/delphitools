@@ -1,443 +1,226 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn, hash } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
+import { hash } from '@ember/helper';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import { LinkTo } from '@ember/routing';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import Icon from 'delphitools-v2/components/icon';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonImageCompare from 'delphicanon/components/canon-image-compare';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { parseHex, takesBlackInk } from 'delphicanon/lib/colour';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
-import {
-	rgbToOklab,
-	oklabToRgb,
-	rgbToHex,
-	labToLch,
-	contrastText,
-	type Triple,
-} from 'delphitools-v2/lib/colour-maths';
-import type BreakpointService from 'delphitools-v2/services/breakpoint';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import {
+	clusterPixels,
+	coverage,
+	downsample,
+	MAX_CLUSTERS,
+	MAX_COLOURS,
+	MIN_COLOURS,
+	PAINT_EDGE,
+	paint,
+	pixelsFromCanvas,
+	rankClusters,
+	STRATEGIES,
+	type Cluster,
+} from 'delphitools-v2/components/tools/palette-extractor/engine';
+import {
+	ShareBand,
+	ShareRows,
+	ShareStrip,
+	type Swatch,
+} from 'delphitools-v2/components/tools/palette-extractor/share';
+import './palette-extractor/palette-extractor.css';
 
-export type ExtractionStrategy =
-	| 'dominant'
-	| 'vibrant'
-	| 'muted'
-	| 'light'
-	| 'dark'
-	| 'warm'
-	| 'cool'
-	| 'accent';
+const strategyNames = STRATEGIES.map((s) => s.name);
 
-export interface Cluster {
-	// oklab [l, a, b]
-	centroid: Triple;
-	hex: string;
-	count: number;
+const Shuffle = <template><IconSvg @name="shuffle" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Code = <template><IconSvg @name="code" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Choose = <template><IconSvg @name="image" /></template>;
+
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+interface Source {
+	url: string;
+	bitmap: ImageBitmap;
+	/** File name less the extension, for the download. */
+	stem: string;
 }
 
-interface StrategyInfo {
-	name: string;
-	description: string;
+/** ?extractSample ?extractCount=<3-11> ?extractStrategy=<index>: the iOS launch arguments. */
+function launchFlags(search: string) {
+	const query = new URLSearchParams(search);
+	const count = Number(query.get('extractCount'));
+	const strategy = Number(query.get('extractStrategy'));
+	return {
+		sample: query.has('extractSample'),
+		count:
+			Number.isInteger(count) &&
+			count >= MIN_COLOURS &&
+			count <= MAX_COLOURS
+				? count
+				: 5,
+		strategy: STRATEGIES[strategy] ? strategy : 0,
+	};
 }
 
-const STRATEGIES: Record<ExtractionStrategy, StrategyInfo> = {
-	dominant: {
-		name: 'Dominant',
-		description:
-			'The most prominent colours by area — what the image is mostly made of',
-	},
-	vibrant: {
-		name: 'Vibrant',
-		description:
-			'The most saturated, punchy colours — the ones that pop',
-	},
-	muted: {
-		name: 'Muted',
-		description:
-			'Understated, desaturated tones — the quiet palette',
-	},
-	light: {
-		name: 'Light',
-		description:
-			'The brightest colours — highlights, glows, and washed-out tones',
-	},
-	dark: {
-		name: 'Dark',
-		description:
-			'Deep shadows and rich darks — moody and grounding',
-	},
-	warm: {
-		name: 'Warm',
-		description: 'Reds, oranges, yellows, and earthy tones',
-	},
-	cool: {
-		name: 'Cool',
-		description: 'Blues, greens, and icy tones',
-	},
-	accent: {
-		name: 'Accent',
-		description:
-			'Rare standout colours that are far from the dominant palette',
-	},
-};
-
-const STRATEGY_ORDER: ExtractionStrategy[] = [
-	'dominant',
-	'vibrant',
-	'muted',
-	'light',
-	'dark',
-	'warm',
-	'cool',
-	'accent',
-];
-
-// ≤22,500 pixels clustered
-const SAMPLE_EDGE = 150;
-const MAX_CLUSTERS = 32;
-const KMEANS_ITERATIONS = 20;
-const MIN_COLOURS = 3;
-const MAX_COLOURS = 11;
-const COPIED_MS = 1500;
-const GRID_THRESHOLD_MOBILE = 4;
-const GRID_THRESHOLD_TABLET = 5;
-
-// squared omits sqrt
-export function oklabDistance(a: Triple, b: Triple): number {
-	const dL = a[0] - b[0];
-	const da = a[1] - b[1];
-	const db = a[2] - b[2];
-	return dL * dL + da * da + db * db;
-}
-
-// zero-dim canvas throws
-export function downsample(
-	image: HTMLImageElement,
-	edge = SAMPLE_EDGE,
-): HTMLCanvasElement {
-	let w = image.naturalWidth;
-	let h = image.naturalHeight;
-	const scale = edge / Math.max(w, h);
-	if (scale < 1) {
-		w = Math.max(1, Math.round(w * scale));
-		h = Math.max(1, Math.round(h * scale));
-	}
-
-	const canvas = document.createElement('canvas');
-	canvas.width = w;
-	canvas.height = h;
-	canvas.getContext('2d')?.drawImage(image, 0, 0, w, h);
-	return canvas;
-}
-
-export function pixelsFromCanvas(canvas: HTMLCanvasElement): Triple[] {
-	const ctx = canvas.getContext('2d');
-	if (!ctx || canvas.width === 0 || canvas.height === 0) return [];
-
-	const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-	const pixels: Triple[] = [];
-	for (let i = 0; i < data.length; i += 4) {
-		if (data[i + 3]! < 128) continue;
-		pixels.push(rgbToOklab(data[i]!, data[i + 1]!, data[i + 2]!));
-	}
-	return pixels;
-}
-
-// k-means++ seeding; random injectable
-export function seedCentroids(
-	pixels: Triple[],
-	k: number,
-	random: () => number = Math.random,
-): Triple[] {
-	const pick = (index: number) =>
-		pixels[Math.min(pixels.length - 1, Math.max(0, index))]!;
-
-	const centroids: Triple[] = [
-		pick(Math.floor(random() * pixels.length)),
-	];
-	const nearest = new Float64Array(pixels.length).fill(Infinity);
-
-	for (let c = 1; c < k; c++) {
-		const last = centroids[c - 1]!;
-		let total = 0;
-		for (let i = 0; i < pixels.length; i++) {
-			const d = oklabDistance(pixels[i]!, last);
-			if (d < nearest[i]!) nearest[i] = d;
-			total += nearest[i]!;
-		}
-
-		let r = random() * total;
-		let index = 0;
-		for (let i = 0; i < pixels.length; i++) {
-			r -= nearest[i]!;
-			if (r <= 0) {
-				index = i;
-				break;
-			}
-		}
-		centroids.push(pick(index));
-	}
-
-	return centroids;
-}
-
-// lloyd's k-means, fixed iterations
-export function clusterPixels(
-	pixels: Triple[],
-	k: number,
-	random: () => number = Math.random,
-): Cluster[] {
-	if (pixels.length === 0) return [];
-
-	let centroids = seedCentroids(
-		pixels,
-		Math.min(k, pixels.length),
-		random,
-	);
-	const assignments = new Int32Array(pixels.length);
-
-	for (let iteration = 0; iteration < KMEANS_ITERATIONS; iteration++) {
-		for (let i = 0; i < pixels.length; i++) {
-			let best = 0;
-			let bestDistance = Infinity;
-			for (let c = 0; c < centroids.length; c++) {
-				const d = oklabDistance(
-					pixels[i]!,
-					centroids[c]!,
-				);
-				if (d < bestDistance) {
-					bestDistance = d;
-					best = c;
-				}
-			}
-			assignments[i] = best;
-		}
-
-		const sums: Triple[] = centroids.map(() => [0, 0, 0]);
-		const counts = new Int32Array(centroids.length);
-		for (let i = 0; i < pixels.length; i++) {
-			const c = assignments[i]!;
-			const sum = sums[c]!;
-			const pixel = pixels[i]!;
-			sum[0] += pixel[0];
-			sum[1] += pixel[1];
-			sum[2] += pixel[2];
-			counts[c] = counts[c]! + 1;
-		}
-
-		centroids = centroids.map((previous, c) => {
-			const n = counts[c]!;
-			if (n === 0) return previous;
-			const sum = sums[c]!;
-			return [sum[0] / n, sum[1] / n, sum[2] / n];
+async function decode(file: Blob): Promise<ImageBitmap> {
+	try {
+		return await createImageBitmap(file, {
+			imageOrientation: 'from-image',
 		});
-	}
-
-	const sizes = new Int32Array(centroids.length);
-	for (let i = 0; i < pixels.length; i++) {
-		const c = assignments[i]!;
-		sizes[c] = sizes[c]! + 1;
-	}
-
-	return centroids
-		.map((centroid, i) => ({
-			centroid,
-			hex: rgbToHex(...oklabToRgb(...centroid)),
-			count: sizes[i]!,
-		}))
-		.filter((cluster) => cluster.count > 0);
-}
-
-function dominantCentroids(clusters: Cluster[]): Triple[] {
-	const sorted = [...clusters].sort((a, b) => b.count - a.count);
-	const threshold = sorted[Math.floor(sorted.length / 3)]?.count ?? 0;
-	return sorted
-		.filter((cluster) => cluster.count >= threshold)
-		.map((cluster) => cluster.centroid);
-}
-
-function score(
-	cluster: Cluster,
-	strategy: ExtractionStrategy,
-	large: Triple[],
-): number {
-	const [L, a, b] = cluster.centroid;
-	const [, chroma, hue] = labToLch(L, a, b);
-
-	switch (strategy) {
-		case 'dominant':
-			return cluster.count;
-		case 'vibrant':
-			return chroma;
-		case 'muted':
-			return 1 / (chroma + 0.001);
-		case 'light':
-			return L;
-		case 'dark':
-			return 1 - L;
-		case 'warm': {
-			const isWarm = (hue >= 0 && hue <= 70) || hue >= 320;
-			return isWarm ? chroma + 0.5 : chroma * 0.1;
-		}
-		case 'cool': {
-			const isCool = hue >= 150 && hue <= 300;
-			return isCool ? chroma + 0.5 : chroma * 0.1;
-		}
-		case 'accent': {
-			let nearest = Infinity;
-			for (const centroid of large) {
-				const d = oklabDistance(
-					cluster.centroid,
-					centroid,
-				);
-				if (d < nearest) nearest = d;
-			}
-			// rare colours outrank common
-			return nearest / Math.log(cluster.count + 2);
-		}
+	} catch {
+		return createImageBitmap(file);
 	}
 }
 
-export function rankClusters(
-	clusters: Cluster[],
-	strategy: ExtractionStrategy,
-	count: number,
-): Cluster[] {
-	const large = strategy === 'accent' ? dominantCentroids(clusters) : [];
-	return clusters
-		.map((cluster) => ({
-			cluster,
-			score: score(cluster, strategy, large),
-		}))
-		.sort((x, y) => y.score - x.score)
-		.slice(0, count)
-		.map((scored) => scored.cluster);
-}
+const pngOf = (canvas: HTMLCanvasElement) =>
+	new Promise<Blob | null>((resolve) =>
+		canvas.toBlob(resolve, 'image/png'),
+	);
 
-export default class PaletteExtractorTool extends Component {
-	@service declare breakpoint: BreakpointService;
+const percentText = (share: number) =>
+	share > 0 && share < 0.01 ? '<1%' : `${Math.round(share * 100)}%`;
+
+/** The port of PaletteExtractorViewController, on the web tool's engine. */
+export default class PaletteExtractor extends Component {
 	@service declare colourNotation: ColourNotationService;
+	@service('canon-toast') declare toast: CanonToastService;
 
-	@tracked imageUrl: string | null = null;
-	@tracked imageName = '';
+	@tracked source?: Source;
 	@tracked clusters: Cluster[] = [];
-	@tracked strategy: ExtractionStrategy = 'dominant';
-	@tracked count = 5;
-	@tracked copied: string | null = null;
-	@tracked selectedIndex: number | null = null;
+	/** Counts extractions, so a new run's rows enter again. */
+	@tracked run = 0;
+	@tracked strategy: number;
+	@tracked count: number;
 	@tracked extracting = false;
+	@tracked painted?: string;
+	@tracked over = false;
 
-	#sampleCanvas: HTMLCanvasElement | null = null;
+	#sample?: HTMLCanvasElement;
 	#frame?: number;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	#paintFrame?: number;
+	#input?: HTMLInputElement;
+	#loading = 0;
+
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		this.count = flags.count;
+		this.strategy = flags.strategy;
+		if (flags.sample)
+			void drawnSample().then((file) => this.readFile(file));
+	}
 
 	willDestroy() {
 		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-		this.#cancelFrame();
-		if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
+		if (this.#frame !== undefined)
+			cancelAnimationFrame(this.#frame);
+		if (this.#paintFrame !== undefined)
+			cancelAnimationFrame(this.#paintFrame);
+		this.#release();
 	}
 
-	#cancelFrame() {
-		if (this.#frame === undefined) return;
-		cancelAnimationFrame(this.#frame);
-		this.#frame = undefined;
+	#release() {
+		if (this.source) {
+			URL.revokeObjectURL(this.source.url);
+			this.source.bitmap.close();
+		}
+		if (this.painted) URL.revokeObjectURL(this.painted);
 	}
 
-	get strategyInfo() {
-		return STRATEGIES[this.strategy];
+	get info() {
+		return STRATEGIES[this.strategy]!;
 	}
 
-	get strategies() {
-		return STRATEGY_ORDER.map((key) => ({
-			key,
-			name: STRATEGIES[key].name,
-		}));
+	get palette(): Cluster[] {
+		return rankClusters(this.clusters, this.info.key, this.count);
 	}
 
-	get palette() {
-		if (this.clusters.length === 0) return [];
-		return rankClusters(this.clusters, this.strategy, this.count);
+	@cached
+	get swatches(): Swatch[] {
+		const { palette } = this;
+		const shares = coverage(this.clusters, palette);
+		return palette.map((cluster, i) => {
+			const share = shares[i]!;
+			const ink = takesBlackInk(parseHex(cluster.hex)!)
+				? 'black'
+				: 'white';
+			return {
+				key: `${this.run}-${i}`,
+				hex: cluster.hex,
+				name: getColourName(cluster.hex),
+				value: this.colourNotation.format(cluster.hex),
+				share,
+				percent: percentText(share),
+				figure: (share * 100).toFixed(1),
+				fill: htmlSafe(`background: ${cluster.hex}`),
+				// min share keeps slivers
+				segment: htmlSafe(
+					`flex-grow: ${Math.max(share, 0.012)}; background: ${cluster.hex}; color: ${ink}`,
+				),
+				delay: htmlSafe(
+					`--pe-delay: ${100 + i * 50}ms`,
+				),
+			};
+		});
 	}
 
-	get totalPixels() {
-		return this.clusters.reduce((sum, c) => sum + c.count, 0);
-	}
-
-	get atMin() {
-		return this.count <= MIN_COLOURS;
-	}
-
-	get atMax() {
-		return this.count >= MAX_COLOURS;
-	}
-
-	get isGrid() {
-		const b = this.breakpoint.current;
-		return (
-			(b === 'mobile' &&
-				this.count > GRID_THRESHOLD_MOBILE) ||
-			(b === 'tablet' && this.count > GRID_THRESHOLD_TABLET)
+	get aspect() {
+		const bitmap = this.source?.bitmap;
+		if (!bitmap) return 4 / 3;
+		return Math.min(
+			Math.max(
+				bitmap.width / Math.max(bitmap.height, 1),
+				0.8,
+			),
+			1.6,
 		);
 	}
 
-	get gridColumns() {
-		return this.breakpoint.current === 'mobile' ? 2 : 3;
+	get stageStyle() {
+		const bitmap = this.source?.bitmap;
+		return htmlSafe(
+			bitmap
+				? `--pe-aspect: ${bitmap.width} / ${bitmap.height}`
+				: '',
+		);
 	}
 
-	get swatches() {
-		return this.palette.map((cluster, index) => ({
-			index,
-			hex: cluster.hex,
-			value: this.colourNotation.format(cluster.hex),
-			fillStyle: htmlSafe(`background-color: ${cluster.hex}`),
-			// style-concatenation: rgbToHex literal
-			textStyle: htmlSafe(
-				`color: ${contrastText(cluster.hex)}`,
-			),
-			selected: this.selectedIndex === index,
-			copyKey: `swatch-${index}`,
-		}));
+	get sizeText() {
+		const bitmap = this.source?.bitmap;
+		return bitmap ? `${bitmap.width} × ${bitmap.height}` : '';
 	}
 
-	get rows() {
-		const total = this.totalPixels;
-		return this.palette.map((cluster, index) => ({
-			index,
-			hex: cluster.hex,
-			value: this.colourNotation.format(cluster.hex),
-			name: getColourName(cluster.hex),
-			share:
-				total > 0
-					? (
-							(cluster.count /
-								total) *
-							100
-						).toFixed(1)
-					: '0',
-			fillStyle: htmlSafe(`background-color: ${cluster.hex}`),
-			copyKey: `list-${index}`,
-		}));
+	get loading() {
+		return this.extracting && this.clusters.length === 0;
 	}
 
 	// palette-genny decodes this
 	get gennyColours() {
 		return this.palette.map((c) => c.hex.slice(1)).join(',');
-	}
-
-	get sourceTitle() {
-		return `Source: ${this.imageName} — click to change`;
 	}
 
 	// listener dies with tool
@@ -453,7 +236,9 @@ export default class PaletteExtractorTool extends Component {
 					'BUTTON',
 					'A',
 				].includes(target.tagName) ||
-					target.isContentEditable)
+					target.isContentEditable ||
+					target.getAttribute('role') ===
+						'slider')
 			)
 				return;
 			if (
@@ -469,10 +254,15 @@ export default class PaletteExtractorTool extends Component {
 		return () => doc.removeEventListener('keydown', onKeyDown);
 	});
 
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
 	extract = () => {
-		const canvas = this.#sampleCanvas;
+		const canvas = this.#sample;
 		if (!canvas) return;
-		this.#cancelFrame();
+		if (this.#frame !== undefined)
+			cancelAnimationFrame(this.#frame);
 		this.extracting = true;
 		// lets dim state paint
 		this.#frame = requestAnimationFrame(() => {
@@ -482,495 +272,347 @@ export default class PaletteExtractorTool extends Component {
 				pixelsFromCanvas(canvas),
 				MAX_CLUSTERS,
 			);
-			this.selectedIndex = null;
+			this.run += 1;
 			this.extracting = false;
+			this.repaint();
 		});
 	};
 
-	readFile = (file: File) => {
+	/** The palettised picture for the compare, a frame after the palette changes. */
+	repaint() {
+		if (this.#paintFrame !== undefined)
+			cancelAnimationFrame(this.#paintFrame);
+		this.#paintFrame = requestAnimationFrame(() => {
+			this.#paintFrame = undefined;
+			const source = this.source;
+			if (!source) return;
+			const hexes = this.palette.map((c) => c.hex);
+			void pngOf(
+				paint(source.bitmap, hexes, PAINT_EDGE),
+			).then((blob) => {
+				if (
+					!blob ||
+					this.isDestroying ||
+					this.source !== source
+				)
+					return;
+				if (this.painted)
+					URL.revokeObjectURL(this.painted);
+				this.painted = URL.createObjectURL(blob);
+			});
+		});
+	}
+
+	readFile = async (file: File) => {
 		if (!file.type.startsWith('image/')) return;
-		if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
-		this.#cancelFrame();
-
-		const url = URL.createObjectURL(file);
-		this.imageUrl = url;
-		this.imageName = file.name;
+		const run = ++this.#loading;
+		let bitmap: ImageBitmap;
+		try {
+			bitmap = await decode(file);
+		} catch {
+			return;
+		}
+		if (run !== this.#loading || this.isDestroying) {
+			bitmap.close();
+			return;
+		}
+		this.#release();
+		this.painted = undefined;
 		this.clusters = [];
-		this.selectedIndex = null;
-		this.extracting = false;
-		this.#sampleCanvas = null;
-
-		const image = new Image();
-		image.addEventListener('load', () => {
-			if (this.isDestroying || this.isDestroyed) return;
-			this.#sampleCanvas = downsample(image);
-			this.extract();
-		});
-		image.src = url;
+		this.source = {
+			url: URL.createObjectURL(file),
+			bitmap,
+			stem: file.name.replace(/\.[^.]*$/, '') || 'image',
+		};
+		this.#sample = downsample(bitmap);
+		this.extract();
 	};
 
-	handleFileSelect = (event: Event) => {
+	loadFiles = (files: File[]) => {
+		const file = files.find((f) => matchesAccept(f, 'image/*'));
+		if (file) void this.readFile(file);
+	};
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
 		// lets same file re-fire
 		input.value = '';
+		if (file) void this.readFile(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
+	dragOver = (event: DragEvent) => {
+		if (!event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
-		const file = Array.from(event.dataTransfer?.files ?? []).find(
-			(f) => f.type.startsWith('image/'),
-		);
-		if (file) this.readFile(file);
+		this.over = true;
 	};
 
-	allowDrop = (event: DragEvent) => {
+	dragLeave = (event: DragEvent) => {
+		const root = event.currentTarget as Element;
+		if (!root.contains(event.relatedTarget as Node | null))
+			this.over = false;
+	};
+
+	drop = (event: DragEvent) => {
+		this.over = false;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		void this.readFile(file);
 	};
 
-	// re-rank invalidates selection index
-	chooseStrategy = (value: string) => {
-		this.strategy = value as ExtractionStrategy;
-		this.selectedIndex = null;
+	pickStrategy = (index: number) => {
+		this.strategy = index;
+		this.repaint();
 	};
 
-	fewer = () => {
-		if (this.atMin) return;
-		this.count -= 1;
-		this.selectedIndex = null;
+	setCount = (value: number) => {
+		this.count = value;
+		this.repaint();
 	};
 
-	more = () => {
-		if (this.atMax) return;
-		this.count += 1;
-		this.selectedIndex = null;
-	};
+	copy = (value: string) => void this.toast.copy(value);
 
-	// touch has no hover
-	selectSwatch = (index: number) => {
-		if (!this.breakpoint.isTouch) return;
-		this.selectedIndex =
-			this.selectedIndex === index ? null : index;
-	};
-
-	deselect = () => {
-		this.selectedIndex = null;
-	};
-
-	copy = async (value: string, key: string) => {
-		await navigator.clipboard.writeText(value);
-		this.copied = key;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	};
-
-	copyValue = (value: string, key: string) => void this.copy(value, key);
-
-	// copy without toggling swatch
-	copySwatch = (value: string, key: string, event: MouseEvent) => {
-		event.stopPropagation();
-		this.copyValue(value, key);
-	};
-
-	copyAll = () =>
-		this.copyValue(
-			this.palette
-				.map((c) => this.colourNotation.format(c.hex))
-				.join(', '),
-			'all',
-		);
+	copyAll = () => this.copy(this.swatches.map((s) => s.value).join(', '));
 
 	copyCss = () =>
-		this.copyValue(
-			`:root {\n${this.palette
+		this.copy(
+			`:root {\n${this.swatches
 				.map(
-					(c, i) =>
-						`  --palette-${i + 1}: ${this.colourNotation.format(c.hex)};`,
+					(s, i) =>
+						`  --palette-${i + 1}: ${s.value};`,
 				)
 				.join('\n')}\n}`,
-			'css',
 		);
 
+	download = async () => {
+		const source = this.source;
+		if (!source || this.palette.length === 0) return;
+		const blob = await pngOf(
+			paint(
+				source.bitmap,
+				this.palette.map((c) => c.hex),
+			),
+		);
+		if (blob) downloadBlob(blob, `${source.stem}-palette.png`);
+	};
+
 	<template>
-		<div
-			class="dt-extract"
+		<CanonSplit
+			class="palette-extractor"
+			@halves={{true}}
+			@collapsesTo={{240}}
 			{{filePaste this.readFile accept="image/*"}}
 			{{this.shortcuts}}
+			{{on "dragover" this.dragOver}}
+			{{on "dragleave" this.dragLeave}}
+			{{on "drop" this.drop}}
 		>
-			{{#if this.imageUrl}}
-				<div class="dt-extract-frame">
-					{{#if this.swatches}}
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					<div class="pe-picture">
 						<div
-							class="dt-extract-strip
-								{{if
-									this.isGrid
-									'is-grid'
-									'is-row'
-								}}
-								cols-{{this.gridColumns}}
-								{{if
-									this.breakpoint.isTouch
-									'is-touch'
-								}}
-								{{if
-									this.extracting
-									'is-busy'
-								}}"
-							{{onClickOutside
-								this.deselect
-							}}
+							class="pe-stage"
+							style={{this.stageStyle}}
 						>
-							{{#each
-								this.swatches
-								key="index"
-								as |swatch|
-							}}
-								{{! template-lint-disable no-invalid-interactive }}
-								<div
-									class="dt-extract-swatch
+							{{#if this.source}}
+								<CanonImageCompare
+									class="pe-compare"
+									@before={{this.source.url}}
+									@after={{this.painted}}
+									@beforeTitle="Original"
+									@afterTitle="Palette"
+								/>
+								{{#if
+									this.loading
+								}}
+									<CanonLoader
+										class="pe-loader"
+									/>
+								{{/if}}
+							{{else}}
+								<button
+									type="button"
+									class="pe-slot
 										{{if
-											swatch.selected
-											'is-selected'
+											this.over
+											'pe-slot--over'
 										}}"
-									style={{swatch.fillStyle}}
 									{{on
 										"click"
-										(fn
-											this.selectSwatch
-											swatch.index
-										)
+										this.choose
 									}}
 								>
-									<button
-										type="button"
-										class="dt-extract-swatch-copy"
-										style={{swatch.textStyle}}
-										aria-label="Copy
-											{{swatch.value}}"
-										{{on
-											"click"
-											(fn
-												this.copySwatch
-												swatch.value
-												swatch.copyKey
-											)
-										}}
-									>
-										{{#if
-											(eq
-												this.copied
-												swatch.copyKey
-											)
-										}}
-											<Icon
-												@name="check"
-											/>
-											Copied!
-										{{else}}
-											<Icon
-												@name="copy"
-											/>
-											{{swatch.value}}
-										{{/if}}
-									</button>
 									<span
-										class="dt-extract-swatch-value"
-										style={{swatch.textStyle}}
-									>{{swatch.value}}</span>
-								</div>
-							{{/each}}
+										class="pe-slot-icon"
+									><IconSvg
+											@name="palette"
+										/></span>
+									<span
+									>Drop an
+										image
+										here</span>
+								</button>
+							{{/if}}
 						</div>
-					{{/if}}
-
-					<div class="dt-extract-controls">
-						<label
-							class="dt-extract-source"
-							title={{this.sourceTitle}}
-						>
-							<input
-								type="file"
-								accept="image/*"
-								class="dt-sr-only"
-								{{on
-									"change"
-									this.handleFileSelect
-								}}
+						{{#if this.swatches.length}}
+							<ShareStrip
+								@swatches={{this.swatches}}
+								@onCopy={{this.copy}}
 							/>
-							<img
-								src={{this.imageUrl}}
-								alt="Source"
-							/>
-						</label>
-
-						<Select
-							@value={{this.strategy}}
-							@onValueChange={{this.chooseStrategy}}
-						>
-							<SelectTrigger
-								class="dt-extract-strategy"
-							>
-								<SelectValue
-								>{{this.strategyInfo.name}}</SelectValue>
-							</SelectTrigger>
-							<SelectContent>
-								{{#each
-									this.strategies
-									key="key"
-									as |option|
-								}}
-									<SelectItem
-										@value={{option.key}}
-									>{{option.name}}</SelectItem>
-								{{/each}}
-							</SelectContent>
-						</Select>
-
-						<button
-							type="button"
-							class="dt-extract-run"
-							disabled={{this.extracting}}
-							title="Re-extract with new seeds (Space)"
-							{{on
-								"click"
-								this.extract
-							}}
-						>
-							<Icon @name="shuffle" />
-							Re-extract
-						</button>
-
-						<div class="dt-extract-count">
-							<button
-								type="button"
-								aria-label="Fewer colours"
-								title="Fewer colours"
-								disabled={{this.atMin}}
-								{{on
-									"click"
-									this.fewer
-								}}
-							>
-								<Icon
-									@name="minus"
-								/>
-							</button>
-							<span
-							>{{this.count}}</span>
-							<button
-								type="button"
-								aria-label="More colours"
-								title="More colours"
-								disabled={{this.atMax}}
-								{{on
-									"click"
-									this.more
-								}}
-							>
-								<Icon
-									@name="plus"
-								/>
-							</button>
-						</div>
+						{{/if}}
 					</div>
-
-					<p class="dt-extract-desc">
-						<span
-							class="dt-extract-desc-name"
-						>{{this.strategyInfo.name}}</span>
-						—
-						{{this.strategyInfo.description}}
-					</p>
-
-					{{#if this.rows}}
-						<div class="dt-extract-export">
-							<span
-								class="dt-extract-label"
-							>Export</span>
-							<div
-								class="segmented dt-extract-export-grid"
-							>
-								<button
-									type="button"
-									{{on
-										"click"
-										this.copyAll
-									}}
-								>
-									<Icon
-										@name={{if
-											(eq
-												this.copied
-												"all"
-											)
-											"check"
-											"copy"
-										}}
-									/>
-									Copy All
-								</button>
-								<button
-									type="button"
-									{{on
-										"click"
-										this.copyCss
-									}}
-								>
-									<Icon
-										@name={{if
-											(eq
-												this.copied
-												"css"
-											)
-											"check"
-											"copy"
-										}}
-									/>
-									CSS
-									Variables
-								</button>
-								<LinkTo
-									@route="tools.tool"
-									@model="palette-genny"
-									@query={{hash
-										colors=this.gennyColours
-									}}
-								>
-									<Icon
-										@name="palette"
-									/>
-									Open in
-									Palette
-									Generator
-									<Icon
-										@name="external-link"
-										class="dt-extract-out"
-									/>
-								</LinkTo>
-							</div>
-						</div>
-
-						<div class="dt-extract-list">
-							<span
-								class="dt-extract-label"
-							>Colours</span>
-							<div
-								class="dt-extract-rows"
-							>
-								{{#each
-									this.rows
-									key="index"
-									as |row|
-								}}
-									<div
-										class="dt-extract-row"
-									>
-										<span
-											class="dt-extract-row-swatch"
-											style={{row.fillStyle}}
-											aria-hidden="true"
-										></span>
-										<div
-											class="dt-extract-row-info"
-										>
-											<div
-												class="dt-extract-row-head"
-											>
-												<span
-													class="dt-extract-row-value"
-												>{{row.value}}</span>
-												<span
-													class="dt-extract-row-name"
-												>{{row.name}}</span>
-											</div>
-											<div
-												class="dt-extract-row-share"
-											>{{row.share}}%
-												of
-												image</div>
-										</div>
-										<button
-											type="button"
-											class="dt-icon-btn"
-											title="Copy colour"
-											aria-label="Copy
-												{{row.value}}"
-											{{on
-												"click"
-												(fn
-													this.copyValue
-													row.value
-													row.copyKey
-												)
-											}}
-										>
-											<Icon
-												@name={{if
-													(eq
-														this.copied
-														row.copyKey
-													)
-													"check"
-													"copy"
-												}}
-											/>
-										</button>
-										<LinkTo
-											@route="tools.tool"
-											@model="tailwind-shades"
-											@query={{hash
-												color=row.hex
-											}}
-											class="dt-icon-btn"
-											title="Generate Tailwind shades"
-										>
-											<Icon
-												@name="wind"
-											/>
-										</LinkTo>
-									</div>
-								{{/each}}
-							</div>
-						</div>
-
-						<p class="dt-extract-hint">
-							Press
-							<kbd>Space</kbd>
-							to re-extract with new
-							seeds
-						</p>
-					{{/if}}
-				</div>
-			{{else}}
-				<div class="dt-extract-frame">
-					<label
-						class="dt-extract-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					{{#if this.source}}
+						<CanonRow
+							class="pe-source"
+							@title="Image"
+							@detail={{this.sizeText}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Choose"
+								@icon={{Choose}}
+								@onClick={{this.choose}}
+							/>
+						</CanonRow>
+					{{else}}
+						<CanonDropZone
+							class="pe-drop"
+							@prompt="Drop an image"
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-extract-drop-title"
-						>Drop an image here</span>
-						<span
-							class="dt-extract-drop-hint"
-						>or click to select a file, or
-							paste</span>
-					</label>
-				</div>
-			{{/if}}
-		</div>
+					{{/if}}
+				</CanonRows>
+				{{#if this.source}}
+					<CanonRows
+						class="pe-controls"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Strategy"
+						/>
+						<CanonSegmented
+							class="pe-strategies"
+							@items={{strategyNames}}
+							@selected={{this.strategy}}
+							@columns={{4}}
+							@onChange={{this.pickStrategy}}
+						/>
+						<CanonStatus
+							class="pe-detail"
+							@text={{this.info.description}}
+							@tone="muted"
+							@row={{true}}
+						/>
+						<CanonRow
+							@title="Colours"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								class="pe-count"
+								@value={{this.count}}
+								@min={{MIN_COLOURS}}
+								@max={{MAX_COLOURS}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setCount}}
+							/>
+						</CanonRow>
+					</CanonRows>
+				{{/if}}
+				{{#if this.swatches.length}}
+					<CanonRows
+						class="pe-result
+							{{if
+								this.extracting
+								'pe-result--busy'
+							}}"
+						@framed={{true}}
+					>
+						<CanonHeading @text="Palette" />
+						<ShareBand
+							@swatches={{this.swatches}}
+							@onCopy={{this.copy}}
+						/>
+						<ShareRows
+							@swatches={{this.swatches}}
+							@onCopy={{this.copy}}
+						/>
+						<CanonGrid @columns={{3}}>
+							<CanonButton
+								class="pe-shuffle"
+								@kind="cell"
+								@text="Shuffle"
+								@icon={{Shuffle}}
+								@disabled={{this.extracting}}
+								@onClick={{this.extract}}
+								title="Re-extract with new seeds (Space)"
+								aria-keyshortcuts="Space"
+							/>
+							<CanonButton
+								class="pe-copy-all"
+								@kind="cell"
+								@text="Copy All"
+								@icon={{Copy}}
+								@onClick={{this.copyAll}}
+							/>
+							<CanonButton
+								class="pe-css"
+								@kind="cell"
+								@text="CSS Variables"
+								@icon={{Code}}
+								@onClick={{this.copyCss}}
+							/>
+							<CanonButton
+								class="pe-download"
+								@kind="cell"
+								@text={{passAlong
+									"Palettised Image"
+								}}
+								@icon={{Save}}
+								@onClick={{this.download}}
+							/>
+							<LinkTo
+								class="pe-open"
+								@route="tools.tool"
+								@model="palette-genny"
+								@query={{hash
+									colors=this.gennyColours
+								}}
+							>
+								<IconSvg
+									@name="palette"
+								/>
+								Open in Palette
+								Generator
+							</LinkTo>
+						</CanonGrid>
+					</CanonRows>
+				{{/if}}
+				{{! the empty picture and Choose open it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }
