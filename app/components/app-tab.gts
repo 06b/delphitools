@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { modifier } from 'ember-modifier';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import { NARROW } from 'delphitools-v2/services/sidebar';
+import type BreakpointService from 'delphitools-v2/services/breakpoint';
 import type SidebarService from 'delphitools-v2/services/sidebar';
 
 const SLOP = 4;
@@ -14,6 +14,7 @@ interface AppTabSignature {
 
 // the iOS folder tab (FanItemView): the current page, and the drawer's handle
 export default class AppTab extends Component<AppTabSignature> {
+	@service declare breakpoint: BreakpointService;
 	@service declare sidebar: SidebarService;
 
 	#dragged = false;
@@ -37,9 +38,10 @@ export default class AppTab extends Component<AppTabSignature> {
 					'--dt-drawer-open',
 				),
 			);
-			along = window.matchMedia(NARROW).matches
-				? (e) => -e.clientY
-				: (e) => e.clientX;
+			along =
+				this.breakpoint.current === 'mobile'
+					? (e) => -e.clientY
+					: (e) => e.clientX;
 			start = along(event);
 			startSize = this.sidebar.open ? drawer : 0;
 			this.#dragged = false;

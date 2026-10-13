@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { setupTest } from 'delphitools-v2/tests/helpers';
 import type SidebarService from 'delphitools-v2/services/sidebar';
+import type BreakpointService from 'delphitools-v2/services/breakpoint';
 
 const COOKIE = 'sidebar_state';
 
@@ -50,5 +51,22 @@ module('Unit | Service | sidebar', function (hooks) {
 		sidebar.toggle();
 		assert.false(sidebar.open);
 		assert.true(document.cookie.includes(`${COOKIE}=false`));
+	});
+
+	test('a phone shows the opposite of the wide state', function (assert) {
+		document.cookie = `${COOKIE}=false; path=/`;
+		const sidebar = lookup(this);
+		const breakpoint = (
+			this as unknown as {
+				owner: { lookup(n: string): BreakpointService };
+			}
+		).owner.lookup('service:breakpoint');
+		breakpoint.current = 'mobile';
+		assert.true(sidebar.open);
+		sidebar.toggle();
+		assert.false(sidebar.open);
+		assert.true(document.cookie.includes(`${COOKIE}=true`));
+		breakpoint.current = 'desktop';
+		assert.true(sidebar.open);
 	});
 });

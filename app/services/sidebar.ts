@@ -2,17 +2,18 @@ import Service, { service } from '@ember/service';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { tracked } from '@glimmer/tracking';
+import type BreakpointService from 'delphitools-v2/services/breakpoint';
 
 const COOKIE = 'sidebar_state';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SHORTCUT = 'b';
-// the open drawer pushes the page off a narrower window
-export const NARROW = '(max-width: 639px)';
 
 export default class SidebarService extends Service {
 	@service declare router: RouterService;
+	@service declare breakpoint: BreakpointService;
 
-	@tracked open = true;
+	/** The drawer on a wide window; a phone shows the opposite. */
+	@tracked wideOpen = true;
 	/** The last URL outside the /canon docs, where the docs nav's back row goes. */
 	@tracked appUrl = '/';
 
@@ -24,10 +25,7 @@ export default class SidebarService extends Service {
 		const stored = new RegExp(
 			`(?:^|;\\s*)${COOKIE}=(true|false)`,
 		).exec(document.cookie);
-		// a phone opens on the page
-		this.open =
-			!window.matchMedia(NARROW).matches &&
-			stored?.[1] !== 'false';
+		this.wideOpen = stored?.[1] !== 'false';
 
 		// the first transition can finish before this service exists
 		const { pathname, search } = window.location;
@@ -44,13 +42,20 @@ export default class SidebarService extends Service {
 		this.router.off('routeDidChange', this.#onRouteChange);
 	}
 
+	get open() {
+		return this.breakpoint.current === 'mobile'
+			? !this.wideOpen
+			: this.wideOpen;
+	}
+
 	toggle = () => {
 		this.setOpen(!this.open);
 	};
 
 	setOpen = (open: boolean) => {
-		this.open = open;
-		document.cookie = `${COOKIE}=${open}; path=/; max-age=${COOKIE_MAX_AGE}`;
+		this.wideOpen =
+			this.breakpoint.current === 'mobile' ? !open : open;
+		document.cookie = `${COOKIE}=${this.wideOpen}; path=/; max-age=${COOKIE_MAX_AGE}`;
 	};
 
 	#onRouteChange = () => {
@@ -61,8 +66,8 @@ export default class SidebarService extends Service {
 			route !== 'not-found'
 		)
 			this.appUrl = this.router.currentURL ?? '/';
-		if (this.open && window.matchMedia(NARROW).matches)
-			this.open = false;
+		if (this.open && this.breakpoint.current === 'mobile')
+			this.setOpen(false);
 	};
 
 	#onKeydown = (e: KeyboardEvent) => {

@@ -1037,7 +1037,7 @@ body {
 }
 
 // iPhone layout: the band and the bar's controls along the bottom, the drawer
-// pushing the page up; same breakpoint as NARROW in services/sidebar.ts
+// pushing the page up; same width as MOBILE in services/breakpoint.ts
 @media (width < 640px) {
 	.dt-frame {
 		--dt-drawer-open: calc(70dvh - var(--dt-band));
