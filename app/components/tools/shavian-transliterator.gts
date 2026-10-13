@@ -1,773 +1,420 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
+import { cached, tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import CanonTooltip from 'delphicanon/components/canon-tooltip';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Editor from 'delphitools-v2/components/tools/shavian-transliterator/editor';
+import { exportGloss } from 'delphitools-v2/components/tools/shavian-transliterator/export';
 import {
-	tokenise,
-	reResolveTokens,
-	setCoreDictionary,
-	setFullDictionary,
-	markerPrefix,
-	nextMarker,
-	type GlossToken,
-	type GlossWord,
-} from 'delphitools-v2/lib/shavian/transliterate';
+	carryEdits,
+	editWord,
+	inserting,
+	isGuess,
+	markers,
+	removing,
+	swapping,
+	tilesOf,
+	withMarker,
+	type Marker,
+} from 'delphitools-v2/components/tools/shavian-transliterator/gloss';
+import Letter, {
+	type LetterEdits,
+} from 'delphitools-v2/components/tools/shavian-transliterator/letter';
+import Result from 'delphitools-v2/components/tools/text-tool/result';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import type { Alternative } from 'delphitools-v2/lib/shavian/alternatives';
 import {
 	loadCoreDictionary,
 	loadFullDictionary,
 } from 'delphitools-v2/lib/shavian/dictionary';
+import type { ShavianLetter } from 'delphitools-v2/lib/shavian/phoneme-map';
 import {
-	getAlternatives,
-	type Alternative,
-} from 'delphitools-v2/lib/shavian/alternatives';
-import { getShavianLetter } from 'delphitools-v2/lib/shavian/phoneme-map';
+	glossToText,
+	markerPrefix,
+	reResolveTokens,
+	setCoreDictionary,
+	setFullDictionary,
+	tokenise,
+	type GlossToken,
+	type Phoneme,
+} from 'delphitools-v2/lib/shavian/transliterate';
+import './shavian-transliterator/shavian-transliterator.css';
 
-// wording from next app
-const DEFAULT_TEXT = 'Mankind, be vigilant; we loved you.';
+const defaultText = 'Mankind, be vigilant; we loved you.';
+const coreOnlyStatus = 'Core dictionary only, uncommon words are guessed';
+// iOS ShavianMarkerTip
+const markerTip =
+	'A namer dot · marks a proper noun. An acroring ⸰ marks an initialism (like FBI), an acroarc ꤮ an acronym said as a word (like NASA).';
+const collapsedHeight = 96;
 
-const COPIED_MS = 2000;
+type DictStatus = 'loading-core' | 'loading-full' | 'core-only' | 'ready';
 
-export type DictStatus =
-	'loading-core' | 'loading-full' | 'core-only' | 'ready';
+const CloseIcon = <template><IconSvg @name="x" /></template>;
+const InfoIcon = <template><IconSvg @name="info" /></template>;
+const DownloadIcon = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-const CORE_ONLY_STATUS = 'Core dictionary only, uncommon words are guessed';
+// the block is the first section of the pane; bring it into view as it opens
+const reveal = modifier((block: HTMLElement) => {
+	block.scrollIntoView({ block: 'nearest' });
+});
 
-// re-exported for lib/omni.ts
-export { parseDictJson } from 'delphitools-v2/lib/shavian/dictionary';
-
-export function markerTitle(marker: GlossWord['marker']): string {
-	// wording from next app
-	switch (marker) {
-		case 'none':
-			return 'Add namer dot · (proper noun)';
-		case 'namer':
-			return 'Switch to acroring ⸰ (initialism)';
-		case 'acroring':
-			return 'Switch to acroarc ꤮ (acronym)';
-		default:
-			return 'Remove marker';
-	}
-}
-
-// punctuation and spacing included
-export function glossToText(tokens: GlossToken[]): string {
-	return tokens
-		.map((token) =>
-			token.type === 'word' && token.gloss
-				? token.gloss.shavian
-				: token.value,
-		)
-		.join('');
-}
-
-export function withMarker(
-	token: GlossToken,
-	marker: GlossWord['marker'],
-): GlossToken {
-	if (token.type !== 'word' || !token.gloss) return token;
-	return {
-		...token,
-		gloss: {
-			...token.gloss,
-			marker,
-			shavian:
-				markerPrefix(marker) +
-				token.gloss.phonemes
-					.map((p) => p.shavian)
-					.join(''),
-		},
-	};
-}
-
-// marks gloss user-edited
-export function withPhoneme(
-	token: GlossToken,
-	phonemeIndex: number,
-	alternative: Alternative,
-): GlossToken {
-	if (token.type !== 'word' || !token.gloss) return token;
-	const phonemes = [...token.gloss.phonemes];
-	phonemes[phonemeIndex] = {
-		shavian: alternative.shavian,
-		ipa: alternative.ipa,
-		alternatives: getAlternatives(alternative.shavian),
-	};
-	return {
-		...token,
-		gloss: {
-			...token.gloss,
-			phonemes,
-			shavian:
-				markerPrefix(token.gloss.marker) +
-				phonemes.map((p) => p.shavian).join(''),
-			ipa: phonemes.map((p) => p.ipa).join(''),
-			userEdited: true,
-		},
-	};
-}
-
-const CANVAS_WIDTH = 1200;
-const PADDING = 40;
-const WORD_GAP = 24;
-const LINE_HEIGHT = 80;
-const BRANDING_HEIGHT = 40;
-const CONTENT_WIDTH = CANVAS_WIDTH - PADDING * 2;
-
-const LATIN_FONT = '14px system-ui';
-const SHAVIAN_FONT = "22px 'Noto Sans Shavian', sans-serif";
-const IPA_FONT = '13px system-ui';
-const PUNCTUATION_FONT = '18px system-ui';
-const BRAND_FONT = '12px system-ui';
-const MARKED_COLOUR = '#ff9f43';
-
-export async function exportGloss(tokens: GlossToken[]) {
-	const canvas = document.createElement('canvas');
-	const ctx = canvas.getContext('2d');
-	if (!ctx) return;
-
-	// fonts.ready before measuring widths
-	await document.fonts.ready;
-
-	const isDark =
-		document.documentElement.classList.contains('dark') ||
-		window.matchMedia('(prefers-color-scheme: dark)').matches;
-	const bgColour = isDark ? '#0a0a0a' : '#ffffff';
-	const latinColour = isDark ? '#8888aa' : '#666688';
-	const shavianColour = isDark ? '#e8e8ff' : '#1a1a2e';
-	const ipaColour = isDark ? '#66cc88' : '#227744';
-	const brandColour = isDark ? '#555' : '#aaa';
-
-	const measurements: { token: GlossToken; width: number }[] = [];
-	ctx.font = LATIN_FONT;
-	for (const token of tokens) {
-		if (token.type === 'word' && token.gloss) {
-			ctx.font = LATIN_FONT;
-			const latinWidth = ctx.measureText(
-				token.gloss.latin,
-			).width;
-			ctx.font = SHAVIAN_FONT;
-			const shavianWidth = ctx.measureText(
-				token.gloss.phonemes
-					.map((p) => p.shavian)
-					.join(''),
-			).width;
-			ctx.font = IPA_FONT;
-			const ipaWidth = ctx.measureText(token.gloss.ipa).width;
-			measurements.push({
-				token,
-				width: Math.max(
-					latinWidth,
-					shavianWidth,
-					ipaWidth,
-				),
-			});
-		} else if (token.type === 'punctuation') {
-			ctx.font = LATIN_FONT;
-			measurements.push({
-				token,
-				width: ctx.measureText(token.value).width,
-			});
-		}
-	}
-
-	const lines: (typeof measurements)[] = [];
-	let currentLine: typeof measurements = [];
-	let currentWidth = 0;
-	for (const measurement of measurements) {
-		if (
-			currentWidth + measurement.width + WORD_GAP >
-				CONTENT_WIDTH &&
-			currentLine.length > 0
-		) {
-			lines.push(currentLine);
-			currentLine = [measurement];
-			currentWidth = measurement.width;
-		} else {
-			currentLine.push(measurement);
-			currentWidth += measurement.width + WORD_GAP;
-		}
-	}
-	if (currentLine.length > 0) lines.push(currentLine);
-
-	canvas.width = CANVAS_WIDTH;
-	canvas.height =
-		PADDING +
-		lines.length * LINE_HEIGHT +
-		BRANDING_HEIGHT +
-		PADDING;
-
-	ctx.fillStyle = bgColour;
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-	let y = PADDING;
-	for (const line of lines) {
-		let x = PADDING;
-		for (const { token } of line) {
-			if (token.type === 'punctuation') {
-				ctx.font = PUNCTUATION_FONT;
-				ctx.fillStyle = latinColour;
-				ctx.textAlign = 'left';
-				ctx.fillText(token.value, x, y + 42);
-				x += ctx.measureText(token.value).width + 4;
-				continue;
-			}
-
-			const gloss = token.gloss;
-			if (!gloss) continue;
-			const prefix = markerPrefix(gloss.marker);
-			const shavianText =
-				prefix +
-				gloss.phonemes.map((p) => p.shavian).join('');
-
-			ctx.font = LATIN_FONT;
-			ctx.fillStyle = latinColour;
-			ctx.textAlign = 'left';
-			ctx.fillText(gloss.latin, x, y + 14);
-			const latinWidth = ctx.measureText(gloss.latin).width;
-
-			ctx.font = SHAVIAN_FONT;
-			ctx.fillStyle =
-				gloss.marker !== 'none'
-					? MARKED_COLOUR
-					: shavianColour;
-			ctx.fillText(shavianText, x, y + 42);
-			const shavianWidth = ctx.measureText(shavianText).width;
-
-			ctx.font = IPA_FONT;
-			ctx.fillStyle = ipaColour;
-			ctx.fillText(gloss.ipa, x, y + 62);
-
-			x += Math.max(latinWidth, shavianWidth) + WORD_GAP;
-		}
-		y += LINE_HEIGHT;
-	}
-
-	ctx.font = BRAND_FONT;
-	ctx.fillStyle = brandColour;
-	ctx.textAlign = 'right';
-	ctx.fillText(
-		'delphi.tools',
-		CANVAS_WIDTH - PADDING,
-		canvas.height - PADDING + 8,
-	);
-
-	downloadUrl(canvas.toDataURL('image/png'), 'shavian-gloss.png');
-}
-
-export default class ShavianTransliteratorTool extends Component {
-	@tracked input = DEFAULT_TEXT;
+/** The port of ShavianTransliteratorViewController and its view model. */
+export default class ShavianTransliterator extends Component {
+	@tracked input = defaultText;
 	@tracked tokens: GlossToken[] = [];
 	@tracked dictStatus: DictStatus = 'loading-core';
-	@tracked copied = false;
-	@tracked activeToken: number | null = null;
-	@tracked activePhoneme: number | null = null;
-
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	@tracked selected: number | null = null;
+	@tracked pictureHeight = 320;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
+		const text = new URLSearchParams(window.location.search).get(
+			'shavianText',
+		);
+		if (text !== null) this.input = text;
 		void this.#loadDictionaries();
 	}
 
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-	}
-
-	// core first, full dictionary re-resolves heuristic guesses
+	// core first, the full dictionary re-resolves the guesses
 	async #loadDictionaries() {
 		const core = await loadCoreDictionary();
 		if (this.isDestroyed) return;
 		setCoreDictionary(core);
 		this.dictStatus = 'loading-full';
-		if (this.input) this.tokens = tokenise(this.input);
-
+		this.tokens = tokenise(this.input);
+		this.#launch();
 		try {
 			const full = await loadFullDictionary();
 			if (this.isDestroyed) return;
 			setFullDictionary(full);
 			this.tokens = reResolveTokens(this.tokens);
+			this.dictStatus = 'ready';
 		} catch (error) {
-			// surface core-only degradation
 			console.error(
 				'shavian full dictionary failed to load:',
 				error,
 			);
-			if (this.isDestroyed) return;
-			this.dictStatus = 'core-only';
-			return;
+			if (!this.isDestroyed) this.dictStatus = 'core-only';
 		}
-		if (this.isDestroyed) return;
-		this.dictStatus = 'ready';
+	}
+
+	// ?shavianWord=<1-based> ?shavianMarker=<0-3> ?shavianSwap: the iOS launch arguments
+	#launch() {
+		const query = new URLSearchParams(window.location.search);
+		const word = Number(query.get('shavianWord'));
+		const slot = this.tokens
+			.flatMap((t, i) => (t.gloss ? [i] : []))
+			.at(word - 1);
+		if (!word || slot === undefined) return;
+		this.selected = slot;
+		if (query.has('shavianMarker'))
+			this.setMarker(Number(query.get('shavianMarker')) % 4);
+		const first = this.word?.phonemes[0]?.alternatives[0];
+		if (query.has('shavianSwap') && first) this.#swap(0, first);
+	}
+
+	get loadingDetail() {
+		return this.dictStatus === 'loading-core'
+			? 'Loading dictionary…'
+			: this.dictStatus === 'loading-full'
+				? 'Loading full dictionary…'
+				: undefined;
+	}
+
+	get coreOnly() {
+		return this.dictStatus === 'core-only';
 	}
 
 	get coreOnlyStatus() {
-		return CORE_ONLY_STATUS;
+		return coreOnlyStatus;
 	}
 
-	get hasContent() {
-		return this.tokens.some((token) => token.type === 'word');
+	get markerTip() {
+		return markerTip;
 	}
 
-	get glossTokens() {
-		return this.tokens.map((token, index) => {
-			const gloss = token.gloss;
-			if (token.type !== 'word' || !gloss) {
-				return {
-					key: `${token.type}-${index}-${token.value}`,
-					kind: token.type,
-					value: token.value,
-					index,
-					latin: '',
-					marked: false,
-					prefix: '',
-					title: '',
-					heuristic: false,
-					phonemes: [],
-				};
-			}
+	get markerTitles() {
+		return markers.map((m) => m.label);
+	}
+
+	get words() {
+		return this.tokens.filter((t) => t.gloss);
+	}
+
+	get text() {
+		return this.words.length ? glossToText(this.tokens) : '';
+	}
+
+	get tiles() {
+		return tilesOf(this.tokens);
+	}
+
+	get word() {
+		return this.selected === null
+			? undefined
+			: this.tokens[this.selected]?.gloss;
+	}
+
+	get wordIpa() {
+		return `/${this.word?.ipa ?? ''}/`;
+	}
+
+	get markerIndex() {
+		const marker = this.word?.marker;
+		return markers.findIndex((m) => m.marker === marker);
+	}
+
+	get exportText() {
+		return passAlong('Export Gloss');
+	}
+
+	@cached
+	get letters(): { key: string; phoneme: Phoneme; edits: LetterEdits }[] {
+		const count = this.word?.phonemes.length ?? 0;
+		return (this.word?.phonemes ?? []).map((phoneme, at) => ({
+			key: `${this.selected}-${at}-${phoneme.shavian}`,
+			phoneme,
+			edits: {
+				pick: (alternative: Alternative) =>
+					this.#swap(at, alternative),
+				insert: (
+					after: boolean,
+					letter: ShavianLetter,
+				) =>
+					this.#edit((w) =>
+						inserting(
+							w,
+							after ? at + 1 : at,
+							letter,
+						),
+					),
+				remove:
+					count > 1
+						? () =>
+								this.#edit(
+									(w) =>
+										removing(
+											w,
+											at,
+										),
+								)
+						: undefined,
+			},
+		}));
+	}
+
+	@cached
+	get runs() {
+		return this.tokens.map((token) => {
+			const { gloss } = token;
 			return {
-				key: `word-${index}-${gloss.latin}`,
-				kind: 'word',
-				value: token.value,
-				index,
-				latin: gloss.latin,
-				marked: gloss.marker !== 'none',
-				prefix: markerPrefix(gloss.marker),
-				title: markerTitle(gloss.marker),
-				heuristic:
-					gloss.source === 'heuristic' &&
-					!gloss.userEdited,
-				phonemes: gloss.phonemes.map(
-					(phoneme, phonemeIndex) => ({
-						key: `${index}-${phonemeIndex}`,
-						tokenIndex: index,
-						phonemeIndex,
-						shavian: phoneme.shavian,
-						ipa: phoneme.ipa,
-						name:
-							getShavianLetter(
-								phoneme.shavian,
-							)?.name ?? '',
-						isActive:
-							this.activeToken ===
-								index &&
-							this.activePhoneme ===
-								phonemeIndex,
-						alternatives:
-							phoneme.alternatives,
-					}),
-				),
+				marker: gloss ? markerPrefix(gloss.marker) : '',
+				text: gloss
+					? gloss.phonemes
+							.map((p) => p.shavian)
+							.join('')
+					: token.value,
+				guess: gloss ? isGuess(gloss) : false,
 			};
 		});
 	}
 
-	setInput = (event: Event) => {
-		this.input = (event.target as HTMLTextAreaElement).value;
-		this.tokens = tokenise(this.input);
-		this.closePopover();
+	#edit(edit: Parameters<typeof editWord>[2]) {
+		if (this.selected === null) return;
+		this.tokens = editWord(this.tokens, this.selected, edit);
+	}
+
+	#swap(at: number, alternative: Alternative) {
+		this.#edit((w) => swapping(w, at, alternative));
+	}
+
+	setInput = (text: string) => {
+		this.input = text;
+		this.selected = null;
+		// before the core tier, nothing to gloss with
+		if (this.dictStatus !== 'loading-core')
+			this.tokens = carryEdits(this.tokens, tokenise(text));
 	};
 
-	closePopover = () => {
-		this.activeToken = null;
-		this.activePhoneme = null;
+	pick = (index: number) => {
+		this.selected = this.selected === index ? null : index;
 	};
 
-	togglePopover = (tokenIndex: number, phonemeIndex: number) => {
-		const isActive =
-			this.activeToken === tokenIndex &&
-			this.activePhoneme === phonemeIndex;
-		this.activeToken = isActive ? null : tokenIndex;
-		this.activePhoneme = isActive ? null : phonemeIndex;
+	close = () => {
+		this.selected = null;
 	};
 
-	cycleMarker = (tokenIndex: number) => {
-		this.tokens = this.tokens.map((token, index) => {
-			if (index !== tokenIndex || !token.gloss) return token;
-			return withMarker(
-				token,
-				nextMarker(token.gloss.marker),
-			);
-		});
+	setMarker = (index: number) => {
+		const marker: Marker | undefined = markers[index]?.marker;
+		if (marker) this.#edit((w) => withMarker(w, marker));
 	};
 
-	swapPhoneme = (
-		tokenIndex: number,
-		phonemeIndex: number,
-		alternative: Alternative,
-	) => {
-		this.tokens = this.tokens.map((token, index) =>
-			index === tokenIndex
-				? withPhoneme(token, phonemeIndex, alternative)
-				: token,
-		);
-		this.closePopover();
+	measured = (height: number) => {
+		// 2 px rule under the picture
+		if (height + 2 !== this.pictureHeight)
+			this.pictureHeight = height + 2;
 	};
 
-	copyShavian = () => {
-		void navigator.clipboard.writeText(glossToText(this.tokens));
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
-	};
-
-	downloadGloss = () => void exportGloss(this.tokens);
+	exportImage = () => void exportGloss(this.tokens);
 
 	<template>
-		<div class="dt-shav">
-			{{! wording from next app }}
-			<div class="dt-shav-intro">
-				<p>The
-					<strong>Shavian alphabet</strong>
-					(𐑖𐑱𐑝𐑾𐑯) is a phonemic writing system
-					designed for English by Kingsley Read,
-					commissioned by the will of George
-					Bernard Shaw. Each letter represents
-					exactly one sound — no silent letters,
-					no ambiguous spellings.</p>
-				<p>Type or paste English text below. Click
-					individual Shavian letters to swap
-					phonemes. Click a Latin word to cycle
-					through markers: namer dot · (proper
-					noun), acroring ⸰ (initialism), acroarc
-					꤮ (pronounceable acronym).</p>
-			</div>
-
-			<div class="dt-shav-frame">
-				<div class="dt-shav-input-pane">
-					<div class="dt-shav-pane-head">
-						{{! wording from next app }}
-						<span
-							class="dt-shav-label"
-						>English input</span>
-					</div>
-					{{! wording from next app }}
-					<textarea
-						class="dt-shav-input"
-						aria-label="English input"
-						placeholder="Type or paste English text here..."
-						value={{this.input}}
-						{{on "input" this.setInput}}
-					></textarea>
-				</div>
-
-				<div>
-					<div class="dt-shav-pane-head is-split">
-						{{! wording from next app }}
-						<span
-							class="dt-shav-label"
-						>Shavian gloss</span>
-						{{#if
-							(eq
-								this.dictStatus
-								"loading-core"
-							)
-						}}
-							<span
-								class="dt-shav-status"
-							>
-								<NdsLoader />
-								{{! wording from next app }}
-								Loading
-								dictionary…
-							</span>
-						{{else if
-							(eq
-								this.dictStatus
-								"loading-full"
-							)
-						}}
-							<span
-								class="dt-shav-status"
-							>
-								<NdsLoader />
-								{{! wording from next app }}
-								Loading full
-								dictionary…
-							</span>
-						{{else if
-							(eq
-								this.dictStatus
-								"core-only"
-							)
-						}}
-							<span
-								class="dt-shav-status is-degraded"
-							>
-								<Icon
-									@name="triangle-alert"
-								/>
-								{{this.coreOnlyStatus}}
-							</span>
-						{{else}}
-							{{! wording from next app }}
-							<span
-								class="dt-shav-status is-ready"
-							>Dictionary ready</span>
-						{{/if}}
-					</div>
-
-					<div
-						class="dt-shav-grid-wrap"
-						{{onClickOutside
-							this.closePopover
-						}}
+		<CanonSplit
+			class="shavian-transliterator"
+			@halves={{true}}
+			@collapsesTo={{collapsedHeight}}
+		>
+			<:sidebar>
+				<CanonCanvas @height={{this.pictureHeight}}>
+					<Editor
+						@text={{this.input}}
+						@tokens={{this.tokens}}
+						@selected={{this.selected}}
+						@onInput={{this.setInput}}
+						@onWord={{this.pick}}
+						@onHeight={{this.measured}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.word}}
+					<CanonRows
+						class="sh-word-block"
+						@framed={{true}}
+						{{reveal}}
 					>
-						{{#if this.hasContent}}
-							<div
-								class="dt-shav-grid"
+						<CanonHeading @text="Word" />
+						<CanonRow
+							class="sh-word-row"
+							@title={{this.word.latin}}
+							@detail={{this.wordIpa}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@icon={{CloseIcon}}
+								@label="Close"
+								@onClick={{this.close}}
+							/>
+						</CanonRow>
+						<CanonGrid
+							class="sh-letters"
+							@columns={{5}}
+						>
+							{{#each
+								this.letters
+								key="key"
+								as |letter|
+							}}
+								<Letter
+									@phoneme={{letter.phoneme}}
+									@edits={{letter.edits}}
+								/>
+							{{/each}}
+						</CanonGrid>
+						<CanonRow
+							@title="Marker"
+							@form="flush"
+						>
+							<CanonTooltip
+								@text={{this.markerTip}}
+								as |tip|
 							>
-								{{#each
-									this.glossTokens
-									key="key"
-									as |token|
-								}}
-									{{#if
-										(eq
-											token.kind
-											"whitespace"
-										)
-									}}
-										<span
-											class="dt-shav-space"
-										></span>
-									{{else if
-										(eq
-											token.kind
-											"punctuation"
-										)
-									}}
-										<span
-											class="dt-shav-punct"
-										>{{token.value}}</span>
-									{{else}}
-										<div
-											class="dt-shav-word"
-										>
-											<button
-												type="button"
-												class="dt-shav-latin
-													{{if
-														token.marked
-														'is-marked'
-													}}"
-												title={{token.title}}
-												{{on
-													"click"
-													(fn
-														this.cycleMarker
-														token.index
-													)
-												}}
-											>{{token.latin}}</button>
-
-											<div
-												class="dt-shav-letters"
-											>
-												{{#if
-													token.marked
-												}}
-													<span
-														class="dt-shav-marker"
-													>{{token.prefix}}</span>
-												{{/if}}
-												{{#each
-													token.phonemes
-													key="key"
-													as |phoneme|
-												}}
-													<div
-														class="dt-shav-phoneme"
-													>
-														<button
-															type="button"
-															class="dt-shav-glyph
-																{{if
-																	phoneme.isActive
-																	'is-active'
-																}}
-																{{if
-																	token.marked
-																	'is-marked'
-																}}"
-															aria-label={{phoneme.name}}
-															{{on
-																"click"
-																(fn
-																	this.togglePopover
-																	phoneme.tokenIndex
-																	phoneme.phonemeIndex
-																)
-															}}
-														>{{phoneme.shavian}}</button>
-
-														{{#if
-															phoneme.isActive
-														}}
-															<div
-																class="dt-shav-popover"
-															>
-																<div
-																	class="dt-shav-current"
-																>
-																	<span
-																		class="dt-shav-option-glyph"
-																	>{{phoneme.shavian}}</span>
-																	<span
-																		class="dt-shav-option-name"
-																	>{{phoneme.name}}</span>
-																	<span
-																		class="dt-shav-option-ipa"
-																	>/{{phoneme.ipa}}/</span>
-																</div>
-																{{#each
-																	phoneme.alternatives
-																	key="shavian"
-																	as |alt|
-																}}
-																	<button
-																		type="button"
-																		class="dt-shav-option"
-																		{{on
-																			"click"
-																			(fn
-																				this.swapPhoneme
-																				phoneme.tokenIndex
-																				phoneme.phonemeIndex
-																				alt
-																			)
-																		}}
-																	>
-																		<span
-																			class="dt-shav-option-glyph"
-																		>{{alt.shavian}}</span>
-																		<span
-																			class="dt-shav-option-name"
-																		>{{alt.name}}</span>
-																		<span
-																			class="dt-shav-option-ipa"
-																		>/{{alt.ipa}}/</span>
-																	</button>
-																{{/each}}
-															</div>
-														{{/if}}
-													</div>
-												{{/each}}
-											</div>
-
-											<div
-												class="dt-shav-ipa-row
-													{{if
-														token.heuristic
-														'is-heuristic'
-													}}"
-											>
-												{{#each
-													token.phonemes
-													key="key"
-													as |phoneme|
-												}}
-													<span
-														class="dt-shav-ipa"
-													>{{phoneme.ipa}}</span>
-												{{/each}}
-											</div>
-										</div>
-									{{/if}}
-								{{/each}}
-							</div>
-						{{else}}
-							{{! wording from next app }}
-							<p
-								class="dt-shav-empty"
-							>Start typing above to
-								see the Shavian
-								transliteration.</p>
-						{{/if}}
-					</div>
-
-					<div class="dt-shav-legend">
-						<span
-							class="dt-shav-legend-item"
-						>
-							<span
-								class="dt-shav-dot is-dict"
-							></span>
-							{{! wording from next app }}
-							Dictionary match
-						</span>
-						<span
-							class="dt-shav-legend-item"
-						>
-							<span
-								class="dt-shav-dot is-heuristic"
-							></span>
-							{{! wording from next app }}
-							Heuristic guess
-						</span>
-						<span
-							class="dt-shav-legend-item"
-						>
-							<span
-								class="dt-shav-dot is-marked"
-							></span>
-							{{! wording from next app }}
-							Marked (· namer, ⸰
-							initialism, ꤮ acronym)
-						</span>
-					</div>
-				</div>
-
-				{{#if this.hasContent}}
-					<div class="dt-shav-actions">
-						<button
-							type="button"
-							class="dt-shav-copy"
-							{{on
-								"click"
-								this.copyShavian
-							}}
-						>
-							<Icon
-								@name={{if
-									this.copied
-									"check"
-									"copy"
-								}}
-							/>
-							{{#if this.copied}}
-								{{! wording from next app }}
-								Copied!
-							{{else}}
-								{{! wording from next app }}
-								Copy Shavian
-							{{/if}}
-						</button>
-						<button
-							type="button"
-							class="dt-shav-export"
-							{{on
-								"click"
-								this.downloadGloss
-							}}
-						>
-							<DownloadLabel
-								@label="Export Gloss"
-							/>
-						</button>
-					</div>
+								<CanonButton
+									{{tip.trigger}}
+									@kind="cell"
+									@icon={{InfoIcon}}
+									@label="Marker"
+								/>
+							</CanonTooltip>
+						</CanonRow>
+						<CanonSegmented
+							aria-label="Marker"
+							@items={{this.markerTitles}}
+							@selected={{this.markerIndex}}
+							@columns={{2}}
+							@onChange={{this.setMarker}}
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-		</div>
+				<Result
+					class="sh-result"
+					@heading="Shavian"
+					@text={{this.text}}
+					@fileName="shavian.txt"
+					@busy={{if
+						this.loadingDetail
+						true
+						false
+					}}
+				>
+					<:default>
+						{{~#each this.runs as |run|~}}
+							<span
+								class={{if
+									run.guess
+									"sh-run--guess"
+								}}
+							><span
+									class="sh-run-marker"
+								>{{run.marker}}</span>{{run.text}}</span>
+						{{~/each~}}
+					</:default>
+					<:extra>
+						{{#if this.loadingDetail}}
+							<CanonRow
+								class="sh-loading"
+								@title="Loading"
+								@detail={{this.loadingDetail}}
+							>
+								<CanonLoader />
+							</CanonRow>
+						{{/if}}
+						{{#if this.coreOnly}}
+							<CanonStatus
+								@text={{this.coreOnlyStatus}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+						{{#if this.words.length}}
+							<div class="sh-legend">
+								<span
+									class="sh-legend-item"
+								><span
+										class="sh-legend-mark"
+									>·</span>
+									Marked</span>
+								<span
+									class="sh-legend-item sh-run--guess"
+								>Guessed</span>
+							</div>
+							<CanonGrid>
+								<CanonButton
+									class="sh-export"
+									@text={{this.exportText}}
+									@icon={{DownloadIcon}}
+									@onClick={{this.exportImage}}
+								/>
+							</CanonGrid>
+						{{/if}}
+					</:extra>
+				</Result>
+				<CanonRows @framed={{true}}>
+					<CanonTiles @items={{this.tiles}} />
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

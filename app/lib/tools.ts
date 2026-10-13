@@ -1087,6 +1087,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'languages',
 				href: '/tools/shavian-transliterator',
 				produces: ['image/png'],
+				canon: true,
 			},
 			{
 				id: 'morse-code',

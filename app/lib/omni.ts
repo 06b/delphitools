@@ -420,20 +420,11 @@ let shavianCoreReady: Promise<void> | null = null;
 
 async function ensureShavianCore(): Promise<void> {
 	shavianCoreReady ??= (async () => {
-		const { parseDictJson } =
-			await import('delphitools-v2/components/tools/shavian-transliterator');
+		const { loadCoreDictionary } =
+			await import('delphitools-v2/lib/shavian/dictionary');
 		const { setCoreDictionary } =
 			await import('delphitools-v2/lib/shavian/transliterate');
-		const core =
-			await import('delphitools-v2/lib/shavian/dictionary-core.json?raw');
-		setCoreDictionary(
-			parseDictJson(
-				JSON.parse(core.default) as Record<
-					string,
-					string[]
-				>,
-			),
-		);
+		setCoreDictionary(await loadCoreDictionary());
 	})();
 	return shavianCoreReady;
 }
@@ -443,9 +434,7 @@ async function shavianAnswers(input: string): Promise<OmniAnswer[]> {
 	if (words.length < SHAVIAN_MIN_WORDS) return [];
 	if (!words.every((word) => SHAVIAN_WORD.test(word))) return [];
 
-	const { glossToText } =
-		await import('delphitools-v2/components/tools/shavian-transliterator');
-	const { tokenise } =
+	const { glossToText, tokenise } =
 		await import('delphitools-v2/lib/shavian/transliterate');
 	await ensureShavianCore();
 
