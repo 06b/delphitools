@@ -1,5 +1,9 @@
 import type { ComponentLike } from '@glint/template';
 import Banner from './banner';
+import Equation from './equation';
+import equation from './equation.gts?raw';
+import Solid from './solid';
+import solid from './solid.gts?raw';
 import banner from './banner.gts?raw';
 import Columns from './columns';
 import columns from './columns.gts?raw';
@@ -42,6 +46,8 @@ export interface Part {
 }
 
 export const patternParts: Record<string, Part> = {
+	solid: { Live: Solid, source: solid },
+	equation: { Live: Equation, source: equation },
 	tone: { Live: Tone, source: tone },
 	swatch: { Live: Swatch, source: swatch },
 	lamps: { Live: Lamps, source: lamps },

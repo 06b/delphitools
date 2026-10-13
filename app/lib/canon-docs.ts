@@ -167,6 +167,13 @@ export interface DocsEntry {
 
 /** The home grid's cards first, in grid order, then the tool layouts. */
 export const docsPatterns: (DocsEntry & { card: boolean })[] = [
+	{ id: 'solid', title: 'Solid', icon: 'box', card: true },
+	{
+		id: 'equation',
+		title: 'Equation',
+		icon: 'square-radical',
+		card: true,
+	},
 	{ id: 'tone', title: 'Tone', icon: 'audio-lines', card: true },
 	{ id: 'swatch', title: 'Swatch', icon: 'pipette', card: true },
 	{ id: 'lamps', title: 'Lamps', icon: 'toggle-right', card: true },

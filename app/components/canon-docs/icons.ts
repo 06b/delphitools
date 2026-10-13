@@ -1,6 +1,7 @@
 import { icons } from 'delphitools-v2/lib/icons';
 import appWindow from 'lucide-static/icons/app-window.svg?raw';
 import blocks from 'lucide-static/icons/blocks.svg?raw';
+import box from 'lucide-static/icons/box.svg?raw';
 import bug from 'lucide-static/icons/bug.svg?raw';
 import caseSensitive from 'lucide-static/icons/case-sensitive.svg?raw';
 import columns2 from 'lucide-static/icons/columns-2.svg?raw';
@@ -13,6 +14,7 @@ import monitor from 'lucide-static/icons/monitor.svg?raw';
 import moveHorizontal from 'lucide-static/icons/move-horizontal.svg?raw';
 import packageSvg from 'lucide-static/icons/package.svg?raw';
 import share from 'lucide-static/icons/share.svg?raw';
+import squareRadical from 'lucide-static/icons/square-radical.svg?raw';
 import sigma from 'lucide-static/icons/sigma.svg?raw';
 import text from 'lucide-static/icons/text.svg?raw';
 
@@ -21,6 +23,7 @@ import text from 'lucide-static/icons/text.svg?raw';
 Object.assign(icons, {
 	'app-window': appWindow,
 	blocks,
+	box,
 	bug,
 	'case-sensitive': caseSensitive,
 	'columns-2': columns2,
@@ -33,6 +36,7 @@ Object.assign(icons, {
 	'move-horizontal': moveHorizontal,
 	package: packageSvg,
 	share,
+	'square-radical': squareRadical,
 	sigma,
 	text,
 });

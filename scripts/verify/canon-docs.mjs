@@ -137,6 +137,18 @@ await (await page.$(`xpath/${'//*[@data-card="paper"]//button[contains(., "Lands
 await sleep(500);
 check('the paper turns', (await paperWidth()) !== portrait, `${portrait} -> ${await paperWidth()}`);
 
+const solidLabel = () => page.$eval(`${card('solid')} .canon-colour-solid`, (el) => el.getAttribute('aria-label') ?? el.textContent);
+const rgbSolid = await solidLabel();
+await (await page.$(`xpath/${'//*[@data-card="solid"]//*[@role="radio"][contains(., "OKLCH")]'}`)).click();
+await sleep(400);
+check('the solid changes space', (await solidLabel()) !== rgbSolid, `${rgbSolid} -> ${await solidLabel()}`);
+
+const equation = () => page.$eval(`${card('equation')} .canon-value-line-value`, (el) => el.textContent.trim());
+const equationBefore = await equation();
+await page.evaluate((sel) => [...document.querySelectorAll(`${sel} .canon-math-keypad button`)].find((k) => k.textContent.trim() === '7').click(), card('equation'));
+await sleep(300);
+check('the keypad edits the equation', (await equation()).endsWith('7') && (await equation()) !== equationBefore, `${equationBefore} -> ${await equation()}`);
+
 await page.click(`${card('tone')} .media-play`);
 await sleep(600);
 const tone = await page.$eval(`${card('tone')} .media-play`, (el) => el.textContent.trim());
