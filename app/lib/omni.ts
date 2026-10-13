@@ -376,8 +376,8 @@ const BASE64_PRINTABLE_FLOOR = 0.8;
 const URL_ENCODED_SHAPE = /%[0-9A-Fa-f]{2}/;
 
 async function encodingAnswers(input: string): Promise<OmniAnswer[]> {
-	const { encodeBase64, decodeBase64, convertUrl, tryDecodeUrl } =
-		await import('delphitools-v2/components/tools/encoder');
+	const { encodeBase64, decodeBase64, tryDecodeUrl } =
+		await import('delphitools-v2/components/tools/encoder/engine');
 
 	let decoded: string | null = null;
 	let mode: 'base64' | 'url' | null = null;
@@ -416,7 +416,7 @@ async function encodingAnswers(input: string): Promise<OmniAnswer[]> {
 	if (mode === 'base64') {
 		push(answers, 'encoder', {
 			value: `base64 decoded · ${truncate(decoded)} · url · ${truncate(
-				convertUrl('encode', decoded),
+				encodeURIComponent(decoded),
 			)}`,
 		});
 	} else {

@@ -1036,6 +1036,7 @@ export const toolCategories: ToolCategory[] = [
 					'Base64, URL encoding, and hash generation',
 				icon: 'file-code',
 				href: '/tools/encoder',
+				canon: true,
 			},
 			{
 				id: 'graph-calc',

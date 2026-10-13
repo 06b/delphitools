@@ -1,0 +1,214 @@
+/* the Base64 strip */
+.enc-regroup,
+.enc-pairs,
+.enc-digest {
+	position: absolute;
+	inset: 0;
+}
+
+.enc-strip {
+	display: block;
+	overflow: visible;
+}
+
+.enc-ink0 {
+	--enc-ink: var(--canon-foreground);
+}
+
+.enc-ink1 {
+	--enc-ink: var(--canon-primary);
+}
+
+.enc-bit--one {
+	fill: var(--enc-ink);
+}
+
+.enc-bit--zero {
+	fill: color-mix(in srgb, var(--enc-ink) 40%, transparent);
+}
+
+.enc-bit--pad {
+	fill: none;
+	stroke: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 60%,
+		transparent
+	);
+	stroke-width: var(--canon-hairline);
+}
+
+.enc-bit--absent {
+	fill: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 30%,
+		transparent
+	);
+}
+
+.enc-bracket {
+	fill: none;
+	stroke: color-mix(
+		in srgb,
+		var(--enc-ink, var(--canon-foreground)) 55%,
+		transparent
+	);
+	stroke-width: var(--canon-hairline);
+}
+
+.enc-label {
+	fill: var(--enc-ink, var(--canon-foreground));
+	font-family: var(--canon-font);
+	font-size: 14px;
+	font-weight: var(--canon-weight-semibold);
+	text-anchor: middle;
+	dominant-baseline: central;
+}
+
+.enc-label--code {
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-medium);
+}
+
+.enc-bracket.enc-faint,
+.enc-label.enc-faint {
+	--enc-ink: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 60%,
+		transparent
+	);
+}
+
+.enc-regroup .canon-glyph-flow-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.enc-regroup-ghost {
+	opacity: 0.45;
+}
+
+/* the URL pairs */
+.enc-pair {
+	display: grid;
+	grid-template-rows: 24px 16px 24px;
+	place-items: center;
+	block-size: 100%;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 17px;
+	font-weight: var(--canon-weight-semibold);
+	white-space: pre;
+}
+
+.enc-pair--changes .enc-pair-top {
+	color: var(--canon-foreground);
+}
+
+.enc-pair--changes .enc-pair-bottom {
+	color: var(--canon-primary);
+}
+
+.enc-pair-mark {
+	inline-size: 2px;
+	block-size: 2px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 35%,
+		transparent
+	);
+}
+
+.enc-pair--changes .enc-pair-mark {
+	inline-size: var(--canon-hairline);
+	block-size: 10px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 45%,
+		transparent
+	);
+}
+
+.enc-pairs .canon-glyph-flow-empty {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 39px;
+}
+
+.enc-pairs-rule {
+	block-size: var(--canon-hairline);
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 30%,
+		transparent
+	);
+}
+
+/* the digest grid */
+.enc-digest {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 12px 16px;
+}
+
+.enc-digest-head {
+	display: flex;
+	flex: none;
+	gap: 8px;
+	align-items: last baseline;
+	justify-content: space-between;
+	block-size: 32px;
+	padding-block-start: 6px;
+	box-sizing: border-box;
+}
+
+.enc-digest-caption {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.enc-digest-grid {
+	display: grid;
+	flex: 1 1 auto;
+	align-content: center;
+	min-block-size: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-weight: var(--canon-weight-medium);
+}
+
+.enc-digit {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0.5px;
+}
+
+.enc-digit--empty {
+	outline: var(--canon-hairline) dashed
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 30%,
+			transparent
+		);
+	outline-offset: -1px;
+}
+
+/* the converted text is code */
+.enc-result .tt-result-text {
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-callout);
+}
+
+.enc-hash .canon-value-line-value {
+	font-family: var(--canon-mono-font);
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
