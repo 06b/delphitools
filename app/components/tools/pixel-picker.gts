@@ -1,665 +1,617 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import { carryColour } from 'delphitools-v2/lib/colour-query';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { rgbToHex } from 'delphitools-v2/lib/colour-maths';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import {
+	contrastFigure,
+	contrastLevels,
+	contrastRatio,
+	hex,
+	type Rgb,
+} from 'delphicanon/lib/colour';
+import { reducedMotion } from 'delphicanon/lib/motion';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
+import { COLOUR_NOTATIONS } from 'delphitools-v2/lib/colour-notation';
+import { carryColour } from 'delphitools-v2/lib/colour-query';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import NotationStrip from 'delphitools-v2/components/tools/colour-tool/notation-strip';
+import {
+	clampPixel,
+	launchFlags,
+	type Point,
+} from 'delphitools-v2/components/tools/pixel-picker/geometry';
+import Picture, {
+	type Move,
+} from 'delphitools-v2/components/tools/pixel-picker/picture';
+// the card markup without the component, which shows hex whatever the notation
+import 'delphicanon/components/canon-colour-card.css';
+import './pixel-picker/pixel-picker.css';
 
-const MAX_CANVAS_EDGE = 2000;
+const loupeRadius = 7;
+const loupeSide = loupeRadius * 2 + 1;
 
-const LOUPE_RADIUS = 10;
-const LOUPE_PIXEL_SIZE = 8;
-const LOUPE_SIZE = (LOUPE_RADIUS * 2 + 1) * LOUPE_PIXEL_SIZE;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Remove = <template><IconSvg @name="x" /></template>;
+const Eyedropper = <template><IconSvg @name="pipette" /></template>;
 
-interface Swatch {
-	id: string;
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+const p3Supported =
+	typeof CSS !== 'undefined' &&
+	CSS.supports('color', 'color(display-p3 1 0 0)');
+
+interface Loaded {
+	name: string;
+	canvas: HTMLCanvasElement;
+	srgb: CanvasRenderingContext2D;
+	p3?: CanvasRenderingContext2D;
+}
+
+interface Pick {
+	id: number;
 	hex: string;
-	p3: string | null;
+	pixel: Point;
 }
 
-const newId = () => Math.random().toString(36).substring(2, 9);
-
-function detectP3Support(): boolean {
-	if (typeof CSS === 'undefined' || !CSS.supports) return false;
-	return CSS.supports('color', 'color(display-p3 1 0 0)');
+function context(canvas: HTMLCanvasElement, colorSpace: PredefinedColorSpace) {
+	return canvas.getContext('2d', {
+		colorSpace,
+		willReadFrequently: true,
+	});
 }
 
-export default class PixelPickerTool extends Component {
+/** The port of PixelPickerViewController, without saved palettes and export. */
+export default class PixelPicker extends Component {
 	@service declare colourNotation: ColourNotationService;
+	@service('canon-toast') declare toast: CanonToastService;
 
-	@tracked fileName: string | null = null;
-	@tracked p3Mode = false;
-	@tracked swatches: Swatch[] = [];
-	@tracked activeSwatch: number | null = null;
-	@tracked hoverPos: { left: number; top: number } | null = null;
-	@tracked copied: string | null = null;
+	@tracked image?: Loaded;
+	@tracked pixel: Point = { x: 0, y: 0 };
+	@tracked hover?: Point;
+	@tracked picks: Pick[] = [];
+	readonly p3Supported = p3Supported;
+	#loading = 0;
+	#nextId = 0;
+	#input?: HTMLInputElement;
+	#list?: HTMLElement;
 
-	get carried(): string | undefined {
-		return this.activeSwatch === null
-			? undefined
-			: this.swatches[this.activeSwatch]?.hex;
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		if (!flags.image) return;
+		void drawnSample()
+			.then((file) => this.load(file))
+			.then(() => {
+				for (const pixel of flags.picks) {
+					this.moveTo(pixel);
+					this.pick();
+				}
+				if (flags.pixel) this.moveTo(flags.pixel);
+			});
+		if (!flags.later) return;
+		const steps: [number, Point | undefined][] = [
+			[2000, { x: 0.8, y: 0.22 }],
+			[3000, undefined],
+			[4000, { x: 0.26, y: 0.74 }],
+			[5000, undefined],
+		];
+		const timers = steps.map(([delay, target]) =>
+			window.setTimeout(() => {
+				const canvas = this.image?.canvas;
+				if (!canvas) return;
+				if (!target) return this.pick();
+				this.moveTo({
+					x: target.x * canvas.width,
+					y: target.y * canvas.height,
+				});
+			}, delay),
+		);
+		registerDestructor(this, () =>
+			timers.forEach((timer) => window.clearTimeout(timer)),
+		);
 	}
 
-	readonly p3Supported = detectP3Support();
-	readonly loupeSize = LOUPE_SIZE;
-
-	#canvas: HTMLCanvasElement | null = null;
-	#loupe: HTMLCanvasElement | null = null;
-	#image: HTMLImageElement | null = null;
-	#p3Canvas: HTMLCanvasElement | null = null;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	get shown() {
+		return this.hover ?? this.pixel;
 	}
 
-	registerCanvas = modifier((element: HTMLCanvasElement) => {
-		this.#canvas = element;
-		this.#paint();
-		return () => {
-			if (this.#canvas === element) this.#canvas = null;
-		};
-	});
+	@cached
+	get sampled(): Rgb {
+		const { image } = this;
+		if (!image) return [0.5, 0.5, 0.5];
+		const { x, y } = this.shown;
+		const [r, g, b] = image.srgb.getImageData(x, y, 1, 1).data;
+		return [r! / 255, g! / 255, b! / 255];
+	}
 
-	registerLoupe = modifier((element: HTMLCanvasElement) => {
-		this.#loupe = element;
-		return () => {
-			if (this.#loupe === element) this.#loupe = null;
-		};
-	});
+	get hex() {
+		return hex(this.sampled);
+	}
+
+	get p3() {
+		const context = this.image?.p3;
+		if (!context) return undefined;
+		const { x, y } = this.shown;
+		const [r, g, b] = context.getImageData(x, y, 1, 1).data;
+		const parts = [r, g, b].map((v) => (v! / 255).toFixed(4));
+		return `color(display-p3 ${parts.join(' ')})`;
+	}
+
+	get loupe() {
+		const { image } = this;
+		if (!image) return undefined;
+		const { x, y } = this.shown;
+		return image.srgb.getImageData(
+			x - loupeRadius,
+			y - loupeRadius,
+			loupeSide,
+			loupeSide,
+		);
+	}
+
+	get name() {
+		return getColourName(this.hex);
+	}
+
+	get value() {
+		return this.colourNotation.format(this.hex);
+	}
+
+	get reading() {
+		return `${this.name}, ${this.value}`;
+	}
+
+	get notationLabel() {
+		const { notation } = this.colourNotation;
+		return (
+			COLOUR_NOTATIONS.find((n) => n.id === notation)
+				?.label ?? ''
+		);
+	}
+
+	get showsHex() {
+		return this.colourNotation.notation !== 'hex';
+	}
+
+	get swatchStyle() {
+		return htmlSafe(`background: ${this.hex}`);
+	}
+
+	get inks() {
+		return [1, 0].map((level) => {
+			const ratio = contrastRatio(this.sampled, [
+				level,
+				level,
+				level,
+			]);
+			return {
+				figure: contrastFigure(ratio),
+				style: htmlSafe(
+					`color: ${level ? 'white' : 'black'}; opacity: ${ratio < contrastLevels.aa ? 0.45 : 1}`,
+				),
+			};
+		});
+	}
+
+	get sizeText() {
+		const canvas = this.image?.canvas;
+		return canvas ? `${canvas.width} × ${canvas.height}` : '';
+	}
+
+	get aspect() {
+		const canvas = this.image?.canvas;
+		if (!canvas) return 4 / 3;
+		return Math.min(
+			Math.max(canvas.width / canvas.height, 0.8),
+			1.6,
+		);
+	}
 
 	get rows() {
-		return this.swatches.map((swatch, index) => ({
-			swatch,
+		const { x, y } = this.shown;
+		return this.picks.map((pick, index) => ({
+			pick,
 			index,
-			value: this.colourNotation.format(swatch.hex),
-			hexUpper: swatch.hex.toUpperCase(),
-			name: getColourName(swatch.hex),
-			// rgbToHex guarantees hex literal
-			fillStyle: htmlSafe(`background-color: ${swatch.hex}`),
-			isActive: this.activeSwatch === index,
+			name: getColourName(pick.hex),
+			value: this.colourNotation.format(pick.hex),
+			swatch: htmlSafe(`background: ${pick.hex}`),
+			lit: pick.pixel.x === x && pick.pixel.y === y,
 		}));
 	}
 
-	get active() {
-		const index = this.activeSwatch;
-		if (index === null) return null;
-		const row = this.rows[index];
-		if (!row) return null;
-		return {
-			...row,
-			display:
-				this.colourNotation.notation === 'hex'
-					? row.hexUpper
-					: row.value,
-			p3: row.swatch.p3,
-		};
+	get carried() {
+		return this.image ? this.hex : undefined;
 	}
 
-	get loupeStyle() {
-		const pos = this.hoverPos;
-		if (!pos) return htmlSafe('');
-		return htmlSafe(`left: ${pos.left}px; top: ${pos.top}px`);
+	moveTo(pixel: Point) {
+		const canvas = this.image?.canvas;
+		if (canvas) this.pixel = clampPixel(pixel, canvas);
 	}
 
-	#paint() {
-		const canvas = this.#canvas;
-		const image = this.#image;
-		if (!canvas || !image) return;
-
-		let w = image.naturalWidth;
-		let h = image.naturalHeight;
-		if (Math.max(w, h) > MAX_CANVAS_EDGE) {
-			const scale = MAX_CANVAS_EDGE / Math.max(w, h);
-			w = Math.round(w * scale);
-			h = Math.round(h * scale);
+	move = (pixel: Point, how: Move) => {
+		if (how === 'hover') {
+			this.hover = pixel;
+			return;
 		}
-
-		canvas.width = w;
-		canvas.height = h;
-		const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
-		if (!ctx) return;
-		ctx.drawImage(image, 0, 0, w, h);
-
-		if (!this.p3Supported) return;
-		const p3Canvas = document.createElement('canvas');
-		p3Canvas.width = w;
-		p3Canvas.height = h;
-		const p3ctx = p3Canvas.getContext('2d', {
-			colorSpace: 'display-p3',
-		});
-		if (!p3ctx) return;
-		p3ctx.drawImage(image, 0, 0, w, h);
-		this.#p3Canvas = p3Canvas;
-	}
-
-	readFile = (file: File) => {
-		if (!file.type.startsWith('image/')) return;
-
-		this.fileName = file.name;
-		this.swatches = [];
-		this.activeSwatch = null;
-		this.hoverPos = null;
-		this.#image = null;
-		this.#p3Canvas = null;
-
-		// undisplayed; revoke after decode
-		const url = URL.createObjectURL(file);
-		const image = new Image();
-		image.onload = () => {
-			URL.revokeObjectURL(url);
-			this.#image = image;
-			this.#paint();
-		};
-		image.onerror = () => URL.revokeObjectURL(url);
-		image.src = url;
+		this.hover = undefined;
+		this.pixel = pixel;
 	};
 
-	handleFileSelect = (event: Event) => {
+	leave = () => (this.hover = undefined);
+
+	pick = () => {
+		if (!this.image) return;
+		this.picks = [
+			...this.picks,
+			{
+				id: this.#nextId++,
+				hex: this.hex,
+				pixel: this.shown,
+			},
+		];
+		requestAnimationFrame(() =>
+			this.#list?.lastElementChild?.scrollIntoView({
+				block: 'nearest',
+				behavior: reducedMotion() ? 'auto' : 'smooth',
+			}),
+		);
+	};
+
+	recall = (pick: Pick) => {
+		this.hover = undefined;
+		this.pixel = pick.pixel;
+	};
+
+	copy = (value: string) => void this.toast.copy(value);
+
+	remove = (index: number) => {
+		this.picks = this.picks.filter((_, i) => i !== index);
+	};
+
+	clearPicks = () => (this.picks = []);
+
+	keepList = modifier((list: HTMLElement) => {
+		this.#list = list;
+	});
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// allow re-picking same file
 		input.value = '';
+		if (file) void this.load(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = Array.from(event.dataTransfer?.files ?? []).find(
-			(f) => f.type.startsWith('image/'),
-		);
-		if (file) this.readFile(file);
+	loadFiles = (files: File[]) => {
+		if (files[0]) void this.load(files[0]);
 	};
 
 	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
+
+	// a drop anywhere loads; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		void this.load(file);
 	};
 
-	setP3Mode = (event: Event) => {
-		this.p3Mode = (event.target as HTMLInputElement).checked;
-	};
-
-	#canvasToPixel(event: MouseEvent): { x: number; y: number } | null {
-		const canvas = this.#canvas;
-		if (!canvas) return null;
-		const rect = canvas.getBoundingClientRect();
-		const x = Math.floor(
-			((event.clientX - rect.left) * canvas.width) /
-				rect.width,
-		);
-		const y = Math.floor(
-			((event.clientY - rect.top) * canvas.height) /
-				rect.height,
-		);
-		if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height)
-			return null;
-		return { x, y };
-	}
-
-	#samplePixel(x: number, y: number): Swatch | null {
-		const canvas = this.#canvas;
-		if (!canvas) return null;
-
-		const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
-		if (!ctx) return null;
-		const data = ctx.getImageData(x, y, 1, 1).data;
-		const hex = rgbToHex(data[0] ?? 0, data[1] ?? 0, data[2] ?? 0);
-
-		let p3: string | null = null;
-		const p3Canvas = this.#p3Canvas;
-		if (this.p3Mode && p3Canvas) {
-			const p3ctx = p3Canvas.getContext('2d', {
-				colorSpace: 'display-p3',
+	// ponytail: full-size canvases (two with Display P3), as iOS samples at full size; cap the edge if memory bites
+	load = async (file: File) => {
+		if (!file.type.startsWith('image/')) return;
+		const run = ++this.#loading;
+		let bitmap: ImageBitmap;
+		try {
+			bitmap = await createImageBitmap(file, {
+				imageOrientation: 'from-image',
 			});
-			if (p3ctx) {
-				const p3data = p3ctx.getImageData(
-					x,
-					y,
-					1,
-					1,
-				).data;
-				const r = (p3data[0] ?? 0) / 255;
-				const g = (p3data[1] ?? 0) / 255;
-				const b = (p3data[2] ?? 0) / 255;
-				p3 = `color(display-p3 ${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)})`;
-			}
-		}
-
-		return { id: newId(), hex, p3 };
-	}
-
-	#drawLoupe(x: number, y: number) {
-		const canvas = this.#canvas;
-		const loupe = this.#loupe;
-		if (!canvas || !loupe) return;
-
-		const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
-		const lctx = loupe.getContext('2d');
-		if (!ctx || !lctx) return;
-
-		lctx.imageSmoothingEnabled = false;
-		lctx.fillStyle = '#1a1a1a';
-		lctx.fillRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
-
-		const sx = Math.max(0, x - LOUPE_RADIUS);
-		const sy = Math.max(0, y - LOUPE_RADIUS);
-		const ex = Math.min(canvas.width, x + LOUPE_RADIUS + 1);
-		const ey = Math.min(canvas.height, y + LOUPE_RADIUS + 1);
-		const rw = ex - sx;
-		const rh = ey - sy;
-
-		if (rw > 0 && rh > 0) {
-			const data = ctx.getImageData(sx, sy, rw, rh).data;
-			const offX = sx - (x - LOUPE_RADIUS);
-			const offY = sy - (y - LOUPE_RADIUS);
-
-			for (let py = 0; py < rh; py++) {
-				for (let px = 0; px < rw; px++) {
-					const i = (py * rw + px) * 4;
-					lctx.fillStyle = `rgb(${data[i] ?? 0}, ${data[i + 1] ?? 0}, ${data[i + 2] ?? 0})`;
-					lctx.fillRect(
-						(px + offX) * LOUPE_PIXEL_SIZE,
-						(py + offY) * LOUPE_PIXEL_SIZE,
-						LOUPE_PIXEL_SIZE,
-						LOUPE_PIXEL_SIZE,
-					);
-				}
-			}
-		}
-
-		const cx = LOUPE_RADIUS * LOUPE_PIXEL_SIZE;
-		const cy = LOUPE_RADIUS * LOUPE_PIXEL_SIZE;
-		lctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-		lctx.lineWidth = 1.5;
-		lctx.strokeRect(cx, cy, LOUPE_PIXEL_SIZE, LOUPE_PIXEL_SIZE);
-		lctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-		lctx.lineWidth = 0.5;
-		lctx.strokeRect(
-			cx - 0.5,
-			cy - 0.5,
-			LOUPE_PIXEL_SIZE + 1,
-			LOUPE_PIXEL_SIZE + 1,
-		);
-	}
-
-	handleCanvasClick = (event: MouseEvent) => {
-		const pos = this.#canvasToPixel(event);
-		if (!pos) return;
-		const swatch = this.#samplePixel(pos.x, pos.y);
-		if (!swatch) return;
-		this.swatches = [...this.swatches, swatch];
-		this.activeSwatch = this.swatches.length - 1;
-	};
-
-	handleCanvasMove = (event: MouseEvent) => {
-		const canvas = this.#canvas;
-		if (!canvas) return;
-		const pos = this.#canvasToPixel(event);
-		if (!pos) {
-			this.hoverPos = null;
+		} catch {
 			return;
 		}
-
-		const rect = canvas.getBoundingClientRect();
-		const cssX = event.clientX - rect.left;
-		const cssY = event.clientY - rect.top;
-		// right-edge overflow flips loupe
-		const flipX = cssX + 20 + LOUPE_SIZE > rect.width;
-		this.hoverPos = {
-			left: flipX ? cssX - 20 - LOUPE_SIZE : cssX + 20,
-			top: Math.max(
-				0,
-				Math.min(
-					rect.height - LOUPE_SIZE,
-					cssY - LOUPE_SIZE / 2,
-				),
-			),
-		};
-		this.#drawLoupe(pos.x, pos.y);
-	};
-
-	handleCanvasLeave = () => {
-		this.hoverPos = null;
-	};
-
-	copyValue = async (value: string) => {
-		await navigator.clipboard.writeText(value);
-		this.copied = value;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			1500,
-		);
-	};
-
-	selectSwatch = (index: number) => {
-		this.activeSwatch = index;
-	};
-
-	removeSwatch = (index: number) => {
-		this.swatches = this.swatches.filter((_, i) => i !== index);
-		if (this.activeSwatch === index) {
-			this.activeSwatch = null;
-		} else if (
-			this.activeSwatch !== null &&
-			this.activeSwatch > index
-		) {
-			this.activeSwatch = this.activeSwatch - 1;
+		if (run !== this.#loading || isDestroying(this)) {
+			bitmap.close();
+			return;
 		}
+		const drawn = (space: PredefinedColorSpace) => {
+			const canvas = document.createElement('canvas');
+			canvas.width = bitmap.width;
+			canvas.height = bitmap.height;
+			const ctx = context(canvas, space);
+			ctx?.drawImage(bitmap, 0, 0);
+			return { canvas, ctx };
+		};
+		const srgb = drawn('srgb');
+		const p3 = p3Supported ? drawn('display-p3').ctx : null;
+		bitmap.close();
+		if (!srgb.ctx) return;
+		srgb.canvas.classList.add('pp-canvas');
+		this.image = {
+			name: file.name || 'image',
+			canvas: srgb.canvas,
+			srgb: srgb.ctx,
+			p3: p3 ?? undefined,
+		};
+		this.picks = [];
+		this.hover = undefined;
+		this.pixel = {
+			x: Math.floor(srgb.canvas.width / 2),
+			y: Math.floor(srgb.canvas.height / 2),
+		};
 	};
 
-	clearSwatches = () => {
-		this.swatches = [];
-		this.activeSwatch = null;
-	};
-
-	clearImage = () => {
-		this.fileName = null;
-		this.swatches = [];
-		this.activeSwatch = null;
-		this.hoverPos = null;
-		this.#image = null;
-		this.#p3Canvas = null;
+	clear = () => {
+		this.#loading++;
+		this.image = undefined;
+		this.picks = [];
+		this.hover = undefined;
 	};
 
 	<template>
-		<div
+		<CanonSplit
+			class="pixel-picker"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			@footerHidden={{if this.image false true}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
 			{{carryColour this.carried}}
-			class="dt-pixel"
-			{{filePaste this.readFile accept="image/*"}}
 		>
-			<div class="dt-pixel-frame">
-				{{#if this.fileName}}
-					<div class="dt-pixel-bar">
-						<span
-							class="dt-pixel-name"
-						>{{this.fileName}}</span>
-						{{#if this.p3Supported}}
-							<label
-								class="dt-pixel-p3"
-							>
-								<span>Display P3</span>
-								<input
-									type="checkbox"
-									class="dt-pixel-p3-input"
-									checked={{this.p3Mode}}
-									{{on
-										"change"
-										this.setP3Mode
-									}}
-								/>
-							</label>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					<div class="pp-stage">
+						<Picture
+							@canvas={{this.image.canvas}}
+							@pixel={{this.shown}}
+							@loupe={{this.loupe}}
+							@colour={{this.sampled}}
+							@reading={{this.reading}}
+							@onMove={{this.move}}
+							@onLeave={{this.leave}}
+							@onPick={{this.pick}}
+							@onChoose={{this.choose}}
+						/>
+						{{#if this.image}}
+							<NotationStrip
+								@hex={{this.hex}}
+							/>
 						{{/if}}
-						<button
-							type="button"
-							class="dt-pixel-bar-btn"
-							aria-label="Remove image"
-							{{on
-								"click"
-								this.clearImage
-							}}
+					</div>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					{{#if this.image}}
+						<CanonRow
+							class="pp-source"
+							@title={{this.image.name}}
+							@detail={{this.sizeText}}
+							@form="flush"
 						>
-							<Icon @name="x" />
-						</button>
-					</div>
-
-					<div class="dt-pixel-stage">
-						<canvas
-							class="dt-pixel-canvas"
-							{{this.registerCanvas}}
-							{{on
-								"click"
-								this.handleCanvasClick
-							}}
-							{{on
-								"mousemove"
-								this.handleCanvasMove
-							}}
-							{{on
-								"mouseleave"
-								this.handleCanvasLeave
-							}}
-						></canvas>
-						<span
-							class="dt-pixel-loupe
-								{{if
-									this.hoverPos
-									'is-on'
-								}}"
-							style={{this.loupeStyle}}
-							aria-hidden="true"
-						>
-							<canvas
-								width={{this.loupeSize}}
-								height={{this.loupeSize}}
-								{{this.registerLoupe}}
-							></canvas>
-						</span>
-					</div>
-
-					<div class="dt-pixel-hint">
-						<Icon @name="crosshair" />
-						<span>Click anywhere on the
-							image to sample a colour</span>
-					</div>
-
-					{{#if this.active}}
-						<div class="dt-pixel-active">
-							<span
-								class="dt-pixel-active-fill"
-								style={{this.active.fillStyle}}
-								aria-hidden="true"
-							></span>
-							<span
-								class="dt-pixel-active-info"
-							>
-								<span
-									class="dt-pixel-active-value"
-								>{{this.active.display}}</span>
-								<span
-									class="dt-pixel-active-name"
-								>{{this.active.name}}</span>
-								{{#if
-									this.p3Mode
-								}}
-									{{#if
-										this.active.p3
-									}}
-										<span
-											class="dt-pixel-active-p3"
-										>{{this.active.p3}}</span>
-									{{/if}}
-								{{/if}}
-							</span>
-							<button
-								type="button"
-								class="dt-pixel-active-copy"
-								aria-label="Copy colour value"
-								{{on
-									"click"
-									(fn
-										this.copyValue
-										this.active.value
-									)
-								}}
-							>
-								<Icon
-									@name={{if
-										(eq
-											this.copied
-											this.active.value
-										)
-										"check"
-										"copy"
-									}}
-								/>
-							</button>
-						</div>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+						<p class="pp-note">Click
+							anywhere on the image to
+							sample a colour</p>
+					{{else}}
+						<CanonDropZone
+							class="pp-drop"
+							@prompt="Drop an image"
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
+						/>
 					{{/if}}
-
-					{{#if this.rows}}
-						<div class="dt-pixel-table">
-							<div
-								class="dt-pixel-table-head"
-							>
+				</CanonRows>
+				{{#if this.image}}
+					<div
+						class="canon-colour-card canon-colour-card--chip pp-card"
+					>
+						<div
+							class="canon-colour-card-swatch"
+							style={{this.swatchStyle}}
+						>
+							{{#each
+								this.inks
+								as |ink|
+							}}
 								<span
-									class="dt-pixel-table-title"
-								>Sampled colours</span>
-								<button
-									type="button"
-									class="dt-pixel-clear"
-									{{on
-										"click"
-										this.clearSwatches
-									}}
+									class="canon-colour-card-ink"
+									style={{ink.style}}
+									aria-hidden="true"
 								>
-									<Icon
-										@name="trash-2"
-									/>
-									Clear
-									all
-								</button>
-							</div>
-
+									<span
+										class="canon-colour-card-specimen"
+									>Aa</span>
+									<span
+										class="canon-colour-card-ratio"
+									>{{ink.figure}}</span>
+								</span>
+							{{/each}}
+						</div>
+						<div
+							class="canon-colour-card-info"
+						>
+							<div
+								class="canon-colour-card-name"
+							>{{this.name}}</div>
+							<CanonValueLine
+								@label={{this.notationLabel}}
+								@value={{this.value}}
+							/>
+							{{#if this.showsHex}}
+								<CanonValueLine
+									@label="HEX"
+									@value={{this.hex}}
+								/>
+							{{/if}}
+						</div>
+					</div>
+					{{#if this.p3}}
+						<CanonRows @framed={{true}}>
+							<CanonValueLine
+								class="pp-p3"
+								@label="P3"
+								@value={{this.p3}}
+							/>
+						</CanonRows>
+					{{/if}}
+				{{/if}}
+				{{#if this.rows}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Picked" />
+						<div
+							class="pp-picks"
+							{{this.keepList}}
+						>
 							{{#each
 								this.rows
-								key="swatch.id"
+								key="pick.id"
 								as |row|
 							}}
 								<div
-									class="dt-pixel-row
+									class="pp-pick
 										{{if
-											row.isActive
-											'is-active'
+											row.lit
+											'pp-pick--lit'
 										}}"
 								>
+									<span
+										class="pp-pick-swatch"
+										style={{row.swatch}}
+									></span>
 									<button
 										type="button"
-										class="dt-pixel-row-select"
+										class="pp-pick-cell"
+										aria-current={{if
+											row.lit
+											"true"
+										}}
 										{{on
 											"click"
 											(fn
-												this.selectSwatch
-												row.index
+												this.recall
+												row.pick
 											)
 										}}
 									>
 										<span
-											class="dt-pixel-row-fill"
-											style={{row.fillStyle}}
-										></span>
+											class="pp-pick-name"
+										>{{row.name}}</span>
 										<span
-											class="dt-pixel-row-info"
-										>
-											<span
-												class="dt-pixel-row-hex"
-											>{{row.hexUpper}}</span>
-											<span
-												class="dt-pixel-row-name"
-											>{{row.name}}</span>
-										</span>
+											class="pp-pick-value"
+										>{{row.value}}</span>
 									</button>
-									<button
-										type="button"
-										class="dt-pixel-row-btn"
-										aria-label="Copy colour value"
-										{{on
-											"click"
-											(fn
-												this.copyValue
-												row.value
-											)
+									<CanonButton
+										class="pp-pick-copy"
+										@kind="cell"
+										@icon={{Copy}}
+										@label="Copy"
+										@onClick={{fn
+											this.copy
+											row.value
 										}}
-									>
-										<Icon
-											@name={{if
-												(eq
-													this.copied
-													row.value
-												)
-												"check"
-												"copy"
-											}}
-										/>
-									</button>
-									<button
-										type="button"
-										class="dt-pixel-row-btn"
-										aria-label="Remove swatch"
-										{{on
-											"click"
-											(fn
-												this.removeSwatch
-												row.index
-											)
+									/>
+									<CanonButton
+										class="pp-pick-remove"
+										@kind="cell"
+										@icon={{Remove}}
+										@label="Remove"
+										@onClick={{fn
+											this.remove
+											row.index
 										}}
-									>
-										<Icon
-											@name="x"
-										/>
-									</button>
+									/>
 								</div>
 							{{/each}}
 						</div>
-					{{/if}}
-
-					<p class="dt-pixel-about">
-						<span
-							class="dt-pixel-about-title"
-						>About colour spaces — </span>
-						Colours are sampled in sRGB by
-						default. Images with wide-gamut
-						colour profiles (Display P3,
-						Adobe RGB) are converted to
-						sRGB, which may shift some
-						colours.
-						{{#if this.p3Supported}}
-							Enable the Display P3
-							toggle to sample
-							wide-gamut values and
-							get color(display-p3 …)
-							CSS output.
-						{{else}}
+						<CanonGrid>
+							<CanonButton
+								class="pp-clear"
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clearPicks}}
+							/>
+						</CanonGrid>
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<p class="pp-note"><span
+							class="pp-note-title"
+						>About colour spaces —
+						</span>Colours are sampled in
+						sRGB by default. Images with
+						wide-gamut colour profiles
+						(Display P3, Adobe RGB) are
+						converted to sRGB, which may
+						shift some colours.
+						{{#unless this.p3Supported}}
 							Your browser does not
 							support Display P3
 							colour sampling.
-						{{/if}}
+						{{/unless}}
 					</p>
-				{{else}}
-					<label
-						class="dt-pixel-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-pixel-drop-title"
-						>Drop an image here</span>
-						<span
-							class="dt-pixel-drop-hint"
-						>or click to select a file, or
-							paste</span>
-					</label>
-				{{/if}}
-			</div>
-		</div>
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+			<:footer>
+				<CanonButton
+					class="pp-pick-button"
+					@kind="primary"
+					@text="Pick"
+					@icon={{Eyedropper}}
+					@iconStyle="oversized"
+					@onClick={{this.pick}}
+				/>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

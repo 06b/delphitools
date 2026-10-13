@@ -213,6 +213,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/pixel-picker',
 				produces: [COLOUR_OUTPUT],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'tailwind-shades',
