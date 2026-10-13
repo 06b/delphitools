@@ -43,8 +43,9 @@ const LIBRARY_LINE = "import { hex } from 'delphicanon/lib/colour';";
 const SERVICE_LINE =
 	"export { default } from 'delphicanon/services/canon-toast';";
 const VIEWS = ['Live', 'Source'];
-// the width a layout pattern or a screen is laid out at before its thumbnail scales it
-const THUMB_WIDTH = 1200;
+// widths a screen and a layout pattern are laid out at before a thumbnail scales them
+const SCREEN_WIDTH = 1200;
+const LAYOUT_WIDTH = 900;
 
 const tileByName = new Map(tiles.map((tile) => [tile.name, tile]));
 const tileOf = (name: string) => tileByName.get(name);
@@ -77,18 +78,20 @@ const screenOf = (name: string) => screenParts[name];
 const cardOf = (name: string) => isCard.get(name) === true;
 const eq = (a: unknown, b: unknown) => a === b;
 
-// lays the content out at THUMB_WIDTH and scales it to the thumbnail's width
-const fit = modifier((thumb: HTMLElement) => {
+// lays the content out at a 16:10 width and scales it to the thumbnail's width
+const fit = modifier((thumb: HTMLElement, [width]: [number]) => {
 	const inner = thumb.firstElementChild as HTMLElement;
+	inner.style.inlineSize = `${width}px`;
+	inner.style.blockSize = `${(width * 10) / 16}px`;
 	const observer = new ResizeObserver(() => {
-		inner.style.scale = String(thumb.clientWidth / THUMB_WIDTH);
+		inner.style.scale = String(thumb.clientWidth / width);
 	});
 	observer.observe(thumb);
 	return () => observer.disconnect();
 });
 
-const Thumb: TOC<{ Args: { part: Part } }> = <template>
-	<div class="cd-thumb" inert {{fit}}>
+const Thumb: TOC<{ Args: { part: Part; width: number } }> = <template>
+	<div class="cd-thumb" inert {{fit @width}}>
 		<div class="cd-thumb-inner"><@part.Live /></div>
 	</div>
 </template>;
@@ -103,7 +106,10 @@ const Card: TOC<{ Args: { page: DocsPage; go: DocsGo } }> = <template>
 		</a>
 		{{#if (eq @page.kind "screen")}}
 			{{#let (screenOf @page.name) as |part|}}
-				{{#if part}}<Thumb @part={{part}} />{{/if}}
+				{{#if part}}<Thumb
+						@part={{part}}
+						@width={{SCREEN_WIDTH}}
+					/>{{/if}}
 			{{/let}}
 		{{else}}
 			{{#let (patternOf @page.name) as |part|}}
@@ -111,7 +117,10 @@ const Card: TOC<{ Args: { page: DocsPage; go: DocsGo } }> = <template>
 					{{#if (cardOf @page.name)}}
 						<part.Live />
 					{{else}}
-						<Thumb @part={{part}} />
+						<Thumb
+							@part={{part}}
+							@width={{LAYOUT_WIDTH}}
+						/>
 					{{/if}}
 				{{/if}}
 			{{/let}}

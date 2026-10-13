@@ -371,7 +371,7 @@
 	outline-offset: -2px;
 }
 
-/* a layout or screen laid out at 1200 px and scaled into the card */
+/* a layout or screen laid out wide and scaled into the card */
 .cd-thumb {
 	position: relative;
 	aspect-ratio: 16 / 10;
@@ -384,8 +384,6 @@
 	inset-block-start: 0;
 	inset-inline-start: 0;
 	display: grid;
-	inline-size: 1200px;
-	block-size: 750px;
 	transform-origin: 0 0;
 	pointer-events: none;
 }
