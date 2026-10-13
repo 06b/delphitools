@@ -872,6 +872,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'calendar-clock',
 				href: '/tools/cron-builder',
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'http-status',
