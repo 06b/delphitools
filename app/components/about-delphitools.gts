@@ -40,7 +40,8 @@ const DONORS = [
 	},
 ];
 
-export const BUILT_WITH = [
+// a url is optional: the kit has no public page yet
+export const BUILT_WITH: { name: string; url?: string }[] = [
 	{ name: 'Ember', url: 'https://emberjs.com' },
 	{ name: 'Glimmer', url: 'https://github.com/glimmerjs/glimmer-vm' },
 	{
@@ -49,10 +50,7 @@ export const BUILT_WITH = [
 	},
 	{ name: 'Vite', url: 'https://vite.dev' },
 	{ name: 'Crayon', url: 'https://crayoncss.com' },
-	{
-		name: 'shadcn-ember',
-		url: 'https://github.com/IgnaceMaes/shadcn-ember',
-	},
+	{ name: "Delphi's Canon UI Kit" },
 	{ name: 'Lucide', url: 'https://lucide.dev' },
 ];
 
@@ -187,15 +185,19 @@ const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 			<h3>Built with</h3>
 			<div class="dt-chips">
 				{{#each BUILT_WITH as |lib|}}
-					<a
-						href={{lib.url}}
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						{{lib.name}}<span
-							class="dt-sr-only"
-						>(opens in new tab)</span>
-					</a>
+					{{#if lib.url}}
+						<a
+							href={{lib.url}}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{{lib.name}}<span
+								class="dt-sr-only"
+							>(opens in new tab)</span>
+						</a>
+					{{else}}
+						<span>{{lib.name}}</span>
+					{{/if}}
 				{{/each}}
 			</div>
 			<p class="dt-about-note">

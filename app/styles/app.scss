@@ -2746,7 +2746,8 @@ body {
 .dt-chips {
 	@include crayon.cluster(1.5);
 
-	a {
+	a,
+	> span {
 		padding: crayon.size(1) crayon.size(2);
 		background: var(--muted);
 		font-size: crayon.font-size("xs");
@@ -3282,6 +3283,14 @@ body {
 	.dt-icon {
 		width: crayon.size(4);
 		height: crayon.size(4);
+	}
+
+	.dt-hero-mascot {
+		display: block;
+		width: 100%;
+		height: 100%;
+		background: currentcolor;
+		mask: url("/mascots/delphi.png") center / contain no-repeat;
 	}
 
 	// glyph is 455x190 wide
