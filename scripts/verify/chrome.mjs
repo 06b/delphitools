@@ -161,7 +161,37 @@ check(
 await page.setViewport({ width: 390, height: 844 });
 await sleep(500);
 await visit(page, '/tools/px-to-rem');
-check('a phone width keeps the page beside the band', await page.$eval('.dt-sheet', (el) => Math.round(el.getBoundingClientRect().width)) === 390 - 56);
+const box = (selector) =>
+	page.$eval(selector, (el) => {
+		const { x, y, width, height } = el.getBoundingClientRect();
+		return [x, y, width, height].map(Math.round);
+	});
+const [, , sheetWidth, sheetHeight] = await box('.dt-sheet');
+check('a phone gets the full width', sheetWidth === 390, `${sheetWidth}`);
+check('and the band along the bottom', sheetHeight === 844 - 56, `${sheetHeight}`);
+const [, barTop] = await box('.dt-bar');
+const [, tabTop] = await box('.dt-tab');
+check('the bar and the tab sit in the band', barTop === 788 && tabTop === 788, `${barTop} ${tabTop}`);
+await page.click(TOGGLE);
+await sleep(500);
+const [, drawerTop, , drawerHeight] = await box('.dt-drawer');
+check('the tab slides the drawer up', drawerHeight === Math.round(844 * 0.7), `${drawerHeight}`);
+check('pushing the page up with it', drawerTop + drawerHeight === 844 && (await box('.dt-tab'))[1] === drawerTop);
+check('the document does not scroll', await page.evaluate(() => document.scrollingElement.scrollHeight <= innerHeight));
+await page.click(TOGGLE);
+await sleep(500);
+const phoneTab = await (await page.$(TOGGLE)).boundingBox();
+await page.mouse.move(phoneTab.x + 40, phoneTab.y + 20);
+await page.mouse.down();
+for (let i = 1; i <= 10; i += 1) {
+	await page.mouse.move(phoneTab.x + 40, phoneTab.y + 20 - i * 15);
+	await sleep(16);
+}
+const phoneDrag = (await box('.dt-drawer'))[3];
+await page.mouse.up();
+await sleep(500);
+check('a drag up follows the pointer', phoneDrag === 150 + 56, `${phoneDrag}`);
+check('and short of halfway it shuts', (await box('.dt-drawer'))[3] === 56);
 
 await page.setViewport({ width: 2200, height: 1100 });
 await visit(page, '/tools/graph-calc');

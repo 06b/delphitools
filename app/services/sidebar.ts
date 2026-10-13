@@ -7,7 +7,7 @@ const COOKIE = 'sidebar_state';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SHORTCUT = 'b';
 // the open drawer pushes the page off a narrower window
-const NARROW = '(max-width: 639px)';
+export const NARROW = '(max-width: 639px)';
 
 export default class SidebarService extends Service {
 	@service declare router: RouterService;
@@ -24,9 +24,10 @@ export default class SidebarService extends Service {
 		const stored = new RegExp(
 			`(?:^|;\\s*)${COOKIE}=(true|false)`,
 		).exec(document.cookie);
-		this.open = stored
-			? stored[1] === 'true'
-			: !window.matchMedia(NARROW).matches;
+		// a phone opens on the page
+		this.open =
+			!window.matchMedia(NARROW).matches &&
+			stored?.[1] !== 'false';
 
 		// the first transition can finish before this service exists
 		const { pathname, search } = window.location;

@@ -926,14 +926,6 @@ body {
 	color: var(--canon-foreground);
 }
 
-// the open drawer pushes the page aside instead of squeezing it
-@container (width < 640px) {
-	.dt-sheet {
-		flex: none;
-		inline-size: calc(100cqi - var(--dt-band));
-	}
-}
-
 .dt-bar {
 	display: flex;
 	flex: none;
@@ -1035,6 +1027,102 @@ body {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	writing-mode: vertical-rl;
+}
+
+// the tab reads it in px while dragging
+@property --dt-drawer-open {
+	syntax: "<length>";
+	inherits: true;
+	initial-value: 0;
+}
+
+// iPhone layout: the band and the bar's controls along the bottom, the drawer
+// pushing the page up; same breakpoint as NARROW in services/sidebar.ts
+@media (width < 640px) {
+	.dt-frame {
+		--dt-drawer-open: calc(70dvh - var(--dt-band));
+
+		flex-direction: column-reverse;
+		overflow: clip;
+	}
+
+	.dt-drawer {
+		inline-size: auto;
+		block-size: calc(var(--dt-drawer, 0px) + var(--dt-band));
+		border-inline-end: 0;
+		border-block-start: var(--dt-rule-width) solid var(--dt-rule);
+		transition-property: block-size;
+	}
+
+	.dt-drawer .canon-sidebar {
+		inline-size: 100%;
+		block-size: calc(var(--dt-drawer-open) + var(--dt-band));
+		padding-block-start: var(--dt-band);
+	}
+
+	.dt-sheet {
+		flex: none;
+		block-size: calc(100% - var(--dt-band));
+	}
+
+	.dt-bar {
+		// the band's colour, for the cell buttons
+		--canon-card: var(--canon-muted);
+
+		position: absolute;
+		z-index: 2;
+		inset-block-start: 100%;
+		inset-inline-start: 0;
+		block-size: var(--dt-band);
+		padding-inline: 8px;
+		border: 0;
+	}
+
+	.dt-bar-title {
+		display: none;
+	}
+
+	.dt-tab {
+		inset-block: 100% auto;
+		inset-inline: auto 16px;
+		flex-direction: row;
+		inline-size: auto;
+		max-inline-size: 60%;
+		block-size: 44px;
+		max-block-size: none;
+		padding: 0 14px 0 12px;
+		border: var(--dt-rule-width) solid var(--dt-rule);
+		border-block-start: 0;
+		border-radius: 0 0 16px 16px;
+
+		&::before,
+		&::after {
+			inset-block: 0 auto;
+			inline-size: calc(12px + 2 * var(--dt-rule-width));
+			block-size: calc(12px + var(--dt-rule-width));
+		}
+
+		&::before {
+			inset-inline: auto calc(100% - var(--dt-rule-width));
+			background: radial-gradient(
+				circle at 0 100%,
+				var(--dt-fillet)
+			);
+		}
+
+		&::after {
+			inset-inline: calc(100% - var(--dt-rule-width)) auto;
+			background: radial-gradient(
+				circle at 100% 100%,
+				var(--dt-fillet)
+			);
+		}
+	}
+
+	.dt-tab-name {
+		min-inline-size: 0;
+		writing-mode: horizontal-tb;
+	}
 }
 
 // kit sidebar, flattened: no cell grid, plain headings
@@ -3956,13 +4044,8 @@ body {
 		height: crayon.size(3.5);
 	}
 
-	// bare span hits .dt-icon
 	.dt-notation-current {
-		display: none;
-
-		@include crayon.screen("sm") {
-			display: inline;
-		}
+		white-space: nowrap;
 	}
 
 	@include crayon.hover {

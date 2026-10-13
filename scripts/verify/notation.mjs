@@ -79,10 +79,7 @@ check(
 
 // bare span matches icon
 await visit(page, '/tools/palette-genny');
-for (const [width, label] of [
-	[420, 'none'],
-	[900, 'block'],
-]) {
+for (const width of [420, 900]) {
 	await page.setViewport({ width, height: 800 });
 	await sleep(350);
 	const parts = await page.evaluate(() => {
@@ -104,8 +101,8 @@ for (const [width, label] of [
 		`icon ${parts.icon}px in a ${parts.trigger}px control`,
 	);
 	check(
-		`at ${width}px the label is ${label}`,
-		parts.label === label,
+		`at ${width}px the label shows`,
+		parts.label !== 'none',
 		parts.label,
 	);
 }
