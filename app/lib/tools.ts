@@ -1147,7 +1147,8 @@ export const toolCategories: ToolCategory[] = [
 			{
 				id: CANON_KIT_ID,
 				name: "Delphi's Canon UI Kit",
-				description: 'The components that make up delphitools',
+				description:
+					'The components that make up delphitools',
 				icon: 'component',
 				href: '/canon',
 				route: 'canon',
