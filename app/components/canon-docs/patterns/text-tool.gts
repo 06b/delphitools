@@ -18,7 +18,7 @@ const convert = [
 	title,
 ];
 
-export default class TextToolBlock extends Component {
+export default class TextToolPattern extends Component {
 	@tracked text = 'delphitools';
 	@tracked mode = 0;
 

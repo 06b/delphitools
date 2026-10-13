@@ -20,6 +20,12 @@ Router.map(function () {
 		this.route('components', function () {
 			this.route('component', { path: '/:name' });
 		});
+		this.route('patterns', function () {
+			this.route('pattern', { path: '/:name' });
+		});
+		this.route('screens', function () {
+			this.route('screen', { path: '/:name' });
+		});
 		this.route('blocks', function () {
 			this.route('block', { path: '/:name' });
 		});

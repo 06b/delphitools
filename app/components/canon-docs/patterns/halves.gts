@@ -12,7 +12,7 @@ import CanonSplit from 'delphicanon/components/canon-split';
 const shapes = ['Square', 'Circle'];
 const whole = (value: number) => String(Math.round(value));
 
-export default class HalvesBlock extends Component {
+export default class HalvesPattern extends Component {
 	@tracked hue = 145;
 	@tracked shape = 0;
 

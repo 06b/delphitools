@@ -9,7 +9,7 @@ import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 
-export default class BannerBlock extends Component {
+export default class BannerPattern extends Component {
 	@tracked px = 24;
 
 	get figure() {

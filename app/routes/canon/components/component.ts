@@ -1,14 +1,12 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
+import { pageFor } from 'delphitools-v2/lib/canon-docs';
 
 export default class CanonComponentRoute extends Route {
 	@service declare router: RouterService;
 
-	// the page table loads with the docs chunk, not the main one
-	async beforeModel() {
-		const { pageFor } =
-			await import('delphitools-v2/lib/canon-docs');
+	beforeModel() {
 		const params = this.paramsFor(this.routeName);
 		if (!pageFor(this.routeName, params))
 			this.router.replaceWith(

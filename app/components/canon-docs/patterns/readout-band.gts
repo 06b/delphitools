@@ -44,7 +44,7 @@ const frames = Array.from(
 		)}`,
 );
 
-export default class ReadoutBandBlock extends Component {
+export default class ReadoutBandPattern extends Component {
 	playback = new Playback();
 	url = URL.createObjectURL(
 		new Blob([encodeWav(channels, rate)], { type: 'audio/wav' }),

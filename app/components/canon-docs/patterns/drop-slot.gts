@@ -18,7 +18,7 @@ import '../../tools/media/media.css';
 const ACCEPT = 'image/*';
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 
-export default class DropSlotBlock extends Component {
+export default class DropSlotPattern extends Component {
 	drop = new Drop(ACCEPT, (file) => this.load(file));
 
 	@tracked url = '';

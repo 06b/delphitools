@@ -11,8 +11,10 @@ export type DocsKind =
 	| 'installation'
 	| 'components'
 	| 'component'
-	| 'blocks'
-	| 'block';
+	| 'patterns'
+	| 'pattern'
+	| 'screens'
+	| 'screen';
 
 export interface DocsPage {
 	id: string;
@@ -24,7 +26,7 @@ export interface DocsPage {
 	section: string;
 	url: string;
 	icon: string;
-	/** The kit module (`canon-slider`), the block id (`halves`), else empty. */
+	/** The kit module (`canon-slider`), the pattern or screen id (`halves`), else empty. */
 	name: string;
 }
 
@@ -157,13 +159,49 @@ export const componentGroups: DocsGroup[] = [
 	},
 ];
 
-export const docsBlocks: { id: string; title: string; icon: string }[] = [
-	{ id: 'halves', title: 'Halves', icon: 'columns-2' },
-	{ id: 'banner', title: 'Banner', icon: 'panel-top' },
-	{ id: 'readout-band', title: 'Readout band', icon: 'audio-lines' },
-	{ id: 'drop-slot', title: 'Drop slot', icon: 'image-plus' },
-	{ id: 'job-panel', title: 'Job panel', icon: 'download' },
-	{ id: 'text-tool', title: 'Text tool', icon: 'text' },
+export interface DocsEntry {
+	id: string;
+	title: string;
+	icon: string;
+}
+
+/** The home grid's cards first, in grid order, then the tool layouts. */
+export const docsPatterns: (DocsEntry & { card: boolean })[] = [
+	{ id: 'tone', title: 'Tone', icon: 'audio-lines', card: true },
+	{ id: 'swatch', title: 'Swatch', icon: 'pipette', card: true },
+	{ id: 'lamps', title: 'Lamps', icon: 'toggle-right', card: true },
+	{ id: 'maths', title: 'Maths', icon: 'sigma', card: true },
+	{ id: 'paper', title: 'Paper', icon: 'ruler', card: true },
+	{ id: 'contrast', title: 'Contrast', icon: 'contrast', card: true },
+	{ id: 'timecode', title: 'Timecode', icon: 'clock', card: true },
+	{ id: 'palette', title: 'Palette', icon: 'swatch-book', card: true },
+	{ id: 'glyphs', title: 'Glyphs', icon: 'type', card: true },
+	{ id: 'compare', title: 'Compare', icon: 'git-compare', card: true },
+	{ id: 'loaders', title: 'Loaders', icon: 'circle-dashed', card: true },
+	{ id: 'columns', title: 'Columns', icon: 'columns-2', card: true },
+	{ id: 'halves', title: 'Halves', icon: 'columns-2', card: false },
+	{ id: 'banner', title: 'Banner', icon: 'panel-top', card: false },
+	{
+		id: 'readout-band',
+		title: 'Readout band',
+		icon: 'audio-lines',
+		card: false,
+	},
+	{
+		id: 'drop-slot',
+		title: 'Drop slot',
+		icon: 'image-plus',
+		card: false,
+	},
+	{ id: 'job-panel', title: 'Job panel', icon: 'download', card: false },
+	{ id: 'text-tool', title: 'Text tool', icon: 'text', card: false },
+];
+
+export const docsScreens: DocsEntry[] = [
+	{ id: 'media-editor', title: 'Media editor', icon: 'clapperboard' },
+	{ id: 'colour-picker', title: 'Colour picker', icon: 'pipette' },
+	{ id: 'converter', title: 'Converter', icon: 'file-image' },
+	{ id: 'settings', title: 'Settings', icon: 'settings' },
 ];
 
 /** `canon-big-number-field` to `CanonBigNumberField`. */
@@ -179,17 +217,31 @@ export const importLine = (name: string) =>
 
 export const componentNames = componentGroups.flatMap((group) => group.names);
 
-const started = 'Getting started';
+const entryPages = (
+	entries: DocsEntry[],
+	kind: 'pattern' | 'screen',
+	section: string,
+) =>
+	entries.map((entry): DocsPage => ({
+		id: `${kind}-${entry.id}`,
+		kind,
+		title: entry.title,
+		heading: entry.title,
+		section,
+		url: `/canon/${kind}s/${entry.id}`,
+		icon: entry.icon,
+		name: entry.id,
+	}));
 
 export const docsPages: DocsPage[] = [
 	{
 		id: 'overview',
 		kind: 'overview',
-		title: 'Overview',
-		heading: 'Overview',
-		section: started,
+		title: 'Home',
+		heading: 'Home',
+		section: '',
 		url: '/canon',
-		icon: 'book-open',
+		icon: 'home',
 		name: '',
 	},
 	{
@@ -197,7 +249,7 @@ export const docsPages: DocsPage[] = [
 		kind: 'installation',
 		title: 'Installation',
 		heading: 'Installation',
-		section: started,
+		section: '',
 		url: '/canon/installation',
 		icon: 'package',
 		name: '',
@@ -225,33 +277,53 @@ export const docsPages: DocsPage[] = [
 		})),
 	),
 	{
-		id: 'blocks',
-		kind: 'blocks',
-		title: 'All blocks',
-		heading: 'Blocks',
-		section: 'Blocks',
-		url: '/canon/blocks',
+		id: 'patterns',
+		kind: 'patterns',
+		title: 'All patterns',
+		heading: 'Patterns',
+		section: 'Patterns',
+		url: '/canon/patterns',
 		icon: 'blocks',
 		name: '',
 	},
-	...docsBlocks.map((block): DocsPage => ({
-		id: `block-${block.id}`,
-		kind: 'block',
-		title: block.title,
-		heading: block.title,
-		section: 'Blocks',
-		url: `/canon/blocks/${block.id}`,
-		icon: block.icon,
-		name: block.id,
-	})),
+	...entryPages(docsPatterns, 'pattern', 'Patterns'),
+	{
+		id: 'screens',
+		kind: 'screens',
+		title: 'All screens',
+		heading: 'Screens',
+		section: 'Screens',
+		url: '/canon/screens',
+		icon: 'monitor',
+		name: '',
+	},
+	...entryPages(docsScreens, 'screen', 'Screens'),
 ];
 
-/** The nav's headed runs, in page order. */
+/** Rows that open a section carry its icon; the entries inside are text only. */
+export const opensSection = (page: DocsPage) =>
+	!['component', 'pattern', 'screen'].includes(page.kind);
+
+/** The nav's headed runs, in page order; the first has no heading. */
 export const docsSections: { title: string; pages: DocsPage[] }[] = [];
 for (const page of docsPages) {
 	const last = docsSections[docsSections.length - 1];
 	if (last?.title === page.section) last.pages.push(page);
 	else docsSections.push({ title: page.section, pages: [page] });
+}
+
+/** The nav's runs, keeping the pages whose title, heading or section holds every word. */
+export function searchDocs(query: string) {
+	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+	if (!words.length) return docsSections;
+	return docsSections.flatMap((section) => {
+		const pages = section.pages.filter((page) => {
+			const text =
+				`${page.title} ${page.heading} ${page.section}`.toLowerCase();
+			return words.every((word) => text.includes(word));
+		});
+		return pages.length ? [{ title: section.title, pages }] : [];
+	});
 }
 
 const byId = new Map(docsPages.map((page) => [page.id, page]));
@@ -270,10 +342,14 @@ export function pageFor(
 			return byId.get('components');
 		case 'canon.components.component':
 			return byId.get(`canon-${name}`);
-		case 'canon.blocks.index':
-			return byId.get('blocks');
-		case 'canon.blocks.block':
-			return byId.get(`block-${name}`);
+		case 'canon.patterns.index':
+			return byId.get('patterns');
+		case 'canon.patterns.pattern':
+			return byId.get(`pattern-${name}`);
+		case 'canon.screens.index':
+			return byId.get('screens');
+		case 'canon.screens.screen':
+			return byId.get(`screen-${name}`);
 		default:
 			return undefined;
 	}

@@ -5,12 +5,17 @@ import {
 	docsPages,
 	docsSections,
 	importLine,
+	docsPatterns,
+	docsScreens,
 	neighbours,
+	opensSection,
 	pageFor,
+	searchDocs,
 } from 'delphitools-v2/lib/canon-docs';
 import platforms from 'delphitools-v2/lib/canon-platforms.json';
 import { tiles } from 'delphitools-v2/components/canon-docs/tiles';
-import { blockParts } from 'delphitools-v2/components/canon-docs/blocks/index';
+import { patternParts } from 'delphitools-v2/components/canon-docs/patterns/index';
+import { screenParts } from 'delphitools-v2/components/canon-docs/screens/index';
 
 const table = platforms as Record<string, string[]>;
 
@@ -31,11 +36,27 @@ module('Unit | Lib | canon-docs', function () {
 			})?.url,
 			'/canon/components/slider',
 		);
-		assert.strictEqual(pageFor('canon.blocks.index')?.id, 'blocks');
 		assert.strictEqual(
-			pageFor('canon.blocks.block', { name: 'job-panel' })
+			pageFor('canon.patterns.index')?.id,
+			'patterns',
+		);
+		assert.strictEqual(
+			pageFor('canon.patterns.pattern', { name: 'job-panel' })
 				?.heading,
 			'Job panel',
+		);
+		assert.strictEqual(
+			pageFor('canon.screens.index')?.id,
+			'screens',
+		);
+		assert.strictEqual(
+			pageFor('canon.screens.screen', { name: 'settings' })
+				?.url,
+			'/canon/screens/settings',
+		);
+		assert.strictEqual(
+			pageFor('canon.screens.screen', { name: 'nope' }),
+			undefined,
 		);
 		assert.strictEqual(
 			pageFor('canon.components.component', { name: 'nope' }),
@@ -100,18 +121,65 @@ module('Unit | Lib | canon-docs', function () {
 		);
 	});
 
-	test('every block page has a live block and its source', function (assert) {
-		for (const page of docsPages.filter(
-			(p) => p.kind === 'block',
-		)) {
-			const block = blockParts[page.name];
-			assert.ok(block?.Live, page.name);
+	test('every pattern and screen page has a live part and its source', function (assert) {
+		const parts = { pattern: patternParts, screen: screenParts };
+		const pages = docsPages.filter(
+			(p) => p.kind === 'pattern' || p.kind === 'screen',
+		);
+		assert.strictEqual(
+			pages.length,
+			docsPatterns.length + docsScreens.length,
+		);
+		for (const page of pages) {
+			const part =
+				parts[page.kind as 'pattern' | 'screen'][
+					page.name
+				];
+			assert.ok(part?.Live, page.name);
 			assert.true(
-				(block?.source ?? '').includes(
+				(part?.source ?? '').includes(
 					'export default class',
 				),
 				page.name,
 			);
 		}
+	});
+
+	test('the nav: sections in order, icons on the rows that open one', function (assert) {
+		assert.deepEqual(docsSections.map((s) => s.title).slice(0, 3), [
+			'',
+			'Components',
+			'Layout',
+		]);
+		assert.deepEqual(
+			docsSections.slice(-2).map((s) => s.title),
+			['Patterns', 'Screens'],
+		);
+		assert.deepEqual(
+			docsPages.filter(opensSection).map((p) => p.id),
+			[
+				'overview',
+				'installation',
+				'components',
+				'patterns',
+				'screens',
+			],
+		);
+	});
+
+	test('search keeps the matching pages under their headings', function (assert) {
+		assert.strictEqual(searchDocs('  '), docsSections);
+		assert.deepEqual(
+			searchDocs('colour well').map((s) => [
+				s.title,
+				s.pages.map((p) => p.id),
+			]),
+			[['Colour', ['canon-colour-well']]],
+		);
+		assert.deepEqual(
+			searchDocs('screens').flatMap((s) => s.pages).length,
+			docsScreens.length + 1,
+		);
+		assert.deepEqual(searchDocs('zzz'), []);
 	});
 });

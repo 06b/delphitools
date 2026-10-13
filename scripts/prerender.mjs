@@ -136,8 +136,13 @@ const routes = [
 		description: canonKit.description,
 		image: `${page.url}/og.png`,
 		imageAlt: canonCardAlt,
+		// a pattern or screen title alone ("Tone") needs its kind on the card
 		card: canonCard(
-			page.kind === 'overview' ? 'Canon' : page.heading,
+			page.kind === 'overview'
+				? 'Canon'
+				: ['pattern', 'screen'].includes(page.kind)
+					? `${page.heading} ${page.kind}`
+					: page.heading,
 		),
 	})),
 ];

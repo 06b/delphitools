@@ -18,7 +18,7 @@ const lengthLabels = ['5 s', '30 s', '2 min'];
 const Render = <template><IconSvg @name="audio-lines" /></template>;
 const nextFrame = () => new Promise(requestAnimationFrame);
 
-export default class JobPanelBlock extends Component {
+export default class JobPanelPattern extends Component {
 	@tracked length = 1;
 	@tracked busy = false;
 	@tracked progress = 0;

@@ -1,58 +1,9 @@
-/* the docs: nav beside the page, one sheet tall */
+/* the docs: one page, one sheet tall */
 .cd-docs {
 	display: flex;
 	block-size: 100%;
 	container: cd-docs / inline-size;
 	background: var(--canon-background);
-}
-
-.cd-pane {
-	display: grid;
-	flex: 1;
-	min-inline-size: 0;
-	grid-template-rows: auto minmax(0, 1fr);
-	min-block-size: 0;
-}
-
-.cd-toolbar {
-	display: flex;
-	gap: 8px;
-	align-items: center;
-	justify-content: flex-end;
-	padding: 6px var(--canon-panel-padding);
-	border-block-end: var(--canon-hairline) solid var(--canon-border);
-	background: var(--canon-muted);
-}
-
-.cd-menu {
-	margin-inline-end: auto;
-}
-
-.cd-key {
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-mono-font);
-	font-size: var(--canon-text-footnote);
-}
-
-/* the nav's 240 px beside a 528 px page */
-@container cd-docs (width < 768px) {
-	.cd-nav,
-	.cd-key {
-		display: none;
-	}
-}
-
-@container cd-docs (width >= 768px) {
-	.cd-menu {
-		display: none;
-	}
-}
-
-.cd-sheet-rows {
-	display: flex;
-	flex-direction: column;
-	gap: var(--canon-frame);
-	background: var(--canon-border);
 }
 
 .cd-head {
@@ -121,7 +72,7 @@
 	padding-inline: 0 10px;
 }
 
-/* blocks */
+/* patterns */
 .cd-halves-picture {
 	display: grid;
 	place-items: center;
@@ -327,12 +278,243 @@
 	outline: var(--canon-hairline) solid var(--canon-border);
 }
 
-/* the docs nav is text only; the group icons repeated on every row */
-.cd-nav .canon-sidebar-row-icon,
-.cd-sheet-rows .canon-sidebar-row-icon {
+.cd-page .cd-import .canon-value-line-value {
+	font-family: var(--canon-mono-font);
+}
+
+.cd-docs > * {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+/* home: the kit's name over a masonry wall of live patterns */
+.cd-home-head {
+	gap: 10px;
+	padding-block: 24px 12px;
+}
+
+.cd-kit {
+	font-size: clamp(28px, 5cqi, 44px);
+	line-height: 1.05;
+	letter-spacing: -0.01em;
+}
+
+.cd-home-head .cd-lede {
+	max-inline-size: 52ch;
+	font-size: var(--canon-text-title3);
+}
+
+.cd-masonry {
+	columns: 4 300px;
+	column-gap: var(--canon-panel-spacing);
+}
+
+.cd-masonry > .cd-card {
+	margin-block-end: var(--canon-panel-spacing);
+	break-inside: avoid;
+}
+
+.cd-screens {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+	gap: var(--canon-panel-spacing);
+}
+
+.cd-card {
+	background: var(--canon-border);
+}
+
+.cd-card-head {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	min-block-size: 36px;
+	padding-inline: var(--canon-panel-padding) 12px;
+	background: var(--canon-heading-background);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	text-decoration: none;
+}
+
+.cd-card-head svg {
+	flex: none;
+	inline-size: var(--canon-icon-row);
+	block-size: var(--canon-icon-row);
+	color: var(--canon-primary);
+}
+
+.cd-card-head svg:last-child {
+	color: var(--canon-muted-foreground);
+	transition: translate 160ms ease-out;
+}
+
+.cd-card-title {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+@media (hover: hover) {
+	.cd-card-head:hover {
+		background: var(--canon-accent-bg);
+	}
+
+	.cd-card-head:hover svg:last-child {
+		color: var(--canon-primary);
+		translate: 2px -2px;
+	}
+}
+
+.cd-card-head:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* a layout or screen laid out at 1200 px and scaled into the card */
+.cd-thumb {
+	position: relative;
+	aspect-ratio: 16 / 10;
+	overflow: hidden;
+	background: var(--canon-background);
+}
+
+.cd-thumb-inner {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	display: grid;
+	inline-size: 1200px;
+	block-size: 750px;
+	transform-origin: 0 0;
+	pointer-events: none;
+}
+
+.cd-thumb-inner > * {
+	min-block-size: 0;
+}
+
+/* a pattern's own page: the card alone on the muted stage */
+.cd-stage-card {
+	display: flex;
+	justify-content: center;
+	padding: 40px 16px;
+	background: var(--canon-muted);
+}
+
+.cd-stage-card > .cd-card {
+	inline-size: min(100%, 420px);
+}
+
+/* a screen fills the sheet; the bar switches it for its source */
+.cd-screen-page {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	block-size: 100%;
+}
+
+.cd-screen-bar {
+	display: flex;
+	gap: var(--canon-panel-spacing);
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px var(--canon-panel-padding);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.cd-screen-bar .cd-title {
+	font-size: var(--canon-text-title3);
+}
+
+.cd-views {
+	flex: none;
+	inline-size: 180px;
+}
+
+/* the tools' 1200 px column, hairlines once the sheet is wider */
+.cd-screen {
+	display: grid;
+	justify-items: center;
+	min-block-size: 0;
+	container-type: inline-size;
+}
+
+.cd-screen[hidden] {
 	display: none;
 }
 
-.cd-page .cd-import .canon-value-line-value {
-	font-family: var(--canon-mono-font);
+.cd-screen > * {
+	box-sizing: border-box;
+	inline-size: 100%;
+	max-inline-size: 1200px;
+	min-block-size: 0;
+}
+
+@container (width > 1200px) {
+	.cd-screen > * {
+		border-inline: var(--canon-hairline) solid var(--canon-border);
+	}
+}
+
+/* card parts */
+.cd-contrast-sample {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	block-size: 100%;
+	padding-inline: 24px;
+	transition:
+		color 200ms ease-out,
+		background-color 200ms ease-out;
+}
+
+.cd-contrast-glyphs {
+	font-family: var(--canon-font);
+	font-size: 56px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+}
+
+.cd-lamps,
+.cd-loader,
+.cd-timecode {
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	justify-content: center;
+	block-size: 100%;
+}
+
+.cd-lamps .canon-lamps {
+	scale: 2;
+}
+
+.cd-paper {
+	position: relative;
+	block-size: calc(100% - 24px);
+	margin: 12px;
+}
+
+.cd-paper-page {
+	position: absolute;
+	background: var(--canon-paper);
+	box-shadow: 0 1px 6px var(--canon-paper-shadow);
+}
+
+.cd-paper-page,
+.cd-paper .canon-dimension-line {
+	transition-duration: 320ms;
+	transition-property:
+		inset-inline-start, inset-block-start, inline-size, block-size;
+	transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cd-card-head svg:last-child,
+	.cd-contrast-sample,
+	.cd-paper-page,
+	.cd-paper .canon-dimension-line {
+		transition: none;
+	}
 }
