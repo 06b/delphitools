@@ -1046,16 +1046,12 @@ body {
 	background: transparent;
 }
 
-.dt-drawer .canon-sidebar-rows,
-.cd-nav .canon-sidebar-rows,
-.cd-sheet-rows {
+.dt-drawer .canon-sidebar-rows {
 	gap: 0;
 	background: transparent;
 }
 
-.dt-drawer .canon-sidebar-row,
-.cd-nav .canon-sidebar-row,
-.cd-sheet-rows .canon-sidebar-row {
+.dt-drawer .canon-sidebar-row {
 	--canon-sidebar-cell: transparent;
 
 	gap: 0;
@@ -1083,11 +1079,17 @@ body {
 	color: var(--canon-primary-foreground);
 }
 
-.dt-drawer .canon-heading,
-.cd-nav .canon-heading,
-.cd-sheet-rows .canon-heading {
+.dt-drawer .canon-heading {
 	padding-block: 16px 4px;
 	background: transparent;
+}
+
+// the docs nav's way back: the hero's top edge, full width, above the search
+.dt-docs-back {
+	margin-block-start: -8px;
+	margin-inline: -12px;
+	inline-size: calc(100% + 24px);
+	border-block-end: var(--dt-rule-width) solid var(--dt-rule);
 }
 
 // a CanonSplit or CanonPage fills it, as CanonWindow's main does

@@ -13,6 +13,8 @@ export default class SidebarService extends Service {
 	@service declare router: RouterService;
 
 	@tracked open = true;
+	/** The last URL outside the /canon docs, where the docs nav's back row goes. */
+	@tracked appUrl = '/';
 
 	constructor(owner: Owner) {
 		super(owner);
@@ -25,6 +27,11 @@ export default class SidebarService extends Service {
 		this.open = stored
 			? stored[1] === 'true'
 			: !window.matchMedia(NARROW).matches;
+
+		// the first transition can finish before this service exists
+		const { pathname, search } = window.location;
+		if (!/^\/canon(\/|$)/.test(pathname))
+			this.appUrl = pathname + search;
 
 		window.addEventListener('keydown', this.#onKeydown);
 		this.router.on('routeDidChange', this.#onRouteChange);
@@ -46,6 +53,13 @@ export default class SidebarService extends Service {
 	};
 
 	#onRouteChange = () => {
+		const route = this.router.currentRouteName ?? '';
+		if (
+			route !== 'canon' &&
+			!route.startsWith('canon.') &&
+			route !== 'not-found'
+		)
+			this.appUrl = this.router.currentURL ?? '/';
 		if (this.open && window.matchMedia(NARROW).matches)
 			this.open = false;
 	};

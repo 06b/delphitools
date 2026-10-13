@@ -16,6 +16,11 @@ import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
 import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
 import type SidebarService from 'delphitools-v2/services/sidebar';
+import {
+	opensSection,
+	pageFor,
+	searchDocs,
+} from 'delphitools-v2/lib/canon-docs';
 
 const PAGES = [
 	{ name: 'Home', icon: 'home', href: '/' },
@@ -40,11 +45,12 @@ const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 interface NavRowSignature {
 	Args: {
 		name: string;
-		icon: string;
+		icon?: string;
 		href: string;
 		external?: boolean;
 		canon?: boolean;
 	};
+	Element: HTMLElement;
 }
 
 class NavRow extends Component<NavRowSignature> {
@@ -81,28 +87,75 @@ class NavRow extends Component<NavRowSignature> {
 		{{else}}
 			<CanonSidebarRow
 				@title={{@name}}
-				@icon={{component IconSvg name=@icon}}
+				@icon={{if
+					@icon
+					(component IconSvg name=@icon)
+				}}
 				@href={{@href}}
 				@selected={{this.selected}}
 				@onClick={{this.go}}
 				data-canon={{if @canon "true"}}
+				...attributes
 			/>
 		{{/if}}
 	</template>
 }
 
 export default class AppSidebar extends Component {
+	@service declare router: RouterService;
 	@service declare sidebar: SidebarService;
 
-	@tracked search = '';
+	@tracked toolSearch = '';
+	@tracked docsSearch = '';
 
 	pride = PRIDE;
 	commitSha = COMMIT_SHA;
 	pages = PAGES;
+	opensSection = opensSection;
+
+	/** On the /canon docs the drawer lists the docs pages instead of the tools. */
+	get inDocs() {
+		const route = this.router.currentRouteName ?? '';
+		return route === 'canon' || route.startsWith('canon.');
+	}
+
+	get search() {
+		return this.inDocs ? this.docsSearch : this.toolSearch;
+	}
 
 	get query() {
 		return this.search.toLowerCase();
 	}
+
+	get docsSections() {
+		return searchDocs(this.docsSearch);
+	}
+
+	get docsPage() {
+		return pageFor(
+			this.router.currentRouteName,
+			this.router.currentRoute?.params,
+		)?.id;
+	}
+
+	// keeps the current docs row in the drawer's view
+	reveal = modifier((nav: HTMLElement, [id]: [string | undefined]) => {
+		if (!id) return;
+		const scroller = nav.querySelector<HTMLElement>(
+			'.canon-sidebar-scroll',
+		);
+		const row = nav.querySelector<HTMLElement>(
+			'.canon-sidebar-rows [aria-current="page"]',
+		);
+		if (!scroller || !row) return;
+		const top = row.offsetTop - scroller.offsetTop;
+		if (
+			top < scroller.scrollTop ||
+			top + row.offsetHeight >
+				scroller.scrollTop + scroller.clientHeight
+		)
+			scroller.scrollTop = top - scroller.clientHeight / 3;
+	});
 
 	get featured(): Tool[] {
 		return featuredTools.filter((t) => matchesQuery(t, this.query));
@@ -129,11 +182,14 @@ export default class AppSidebar extends Component {
 	shortcut = navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K';
 
 	onSearch = (event: Event) => {
-		this.search = (event.target as HTMLInputElement).value;
+		const value = (event.target as HTMLInputElement).value;
+		if (this.inDocs) this.docsSearch = value;
+		else this.toolSearch = value;
 	};
 
 	clearSearch = () => {
-		this.search = '';
+		if (this.inDocs) this.docsSearch = '';
+		else this.toolSearch = '';
 	};
 
 	// the home omnibox claims the key first and prevents default
@@ -162,66 +218,89 @@ export default class AppSidebar extends Component {
 			class="dt-sidebar"
 			@compact={{true}}
 			@collapsed={{false}}
-			aria-label="Main"
+			aria-label={{if this.inDocs "Docs" "Main"}}
+			{{this.reveal this.docsPage}}
 		>
 			<:hero>
 				<div class="dt-sidebar-hero">
-					<LinkTo @route="index" class="dt-brand">
-						<img
-							src="/delphi-lowlod.png"
-							width="64"
-							height="64"
-							alt=""
-							class="dt-brand-logo
-								{{if
-									this.pride
-									'pride-ring'
-								}}"
+					{{#if this.inDocs}}
+						<NavRow
+							class="dt-docs-back"
+							@name="delphitools"
+							@icon="arrow-left"
+							@href={{this.sidebar.appUrl}}
 						/>
-						<span class="dt-brand-text">
-							<span
-								class="dt-brand-name
+					{{else}}
+						<LinkTo
+							@route="index"
+							class="dt-brand"
+						>
+							<img
+								src="/delphi-lowlod.png"
+								width="64"
+								height="64"
+								alt=""
+								class="dt-brand-logo
 									{{if
 										this.pride
-										'pride-wordmark'
+										'pride-ring'
 									}}"
-							>
-								delphitools
-							</span>
+							/>
 							<span
-								class="dt-brand-sub"
+								class="dt-brand-text"
 							>
 								<span
-									class="dt-brand-tagline
+									class="dt-brand-name
 										{{if
 											this.pride
-											'pride-tagline'
+											'pride-wordmark'
 										}}"
 								>
-									{{#if
-										this.pride
-									}}trans
-										rights{{else}}indie
-										tools{{/if}}
+									delphitools
 								</span>
 								<span
-									class="dt-brand-sha"
-									title="Build commit"
+									class="dt-brand-sub"
 								>
-									v{{VERSION}}
-									Â·
-									{{this.commitSha}}
+									<span
+										class="dt-brand-tagline
+											{{if
+												this.pride
+												'pride-tagline'
+											}}"
+									>
+										{{#if
+											this.pride
+										}}trans
+											rights{{else}}indie
+											tools{{/if}}
+									</span>
+									<span
+										class="dt-brand-sha"
+										title="Build commit"
+									>
+										v{{VERSION}}
+										Â·
+										{{this.commitSha}}
+									</span>
 								</span>
 							</span>
-						</span>
-					</LinkTo>
+						</LinkTo>
+					{{/if}}
 					<div class="dt-search">
 						<IconSvg @name="search" />
 						<input
 							type="search"
 							class="dt-search-input"
-							placeholder="Search tools..."
-							aria-label="Search tools"
+							placeholder={{if
+								this.inDocs
+								"Search docs..."
+								"Search tools..."
+							}}
+							aria-label={{if
+								this.inDocs
+								"Search docs"
+								"Search tools"
+							}}
 							value={{this.search}}
 							{{on
 								"input"
@@ -252,89 +331,135 @@ export default class AppSidebar extends Component {
 				</div>
 			</:hero>
 			<:default>
-				{{#unless this.query}}
-					{{#each this.pages as |page|}}
-						<NavRow
-							@name={{page.name}}
-							@icon={{page.icon}}
-							@href={{page.href}}
-						/>
+				{{#if this.inDocs}}
+					{{#each this.docsSections as |section|}}
+						{{#if section.title}}
+							<CanonHeading
+								@text={{section.title}}
+							/>
+						{{/if}}
+						{{#each
+							section.pages
+							as |page|
+						}}
+							<NavRow
+								@name={{page.title}}
+								@icon={{if
+									(this.opensSection
+										page
+									)
+									page.icon
+								}}
+								@href={{page.url}}
+							/>
+						{{/each}}
+					{{else}}
+						<output
+							class="dt-nav-empty"
+							aria-live="polite"
+						>No pages</output>
 					{{/each}}
-				{{/unless}}
+				{{else}}
+					{{#unless this.query}}
+						{{#each this.pages as |page|}}
+							<NavRow
+								@name={{page.name}}
+								@icon={{page.icon}}
+								@href={{page.href}}
+							/>
+						{{/each}}
+					{{/unless}}
 
-				{{#if this.empty}}
-					<output
-						class="dt-nav-empty"
-						aria-live="polite"
-					>No tools found</output>
-				{{/if}}
+					{{#if this.empty}}
+						<output
+							class="dt-nav-empty"
+							aria-live="polite"
+						>No tools found</output>
+					{{/if}}
 
-				{{#if this.featured.length}}
-					<CanonHeading @text="Greatest Hits" />
-					{{#each this.featured as |tool|}}
-						<NavRow
-							@name={{tool.name}}
-							@icon={{tool.icon}}
-							@href={{tool.href}}
-							@canon={{tool.canon}}
+					{{#if this.featured.length}}
+						<CanonHeading
+							@text="Greatest Hits"
 						/>
+						{{#each
+							this.featured
+							as |tool|
+						}}
+							<NavRow
+								@name={{tool.name}}
+								@icon={{tool.icon}}
+								@href={{tool.href}}
+								@canon={{tool.canon}}
+							/>
+						{{/each}}
+					{{/if}}
+
+					{{#each this.categories as |category|}}
+						<CanonHeading
+							@text={{category.name}}
+						/>
+						{{#each
+							category.tools
+							as |tool|
+						}}
+							<NavRow
+								@name={{tool.name}}
+								@icon={{tool.icon}}
+								@href={{tool.href}}
+								@external={{tool.external}}
+								@canon={{tool.canon}}
+							/>
+						{{/each}}
 					{{/each}}
-				{{/if}}
 
-				{{#each this.categories as |category|}}
-					<CanonHeading @text={{category.name}} />
-					{{#each category.tools as |tool|}}
-						<NavRow
-							@name={{tool.name}}
-							@icon={{tool.icon}}
-							@href={{tool.href}}
-							@external={{tool.external}}
-							@canon={{tool.canon}}
+					{{#unless this.query}}
+						<CanonHeading
+							@text="delphitools"
 						/>
-					{{/each}}
-				{{/each}}
-
-				{{#unless this.query}}
-					<CanonHeading @text="delphitools" />
-					<Dialog as |d|>
-						<CanonSidebarRow
-							@title="About"
-							@icon={{component
-								IconSvg
-								name="info"
-							}}
-							@onClick={{d.open}}
-							{{d.focusOnClose}}
-						/>
-						<d.Content class="dt-dialog">
-							<header
-								class="dt-dialog-head"
+						<Dialog as |d|>
+							<CanonSidebarRow
+								@title="About"
+								@icon={{component
+									IconSvg
+									name="info"
+								}}
+								@onClick={{d.open}}
+								{{d.focusOnClose}}
+							/>
+							<d.Content
+								class="dt-dialog"
 							>
-								<h2>About
-									delphitools</h2>
-								<button
-									type="button"
-									class="dt-dialog-close"
-									aria-label="Close"
-									{{on
-										"click"
-										d.close
-									}}
+								<header
+									class="dt-dialog-head"
 								>
-									<Icon
-										@name="x"
-									/>
-								</button>
-							</header>
-							<AboutDelphitoolsBody />
-						</d.Content>
-					</Dialog>
-					<NavRow
-						@name="Privacy"
-						@icon="shield-check"
-						@href="/privacy"
-					/>
-				{{/unless}}
+									<h2
+									>About
+										delphitools</h2>
+									<button
+										type="button"
+										class="dt-dialog-close"
+										aria-label="Close"
+										{{on
+											"click"
+											d.close
+										}}
+									>
+										<Icon
+											@name="x"
+										/>
+									</button>
+								</header>
+								<AboutDelphitoolsBody
+								/>
+							</d.Content>
+						</Dialog>
+						<NavRow
+							@name="Privacy"
+							@icon="shield-check"
+							@href="/privacy"
+						/>
+					{{/unless}}
+				{{/if}}
 			</:default>
 		</CanonSidebar>
 	</template>
