@@ -279,7 +279,7 @@ export default class AppSidebar extends Component {
 										title="Build commit"
 									>
 										v{{VERSION}}
-										Â·
+										·
 										{{this.commitSha}}
 									</span>
 								</span>
