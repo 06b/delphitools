@@ -75,6 +75,7 @@ import iCode from 'lucide-static/icons/code.svg?raw';
 import iCode2 from 'lucide-static/icons/code-2.svg?raw';
 import iCoffee from 'lucide-static/icons/coffee.svg?raw';
 import iCombine from 'lucide-static/icons/combine.svg?raw';
+import iComponent from 'lucide-static/icons/component.svg?raw';
 import iContrast from 'lucide-static/icons/contrast.svg?raw';
 import iCookingPot from 'lucide-static/icons/cooking-pot.svg?raw';
 import iCopy from 'lucide-static/icons/copy.svg?raw';
@@ -335,6 +336,7 @@ export const icons: Record<string, string> = {
 	'code-2': iCode2,
 	coffee: iCoffee,
 	combine: iCombine,
+	component: iComponent,
 	contrast: iContrast,
 	'cooking-pot': iCookingPot,
 	copy: iCopy,
