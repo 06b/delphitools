@@ -483,3 +483,86 @@
 		animation: none;
 	}
 }
+
+/* FloatingCard over its scrim */
+.sub-card-layer {
+	position: absolute;
+	inset: 0;
+	z-index: 60;
+}
+
+.sub-card-scrim {
+	position: absolute;
+	inset: 0;
+	border: 0;
+	background: transparent;
+}
+
+.sub-card {
+	position: absolute;
+	box-sizing: border-box;
+	max-block-size: calc(100% - 2 * var(--sub-gap));
+	overflow: auto;
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+	outline: none;
+	animation: sub-card-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.05) both;
+}
+
+@keyframes sub-card-in {
+	from {
+		opacity: 0;
+		translate: var(--sub-card-from) 0;
+	}
+}
+
+.sub-menu-card {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	align-items: center;
+	justify-content: center;
+	min-block-size: 64px;
+	padding: 10px 6px 8px;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	cursor: pointer;
+}
+
+.sub-menu-card:hover:enabled {
+	background: var(--canon-accent-bg);
+}
+
+.sub-menu-card:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.sub-menu-card.is-destructive {
+	color: var(--canon-destructive);
+}
+
+.sub-menu-card-icon {
+	display: flex;
+	inline-size: var(--canon-icon-alone);
+	block-size: var(--canon-icon-alone);
+}
+
+.sub-menu-card-icon svg {
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.sub-menu-card-title {
+	text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-card {
+		animation: none;
+	}
+}

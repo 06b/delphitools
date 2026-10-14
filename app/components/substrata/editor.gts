@@ -189,6 +189,11 @@ export default class SubstrataEditor extends Component {
 
 	measure = modifier((root: HTMLElement) => {
 		editorUi.hydrate();
+		// harnesses drive the floating pieces
+		if (import.meta.env.DEV)
+			(window as unknown as Record<string, unknown>)[
+				'__substrataUi'
+			] = editorUi;
 		const ro = new ResizeObserver(() => {
 			this.width = root.clientWidth;
 			this.height = root.clientHeight;
