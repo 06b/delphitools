@@ -156,6 +156,7 @@ import iMagnet from 'lucide-static/icons/magnet.svg?raw';
 import iMapPin from 'lucide-static/icons/map-pin.svg?raw';
 import iMaximize from 'lucide-static/icons/maximize.svg?raw';
 import iMaximize2 from 'lucide-static/icons/maximize-2.svg?raw';
+import iMenu from 'lucide-static/icons/menu.svg?raw';
 import iMessageSquare from 'lucide-static/icons/message-square.svg?raw';
 import iMessageSquarePlus from 'lucide-static/icons/message-square-plus.svg?raw';
 import iMic from 'lucide-static/icons/mic.svg?raw';
@@ -209,6 +210,7 @@ import iServer from 'lucide-static/icons/server.svg?raw';
 import iSettings from 'lucide-static/icons/settings.svg?raw';
 import iSettings2 from 'lucide-static/icons/settings-2.svg?raw';
 import iShapes from 'lucide-static/icons/shapes.svg?raw';
+import iShare from 'lucide-static/icons/share.svg?raw';
 import iShieldCheck from 'lucide-static/icons/shield-check.svg?raw';
 import iShrink from 'lucide-static/icons/shrink.svg?raw';
 import iShuffle from 'lucide-static/icons/shuffle.svg?raw';
@@ -417,6 +419,7 @@ export const icons: Record<string, string> = {
 	'map-pin': iMapPin,
 	maximize: iMaximize,
 	'maximize-2': iMaximize2,
+	menu: iMenu,
 	'message-square': iMessageSquare,
 	'message-square-plus': iMessageSquarePlus,
 	mic: iMic,
@@ -470,6 +473,7 @@ export const icons: Record<string, string> = {
 	settings: iSettings,
 	'settings-2': iSettings2,
 	shapes: iShapes,
+	share: iShare,
 	'shield-check': iShieldCheck,
 	shrink: iShrink,
 	shuffle: iShuffle,

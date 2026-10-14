@@ -1,0 +1,485 @@
+/* iOS EditorLayout: the canvas full-bleed, floating pieces over it */
+.sub-ed {
+	--sub-cell: 44px;
+	--sub-small: 36px;
+	--sub-frame: 2px;
+	--sub-box: calc(var(--sub-cell) + 2 * var(--sub-frame));
+	--sub-small-box: calc(var(--sub-small) + 2 * var(--sub-frame));
+	--sub-pad: 16px;
+	--sub-gap: 8px;
+	--sub-rail: 300px;
+	--sub-shadow: 0 2px 8px rgb(0 0 0 / 10%);
+	--sub-tray-h: 0px;
+	--sub-row-bottom: calc(var(--sub-pad) + env(safe-area-inset-bottom));
+
+	position: relative;
+	flex: 1;
+	overflow: hidden;
+	background: var(--canon-muted);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.sub-ed .sub-shell-canvas-area {
+	position: absolute;
+	inset: 0;
+	display: flex;
+}
+
+.sub-ed .sub-canvas-wrap {
+	background: var(--canon-muted);
+}
+
+.sub-ed .sub-canvas-wordmark {
+	display: none;
+}
+
+/* FloatingCells */
+.sub-cells {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	inline-size: max-content;
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+	pointer-events: auto;
+}
+
+.sub-cells.is-row {
+	flex-direction: row;
+}
+
+.sub-cells > .sub-cell,
+.sub-cells > * > .sub-cell {
+	min-inline-size: var(--sub-cell);
+	min-block-size: var(--sub-cell);
+	block-size: var(--sub-cell);
+	padding: 0;
+}
+
+.sub-cells > .sub-cell:not(:has(.canon-button-title)) {
+	inline-size: var(--sub-cell);
+}
+
+.sub-cells.is-small > .sub-cell {
+	min-inline-size: var(--sub-small);
+	min-block-size: var(--sub-small);
+	block-size: var(--sub-small);
+}
+
+.sub-cells.is-small > .sub-cell:not(:has(.canon-button-title)) {
+	inline-size: var(--sub-small);
+}
+
+.sub-cells > .sub-cell:has(.canon-button-title) {
+	padding-inline: 12px;
+}
+
+.sub-cell .canon-button-icon {
+	inline-size: var(--canon-icon-alone);
+	block-size: var(--canon-icon-alone);
+}
+
+.sub-cell .canon-button-icon svg {
+	stroke-width: 2;
+}
+
+.sub-ed-help {
+	position: absolute;
+	inset-block-start: var(--sub-gap);
+	inset-inline-start: var(--sub-pad);
+	z-index: 20;
+}
+
+.sub-ed-help .sub-cell {
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* TitlePanel: the title and the zoom figure; only the figure takes taps */
+.sub-ed-title {
+	position: absolute;
+	inset-block-start: var(--sub-gap);
+	inset-inline-start: 50%;
+	z-index: 20;
+	display: flex;
+	gap: var(--canon-hairline);
+	max-inline-size: calc(
+		100% - 2 * (var(--sub-pad) + var(--sub-box) + var(--sub-gap))
+	);
+	block-size: var(--sub-small-box);
+	box-sizing: border-box;
+	padding: var(--sub-frame);
+	translate: -50% 0;
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+}
+
+.sub-ed-title:dir(rtl) {
+	translate: 50% 0;
+}
+
+.sub-ed-title > button {
+	display: flex;
+	align-items: center;
+	min-inline-size: 0;
+	margin: 0;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.sub-ed-title-name {
+	padding-inline: var(--sub-pad);
+	overflow: hidden;
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sub-ed-title-zoom {
+	flex: none;
+	justify-content: center;
+	min-inline-size: 80px;
+	padding-inline: 12px;
+	color: var(--canon-muted-foreground);
+}
+
+.sub-ed-title-zoom .canon-figure {
+	font-size: var(--canon-text-footnote);
+}
+
+/* the trailing column: edit stack, omnibar, tools tab, colour key */
+.sub-ed-column {
+	position: absolute;
+	inset-block: var(--sub-pad);
+	inset-inline-end: var(--sub-pad);
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	gap: var(--sub-gap);
+	inline-size: var(--sub-box);
+	pointer-events: none;
+}
+
+.sub-ed-column-fill {
+	display: none;
+}
+
+.sub-ed-omni {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: var(--sub-gap);
+	margin-block-start: auto;
+	transition: opacity 0.25s;
+}
+
+.sub-ed-omni.is-hidden {
+	display: none;
+}
+
+/* the tab shares the frame of whatever it hangs under */
+.sub-ed-tab {
+	margin-block: calc(-1 * (var(--sub-gap) + var(--sub-frame))) auto;
+	box-shadow: var(--sub-shadow);
+}
+
+.sub-ed-tab > .sub-cell {
+	min-block-size: 28px;
+	block-size: 28px;
+}
+
+.sub-ed-tab .canon-button-icon {
+	inline-size: var(--canon-icon-inline);
+	block-size: var(--canon-icon-inline);
+}
+
+.sub-ed-omni.is-hidden + .sub-ed-tab {
+	margin-block-start: calc(-1 * (var(--sub-gap) + var(--sub-frame)));
+}
+
+.sub-ed-colour-key > .sub-cell {
+	display: grid;
+	place-items: center;
+}
+
+.sub-ed-colour-dot {
+	inline-size: 28px;
+	block-size: 28px;
+	border-radius: 50%;
+	background:
+		linear-gradient(var(--sub-key-colour), var(--sub-key-colour)),
+		repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+	box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
+}
+
+.sub-ed-colour-key > .sub-cell.is-open {
+	background: var(--canon-accent-bg);
+}
+
+/* compact column: one tool cell that blooms into a fan towards the canvas */
+.sub-ed-bloom {
+	position: absolute;
+	inset-block-start: var(--sub-frame);
+	inset-inline-start: var(--sub-frame);
+	z-index: 30;
+	inline-size: var(--sub-cell);
+	block-size: var(--sub-cell);
+	pointer-events: none;
+}
+
+.sub-ed-bloom-cell {
+	position: absolute;
+	inset: calc(-1 * var(--sub-frame));
+	translate: var(--sub-bloom-x) var(--sub-bloom-y);
+	animation: sub-ed-bloom 0.3s calc(var(--sub-bloom-i) * 30ms) both;
+}
+
+@keyframes sub-ed-bloom {
+	from {
+		opacity: 0;
+		translate: 0 0;
+	}
+}
+
+/* the rail: open panels on the column's canvas side, floating */
+.sub-ed-rail {
+	position: absolute;
+	inset-block: var(--sub-pad);
+	inset-inline-end: calc(
+		var(--sub-pad) + var(--sub-box) + var(--sub-gap)
+	);
+	z-index: 15;
+	display: flex;
+	flex-direction: column;
+	gap: var(--sub-gap);
+	inline-size: var(--sub-rail);
+	pointer-events: none;
+}
+
+.sub-rail-panel {
+	display: flex;
+	flex: 0 1 auto;
+	flex-direction: column;
+	min-block-size: calc(var(--sub-cell) * 2);
+	box-sizing: border-box;
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+	pointer-events: auto;
+}
+
+.sub-panel-header {
+	display: flex;
+	flex: none;
+	gap: var(--canon-hairline);
+	padding-block-end: var(--canon-hairline);
+}
+
+.sub-panel-header > .sub-cell {
+	flex: none;
+	inline-size: var(--sub-cell);
+	block-size: var(--sub-cell);
+	min-block-size: var(--sub-cell);
+	padding: 0;
+}
+
+.sub-panel-title.canon-heading {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	min-inline-size: 0;
+	margin: 0;
+	padding-inline: var(--sub-pad);
+	background: var(--canon-card);
+}
+
+.sub-rail-body {
+	min-block-size: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: var(--canon-card);
+}
+
+/* the tool settings bar, 36 px cells, along its edge */
+.sub-ed-bar {
+	position: absolute;
+	z-index: 18;
+	display: flex;
+	gap: var(--sub-gap);
+	touch-action: none;
+	pointer-events: none;
+}
+
+.sub-ed-bar > * {
+	pointer-events: auto;
+}
+
+.sub-ed-bar.is-bottom {
+	inset-block-end: var(--sub-pad);
+	inset-inline-start: 50%;
+	translate: -50% 0;
+}
+
+.sub-ed-bar.is-top {
+	inset-block-start: calc(
+		var(--sub-gap) + var(--sub-small-box) + var(--sub-pad)
+	);
+	inset-inline-start: 50%;
+	translate: -50% 0;
+}
+
+.sub-ed-bar.is-bottom:dir(rtl),
+.sub-ed-bar.is-top:dir(rtl) {
+	translate: 50% 0;
+}
+
+.sub-ed-bar.is-leading,
+.sub-ed-bar.is-trailing {
+	flex-direction: column;
+	inset-block-start: 50%;
+	translate: 0 -50%;
+}
+
+.sub-ed-bar.is-leading {
+	inset-inline-start: var(--sub-pad);
+}
+
+.sub-ed-bar.is-trailing {
+	inset-inline-end: calc(2 * var(--sub-pad) + var(--sub-box));
+}
+
+.sub-ed-bar.is-dragging {
+	z-index: 40;
+	opacity: 0.85;
+	transition: none;
+	cursor: grabbing;
+}
+
+.sub-ed-bar.is-dragging {
+	transform: translate(var(--sub-drag-x), var(--sub-drag-y));
+}
+
+/* the phone: title row along the top, a row of keys along the bottom, one
+   open panel in a tray above it */
+.sub-ed.is-phone .sub-ed-help {
+	inset-inline-start: var(--sub-pad);
+}
+
+.sub-ed.is-phone .sub-ed-title {
+	inset-inline: calc(
+			var(--sub-pad) + var(--sub-small-box) + var(--sub-gap)
+		)
+		calc(
+			var(--sub-pad) + 2 * var(--sub-small) + 1px + 2 *
+				var(--sub-frame) + var(--sub-gap)
+		);
+	max-inline-size: none;
+	translate: none;
+}
+
+.sub-ed.is-phone .sub-ed-title-name {
+	flex: 1;
+}
+
+.sub-ed-phone-stack {
+	position: absolute;
+	inset-block-start: var(--sub-gap);
+	inset-inline-end: var(--sub-pad);
+	z-index: 20;
+}
+
+.sub-ed-row {
+	position: absolute;
+	inset-inline: var(--sub-pad);
+	inset-block-end: var(--sub-row-bottom);
+	z-index: 20;
+	display: flex;
+	gap: var(--sub-gap);
+	pointer-events: none;
+}
+
+.sub-ed-row-fill {
+	flex: 1;
+}
+
+.sub-ed-rail.is-tray {
+	inset-block: auto
+		calc(var(--sub-row-bottom) + var(--sub-box) + var(--sub-gap));
+	inset-inline: var(--sub-pad);
+	inline-size: auto;
+	max-block-size: var(--sub-tray-max);
+}
+
+.sub-ed-rail.is-tray .sub-rail-panel {
+	flex: 1 1 auto;
+	animation: sub-ed-tray 0.25s both;
+}
+
+@keyframes sub-ed-tray {
+	from {
+		opacity: 0;
+		translate: 0 24px;
+	}
+}
+
+.sub-ed.is-phone .sub-ed-bar {
+	inset-block-end: calc(
+		var(--sub-row-bottom) + var(--sub-box) + 2 * var(--sub-gap) +
+			var(--sub-tray-h)
+	);
+}
+
+.sub-ed-dim {
+	position: absolute;
+	inset: 0;
+	z-index: 25;
+	border: 0;
+	background: rgb(0 0 0 / 30%);
+}
+
+.sub-ed-phone-tools {
+	position: absolute;
+	inset-block-end: calc(
+		var(--sub-row-bottom) + var(--sub-box) + var(--sub-gap)
+	);
+	inset-inline-start: var(--sub-pad);
+	z-index: 26;
+	display: flex;
+	flex-direction: column-reverse;
+	gap: var(--sub-gap);
+}
+
+.sub-ed-phone-tools .sub-cells {
+	animation: sub-ed-tray 0.25s calc(var(--sub-i, 0) * 30ms) both;
+}
+
+.sub-ed-phone-tools .sub-cell {
+	justify-content: flex-start;
+	inline-size: 180px;
+}
+
+/* interim colour panel beside the colour key */
+.sub-ed-ring-interim {
+	position: absolute;
+	inset-block-end: var(--sub-pad);
+	inset-inline-end: calc(
+		var(--sub-pad) + var(--sub-box) + var(--sub-gap)
+	);
+	z-index: 30;
+	inline-size: 320px;
+	max-block-size: 80%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-ed-bloom-cell,
+	.sub-ed-rail.is-tray .sub-rail-panel,
+	.sub-ed-phone-tools .sub-cells {
+		animation: none;
+	}
+}

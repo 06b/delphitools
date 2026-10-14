@@ -36,6 +36,13 @@ const EXTRA = [
 	'carrot',
 	'list-checks',
 	'settings-2',
+	// names built at runtime outside templates
+	'alert-circle',
+	'arrow-right-left',
+	'axis-3d',
+	'circle-check-big',
+	'map-pin',
+	'triangle-alert',
 	...Object.values(FX_ICONS),
 	...TOOL_ORDER.map((t) => t.icon),
 	FX_ICON_FALLBACK,
@@ -74,7 +81,8 @@ const isIcon = (n) =>
 const names = [
 	...new Set([
 		...allTools.map((t) => t.icon),
-		...fromTemplates,
+		// @name also names non-icon components (app-sidebar's wordmark)
+		...[...fromTemplates].filter(isIcon),
 		...[...candidates].filter(isIcon),
 		...EXTRA,
 	]),

@@ -199,7 +199,6 @@ import {
 	type SnapBox,
 } from 'delphitools-v2/lib/substrata/snap-engine';
 
-
 // fabric serialization key
 class AnchorBoxLayout extends FitContentLayout {
 	calcBoundingBox(
@@ -230,7 +229,23 @@ function chromeInset(wrap: HTMLElement, rulers: boolean): Inset {
 		bottom: 0,
 		left: rulers ? RULER_PX : 0,
 	};
-	const area = wrap.closest('.sub-shell-canvas-area');
+	const area = wrap.closest<HTMLElement>('.sub-shell-canvas-area');
+	// the canon editor measures its floating pieces
+	const measured = area?.dataset['inset']?.split(',').map(Number);
+	if (measured?.length === 4 && measured.every(Number.isFinite)) {
+		const [top, right, bottom, left] = measured as [
+			number,
+			number,
+			number,
+			number,
+		];
+		return {
+			top: Math.max(inset.top, top),
+			right,
+			bottom,
+			left: Math.max(inset.left, left),
+		};
+	}
 	const docks =
 		area?.querySelectorAll('.sub-omni-dock, .sub-omni-rail-dock') ??
 		[];
@@ -308,10 +323,10 @@ export default class FabricCanvas extends Component {
 		const applySelectionChrome = () => {
 			const css = getComputedStyle(document.documentElement);
 			const primary = css
-				.getPropertyValue('--primary')
+				.getPropertyValue('--canon-primary')
 				.trim();
 			const paper = css
-				.getPropertyValue('--background')
+				.getPropertyValue('--canon-card')
 				.trim();
 			const chrome = {
 				transparentCorners: false,
@@ -374,7 +389,7 @@ export default class FabricCanvas extends Component {
 		// suppress selection echo
 		let squelchSelectionEvents = false;
 
-				const selectedLeafObjects = (): FabricObject[] => {
+		const selectedLeafObjects = (): FabricObject[] => {
 			const doc = getSnapshot();
 			if (!doc) return [];
 			const effective = new Map(
@@ -1239,8 +1254,8 @@ export default class FabricCanvas extends Component {
 		canvas.on('selection:updated', syncSelectionToStore);
 		canvas.on('selection:cleared', syncSelectionToStore);
 
-				// use composed selection transform
-				const absoluteTransformOf = (obj: FabricObject): Transform => {
+		// use composed selection transform
+		const absoluteTransformOf = (obj: FabricObject): Transform => {
 			const d = fabricUtil.qrDecompose(
 				obj.calcTransformMatrix(),
 			);
@@ -1295,7 +1310,6 @@ export default class FabricCanvas extends Component {
 				flipY: target.flipY,
 			});
 		});
-
 
 		const SNAP_SCREEN_PX = 6;
 		let activeGuides: { v: number[]; h: number[] } | null = null;
@@ -1605,7 +1619,7 @@ export default class FabricCanvas extends Component {
 			t: Transform;
 			crop: CropRect;
 		};
-				const cropTarget = (): CropTarget | null => {
+		const cropTarget = (): CropTarget | null => {
 			const doc = getSnapshot();
 			const ids = getSelectedLayerIds();
 			const onlyId = ids[0];
@@ -1648,12 +1662,19 @@ export default class FabricCanvas extends Component {
 			const inverse = fabricUtil.invertTransform(local);
 			return {
 				toScreen: (lx: number, ly: number) =>
-					new Point(lx - dims.width / 2, ly - dims.height / 2).transform(
-						screen,
-					),
+					new Point(
+						lx - dims.width / 2,
+						ly - dims.height / 2,
+					).transform(screen),
 				toLocal: (sceneX: number, sceneY: number) => {
-					const p = new Point(sceneX, sceneY).transform(inverse);
-					return { lx: p.x + dims.width / 2, ly: p.y + dims.height / 2 };
+					const p = new Point(
+						sceneX,
+						sceneY,
+					).transform(inverse);
+					return {
+						lx: p.x + dims.width / 2,
+						ly: p.y + dims.height / 2,
+					};
 				},
 			};
 		};
@@ -1665,7 +1686,7 @@ export default class FabricCanvas extends Component {
 			dims: CropTarget['dims'];
 			t: Transform;
 		} | null = null;
-				const cropClaim = (px: number, py: number): boolean => {
+		const cropClaim = (px: number, py: number): boolean => {
 			const tgt = cropTarget();
 			if (!tgt) return false;
 			const m = cropProject(tgt.t, tgt.dims);
@@ -1720,7 +1741,10 @@ export default class FabricCanvas extends Component {
 			}
 			const { start, dims, t, hx, hy } = cropDrag;
 			const p = sceneXY(px, py);
-			const { lx, ly } = cropProject(t, dims).toLocal(p.x, p.y);
+			const { lx, ly } = cropProject(t, dims).toLocal(
+				p.x,
+				p.y,
+			);
 			let { x, y, w, h } = start;
 			if (hx === -1) {
 				const right = start.x + start.w;
@@ -2521,8 +2545,12 @@ export default class FabricCanvas extends Component {
 						m.toScreen(x + w, y + h),
 						m.toScreen(x, y + h),
 					];
-					ctx.moveTo(corners[0]!.x, corners[0]!.y);
-					for (const c of corners.slice(1)) ctx.lineTo(c.x, c.y);
+					ctx.moveTo(
+						corners[0]!.x,
+						corners[0]!.y,
+					);
+					for (const c of corners.slice(1))
+						ctx.lineTo(c.x, c.y);
 					ctx.closePath();
 				};
 				ctx.save();
@@ -2542,10 +2570,15 @@ export default class FabricCanvas extends Component {
 					for (const fy of [0, 0.5, 1]) {
 						if (fx === 0.5 && fy === 0.5)
 							continue;
-						const { x: hx, y: hy } = m.toScreen(
-							crop.x + fx * crop.w,
-							crop.y + fy * crop.h,
-						);
+						const { x: hx, y: hy } =
+							m.toScreen(
+								crop.x +
+									fx *
+										crop.w,
+								crop.y +
+									fy *
+										crop.h,
+							);
 						ctx.fillRect(
 							hx - 3,
 							hy - 3,
@@ -3092,8 +3125,7 @@ export default class FabricCanvas extends Component {
 								);
 							}
 						}
-					} catch {
-					}
+					} catch {}
 					return {
 						ok: true,
 						size: outcome.blob.size,
@@ -3635,12 +3667,12 @@ export default class FabricCanvas extends Component {
 			{{this.mount}}
 			{{filePaste this.paste accept="image/*"}}
 		>
-						<div
+			<div
 				class="sub-canvas-wordmark"
 				aria-hidden="true"
 			></div>
 			<canvas></canvas>
-						<div
+			<div
 				class="sub-canvas-drop-hint hidden"
 				aria-hidden="true"
 			></div>
