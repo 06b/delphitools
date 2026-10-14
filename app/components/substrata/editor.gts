@@ -205,13 +205,22 @@ export default class SubstrataEditor extends Component {
 			this.placeInset(root);
 		});
 		ro.observe(root);
-		// the phone's bar rides on the tray
+		// the phone's bar rides on the tray, and a fitted artboard refits
+		// above it (iOS: the canvas area ends above the open panel)
+		let fitted = getZoom();
 		const tray = new ResizeObserver(([entry]) => {
 			const h = entry?.contentRect.height ?? 0;
 			root.style.setProperty(
 				'--sub-tray-h',
 				`${h ? h + GAP : 0}px`,
 			);
+			if (!this.phone) return;
+			requestAnimationFrame(() => {
+				this.placeInset(root);
+				if (Math.abs(getZoom() - fitted) < 1e-3)
+					viewport.fit();
+				fitted = getZoom();
+			});
 		});
 		const rail = root.querySelector('.sub-ed-rail');
 		if (rail) tray.observe(rail);
