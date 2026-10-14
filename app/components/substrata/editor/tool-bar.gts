@@ -44,9 +44,17 @@ export default class ToolBar extends Component<Signature> {
 	fit = () => viewport.fit();
 	actual = () => viewport.setZoom(1);
 
+	#bar: HTMLElement | null = null;
+	#wasDrag = false;
+
+	// window listeners: the pointer leaves the bar long before the drop
 	down = (e: PointerEvent) => {
 		if (this.args.phone || e.button !== 0) return;
 		this.#start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+		this.#wasDrag = false;
+		window.addEventListener('pointermove', this.move);
+		window.addEventListener('pointerup', this.up);
+		window.addEventListener('pointercancel', this.up);
 	};
 
 	move = (e: PointerEvent) => {
@@ -55,22 +63,20 @@ export default class ToolBar extends Component<Signature> {
 		const x = e.clientX - s.x;
 		const y = e.clientY - s.y;
 		if (!this.dragging && Math.hypot(x, y) < DRAG_SLOP) return;
-		if (!this.dragging)
-			(e.currentTarget as HTMLElement).setPointerCapture(
-				e.pointerId,
-			);
 		this.dragging = { x, y };
 	};
 
 	up = (e: PointerEvent) => {
+		window.removeEventListener('pointermove', this.move);
+		window.removeEventListener('pointerup', this.up);
+		window.removeEventListener('pointercancel', this.up);
 		const s = this.#start;
 		this.#start = null;
 		if (!s || !this.dragging) return;
 		this.dragging = null;
-		const root = (e.currentTarget as HTMLElement).closest(
-			'.sub-ed',
-		);
-		if (!root) return;
+		this.#wasDrag = true;
+		const root = this.#bar?.closest('.sub-ed');
+		if (!root || e.type === 'pointercancel') return;
 		const box = root.getBoundingClientRect();
 		const rtl = getComputedStyle(root).direction === 'rtl';
 		const near: [EditorEdge, number][] = [
@@ -85,33 +91,20 @@ export default class ToolBar extends Component<Signature> {
 
 	// a drag ends without the cell under the pointer taking the click
 	swallow = (e: MouseEvent) => {
-		if (this.#wasDrag) {
-			e.stopPropagation();
-			e.preventDefault();
-			this.#wasDrag = false;
-		}
-	};
-
-	#wasDrag = false;
-
-	markDrag = () => {
-		this.#wasDrag = !!this.dragging;
+		if (!this.#wasDrag) return;
+		e.stopPropagation();
+		e.preventDefault();
+		this.#wasDrag = false;
 	};
 
 	draggable = modifier((el: HTMLElement) => {
-		const listeners: [string, EventListener, boolean?][] = [
-			['pointerdown', this.down as EventListener],
-			['pointermove', this.move as EventListener],
-			['pointerup', this.markDrag],
-			['pointerup', this.up as EventListener],
-			['pointercancel', this.up as EventListener],
-			['click', this.swallow as EventListener, true],
-		];
-		for (const [type, fn, capture] of listeners)
-			el.addEventListener(type, fn, capture);
+		this.#bar = el;
+		el.addEventListener('pointerdown', this.down);
+		el.addEventListener('click', this.swallow, true);
 		return () => {
-			for (const [type, fn, capture] of listeners)
-				el.removeEventListener(type, fn, capture);
+			el.removeEventListener('pointerdown', this.down);
+			el.removeEventListener('click', this.swallow, true);
+			this.up(new PointerEvent('pointercancel'));
 		};
 	});
 

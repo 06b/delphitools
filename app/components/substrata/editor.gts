@@ -176,14 +176,19 @@ export default class SubstrataEditor extends Component {
 	cycleZoom = () => viewport.cycle();
 
 	bloomStyle = (index: number) => {
-		// iOS fan: radius 120 around the tool key, towards the canvas
+		// iOS fan: 125 to 235 degrees around the tool key; the web's seven
+		// tools need a wider radius than iOS's 120 for the cells to clear
 		const count = EDITOR_TOOLS.length;
-		const spread = Math.PI * 0.75;
-		const a = Math.PI - spread / 2 + (spread * index) / (count - 1);
-		const x = Math.cos(a) * 120;
-		const y = -Math.sin(a) * 120;
+		const spread = (110 * Math.PI) / 180;
+		const radius = Math.max(
+			120,
+			((count - 1) * (BOX + 4)) / spread,
+		);
+		const a = ((125 + (110 * index) / (count - 1)) * Math.PI) / 180;
+		const x = Math.cos(a) * radius;
+		const y = Math.sin(a) * radius;
 		return htmlSafe(
-			`--sub-bloom-x: ${x.toFixed(1)}px; --sub-bloom-y: ${y.toFixed(1)}px; --sub-bloom-i: ${index}`,
+			`--sub-bloom-x: ${x.toFixed(1)}px; --sub-bloom-y: ${y.toFixed(1)}px; --sub-bloom-i: ${count - 1 - index}`,
 		);
 	};
 
@@ -263,6 +268,29 @@ export default class SubstrataEditor extends Component {
 			inset.left,
 		].join(',');
 	};
+
+	// the open fan or tool column closes on a press elsewhere or Esc
+	bloomClose = modifier((el: HTMLElement) => {
+		const close = () => (editorUi.bloomOpen = false);
+		const onDown = (e: PointerEvent) => {
+			const target = e.target as Element;
+			// the tool key toggles it itself
+			if (
+				!el.contains(target) &&
+				!target.closest('.sub-ed-tools')
+			)
+				close();
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') close();
+		};
+		window.addEventListener('pointerdown', onDown, true);
+		window.addEventListener('keydown', onKey);
+		return () => {
+			window.removeEventListener('pointerdown', onDown, true);
+			window.removeEventListener('keydown', onKey);
+		};
+	});
 
 	toolKeys = modifier(() => {
 		const onKey = (e: KeyboardEvent) => {
@@ -520,6 +548,7 @@ export default class SubstrataEditor extends Component {
 						}}
 							<div
 								class="sub-ed-bloom"
+								{{this.bloomClose}}
 							>
 								{{#each
 									EDITOR_TOOLS
