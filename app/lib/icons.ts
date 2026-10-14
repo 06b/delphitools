@@ -37,7 +37,6 @@ import iBinary from 'lucide-static/icons/binary.svg?raw';
 import iBlend from 'lucide-static/icons/blend.svg?raw';
 import iBold from 'lucide-static/icons/bold.svg?raw';
 import iBookOpen from 'lucide-static/icons/book-open.svg?raw';
-import iBox from 'lucide-static/icons/box.svg?raw';
 import iBoxSelect from 'lucide-static/icons/box-select.svg?raw';
 import iBraces from 'lucide-static/icons/braces.svg?raw';
 import iBriefcase from 'lucide-static/icons/briefcase.svg?raw';
@@ -85,7 +84,6 @@ import iCrop from 'lucide-static/icons/crop.svg?raw';
 import iCrosshair from 'lucide-static/icons/crosshair.svg?raw';
 import iDelete from 'lucide-static/icons/delete.svg?raw';
 import iDices from 'lucide-static/icons/dices.svg?raw';
-import iDock from 'lucide-static/icons/dock.svg?raw';
 import iDot from 'lucide-static/icons/dot.svg?raw';
 import iDownload from 'lucide-static/icons/download.svg?raw';
 import iDroplet from 'lucide-static/icons/droplet.svg?raw';
@@ -120,9 +118,7 @@ import iFlipHorizontal2 from 'lucide-static/icons/flip-horizontal-2.svg?raw';
 import iFlipVertical2 from 'lucide-static/icons/flip-vertical-2.svg?raw';
 import iFocus from 'lucide-static/icons/focus.svg?raw';
 import iFolder from 'lucide-static/icons/folder.svg?raw';
-import iFolderMinus from 'lucide-static/icons/folder-minus.svg?raw';
 import iFolderOpen from 'lucide-static/icons/folder-open.svg?raw';
-import iFolderPlus from 'lucide-static/icons/folder-plus.svg?raw';
 import iFrame from 'lucide-static/icons/frame.svg?raw';
 import iGalleryVertical from 'lucide-static/icons/gallery-vertical.svg?raw';
 import iGauge from 'lucide-static/icons/gauge.svg?raw';
@@ -230,7 +226,6 @@ import iSquareDashed from 'lucide-static/icons/square-dashed.svg?raw';
 import iSquareDashedMousePointer from 'lucide-static/icons/square-dashed-mouse-pointer.svg?raw';
 import iSquareMinus from 'lucide-static/icons/square-minus.svg?raw';
 import iSquarePlus from 'lucide-static/icons/square-plus.svg?raw';
-import iSquareSlash from 'lucide-static/icons/square-slash.svg?raw';
 import iSquareSquare from 'lucide-static/icons/square-square.svg?raw';
 import iSquareStack from 'lucide-static/icons/square-stack.svg?raw';
 import iSquareTerminal from 'lucide-static/icons/square-terminal.svg?raw';
@@ -248,7 +243,6 @@ import iTextCursorInput from 'lucide-static/icons/text-cursor-input.svg?raw';
 import iThermometer from 'lucide-static/icons/thermometer.svg?raw';
 import iToggleRight from 'lucide-static/icons/toggle-right.svg?raw';
 import iTrash2 from 'lucide-static/icons/trash-2.svg?raw';
-import iTriangle from 'lucide-static/icons/triangle.svg?raw';
 import iTriangleAlert from 'lucide-static/icons/triangle-alert.svg?raw';
 import iType from 'lucide-static/icons/type.svg?raw';
 import iUndo2 from 'lucide-static/icons/undo-2.svg?raw';
@@ -307,7 +301,6 @@ export const icons: Record<string, string> = {
 	blend: iBlend,
 	bold: iBold,
 	'book-open': iBookOpen,
-	box: iBox,
 	'box-select': iBoxSelect,
 	braces: iBraces,
 	briefcase: iBriefcase,
@@ -355,7 +348,6 @@ export const icons: Record<string, string> = {
 	crosshair: iCrosshair,
 	delete: iDelete,
 	dices: iDices,
-	dock: iDock,
 	dot: iDot,
 	download: iDownload,
 	droplet: iDroplet,
@@ -390,9 +382,7 @@ export const icons: Record<string, string> = {
 	'flip-vertical-2': iFlipVertical2,
 	focus: iFocus,
 	folder: iFolder,
-	'folder-minus': iFolderMinus,
 	'folder-open': iFolderOpen,
-	'folder-plus': iFolderPlus,
 	frame: iFrame,
 	'gallery-vertical': iGalleryVertical,
 	gauge: iGauge,
@@ -500,7 +490,6 @@ export const icons: Record<string, string> = {
 	'square-dashed-mouse-pointer': iSquareDashedMousePointer,
 	'square-minus': iSquareMinus,
 	'square-plus': iSquarePlus,
-	'square-slash': iSquareSlash,
 	'square-square': iSquareSquare,
 	'square-stack': iSquareStack,
 	'square-terminal': iSquareTerminal,
@@ -518,7 +507,6 @@ export const icons: Record<string, string> = {
 	thermometer: iThermometer,
 	'toggle-right': iToggleRight,
 	'trash-2': iTrash2,
-	triangle: iTriangle,
 	'triangle-alert': iTriangleAlert,
 	type: iType,
 	'undo-2': iUndo2,

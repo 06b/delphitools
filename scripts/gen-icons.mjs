@@ -43,6 +43,20 @@ const EXTRA = [
 	'circle-check-big',
 	'map-pin',
 	'triangle-alert',
+	// canon-docs tiles pass these through variables
+	'panel-bottom',
+	'panel-left',
+	'panel-right',
+	'panel-top',
+	// drawn into the colour ring's canvas by name
+	'clock',
+	'droplet',
+	'hash',
+	'highlighter',
+	'pipette',
+	'sliders-horizontal',
+	'star',
+	'swatch-book',
 	...Object.values(FX_ICONS),
 	...TOOL_ORDER.map((t) => t.icon),
 	FX_ICON_FALLBACK,
@@ -71,6 +85,9 @@ for (const file of walk(join(root, 'app')).filter((f) => f.endsWith('.gts'))) {
 		candidates.add(m[1]);
 	}
 	for (const m of src.matchAll(/@icon=["']([a-z0-9-]+)["']/g)) {
+		candidates.add(m[1]);
+	}
+	for (const m of src.matchAll(/IconSvg\s+name=["']([a-z0-9-]+)["']/g)) {
 		candidates.add(m[1]);
 	}
 }
