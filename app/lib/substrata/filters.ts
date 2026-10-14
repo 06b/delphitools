@@ -299,6 +299,27 @@ export const FILTER_REGISTRY: Record<string, FilterDefinition> = {
 		label: 'Temperature',
 		params: [amount()],
 	},
+	tint: {
+		type: 'tint',
+		category: 'filter',
+		tier: 0,
+		label: 'Tint',
+		params: [amount()],
+	},
+	highlights: {
+		type: 'highlights',
+		category: 'filter',
+		tier: 1,
+		label: 'Highlights',
+		params: [amount()],
+	},
+	shadows: {
+		type: 'shadows',
+		category: 'filter',
+		tier: 1,
+		label: 'Shadows',
+		params: [amount()],
+	},
 	grayscale: {
 		type: 'grayscale',
 		category: 'filter',

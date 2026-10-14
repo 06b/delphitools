@@ -234,6 +234,7 @@ import iStar from 'lucide-static/icons/star.svg?raw';
 import iStrikethrough from 'lucide-static/icons/strikethrough.svg?raw';
 import iSubtitles from 'lucide-static/icons/subtitles.svg?raw';
 import iSun from 'lucide-static/icons/sun.svg?raw';
+import iSunMedium from 'lucide-static/icons/sun-medium.svg?raw';
 import iSwatchBook from 'lucide-static/icons/swatch-book.svg?raw';
 import iTag from 'lucide-static/icons/tag.svg?raw';
 import iTerminal from 'lucide-static/icons/terminal.svg?raw';
@@ -497,6 +498,7 @@ export const icons: Record<string, string> = {
 	strikethrough: iStrikethrough,
 	subtitles: iSubtitles,
 	sun: iSun,
+	'sun-medium': iSunMedium,
 	'swatch-book': iSwatchBook,
 	tag: iTag,
 	terminal: iTerminal,

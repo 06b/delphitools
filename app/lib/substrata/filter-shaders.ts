@@ -494,6 +494,64 @@ export class SubstrataColourBalance extends BaseFilter<
 	}
 }
 
+// iOS FilterPipeline "tones": weights peak at 1 on luminance 2/3
+// (highlights) and 1/3 (shadows), 0 at black and white
+export const toneLift = (l: number, highlights: number, shadows: number) =>
+	0.25 * 6.75 * l * (1 - l) * (highlights * l + shadows * (1 - l));
+
+type TonesProps = { highlights: number; shadows: number };
+
+export class SubstrataTones extends BaseFilter<'SubstrataTones', TonesProps> {
+	declare highlights: number;
+	declare shadows: number;
+	static type = 'SubstrataTones';
+	static defaults: TonesProps = { highlights: 0, shadows: 0 };
+	static uniformLocations = ['uHighlights', 'uShadows'];
+
+	protected getFragmentSource(): string {
+		return `
+      precision highp float;
+      uniform sampler2D uTexture;
+      uniform float uHighlights;
+      uniform float uShadows;
+      varying vec2 vTexCoord;
+      void main() {
+        vec4 color = texture2D(uTexture, vTexCoord);
+        float l = clamp(dot(color.rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+        color.rgb = clamp(color.rgb + 1.6875 * l * (1.0 - l) * (uHighlights * l + uShadows * (1.0 - l)), 0.0, 1.0);
+        gl_FragColor = color;
+      }
+    `;
+	}
+
+	applyTo2d({ imageData: { data } }: T2DPipelineState): void {
+		for (let i = 0; i < data.length; i += 4) {
+			const l = clamp01(
+				lumaOf(data[i]!, data[i + 1]!, data[i + 2]!) /
+					255,
+			);
+			const lift =
+				255 *
+				toneLift(l, this.highlights, this.shadows);
+			data[i]! += lift;
+			data[i + 1]! += lift;
+			data[i + 2]! += lift;
+		}
+	}
+
+	sendUniformData(
+		gl: WebGLRenderingContext,
+		u: TWebGLUniformLocationMap,
+	): void {
+		gl.uniform1f(u.uHighlights!, this.highlights);
+		gl.uniform1f(u.uShadows!, this.shadows);
+	}
+
+	isNeutralState(): boolean {
+		return this.highlights === 0 && this.shadows === 0;
+	}
+}
+
 type FilmSimProps = {
 	lift: Vec3;
 	gain: Vec3;

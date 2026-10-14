@@ -15,6 +15,7 @@ import {
 	SubstrataLut,
 	SubstrataPosterise,
 	SubstrataThreshold,
+	SubstrataTones,
 	SubstrataVignette,
 	type Vec3,
 } from './filter-shaders';
@@ -82,6 +83,10 @@ const FACTORIES: Record<
 		const t = num(p, 'amount') / 100;
 		return gainMatrix(1 + 0.25 * t, 1, 1 - 0.25 * t);
 	},
+	tint: (p) => gainMatrix(1, 1 - (0.25 * num(p, 'amount')) / 100, 1),
+	highlights: (p) =>
+		new SubstrataTones({ highlights: num(p, 'amount') / 100 }),
+	shadows: (p) => new SubstrataTones({ shadows: num(p, 'amount') / 100 }),
 	grayscale: () => new Grayscale(),
 	sepia: () => new Sepia(),
 	invert: () => new Invert(),
