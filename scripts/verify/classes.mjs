@@ -13,6 +13,9 @@ const UNSTYLED_CONTAINERS = new Set([
 	'dt-tc-table',
 	'dt-tabs',
 	'sub-csm-section',
+	'sub-ed-panel-keys', // Cells groups, styled by .sub-cells
+	'sub-ed-stack',
+	'sub-ed-tools',
 	'sub-grip', // draggable modifier handle
 	'sub-preset-strip', // .segmented carries styling
 	'sub-topbar-seg-hook', // span[title] rigs read
@@ -27,8 +30,10 @@ function* walk(dir) {
 }
 
 let css = '';
-for (const path of walk(join(root, 'app/styles')))
-	if (/\.(scss|css)$/.test(path)) css += readFileSync(path, 'utf8');
+// canon surfaces keep a plain .css beside their component
+for (const dir of ['app/styles', 'app/components'])
+	for (const path of walk(join(root, dir)))
+		if (/\.(scss|css)$/.test(path)) css += readFileSync(path, 'utf8');
 
 const failures = [];
 let checked = 0;
@@ -49,7 +54,7 @@ for (const path of walk(join(root, 'app/components'))) {
 		if (UNSTYLED_CONTAINERS.has(cls)) continue;
 		if (!css.includes(`.${cls}`))
 			failures.push(
-				`${path.slice(root.length + 1)}: .${cls} is used but defined nowhere in app/styles`,
+				`${path.slice(root.length + 1)}: .${cls} is used but defined in no stylesheet`,
 			);
 	}
 }

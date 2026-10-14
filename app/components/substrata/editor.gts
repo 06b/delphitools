@@ -442,7 +442,6 @@ export default class SubstrataEditor extends Component {
 						{{#each EDITOR_TOOLS as |t|}}
 							<Cells @axis="row">
 								<Cell
-									class="sub-ed-named"
 									@label={{t.title}}
 									@icon={{t.icon}}
 									@text={{t.title}}
