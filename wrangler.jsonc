@@ -11,7 +11,12 @@
 	"env": {
 		"canon": {
 			"name": "delphitools-canon",
-			"routes": [{ "pattern": "canon.delphi.tools", "custom_domain": true }],
+			"routes": [
+				{
+					"pattern": "canon.delphi.tools",
+					"custom_domain": true,
+				},
+			],
 		},
 	},
 }
