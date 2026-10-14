@@ -59,7 +59,7 @@ interface Signature {
 }
 
 // iOS ArrangeAction labels and the web arrange panel's icons
-const ACTIONS: Record<ArrangeAction, { title: string; icon: string }> = {
+export const ACTIONS: Record<ArrangeAction, { title: string; icon: string }> = {
 	alignLeft: { title: 'Align left', icon: 'align-start-vertical' },
 	alignCentre: { title: 'Align centre', icon: 'align-center-vertical' },
 	alignRight: { title: 'Align right', icon: 'align-end-vertical' },

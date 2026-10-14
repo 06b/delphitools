@@ -335,10 +335,16 @@ export default class SubstrataEditor extends Component {
 	toolKeys = modifier(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (
+				e.defaultPrevented ||
 				e.metaKey ||
 				e.ctrlKey ||
 				e.altKey ||
-				isTextEntry(e.target)
+				isTextEntry(e.target) ||
+				// an open menu or card takes letters for type-ahead
+				(e.target instanceof Element &&
+					e.target.closest(
+						'[role=menu], [role=dialog], [role=listbox]',
+					))
 			)
 				return;
 			const hit = toolForKey(e.key);
