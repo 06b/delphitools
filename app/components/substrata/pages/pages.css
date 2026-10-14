@@ -39,6 +39,11 @@
 	padding: 0;
 }
 
+.sub-pg-drawer > .sub-panel-header > .sub-pg-back {
+	inline-size: auto;
+	padding-inline: var(--sub-pad);
+}
+
 /* the sections, in columns as tall as the page, scrolling sideways */
 .sub-pg-scroller {
 	--sub-pg-column: 300px;

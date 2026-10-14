@@ -4,6 +4,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
+import type RouterService from '@ember/routing/router-service';
 import { htmlSafe } from '@ember/template';
 import type { TOC } from '@ember/component/template-only';
 import { modifier } from 'ember-modifier';
@@ -135,6 +136,7 @@ export default class SettingsPage extends Component<{
 	Args: { phone: boolean };
 }> {
 	@service declare theme: ThemeService;
+	@service declare router: RouterService;
 	@service('colour-notation') declare notation: ColourNotationService;
 
 	doc = new TrackedExternal(subscribe, () => ({
@@ -280,15 +282,32 @@ export default class SettingsPage extends Component<{
 				.closest('.sub-ed')
 				?.classList.contains('is-compact');
 		};
+		// the columns only scroll sideways, so a vertical wheel does that
+		const wheel = (e: WheelEvent) => {
+			if (
+				e.ctrlKey ||
+				Math.abs(e.deltaX) >= Math.abs(e.deltaY)
+			)
+				return;
+			e.preventDefault();
+			scroller.scrollLeft +=
+				e.deltaMode === WheelEvent.DOM_DELTA_LINE
+					? e.deltaY * 16
+					: e.deltaY;
+		};
+		scroller.addEventListener('wheel', wheel, { passive: false });
 		const ro = new ResizeObserver(lay);
 		ro.observe(scroller);
 		const mo = new MutationObserver(lay);
 		mo.observe(scroller, { childList: true, subtree: true });
 		return () => {
+			scroller.removeEventListener('wheel', wheel);
 			ro.disconnect();
 			mo.disconnect();
 		};
 	});
+
+	leave = () => void this.router.transitionTo('index');
 
 	openGallery = () => {
 		editorUi.pageOpen = false;
@@ -415,7 +434,15 @@ export default class SettingsPage extends Component<{
 				<PanelHeader
 					@title="Settings"
 					@onClose={{this.close}}
-				/>
+				>
+					<Cell
+						class="sub-pg-back"
+						@label="Back to delphitools"
+						@text="Back to delphitools"
+						@icon="arrow-left"
+						@onClick={{this.leave}}
+					/>
+				</PanelHeader>
 				<div class="sub-pg-scroller" {{this.flow}}>
 					<div
 						class="sub-pg-actions"

@@ -108,6 +108,13 @@ check('every section flows inside its columns', blocks.every((b) => b.over === 0
 check('sections: project to about', blocks.map((b) => b.id).join() === 'project,canvas,surface,general,editing,storage,reset,about', blocks.map((b) => b.id).join());
 check('settings controls are named', (await unnamed('.sub-pg-drawer')).length === 0, (await unnamed('.sub-pg-drawer')).join(' | '));
 
+const scroller = await rect('.sub-pg-scroller');
+await page.mouse.move(scroller.left + 100, scroller.top + 100);
+await page.mouse.wheel({ deltaY: 300 });
+await sleep(200);
+check('vertical wheel scrolls the settings sideways', (await page.evaluate(() => document.querySelector('.sub-pg-scroller').scrollLeft)) > 0);
+await page.evaluate(() => (document.querySelector('.sub-pg-scroller').scrollLeft = 0));
+
 await page.evaluate(() => {
 	const input = [...document.querySelectorAll('.canon-row')].find((r) => r.querySelector('.canon-row-title')?.textContent.trim() === 'Name')?.querySelector('input');
 	input.focus();
@@ -357,5 +364,14 @@ check('onboarding ends in the new form', await fresh.evaluate(() => !document.qu
 await fresh.keyboard.press('Escape');
 await sleep(400);
 check('closing the new form leaves the default scene', (await fresh.evaluate(() => document.querySelector('.sub-ed-title-name')?.textContent.trim())) === 'Untitled scene');
+
+await page.evaluate(() => {
+	window.__substrataUi.helpOpen = false;
+	window.__substrataUi.pageOpen = true;
+});
+await sleep(300);
+await page.evaluate(() => document.querySelector('.sub-pg-drawer .sub-panel-header [title="Back to delphitools"]').click());
+await page.waitForFunction(() => location.pathname === '/', { timeout: 5000 }).catch(() => {});
+check('header cell goes back to delphitools', await page.evaluate(() => location.pathname === '/'));
 
 await finish(browser);
