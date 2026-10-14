@@ -50,6 +50,7 @@ interface NavRowSignature {
 		href: string;
 		external?: boolean;
 		canon?: boolean;
+		description?: string;
 		/** Overrides the URL match, for a row that stands for many pages. */
 		current?: boolean;
 	};
@@ -64,6 +65,10 @@ class NavRow extends Component<NavRowSignature> {
 			this.args.current ??
 			this.router.currentURL?.split('?')[0] === this.args.href
 		);
+	}
+
+	get detail() {
+		return this.selected ? this.args.description : undefined;
 	}
 
 	// canon rows are plain links
@@ -103,6 +108,9 @@ class NavRow extends Component<NavRowSignature> {
 				data-canon={{if @canon "true"}}
 				...attributes
 			/>
+			{{#if this.detail}}
+				<p class="dt-nav-detail">{{this.detail}}</p>
+			{{/if}}
 		{{/if}}
 	</template>
 }
@@ -405,6 +413,7 @@ export default class AppSidebar extends Component {
 								@icon={{tool.icon}}
 								@href={{tool.href}}
 								@canon={{tool.canon}}
+								@description={{tool.description}}
 							/>
 						{{/each}}
 					{{/if}}
@@ -423,6 +432,7 @@ export default class AppSidebar extends Component {
 								@href={{tool.href}}
 								@external={{tool.external}}
 								@canon={{tool.canon}}
+								@description={{tool.description}}
 							/>
 						{{/each}}
 					{{/each}}

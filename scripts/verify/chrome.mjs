@@ -107,6 +107,13 @@ check('a row click routes in the app', tool.url === '/tools/px-to-rem');
 check('a tool route names the tool', tool.title === 'PX to REM', tool.title);
 check('and marks its row current', tool.current === 'PX to REM', tool.current);
 check('exactly one h1', tool.h1 === 1, `${tool.h1}`);
+const shown = (sel) =>
+	page.$$eval(sel, (els) =>
+		els.filter((el) => el.getClientRects().length > 0).map((el) => el.textContent.trim()),
+	);
+const barDetail = await shown('.dt-bar-detail');
+check('the bar describes the tool', barDetail.length === 1 && barDetail[0].length > 0, barDetail.join());
+check('the drawer leaves that to the bar', (await shown('.dt-nav-detail')).length === 0);
 check('the document does not scroll, the main pane does', tool.scrolls);
 
 await page.goto('http://localhost:3000/nope', { waitUntil: 'networkidle2' });
@@ -178,6 +185,8 @@ const [, drawerTop, , drawerHeight] = await box('.dt-drawer');
 check('the tab slides the drawer up', drawerHeight === Math.round(844 * 0.7), `${drawerHeight}`);
 check('pushing the page up with it', drawerTop + drawerHeight === 844 && (await box('.dt-tab'))[1] === drawerTop);
 check('the document does not scroll', await page.evaluate(() => document.scrollingElement.scrollHeight <= innerHeight));
+const navDetail = await shown('.dt-nav-detail');
+check('the current row describes the tool', navDetail.length > 0 && navDetail[0] === barDetail[0], navDetail.join());
 await page.setViewport({ width: 1400, height: 844 });
 await sleep(500);
 check('open on a phone is shut on a wide window', (await box('.dt-drawer'))[2] === 56);

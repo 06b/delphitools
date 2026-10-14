@@ -54,7 +54,12 @@ export default class ApplicationTemplate extends Component {
 			: route.startsWith('canon.')
 				? getToolById(CANON_KIT_ID)
 				: undefined;
-		if (tool) return { title: tool.name, icon: tool.icon };
+		if (tool)
+			return {
+				title: tool.name,
+				icon: tool.icon,
+				description: tool.description,
+			};
 		return (
 			PAGES[route] ?? {
 				title: 'delphitools',
@@ -102,9 +107,18 @@ export default class ApplicationTemplate extends Component {
 						@icon={{this.page.icon}}
 					/>
 					<header class="dt-bar">
-						<span
-							class="dt-bar-title"
-						>{{this.page.title}}</span>
+						<span class="dt-bar-heading">
+							<span
+								class="dt-bar-title"
+							>{{this.page.title}}</span>
+							{{#if
+								this.page.description
+							}}
+								<span
+									class="dt-bar-detail"
+								>{{this.page.description}}</span>
+							{{/if}}
+						</span>
 						{{#if this.showsNotation}}
 							<ColourNotationSelector
 							/>

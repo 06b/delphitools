@@ -920,14 +920,28 @@ body {
 	border-block-end: var(--canon-hairline) solid var(--canon-border);
 }
 
-.dt-bar-title {
+.dt-bar-heading {
+	display: flex;
 	flex: 1;
+	flex-direction: column;
 	min-inline-size: 0;
+}
+
+.dt-bar-title,
+.dt-bar-detail {
 	overflow: hidden;
-	font-size: var(--canon-text-body);
-	font-weight: var(--canon-weight-semibold);
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.dt-bar-title {
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.dt-bar-detail {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
 }
 
 // FanItemView: 16 corners, 12 concave fillets where it meets the page
@@ -1028,6 +1042,14 @@ body {
 	background: transparent;
 }
 
+.dt-nav-detail {
+	display: none;
+	margin: 0;
+	padding: 0 16px 8px 40px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
 // iPhone layout: the band and the bar's controls along the bottom, the drawer
 // pushing the page up; same width as MOBILE in services/breakpoint.ts
 @media (width < 640px) {
@@ -1070,8 +1092,13 @@ body {
 		border: 0;
 	}
 
-	.dt-bar-title {
+	.dt-bar-heading {
 		display: none;
+	}
+
+	// the bar's description is hidden here; the current row shows it
+	.dt-nav-detail {
+		display: block;
 	}
 
 	.dt-tab {
