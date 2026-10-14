@@ -8,6 +8,14 @@ export type TrayStop = 'short' | 'tall' | 'full';
 export const PANELS: readonly EditorPanel[] = ['layers', 'inspector', 'fx'];
 const EDGES: readonly EditorEdge[] = ['top', 'bottom', 'leading', 'trailing'];
 
+// a colour well's pick: the ring sends to it and restores the working
+// colour on close (iOS ColourPickerPresenter.redirect)
+export interface RingTarget {
+	hex: string;
+	alpha: number;
+	send: (hex: string, alpha: number, final: boolean) => void;
+}
+
 const SETTINGS_EDGE_KEY = 'canonSettingsEdge';
 const TOOLS_HIDDEN_KEY = 'canonToolsHidden';
 const LAYERS_PINNED_KEY = 'canonLayersPinned';
@@ -26,6 +34,17 @@ class EditorUi {
 	@tracked helpOpen = false;
 	@tracked exportOpen = false;
 	@tracked trayStop: TrayStop = 'short';
+	@tracked ringTarget: RingTarget | null = null;
+
+	openRingFor = (target: RingTarget): void => {
+		this.ringTarget = target;
+		this.ringOpen = true;
+	};
+
+	closeRing = (): void => {
+		this.ringOpen = false;
+		this.ringTarget = null;
+	};
 
 	hydrate(): void {
 		const edge = loadLayout<unknown>(SETTINGS_EDGE_KEY, null);

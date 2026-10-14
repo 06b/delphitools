@@ -1,19 +1,22 @@
-import { ColourBody } from 'delphitools-v2/components/substrata/modules/colour-panel';
-import { RailPanel } from 'delphitools-v2/components/substrata/editor/cells';
-import { editorUi } from 'delphitools-v2/lib/substrata/editor-ui';
+import ColourRing from 'delphitools-v2/components/substrata/colour/ring';
+import SettingsPage from 'delphitools-v2/components/substrata/pages/settings-page';
+import Gallery from 'delphitools-v2/components/substrata/pages/gallery';
+import ExportPopover from 'delphitools-v2/components/substrata/pages/export-popover';
+import HelpOverlay from 'delphitools-v2/components/substrata/pages/help-overlay';
+import Develop from 'delphitools-v2/components/substrata/develop/develop';
+import LayerMenu from 'delphitools-v2/components/substrata/panels/layers/layer-menu';
 
-const closeRing = () => (editorUi.ringOpen = false);
+import type { TOC } from '@ember/component/template-only';
 
-// interim: the old colour panel until the ring lands
-<template>
-	{{#if editorUi.ringOpen}}
-		<RailPanel
-			class="sub-ed-ring-interim"
-			@id="colour"
-			@title="Colour"
-			@onClose={{closeRing}}
-		>
-			<ColourBody />
-		</RailPanel>
-	{{/if}}
-</template>
+// each surface owns its own open state in editor-ui
+const Overlays: TOC<{ Args: { phone: boolean } }> = <template>
+	<ColourRing @phone={{@phone}} />
+	<SettingsPage @phone={{@phone}} />
+	<Gallery @phone={{@phone}} />
+	<ExportPopover @phone={{@phone}} />
+	<HelpOverlay @phone={{@phone}} />
+	<Develop @phone={{@phone}} />
+	<LayerMenu />
+</template>;
+
+export default Overlays;

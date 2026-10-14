@@ -8,7 +8,6 @@ import { eq } from 'ember-truth-helpers';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import FabricCanvas from 'delphitools-v2/components/substrata/fabric-canvas';
 import ModalHost from 'delphitools-v2/components/substrata/modal-host';
-import { LayerContextMenu } from 'delphitools-v2/components/substrata/layer-context-menu';
 import SelectionPopup from 'delphitools-v2/components/substrata/selection-popup';
 import SecureContextNotice from 'delphitools-v2/components/substrata/secure-context-notice';
 import EmptyHint from 'delphitools-v2/components/substrata/empty-hint';
@@ -587,9 +586,8 @@ export default class SubstrataEditor extends Component {
 				@phone={{this.phone}}
 			/>
 
-			<Overlays />
+			<Overlays @phone={{this.phone}} />
 			<ModalHost />
-			<LayerContextMenu />
 		</div>
 	</template>
 
