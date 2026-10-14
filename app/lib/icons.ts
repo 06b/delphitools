@@ -228,10 +228,13 @@ import iSquare from 'lucide-static/icons/square.svg?raw';
 import iSquareCheck from 'lucide-static/icons/square-check.svg?raw';
 import iSquareDashed from 'lucide-static/icons/square-dashed.svg?raw';
 import iSquareDashedMousePointer from 'lucide-static/icons/square-dashed-mouse-pointer.svg?raw';
+import iSquareMinus from 'lucide-static/icons/square-minus.svg?raw';
+import iSquarePlus from 'lucide-static/icons/square-plus.svg?raw';
 import iSquareSlash from 'lucide-static/icons/square-slash.svg?raw';
 import iSquareSquare from 'lucide-static/icons/square-square.svg?raw';
 import iSquareStack from 'lucide-static/icons/square-stack.svg?raw';
 import iSquareTerminal from 'lucide-static/icons/square-terminal.svg?raw';
+import iSquareX from 'lucide-static/icons/square-x.svg?raw';
 import iStamp from 'lucide-static/icons/stamp.svg?raw';
 import iStar from 'lucide-static/icons/star.svg?raw';
 import iStrikethrough from 'lucide-static/icons/strikethrough.svg?raw';
@@ -495,10 +498,13 @@ export const icons: Record<string, string> = {
 	'square-check': iSquareCheck,
 	'square-dashed': iSquareDashed,
 	'square-dashed-mouse-pointer': iSquareDashedMousePointer,
+	'square-minus': iSquareMinus,
+	'square-plus': iSquarePlus,
 	'square-slash': iSquareSlash,
 	'square-square': iSquareSquare,
 	'square-stack': iSquareStack,
 	'square-terminal': iSquareTerminal,
+	'square-x': iSquareX,
 	stamp: iStamp,
 	star: iStar,
 	strikethrough: iStrikethrough,

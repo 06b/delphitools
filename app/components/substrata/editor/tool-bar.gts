@@ -3,17 +3,30 @@ import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
-import { Cell, Cells } from 'delphitools-v2/components/substrata/editor/cells';
 import type { EditorTool } from 'delphitools-v2/components/substrata/editor/tools';
+import type { CanonPlacement } from 'delphitools-v2/components/substrata/editor/tool-bar/bar-cells';
+import MoveCells from 'delphitools-v2/components/substrata/editor/tool-bar/move-cells';
+import CropCells from 'delphitools-v2/components/substrata/editor/tool-bar/crop-cells';
+import SelectCells from 'delphitools-v2/components/substrata/editor/tool-bar/select-cells';
+import TextCells from 'delphitools-v2/components/substrata/editor/tool-bar/text-cells';
+import ShapeCells from 'delphitools-v2/components/substrata/editor/tool-bar/shape-cells';
+import DrawCells from 'delphitools-v2/components/substrata/editor/tool-bar/draw-cells';
 import {
 	editorUi,
 	type EditorEdge,
 } from 'delphitools-v2/lib/substrata/editor-ui';
-import { viewport } from 'delphitools-v2/lib/substrata/viewport';
 
 interface Signature {
 	Args: { tool: EditorTool; phone: boolean };
 }
+
+// menus and panels open away from the bar's edge, over the canvas
+const PLACEMENT: Record<EditorEdge, CanonPlacement> = {
+	bottom: 'top',
+	top: 'bottom',
+	leading: 'right-start',
+	trailing: 'left-start',
+};
 
 // a press that travels this far drags the bar instead of tapping a cell
 const DRAG_SLOP = 8;
@@ -41,8 +54,13 @@ export default class ToolBar extends Component<Signature> {
 			: htmlSafe('');
 	}
 
-	fit = () => viewport.fit();
-	actual = () => viewport.setZoom(1);
+	get axis(): 'row' | 'column' {
+		return this.vertical ? 'column' : 'row';
+	}
+
+	get placement() {
+		return PLACEMENT[this.edge];
+	}
 
 	#bar: HTMLElement | null = null;
 	#wasDrag = false;
@@ -50,6 +68,8 @@ export default class ToolBar extends Component<Signature> {
 	// window listeners: the pointer leaves the bar long before the drop
 	down = (e: PointerEvent) => {
 		if (this.args.phone || e.button !== 0) return;
+		// a press inside an open menu or panel is not a bar drag
+		if ((e.target as Element).closest('.canon-popover')) return;
 		this.#start = { x: e.clientX, y: e.clientY, id: e.pointerId };
 		this.#wasDrag = false;
 		window.addEventListener('pointermove', this.move);
@@ -123,25 +143,34 @@ export default class ToolBar extends Component<Signature> {
 			{{this.draggable}}
 		>
 			{{#if (eq @tool "move")}}
-				<Cells
-					@axis={{if
-						this.vertical
-						"column"
-						"row"
-					}}
-					@small={{true}}
-				>
-					<Cell
-						@label="Fit"
-						@text="Fit"
-						@onClick={{this.fit}}
-					/>
-					<Cell
-						@label="100 %"
-						@text="100 %"
-						@onClick={{this.actual}}
-					/>
-				</Cells>
+				<MoveCells
+					@axis={{this.axis}}
+					@placement={{this.placement}}
+					@compact={{@phone}}
+				/>
+			{{else if (eq @tool "crop")}}
+				<CropCells @axis={{this.axis}} />
+			{{else if (eq @tool "select")}}
+				<SelectCells
+					@axis={{this.axis}}
+					@placement={{this.placement}}
+					@compact={{@phone}}
+				/>
+			{{else if (eq @tool "text")}}
+				<TextCells
+					@axis={{this.axis}}
+					@placement={{this.placement}}
+				/>
+			{{else if (eq @tool "shape")}}
+				<ShapeCells
+					@axis={{this.axis}}
+					@placement={{this.placement}}
+				/>
+			{{else if (eq @tool "draw")}}
+				<DrawCells
+					@axis={{this.axis}}
+					@placement={{this.placement}}
+				/>
 			{{/if}}
 		</div>
 	</template>

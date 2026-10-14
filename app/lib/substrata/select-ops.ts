@@ -7,18 +7,52 @@ import { getActiveLayerId, setSelection } from './selection';
 import { getRaster } from './raster-cache';
 import { bakeCanvasToHash } from './blobs';
 import {
+	clearPixelSelection,
 	getPixelSelection,
 	getSelectionAlphaCanvas,
 	setPixelSelectionMask,
 } from './pixel-selection';
 import type { MaskBounds, PixelMask } from './select-mask';
-import { growMask, invertMask, maskBounds, shrinkMask } from './select-mask';
+import {
+	combineMask,
+	featherMask,
+	growMask,
+	invertMask,
+	maskBounds,
+	shrinkMask,
+} from './select-mask';
+import { getToolSettings } from './tool-settings';
 
+// iOS addToSelection: a new shape joins the selection, or in Remove mode
+// leaves it; removing from nothing selects nothing
+export function addToSelection(shape: PixelMask): void {
+	const removes = getToolSettings().select.removes;
+	const base = getPixelSelection()?.mask;
+	if (!base || base.data.length !== shape.data.length) {
+		if (removes) clearPixelSelection();
+		else setPixelSelectionMask(shape);
+		return;
+	}
+	setPixelSelectionMask(combineMask(base, shape, removes));
+}
+
+// iOS: inverting no selection selects the whole artboard
 export function invertSelection(): void {
 	// reconciler validates mask dimensions
 	const sel = getPixelSelection();
+	if (sel) return setPixelSelectionMask(invertMask(sel.mask));
+	const doc = getSnapshot();
+	if (!doc) return;
+	const width = Math.round(doc.artboard.width);
+	const height = Math.round(doc.artboard.height);
+	const data = new Uint8Array(width * height).fill(255);
+	setPixelSelectionMask({ data, width, height });
+}
+
+export function featherSelection(radius: number): void {
+	const sel = getPixelSelection();
 	if (!sel) return;
-	setPixelSelectionMask(invertMask(sel.mask));
+	setPixelSelectionMask(featherMask(sel.mask, radius));
 }
 
 export function growSelection(step = 2): void {
@@ -232,4 +266,69 @@ async function cutSelectionInner(): Promise<string | null> {
 		return { ...doc, layers, updatedAt: Date.now() };
 	});
 	return newLayer.id;
+}
+
+// the active raster redrawn through the selection, one undo step
+function repaintActive(
+	paint: (
+		ctx: CanvasRenderingContext2D,
+		layerMask: HTMLCanvasElement,
+	) => void,
+): Promise<string | null> {
+	return withBakeGuard(async () => {
+		if (!canOperateOnActive()) return null;
+		const alpha = getSelectionAlphaCanvas();
+		const doc = getSnapshot();
+		const id = getActiveLayerId();
+		const source = doc && id ? findLayer(doc.layers, id) : null;
+		if (!alpha || !source || source.kind !== 'raster') return null;
+		const sourceCanvas = getRaster(source.blobHash);
+		const layerMask = sceneMaskToLayerSpace(alpha, source);
+		if (!sourceCanvas || !layerMask) return null;
+		const out = document.createElement('canvas');
+		out.width = source.naturalWidth;
+		out.height = source.naturalHeight;
+		const ctx = out.getContext('2d');
+		if (!ctx) return null;
+		ctx.drawImage(sourceCanvas, 0, 0);
+		paint(ctx, layerMask);
+		const hash = await bakeCanvasToHash(out);
+		if (!sourceStillMatches(source)) return null;
+		update((d) => ({
+			...d,
+			layers: mapLayerInTree(d.layers, source.id, (l) =>
+				l.kind === 'raster'
+					? { ...l, blobHash: hash }
+					: l,
+			),
+			updatedAt: Date.now(),
+		}));
+		// the new pixels replace the canvas object, which drops it
+		setSelection([source.id]);
+		return source.id;
+	});
+}
+
+// iOS Clear: a hole where the selection is, no new layer
+export function clearSelectionPixels(): Promise<string | null> {
+	return repaintActive((ctx, layerMask) => {
+		ctx.globalCompositeOperation = 'destination-out';
+		ctx.drawImage(layerMask, 0, 0);
+	});
+}
+
+// iOS Fill: the selection painted with `colour` on the active layer
+export function fillSelection(colour: string): Promise<string | null> {
+	return repaintActive((ctx, layerMask) => {
+		const tint = document.createElement('canvas');
+		tint.width = layerMask.width;
+		tint.height = layerMask.height;
+		const tctx = tint.getContext('2d');
+		if (!tctx) return;
+		tctx.drawImage(layerMask, 0, 0);
+		tctx.globalCompositeOperation = 'source-in';
+		tctx.fillStyle = colour;
+		tctx.fillRect(0, 0, tint.width, tint.height);
+		ctx.drawImage(tint, 0, 0);
+	});
 }

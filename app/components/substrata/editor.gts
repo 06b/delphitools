@@ -9,7 +9,6 @@ import CanonFigure from 'delphicanon/components/canon-figure';
 import FabricCanvas from 'delphitools-v2/components/substrata/fabric-canvas';
 import Sheets from 'delphitools-v2/components/substrata/pages/sheets';
 import { pageState } from 'delphitools-v2/components/substrata/pages/page-state';
-import SelectionPopup from 'delphitools-v2/components/substrata/selection-popup';
 import SecureContextNotice from 'delphitools-v2/components/substrata/secure-context-notice';
 import EmptyHint from 'delphitools-v2/components/substrata/empty-hint';
 import { Cell, Cells } from 'delphitools-v2/components/substrata/editor/cells';
@@ -361,7 +360,6 @@ export default class SubstrataEditor extends Component {
 		>
 			<div class="sub-shell-canvas-area">
 				<FabricCanvas />
-				<SelectionPopup />
 				<EmptyHint />
 			</div>
 			<StatusNote />
