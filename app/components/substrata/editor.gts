@@ -20,6 +20,7 @@ import Overlays from 'delphitools-v2/components/substrata/editor/overlays';
 import LayersPanel from 'delphitools-v2/components/substrata/panels/layers';
 import InspectorPanel from 'delphitools-v2/components/substrata/panels/inspector';
 import FxPanel from 'delphitools-v2/components/substrata/panels/fx';
+import ColourTray from 'delphitools-v2/components/substrata/colour/tray';
 import {
 	EDITOR_TOOLS,
 	PANEL_DEFS,
@@ -147,7 +148,8 @@ export default class SubstrataEditor extends Component {
 
 	get layoutClass() {
 		if (this.phone) return 'is-phone';
-		return this.compact ? 'is-compact' : 'is-full';
+		const ring = editorUi.ringOpen ? ' is-ringing' : '';
+		return (this.compact ? 'is-compact' : 'is-full') + ring;
 	}
 
 	isToolOn = (id: EditorTool) => this.activeTool === id;
@@ -459,7 +461,7 @@ export default class SubstrataEditor extends Component {
 						{{/each}}
 					</Cells>
 					<span class="sub-ed-row-fill"></span>
-					<ColourKey />
+					<ColourKey @phone={{true}} />
 				</div>
 				{{#if editorUi.bloomOpen}}
 					<button
@@ -649,6 +651,8 @@ export default class SubstrataEditor extends Component {
 						<LayersPanel />
 					{{else if (eq p "inspector")}}
 						<InspectorPanel />
+					{{else if (eq p "colour")}}
+						<ColourTray />
 					{{else}}
 						<FxPanel />
 					{{/if}}

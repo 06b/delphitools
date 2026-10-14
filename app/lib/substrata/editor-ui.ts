@@ -1,7 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 import { loadLayout, saveLayout } from './layout-storage';
 
-export type EditorPanel = 'layers' | 'inspector' | 'fx';
+// colour: the phone's colour tray, never in the rail
+export type EditorPanel = 'layers' | 'inspector' | 'fx' | 'colour';
 export type EditorEdge = 'top' | 'bottom' | 'leading' | 'trailing';
 export type TrayStop = 'short' | 'tall' | 'full';
 

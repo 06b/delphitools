@@ -465,16 +465,36 @@
 	inline-size: 180px;
 }
 
-/* interim colour panel beside the colour key */
-.sub-ed-ring-interim {
-	position: absolute;
-	inset-block-end: var(--sub-pad);
-	inset-inline-end: calc(
-		var(--sub-pad) + var(--sub-box) + var(--sub-gap)
-	);
-	z-index: 30;
-	inline-size: 320px;
-	max-block-size: 80%;
+/* the colour ring fades the column, title, rail and bar; the help cell and
+   the colour key stay (iOS setRingOpen) */
+.sub-ed
+	:is(
+		.sub-ed-title,
+		.sub-ed-stack,
+		.sub-ed-omni,
+		.sub-ed-tab,
+		.sub-ed-rail,
+		.sub-ed-bar
+	) {
+	transition:
+		opacity 0.3s ease-in-out 0.08s,
+		visibility 0s;
+}
+
+.sub-ed.is-ringing
+	:is(
+		.sub-ed-title,
+		.sub-ed-stack,
+		.sub-ed-omni,
+		.sub-ed-tab,
+		.sub-ed-rail,
+		.sub-ed-bar
+	) {
+	visibility: hidden;
+	opacity: 0;
+	transition:
+		opacity 0.3s ease-out,
+		visibility 0s 0.3s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -482,6 +502,18 @@
 	.sub-ed-rail.is-tray .sub-rail-panel,
 	.sub-ed-phone-tools .sub-cells {
 		animation: none;
+	}
+
+	.sub-ed
+		:is(
+			.sub-ed-title,
+			.sub-ed-stack,
+			.sub-ed-omni,
+			.sub-ed-tab,
+			.sub-ed-rail,
+			.sub-ed-bar
+		) {
+		transition: none;
 	}
 }
 

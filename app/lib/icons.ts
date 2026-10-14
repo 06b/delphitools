@@ -83,6 +83,7 @@ import iCopyPlus from 'lucide-static/icons/copy-plus.svg?raw';
 import iCornerLeftUp from 'lucide-static/icons/corner-left-up.svg?raw';
 import iCrop from 'lucide-static/icons/crop.svg?raw';
 import iCrosshair from 'lucide-static/icons/crosshair.svg?raw';
+import iDelete from 'lucide-static/icons/delete.svg?raw';
 import iDices from 'lucide-static/icons/dices.svg?raw';
 import iDock from 'lucide-static/icons/dock.svg?raw';
 import iDot from 'lucide-static/icons/dot.svg?raw';
@@ -349,6 +350,7 @@ export const icons: Record<string, string> = {
 	'corner-left-up': iCornerLeftUp,
 	crop: iCrop,
 	crosshair: iCrosshair,
+	delete: iDelete,
 	dices: iDices,
 	dock: iDock,
 	dot: iDot,

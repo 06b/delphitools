@@ -8,8 +8,11 @@ import {
 import { editorUi } from 'delphitools-v2/lib/substrata/editor-ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 
-// iOS colour key: the working colour as a dot; opens the ring
-export default class ColourKey extends Component {
+// iOS colour key: the working colour as a dot; opens and closes the ring,
+// or on the phone the colour tray
+export default class ColourKey extends Component<{
+	Args: { phone?: boolean };
+}> {
 	colour = new TrackedExternal(subscribeColour, getColour);
 
 	willDestroy() {
@@ -24,8 +27,16 @@ export default class ColourKey extends Component {
 		);
 	}
 
+	get open() {
+		return this.args.phone
+			? editorUi.isOpen('colour')
+			: editorUi.ringOpen;
+	}
+
 	toggle = () => {
-		editorUi.ringOpen = !editorUi.ringOpen;
+		if (this.args.phone) editorUi.toggle('colour', true);
+		else if (editorUi.ringOpen) editorUi.closeRing();
+		else editorUi.ringOpen = true;
 	};
 
 	<template>
@@ -33,13 +44,9 @@ export default class ColourKey extends Component {
 			<button
 				type="button"
 				class="canon-button canon-button--segment sub-cell
-					{{if editorUi.ringOpen 'is-open'}}"
+					{{if this.open 'is-open'}}"
 				aria-label="Colour"
-				aria-expanded={{if
-					editorUi.ringOpen
-					"true"
-					"false"
-				}}
+				aria-expanded={{if this.open "true" "false"}}
 				title="Colour"
 				{{on "click" this.toggle}}
 			><span
