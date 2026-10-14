@@ -34,3 +34,6 @@ ember-cli-update.json
 # root and keep their own formatting.
 /scripts/verify/
 /scripts/build-shavian-dict.ts
+
+# colour data copied verbatim from dt-substrata-ios Substrata/Colour/
+/app/lib/substrata/colour-data/
