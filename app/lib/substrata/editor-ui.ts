@@ -25,7 +25,7 @@ class EditorUi {
 	@tracked panels: EditorPanel[] = [];
 	@tracked settingsEdge: EditorEdge = 'bottom';
 	@tracked toolsHidden = false;
-	@tracked layersPinned = false;
+	@tracked layersPinned = true;
 	@tracked ringOpen = false;
 	@tracked bloomOpen = false;
 	@tracked pageOpen = false;
@@ -52,8 +52,9 @@ class EditorUi {
 			this.settingsEdge = edge as EditorEdge;
 		this.toolsHidden =
 			loadLayout<unknown>(TOOLS_HIDDEN_KEY, false) === true;
+		// iOS LayersPanel.isPinned defaults to pinned
 		this.layersPinned =
-			loadLayout<unknown>(LAYERS_PINNED_KEY, false) === true;
+			loadLayout<unknown>(LAYERS_PINNED_KEY, true) !== false;
 	}
 
 	isOpen = (panel: EditorPanel): boolean => this.panels.includes(panel);

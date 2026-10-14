@@ -1,0 +1,325 @@
+/* iOS LayersPanel: rows under hairlines */
+.sub-layers {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.sub-layers-empty {
+	min-block-size: 96px;
+}
+
+.sub-layer-row {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	min-block-size: var(--canon-row-height);
+	background: var(--canon-card);
+	touch-action: pan-y;
+}
+
+.sub-layer-row.is-selected {
+	background: var(--canon-accent-bg);
+}
+
+.sub-layer-row.is-dragging {
+	opacity: 0.6;
+}
+
+.sub-layer-bar {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	display: none;
+	inline-size: 3px;
+	background: var(--canon-primary);
+}
+
+.sub-layer-row.is-active > .sub-layer-bar {
+	display: block;
+}
+
+.sub-layer-main {
+	display: flex;
+	flex: 1;
+	gap: 12px;
+	align-items: center;
+	min-inline-size: 0;
+	padding-block: 0;
+	padding-inline: calc(
+			var(--canon-panel-padding) + var(--sub-layer-depth, 0) *
+				16px
+		)
+		4px;
+	border: 0;
+	background: transparent;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: default;
+}
+
+.sub-layer-main:focus-visible,
+.sub-layer-toggle:focus-visible,
+.sub-layer-lamp:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.sub-layer-thumb {
+	flex: none;
+	box-sizing: border-box;
+	inline-size: 32px;
+	block-size: 32px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0 25%,
+			var(--canon-card) 0 50%
+		)
+		0 0 / 8px 8px;
+}
+
+.sub-layer-thumb.is-group {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--canon-muted);
+	color: var(--canon-muted-foreground);
+}
+
+.sub-layer-thumb.is-group svg {
+	inline-size: var(--canon-icon-inline);
+	block-size: var(--canon-icon-inline);
+}
+
+.sub-layer-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+}
+
+.sub-layer-name,
+.sub-layer-kind {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sub-layer-name {
+	font-size: var(--canon-text-body);
+}
+
+.sub-layer-row.is-hidden .sub-layer-name {
+	color: var(--canon-muted-foreground);
+}
+
+.sub-layer-kind {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.sub-layer-rename {
+	flex: 1;
+	min-inline-size: 0;
+	block-size: 36px;
+	box-sizing: border-box;
+	padding-inline: 8px;
+	border: 0;
+	outline: none;
+	background: var(--canon-muted);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	caret-color: var(--canon-primary);
+}
+
+.sub-layer-toggle,
+.sub-layer-lamp {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 40px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--canon-muted-foreground);
+	cursor: pointer;
+}
+
+.sub-layer-lamp {
+	margin-inline-end: 4px;
+}
+
+.sub-layer-toggle.is-on {
+	color: var(--canon-foreground);
+}
+
+.sub-layer-toggle svg {
+	inline-size: 18px;
+	block-size: 18px;
+}
+
+.sub-layer-lamp-dot {
+	box-sizing: border-box;
+	inline-size: 10px;
+	block-size: 10px;
+	border: var(--canon-hairline) solid var(--canon-muted-foreground);
+	border-radius: 50%;
+	background: var(--canon-muted);
+}
+
+.sub-layer-lamp.is-lit > .sub-layer-lamp-dot {
+	border-color: var(--canon-primary);
+	background: var(--canon-primary);
+}
+
+/* iOS LayerFold: opacity and blend under the tapped row */
+.sub-layer-controls {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.sub-layer-fold {
+	animation: sub-layer-fold 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.05) both;
+}
+
+@keyframes sub-layer-fold {
+	from {
+		opacity: 0;
+		translate: 0 -8px;
+	}
+}
+
+/* iOS FloatingCard.setGroups: framed boxes, the canvas between them */
+.sub-card:has(> .sub-lm) {
+	padding: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+.sub-lm {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sub-gap);
+	padding-block-end: var(--sub-gap);
+}
+
+.sub-lm-box {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+}
+
+/* the lamp keys sit in a bed, apart from the boxes below */
+.sub-lm-lamps {
+	flex-direction: row;
+	gap: 6px;
+	margin-block-end: var(--sub-gap);
+	padding: 6px;
+	background: var(--canon-muted);
+}
+
+.sub-lm-lamps > .sub-menu-card,
+.sub-lm-add > .sub-menu-card {
+	position: relative;
+	flex: 1;
+}
+
+.sub-lm-add {
+	flex-direction: row;
+}
+
+.sub-lm-lamp::after {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-end: 8px;
+	box-sizing: border-box;
+	inline-size: 6px;
+	block-size: 6px;
+	border-radius: 50%;
+	background: var(--canon-border);
+	content: "";
+}
+
+.sub-lm-lamp.is-lit {
+	background: var(--canon-accent-bg);
+}
+
+.sub-lm-lamp.is-lit::after {
+	background: var(--canon-primary);
+}
+
+/* iOS MenuRow */
+.sub-menu-row {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	min-block-size: var(--canon-control-height);
+	padding-inline: var(--canon-panel-padding);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	text-align: start;
+	cursor: pointer;
+}
+
+.sub-menu-row:hover:enabled {
+	background: var(--canon-accent-bg);
+}
+
+.sub-menu-row:focus-visible,
+.sub-lm .sub-menu-card:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.sub-menu-row:disabled {
+	cursor: default;
+}
+
+.sub-menu-row:disabled > * {
+	opacity: 0.35;
+}
+
+.sub-menu-row-icon {
+	display: flex;
+	flex: none;
+	justify-content: center;
+	inline-size: 24px;
+	color: var(--canon-muted-foreground);
+}
+
+.sub-menu-row-icon svg {
+	inline-size: var(--canon-icon-alone);
+	block-size: var(--canon-icon-alone);
+}
+
+.sub-menu-row-title {
+	flex: 1;
+}
+
+.sub-menu-row-hint {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.sub-menu-row.is-destructive,
+.sub-menu-row.is-destructive .sub-menu-row-icon {
+	color: var(--canon-destructive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-layer-fold {
+		animation: none;
+	}
+}

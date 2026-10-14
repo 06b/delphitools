@@ -102,13 +102,16 @@ await sleep(150);
 const p3 = toPage(650, 1000);
 await page.mouse.click(p3.x, p3.y, { button: "right" });
 await sleep(300);
-const clicked = await page.evaluate(() => {
-  const items = Array.from(document.querySelectorAll("button, [role=menuitem]"));
-  const it = items.find((el) => el.textContent?.trim() === "Rasterize");
-  if (!it) return false;
-  it.click();
-  return true;
-});
+// the layer menu card keeps Rasterize behind More Options
+const clickRow = (title) =>
+  page.evaluate((t) => {
+    const it = [...document.querySelectorAll(".sub-menu-row-title")].find((el) => el.textContent?.trim() === t);
+    it?.click();
+    return !!it;
+  }, title);
+await clickRow("More Options");
+await sleep(200);
+const clicked = await clickRow("Rasterize");
 await sleep(400);
 ls = await layers();
 check("menu: Rasterize item works", `${clicked} ${ls[ls.length - 1]?.kind}`, clicked && ls[ls.length - 1]?.kind === "raster");

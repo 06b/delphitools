@@ -12,6 +12,8 @@ interface Signature {
 	Args: {
 		// the control that opened the card; the card sits level with it
 		anchor: HTMLElement;
+		// a pointer's place, for a card opened from the canvas
+		at?: { x: number; y: number };
 		width?: number;
 		label: string;
 		onClose: () => void;
@@ -55,18 +57,21 @@ export default class FloatingCard extends Component<Signature> {
 			card.offsetHeight,
 			room.height - 2 * GAP,
 		);
-		const onRight =
-			panel.left + panel.width / 2 >
-			room.left + room.width / 2;
+		const at = this.args.at;
+		const onRight = at
+			? at.x + width > room.right - GAP
+			: panel.left + panel.width / 2 >
+				room.left + room.width / 2;
+		const from = at ? { left: at.x, right: at.x } : panel;
 		const beside = onRight
-			? panel.left - GAP - width
-			: panel.right + GAP;
+			? from.left - GAP - width
+			: from.right + GAP;
 		const x = Math.min(
 			Math.max(beside, room.left + GAP),
 			room.right - GAP - width,
 		);
 		const y = Math.min(
-			Math.max(anchor.top, room.top + GAP),
+			Math.max(at?.y ?? anchor.top, room.top + GAP),
 			room.bottom - GAP - height,
 		);
 		this.place = { x: x - room.left, y: y - room.top, onRight };
@@ -77,7 +82,21 @@ export default class FloatingCard extends Component<Signature> {
 			this.args.onClose();
 		};
 		window.addEventListener('keydown', onKey, true);
-		return () => window.removeEventListener('keydown', onKey, true);
+		// iOS refit: a card that grows keeps its top while it still fits
+		const refit = new ResizeObserver(() => {
+			const limit =
+				root.clientHeight - GAP - card.offsetHeight;
+			if (this.place.y > limit)
+				this.place = {
+					...this.place,
+					y: Math.max(GAP, limit),
+				};
+		});
+		refit.observe(card);
+		return () => {
+			window.removeEventListener('keydown', onKey, true);
+			refit.disconnect();
+		};
 	});
 
 	<template>
