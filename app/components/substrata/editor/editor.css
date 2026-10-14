@@ -567,3 +567,49 @@
 		animation: none;
 	}
 }
+
+/* the web's toasts, as the iOS caption chip under the title */
+.sub-ed-note-slot {
+	position: absolute;
+	inset-block-start: calc(
+		var(--sub-gap) + var(--sub-small-box) + var(--sub-gap)
+	);
+	inset-inline: 0;
+	z-index: 21;
+	display: flex;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.sub-ed-note {
+	padding: 8px 12px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	box-shadow: var(--sub-shadow);
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	animation: sub-ed-note 1.8s both;
+}
+
+@keyframes sub-ed-note {
+	0% {
+		opacity: 0;
+		translate: 0 -6px;
+	}
+
+	10%,
+	80% {
+		opacity: 1;
+		translate: 0 0;
+	}
+
+	100% {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-ed-note {
+		animation: none;
+	}
+}

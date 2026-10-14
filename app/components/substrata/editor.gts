@@ -13,6 +13,7 @@ import SecureContextNotice from 'delphitools-v2/components/substrata/secure-cont
 import EmptyHint from 'delphitools-v2/components/substrata/empty-hint';
 import { Cell, Cells } from 'delphitools-v2/components/substrata/editor/cells';
 import ToolBar from 'delphitools-v2/components/substrata/editor/tool-bar';
+import StatusNote from 'delphitools-v2/components/substrata/editor/status-note';
 import ColourKey from 'delphitools-v2/components/substrata/editor/colour-key';
 import Overlays from 'delphitools-v2/components/substrata/editor/overlays';
 import LayersPanel from 'delphitools-v2/components/substrata/panels/layers';
@@ -332,6 +333,7 @@ export default class SubstrataEditor extends Component {
 				<SelectionPopup />
 				<EmptyHint />
 			</div>
+			<StatusNote />
 			<SecureContextNotice />
 
 			<Cells class="sub-ed-help" @small={{true}}>
