@@ -1,5 +1,5 @@
 // needs `npm start` on :3000
-import { BASE, check, finish, launch, openModule, sleep } from './harness.mjs';
+import { BASE, check, finish, launch, sleep } from './harness.mjs';
 
 const { browser, page } = await launch({ viewport: { width: 1460, height: 900 } });
 await page.goto(`${BASE}/editor`, { waitUntil: 'networkidle2' });
@@ -90,22 +90,26 @@ check(
 	`mask=${ls[0]?.mask?.label} scene=${JSON.stringify(ls[0]?.scene)} corner=${px?.join(',')} kept=${kept?.join(',')}`,
 );
 
-check('omnibar Inspector trigger found', await openModule(page, 'Inspector'));
-const section = await page.evaluate(() => ({
-	label: document.querySelector('.sub-insp-mask-current')?.textContent?.trim(),
-	grid: !!document.querySelector('.sub-insp-mask-grid'),
-}));
-check('inspector shows the current mask', section.label === 'Tri' && !section.grid, JSON.stringify(section));
-await page.evaluate(() => [...document.querySelectorAll('.sub-insp-mask-btn')].find((b) => /shapes/i.test(b.textContent)).click());
+const P = '[data-panel=inspector]';
+await page.evaluate(() => window.__substrataUi.toggle('inspector'));
 await sleep(400);
-const cells = await page.evaluate(() => document.querySelectorAll('.sub-insp-mask-grid .dt-masker-cell').length);
+const maskRow = () =>
+	page.evaluate((p) => {
+		const head = [...document.querySelectorAll(`${p} .canon-heading`)].find((h) => h.textContent.trim() === 'Mask');
+		return head?.nextElementSibling?.querySelector('.canon-row-title')?.textContent.trim() ?? null;
+	}, P);
+const section = { label: await maskRow(), grid: await page.evaluate((p) => !!document.querySelector(`${p} .sub-ip-mask-grid`), P) };
+check('inspector shows the current mask', section.label === 'Tri' && !section.grid, JSON.stringify(section));
+await page.evaluate((p) => [...document.querySelectorAll(`${p} .sub-ip-mask button`)].find((b) => /shapes/i.test(b.textContent)).click(), P);
+await sleep(400);
+const cells = await page.evaluate(() => document.querySelectorAll('.sub-ip-mask-grid .dt-masker-cell').length);
 check('shapes button unfolds the grid', cells === 336, `${cells}`);
 await page.evaluate(() => document.querySelector('.dt-masker-cell[title="Heart 1"]').click());
 await sleep(400);
 ls = await layers();
-const shown = await page.evaluate(() => document.querySelector('.sub-insp-mask-current')?.textContent?.trim());
+const shown = await maskRow();
 check('picking a cell writes the layer mask', ls[0]?.mask?.label === 'Heart 1' && shown === 'Heart 1', `${ls[0]?.mask?.label} / ${shown}`);
-await page.evaluate(() => document.querySelector('.sub-insp-mask-btn[aria-label="Clear mask"]').click());
+await page.evaluate((p) => document.querySelector(`${p} button[aria-label="Clear mask"]`).click(), P);
 await sleep(300);
 ls = await layers();
 check('clear button removes the mask', ls[0]?.mask === null, JSON.stringify(ls[0]?.mask));

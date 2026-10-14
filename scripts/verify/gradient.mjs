@@ -3,7 +3,6 @@ import {
   check,
   finish,
   launch,
-  openModule,
   sleep,
 } from "./harness.mjs";
 
@@ -43,42 +42,61 @@ const undo = async () => {
   await sleep(350);
 };
 
-// module remounts; always re-query
+// panel rows re-render; always re-query
+const P = "[data-panel=inspector]";
 const clickMode = (text) =>
   page
-    .evaluate((t) => {
-      const b = [...document.querySelectorAll(".sub-grad-mode-cell")].find(
-        (x) => x.textContent.trim() === t,
-      );
-      b?.click();
-      return !!b;
-    }, text)
+    .evaluate(
+      (p, t) => {
+        const b = [...document.querySelectorAll(`${p} [role=radio]`)].find(
+          (x) => x.textContent.trim().toLowerCase() === t,
+        );
+        b?.click();
+        return !!b;
+      },
+      P,
+      text,
+    )
     .then(async (ok) => {
       await sleep(300);
       return ok;
     });
 
+// the last row so titled: the gradient's Angle follows the Transform one
+const lastRow = (p, l) =>
+  [...document.querySelectorAll(`${p} .canon-row`)]
+    .filter((r) => r.querySelector(".canon-row-title")?.textContent.trim() === l)
+    .at(-1) ?? null;
+
+const rowCount = (label) =>
+  page.evaluate(
+    (p, l) =>
+      [...document.querySelectorAll(`${p} .canon-row-title`)].filter((t) => t.textContent.trim() === l).length,
+    P,
+    label,
+  );
+
 const rowValue = (label) =>
-  page.evaluate((l) => {
-    const row = [...document.querySelectorAll(".sub-grad-row")].find(
-      (r) => r.querySelector(".sub-grad-row-label")?.textContent.trim() === l,
-    );
-    if (!row) return null;
-    const stepper = row.querySelector(".sub-stepper-value");
-    const stops = row.querySelector(".sub-grad-stopcount-value");
-    return (stepper ?? stops)?.textContent.replace(/\s+/g, " ").trim() ?? null;
-  }, label);
+  page.evaluate(
+    (p, l, find) => {
+      const row = new Function(`return ${find}`)()(p, l);
+      if (!row) return null;
+      const field = row.querySelector("input.canon-stepper-field");
+      return field ? field.value : (row.querySelector(".sub-ip-fact")?.textContent.trim() ?? null);
+    },
+    P,
+    label,
+    lastRow.toString(),
+  );
 
 const rowPress = async (label, aria, times = 1) => {
   for (let i = 0; i < times; i++) {
     await page.evaluate(
-      ([l, a]) => {
-        const row = [...document.querySelectorAll(".sub-grad-row")].find(
-          (r) => r.querySelector(".sub-grad-row-label")?.textContent.trim() === l,
-        );
-        row?.querySelector(`button[aria-label="${a}"]`)?.click();
-      },
-      [label, aria],
+      (p, l, a, find) => new Function(`return ${find}`)()(p, l)?.querySelector(`button[aria-label="${a}"]`)?.click(),
+      P,
+      label,
+      aria,
+      lastRow.toString(),
     );
     await sleep(120);
   }
@@ -87,17 +105,17 @@ const rowPress = async (label, aria, times = 1) => {
 
 const rowDisabled = (label, aria) =>
   page.evaluate(
-    ([l, a]) => {
-      const row = [...document.querySelectorAll(".sub-grad-row")].find(
-        (r) => r.querySelector(".sub-grad-row-label")?.textContent.trim() === l,
-      );
-      return row?.querySelector(`button[aria-label="${a}"]`)?.disabled ?? null;
-    },
-    [label, aria],
+    (p, l, a, find) => new Function(`return ${find}`)()(p, l)?.querySelector(`button[aria-label="${a}"]`)?.disabled ?? null,
+    P,
+    label,
+    aria,
+    lastRow.toString(),
   );
 
 const BASE_RGB = [204, 34, 0];
-check("omnibar Inspector trigger found", await openModule(page, "Inspector"));
+await page.evaluate(() => window.__substrataUi.toggle("inspector"));
+await sleep(300);
+check("inspector opens", await page.evaluate((p) => !!document.querySelector(p), P));
 
 await page.evaluate(() => {
   window.__substrata.setTool("pieces", "primitives");
@@ -112,8 +130,9 @@ await drag({ x: 600, y: 500 }, { x: 1000, y: 700 });
 let px = await sample(800, 600);
 check("baseline: solid rect drawn", near(px, BASE_RGB), `${px}`);
 
-const fillModes = await page.evaluate(() =>
-  [...document.querySelectorAll(".sub-grad-mode-cell")].map((b) => b.textContent.trim()),
+const fillModes = await page.evaluate((p) =>
+  [...document.querySelectorAll(`${p} [role=radio]`)].map((b) => b.textContent.trim().toLowerCase()),
+  P,
 );
 check(
   "Fill row shows the solid/gradient pair",
@@ -138,7 +157,7 @@ check("solid→gradient is one undo step", near(px, BASE_RGB), `${px}`);
 await clickMode("gradient");
 await rowPress("Angle", "Increase", 6);
 const angle90 = await rowValue("Angle");
-check("Angle stepper reads 90 °", angle90 === "90 °", angle90 ?? "(no row)");
+check("Angle stepper reads 90", angle90 === "90", angle90 ?? "(no row)");
 const top = await sample(800, 515);
 const bottom = await sample(800, 685);
 check("angle 90°: top is stop[0]", near(top, BASE_RGB, 30), `${top}`);
@@ -146,7 +165,7 @@ check("angle 90°: bottom darker than top", bottom[0] < top[0] - 40, `${top} →
 
 await undo();
 const angle75 = await rowValue("Angle");
-check("one stepper click = one undo step (75 °)", angle75 === "75 °", angle75 ?? "(no row)");
+check("one stepper click = one undo step (75)", angle75 === "75", angle75 ?? "(no row)");
 await rowPress("Angle", "Increase", 1);
 
 check("radial type cell clicks", await clickMode("radial"));
@@ -155,8 +174,8 @@ check("radial: centre is stop[0]", near(px, BASE_RGB, 26), `${px}`);
 px = await sample(970, 665); // past r2, clear of handle
 check("radial: corner reaches the far stop", px[0] < BASE_RGB[0] - 40, `${px}`);
 
-check("radial hides the Angle row", (await rowValue("Angle")) === null);
-check("linear restores it", (await clickMode("linear")) && (await rowValue("Angle")) !== null);
+check("radial hides the gradient Angle row", (await rowCount("Angle")) === 1);
+check("linear restores it", (await clickMode("linear")) && (await rowCount("Angle")) === 2);
 await clickMode("radial");
 
 check("stops start at 1/2", (await rowValue("Stop")) === "1/2", (await rowValue("Stop")) ?? "");
@@ -164,31 +183,30 @@ await rowPress("Stop", "Add stop", 1);
 check("add selects the new stop, 2/3", (await rowValue("Stop")) === "2/3", (await rowValue("Stop")) ?? "");
 
 await page.evaluate(() => {
-  const markers = [...document.querySelectorAll(".sub-grad-stop")];
+  const markers = [...document.querySelectorAll(".sub-ip-grad-stop")];
   markers.sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
   markers[markers.length - 1].click();
 });
 await sleep(250);
 check("last marker selects 3/3", (await rowValue("Stop")) === "3/3", (await rowValue("Stop")) ?? "");
 const markerSelected = await page.evaluate(() => {
-  const markers = [...document.querySelectorAll(".sub-grad-stop")];
+  const markers = [...document.querySelectorAll(".sub-ip-grad-stop")];
   markers.sort((a, b) => parseFloat(a.style.left) - parseFloat(b.style.left));
   return markers[markers.length - 1].classList.contains("is-selected");
 });
 check("the selected marker carries is-selected", markerSelected);
 
-// picks coalesce within 600ms
-const streamStop = (hex) =>
-  page.evaluate((h) => {
-    const input = document.querySelector('input[type="color"][aria-label="Stop colour"]');
-    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-    set.call(input, h);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, hex);
-await streamStop("#8800ff");
-await sleep(120);
-await streamStop("#0000ff");
-await sleep(950); // > 600ms settle window
+// the ring's stream is one undo step, ended by its final send
+await page.evaluate((p) => document.querySelector(`${p} button[aria-label="Stop colour"]`).click(), P);
+await sleep(200);
+await page.evaluate(() => {
+  const t = window.__substrataUi.ringTarget;
+  t.send("#8800ff", 1, false);
+  t.send("#0000ff", 1, false);
+  t.send("#0000ff", 1, true);
+  window.__substrataUi.closeRing();
+});
+await sleep(400);
 px = await sample(970, 665);
 check("streamed picks recolour the outer stop blue", px[2] > 150 && px[0] < 90, `${px}`);
 await undo();

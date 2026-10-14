@@ -1,0 +1,154 @@
+/* a field cell fills what the 300 px rail leaves beside its title */
+.sub-ip .canon-row--flush > .canon-row-label {
+	flex: 0 0 auto;
+	min-inline-size: 72px;
+}
+
+.sub-ip .canon-row--flush > .canon-row-control {
+	flex: 1 1 0;
+	justify-content: flex-end;
+	min-inline-size: 168px;
+}
+
+.sub-ip .canon-row--flush > .canon-row-control > .canon-text-cell {
+	inline-size: 100%;
+}
+
+.sub-ip-num .canon-stepper-field {
+	min-inline-size: 40px;
+}
+
+.sub-ip-fact {
+	font-family: var(--canon-mono-font, var(--canon-font));
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.sub-ip-presets {
+	--canon-grid-columns: 4;
+
+	background: var(--canon-border);
+}
+
+.sub-ip-presets > .canon-button {
+	min-block-size: var(--sub-small);
+	font-size: var(--canon-text-subheadline);
+}
+
+.sub-ip-wide {
+	min-block-size: var(--canon-control-height);
+}
+
+.sub-ip-well-swatch {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.sub-ip-well-swatch:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-ip-content {
+	inline-size: 100%;
+}
+
+/* gradient preview: the strip with its stop markers along it */
+.sub-ip-grad {
+	position: relative;
+	block-size: var(--sub-small);
+	margin: 0;
+	padding: 6px var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.sub-ip-grad-track {
+	position: relative;
+	block-size: 100%;
+}
+
+.sub-ip-grad-fill {
+	block-size: 100%;
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.sub-ip-grad-stop {
+	position: absolute;
+	inset-block-start: 50%;
+	inline-size: 18px;
+	block-size: 18px;
+	margin-left: -9px;
+	padding: 0;
+	border: var(--canon-frame) solid var(--canon-card);
+	background: none;
+	box-shadow: 0 0 0 var(--canon-hairline) var(--canon-foreground);
+	translate: 0 -50%;
+	cursor: pointer;
+}
+
+.sub-ip-grad-stop.is-selected {
+	box-shadow: 0 0 0 var(--canon-frame) var(--canon-primary);
+}
+
+.sub-ip-grad-stop:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+.sub-ip-stops {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.sub-ip-stops > .sub-ip-fact {
+	display: flex;
+	flex: 1;
+	align-self: stretch;
+	align-items: center;
+	justify-content: flex-end;
+	padding-inline: 12px;
+	background: var(--canon-card);
+}
+
+.sub-ip-stops > .canon-button {
+	inline-size: var(--canon-control-height);
+}
+
+.sub-ip-mask .canon-row-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sub-ip-mask > .canon-row-control {
+	gap: var(--canon-hairline);
+}
+
+.sub-ip-mask > .canon-row-control > .canon-button {
+	flex: none;
+}
+
+.sub-ip-mask-grid {
+	--mask-cell: 3rem;
+
+	background: var(--canon-card);
+}
+
+.sub-ip-mask-grid .dt-masker-grid {
+	max-block-size: 10.5rem;
+	border-block-end: 0;
+}
+
+.sub-ip-arrange > .canon-button {
+	min-block-size: var(--canon-control-height);
+}
+
+.sub-ip .canon-row--flush .canon-menu-cell {
+	justify-content: flex-end;
+}
