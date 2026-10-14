@@ -101,7 +101,7 @@ const picker = await run(() => {
 	};
 });
 check('picker: Filters then Effects', JSON.stringify(picker.heads) === '["Filters","Effects"]', JSON.stringify(picker.heads));
-check('picker: every web type is a card', picker.cards === 30, `${picker.cards}`);
+check('picker: every web type is a card', picker.cards === 33, `${picker.cards}`);
 check('picker: every card has an icon and a name', picker.named === picker.cards);
 check('picker: 416 px card, no sideways scroll', picker.width === 416 && picker.scroll, `${picker.width}`);
 await page.keyboard.press('Escape');

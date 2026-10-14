@@ -24,7 +24,7 @@ interface Signature {
 // iOS FloatingCard: rows floating beside the panel that opened them, over a
 // scrim; a click outside or Esc closes it
 export default class FloatingCard extends Component<Signature> {
-	@tracked place = { x: 0, y: 0, onRight: false };
+	@tracked place = { x: 0, y: 0, width: 300, onRight: false };
 
 	// the card leaves the rail so its scrim covers the whole editor
 	get host(): HTMLElement {
@@ -35,9 +35,9 @@ export default class FloatingCard extends Component<Signature> {
 	}
 
 	get style() {
-		const { x, y, onRight } = this.place;
+		const { x, y, width, onRight } = this.place;
 		return htmlSafe(
-			`inset-inline-start: ${x}px; inset-block-start: ${y}px; inline-size: ${this.args.width ?? 300}px; --sub-card-from: ${onRight ? 12 : -12}px`,
+			`inset-inline-start: ${x}px; inset-block-start: ${y}px; inline-size: ${width}px; --sub-card-from: ${onRight ? 12 : -12}px`,
 		);
 	}
 
@@ -74,7 +74,12 @@ export default class FloatingCard extends Component<Signature> {
 			Math.max(at?.y ?? anchor.top, room.top + GAP),
 			room.bottom - GAP - height,
 		);
-		this.place = { x: x - room.left, y: y - room.top, onRight };
+		this.place = {
+			x: x - room.left,
+			y: y - room.top,
+			width,
+			onRight,
+		};
 		card.focus();
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key !== 'Escape') return;
