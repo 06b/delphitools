@@ -52,6 +52,7 @@ import {
 	subscribeViewport,
 	viewport,
 } from 'delphitools-v2/lib/substrata/viewport';
+import { sharePanels } from 'delphitools-v2/lib/substrata/rail-share';
 import { isTextEntry } from 'delphitools-v2/lib/text-entry';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 import './editor/editor.css';
@@ -240,8 +241,9 @@ export default class SubstrataEditor extends Component {
 				fitted = getZoom();
 			});
 		});
-		const rail = root.querySelector('.sub-ed-rail');
+		const rail = root.querySelector<HTMLElement>('.sub-ed-rail');
 		if (rail) tray.observe(rail);
+		const stop = rail ? this.shareRail(rail) : () => {};
 		// the settings page mirrors the frame (data-hand)
 		const hand = new MutationObserver(() => this.placeInset(root));
 		hand.observe(root, { attributeFilter: ['data-hand'] });
@@ -249,8 +251,76 @@ export default class SubstrataEditor extends Component {
 			ro.disconnect();
 			tray.disconnect();
 			hand.disconnect();
+			stop();
 		};
 	});
+
+	// iOS stackPanels: open panels as tall as their content; when they do
+	// not all fit, the tallest give up room first
+	shareRail = (rail: HTMLElement) => {
+		let frame = 0;
+		const content = new ResizeObserver(() => schedule());
+		const lay = () => {
+			frame = 0;
+			const panels = [
+				...rail.querySelectorAll<HTMLElement>(
+					':scope > .sub-rail-panel',
+				),
+			];
+			content.disconnect();
+			content.observe(rail);
+			for (const p of panels)
+				for (const c of p.querySelectorAll(
+					':scope > .sub-rail-body > *',
+				))
+					content.observe(c);
+			// panels may scroll inside their body; free height reads the
+			// whole content
+			for (const p of panels)
+				p.style.removeProperty('block-size');
+			if (this.phone) return;
+			const naturals = panels.map((p) => p.offsetHeight);
+			const room =
+				rail.clientHeight -
+				GAP * Math.max(0, panels.length - 1);
+			sharePanels(room, naturals).forEach((h, i) =>
+				panels[i]!.style.setProperty(
+					'block-size',
+					`${h}px`,
+				),
+			);
+		};
+		// a row drag moves rows in and out of the list; heights hold until
+		// the pointer lets go
+		let held = false;
+		const schedule = () => {
+			if (!held) frame ||= requestAnimationFrame(lay);
+		};
+		const hold = () => (held = true);
+		const release = () => {
+			if (!held) return;
+			held = false;
+			schedule();
+		};
+		rail.addEventListener('pointerdown', hold, true);
+		window.addEventListener('pointerup', release, true);
+		window.addEventListener('pointercancel', release, true);
+		const children = new MutationObserver(schedule);
+		children.observe(rail, { childList: true, subtree: true });
+		schedule();
+		return () => {
+			cancelAnimationFrame(frame);
+			content.disconnect();
+			children.disconnect();
+			rail.removeEventListener('pointerdown', hold, true);
+			window.removeEventListener('pointerup', release, true);
+			window.removeEventListener(
+				'pointercancel',
+				release,
+				true,
+			);
+		};
+	};
 
 	// the fitted artboard keeps clear of the title, the column and the
 	// settings bar; open panels float over it (iOS artboardArea)

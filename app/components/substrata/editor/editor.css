@@ -265,7 +265,7 @@
 
 .sub-rail-panel {
 	display: flex;
-	flex: 0 1 auto;
+	flex: none;
 	flex-direction: column;
 	min-block-size: calc(var(--sub-cell) * 2);
 	box-sizing: border-box;
@@ -301,6 +301,7 @@
 }
 
 .sub-rail-body {
+	flex: 0 1 auto;
 	min-block-size: 0;
 	overflow: auto;
 	overscroll-behavior: contain;
