@@ -44,6 +44,11 @@ const dragMouse = async (x0, y0, x1, y1) => {
   await sleep(300);
 };
 
+// rulers default off (iOS)
+await page.evaluate(() => {
+  if (!JSON.parse(localStorage.getItem("substrata:guides") ?? "{}").rulers) window.__substrata.toggleGuidePref("rulers");
+});
+await sleep(300);
 let px = await sampleTop(400, 10); // top band, clear of labels
 check("rulers: top band paints opaque", px?.join(","), px?.[3] === 255);
 px = await sampleTop(10, 400);
@@ -66,7 +71,8 @@ await page.evaluate(() => {
   });
 
 const t2 = toPage(900, 500);
-await dragMouse(t2.x, rect.top + 10, t2.x, t2.y);
+// the title panel floats over the ruler's middle (as on iOS)
+await dragMouse(rect.left + 300, rect.top + 10, rect.left + 300, t2.y);
 gs = await guides();
 check("drag-out: horizontal guide at y≈500", JSON.stringify(gs), gs.length === 1 && gs[0].axis === "y" && Math.abs(gs[0].pos - 500) <= 1);
 
