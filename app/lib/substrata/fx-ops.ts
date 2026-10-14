@@ -159,8 +159,9 @@ export function setFxParams(
 	stack: FxStack,
 	fxId: string,
 	patch: Record<string, number | string>,
+	opts?: { transient?: boolean },
 ): void {
-	update((doc) => ({
+	const apply = (doc: SubstrataDoc): SubstrataDoc => ({
 		...doc,
 		layers: mapStack(doc.layers, layerId, stack, (list) =>
 			mapItem(list, fxId, (fx) => ({
@@ -169,7 +170,9 @@ export function setFxParams(
 			})),
 		),
 		updatedAt: Date.now(),
-	}));
+	});
+	if (opts?.transient) updateTransient(apply);
+	else update(apply);
 }
 
 export function setFxOrder(

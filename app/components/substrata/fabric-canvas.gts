@@ -2836,6 +2836,7 @@ export default class FabricCanvas extends Component {
 						'canvas.upper-canvas',
 					).length,
 				vt: () => canvas.viewportTransform,
+				doc: getSnapshot,
 				menuState: () => getLayerMenu(),
 				hitTest: (x: number, y: number) => {
 					const info = canvas.findTarget(

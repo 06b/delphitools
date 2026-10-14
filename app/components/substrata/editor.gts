@@ -654,7 +654,9 @@ export default class SubstrataEditor extends Component {
 					{{else if (eq p "colour")}}
 						<ColourTray />
 					{{else}}
-						<FxPanel />
+						<FxPanel
+							@phone={{this.phone}}
+						/>
 					{{/if}}
 				{{/each}}
 			</div>
