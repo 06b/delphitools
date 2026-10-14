@@ -42,7 +42,7 @@ import {
 	Item,
 	Sep,
 	UrButton,
-} from 'delphitools-v2/components/substrata/top-bar';
+} from 'delphitools-v2/components/errata/substrata-parts';
 
 // menu id typed per-editor
 

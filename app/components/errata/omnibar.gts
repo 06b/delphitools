@@ -19,11 +19,11 @@ import {
 	RotatePanel,
 } from 'delphitools-v2/components/errata/page-strips';
 import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
-import { Bloom } from 'delphitools-v2/components/substrata/omnibar/omnibar';
 import {
+	Bloom,
 	ColourCell,
 	Row,
-} from 'delphitools-v2/components/substrata/omnibar/tool-settings';
+} from 'delphitools-v2/components/errata/substrata-parts';
 import {
 	PresetRow,
 	type PresetOption,
