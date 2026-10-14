@@ -1020,6 +1020,14 @@ body {
 	initial-value: 0;
 }
 
+.dt-drawer .canon-sidebar {
+	inline-size: calc(
+		var(--dt-drawer-open) + var(--dt-band) - var(--dt-rule-width)
+	);
+	border-inline-end: 0;
+	background: transparent;
+}
+
 // iPhone layout: the band and the bar's controls along the bottom, the drawer
 // pushing the page up; same width as MOBILE in services/breakpoint.ts
 @media (width < 640px) {
@@ -1110,14 +1118,6 @@ body {
 }
 
 // kit sidebar, flattened: no cell grid, plain headings
-.dt-drawer .canon-sidebar {
-	inline-size: calc(
-		var(--dt-drawer-open) + var(--dt-band) - var(--dt-rule-width)
-	);
-	border-inline-end: 0;
-	background: transparent;
-}
-
 .dt-drawer .canon-sidebar-rows {
 	gap: 0;
 	background: transparent;
