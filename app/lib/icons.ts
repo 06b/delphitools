@@ -98,6 +98,7 @@ import iExternalLink from 'lucide-static/icons/external-link.svg?raw';
 import iEye from 'lucide-static/icons/eye.svg?raw';
 import iEyeOff from 'lucide-static/icons/eye-off.svg?raw';
 import iFastForward from 'lucide-static/icons/fast-forward.svg?raw';
+import iFile from 'lucide-static/icons/file.svg?raw';
 import iFileAudio from 'lucide-static/icons/file-audio.svg?raw';
 import iFileCode from 'lucide-static/icons/file-code.svg?raw';
 import iFileDigit from 'lucide-static/icons/file-digit.svg?raw';
@@ -119,6 +120,7 @@ import iFlipVertical2 from 'lucide-static/icons/flip-vertical-2.svg?raw';
 import iFocus from 'lucide-static/icons/focus.svg?raw';
 import iFolder from 'lucide-static/icons/folder.svg?raw';
 import iFolderMinus from 'lucide-static/icons/folder-minus.svg?raw';
+import iFolderOpen from 'lucide-static/icons/folder-open.svg?raw';
 import iFolderPlus from 'lucide-static/icons/folder-plus.svg?raw';
 import iFrame from 'lucide-static/icons/frame.svg?raw';
 import iGalleryVertical from 'lucide-static/icons/gallery-vertical.svg?raw';
@@ -362,6 +364,7 @@ export const icons: Record<string, string> = {
 	eye: iEye,
 	'eye-off': iEyeOff,
 	'fast-forward': iFastForward,
+	file: iFile,
 	'file-audio': iFileAudio,
 	'file-code': iFileCode,
 	'file-digit': iFileDigit,
@@ -383,6 +386,7 @@ export const icons: Record<string, string> = {
 	focus: iFocus,
 	folder: iFolder,
 	'folder-minus': iFolderMinus,
+	'folder-open': iFolderOpen,
 	'folder-plus': iFolderPlus,
 	frame: iFrame,
 	'gallery-vertical': iGalleryVertical,

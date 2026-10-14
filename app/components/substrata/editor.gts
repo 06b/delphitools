@@ -7,7 +7,8 @@ import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import FabricCanvas from 'delphitools-v2/components/substrata/fabric-canvas';
-import ModalHost from 'delphitools-v2/components/substrata/modal-host';
+import Sheets from 'delphitools-v2/components/substrata/pages/sheets';
+import { pageState } from 'delphitools-v2/components/substrata/pages/page-state';
 import SelectionPopup from 'delphitools-v2/components/substrata/selection-popup';
 import SecureContextNotice from 'delphitools-v2/components/substrata/secure-context-notice';
 import EmptyHint from 'delphitools-v2/components/substrata/empty-hint';
@@ -51,7 +52,6 @@ import {
 	subscribeViewport,
 	viewport,
 } from 'delphitools-v2/lib/substrata/viewport';
-import { openModal } from 'delphitools-v2/lib/substrata/modal';
 import { isTextEntry } from 'delphitools-v2/lib/text-entry';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 import './editor/editor.css';
@@ -163,14 +163,30 @@ export default class SubstrataEditor extends Component {
 		editorUi.bloomOpen = !editorUi.bloomOpen;
 	};
 
+	// the settings page and the gallery share the drawer
 	openMenu = () => {
-		editorUi.pageOpen = !editorUi.pageOpen;
+		editorUi.pageOpen = !(
+			editorUi.pageOpen || editorUi.galleryOpen
+		);
+		editorUi.galleryOpen = false;
 	};
 
-	// interim: the old modals until the canon export and help land
-	openShare = () => openModal('export');
+	openShare = () => {
+		editorUi.exportOpen = !editorUi.exportOpen;
+	};
 
-	openHelp = () => openModal('shortcuts');
+	openHelp = () => {
+		editorUi.helpOpen = true;
+	};
+
+	rename = (event: Event) => {
+		const doc = this.doc.current.doc;
+		if (!doc) return;
+		pageState.openRename(
+			{ id: doc.id, name: doc.name },
+			event.currentTarget as HTMLElement,
+		);
+	};
 
 	doUndo = () => undo();
 	doRedo = () => redo();
@@ -225,9 +241,13 @@ export default class SubstrataEditor extends Component {
 		});
 		const rail = root.querySelector('.sub-ed-rail');
 		if (rail) tray.observe(rail);
+		// the settings page mirrors the frame (data-hand)
+		const hand = new MutationObserver(() => this.placeInset(root));
+		hand.observe(root, { attributeFilter: ['data-hand'] });
 		return () => {
 			ro.disconnect();
 			tray.disconnect();
+			hand.disconnect();
 		};
 	});
 
@@ -244,9 +264,15 @@ export default class SubstrataEditor extends Component {
 			root.querySelector(sel)?.getBoundingClientRect();
 		const title = rect('.sub-ed-title');
 		if (title) inset.top = title.bottom - box.top + PAD;
+		// sides by position: the left hand mirrors the frame (data-hand)
+		const onLeft = (r: DOMRect) =>
+			r.left + r.width / 2 < box.left + box.width / 2;
 		const column = rect('.sub-ed-column');
-		if (column && column.width)
-			inset.right = box.right - column.left + PAD;
+		if (column && column.width) {
+			if (onLeft(column))
+				inset.left = column.right - box.left + PAD;
+			else inset.right = box.right - column.left + PAD;
+		}
 		const row = rect('.sub-ed-row');
 		if (row && row.height)
 			inset.bottom = box.bottom - row.top + PAD;
@@ -263,8 +289,11 @@ export default class SubstrataEditor extends Component {
 					inset.top,
 					bar.bottom - box.top + PAD,
 				);
-			else if (edge === 'leading')
-				inset.left = bar.right - box.left + PAD;
+			else if (onLeft(bar))
+				inset.left = Math.max(
+					inset.left,
+					bar.right - box.left + PAD,
+				);
 			else
 				inset.right = Math.max(
 					inset.right,
@@ -353,6 +382,7 @@ export default class SubstrataEditor extends Component {
 					type="button"
 					class="sub-ed-title-name"
 					title="Rename"
+					{{on "click" this.rename}}
 				>{{this.title}}</button>
 				<button
 					type="button"
@@ -631,7 +661,7 @@ export default class SubstrataEditor extends Component {
 			/>
 
 			<Overlays @phone={{this.phone}} />
-			<ModalHost />
+			<Sheets @phone={{this.phone}} />
 		</div>
 	</template>
 

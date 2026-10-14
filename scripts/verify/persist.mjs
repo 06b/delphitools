@@ -54,6 +54,11 @@ await page.evaluate(() => {
   window.__substrata.toolSettings("pieces", { symbolId: "heart", fill: "#3e6b33" });
 });
 await drag(1200, 800, 1600, 1200);
+// rulers default off (iOS); the guide drags out of the left one
+await page.evaluate(() => {
+  if (!JSON.parse(localStorage.getItem("substrata:guides") ?? "{}").rulers) window.__substrata.toggleGuidePref("rulers");
+});
+await sleep(300);
 // page coords, not scene
 const t = toPage(900, 700);
 await page.mouse.move(rect.left + 10, t.y);

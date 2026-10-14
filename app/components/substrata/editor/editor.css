@@ -485,6 +485,26 @@
 	}
 }
 
+/* settings page hooks: Handedness mirrors the frame, its pieces keep their
+   own direction; Help Button hides the help cell */
+.sub-ed[data-hand="left"] {
+	direction: rtl;
+}
+
+.sub-ed[data-hand="left"] > * > *,
+.sub-ed[data-hand="left"] > .sub-card-layer {
+	direction: ltr;
+}
+
+.sub-ed[data-hand="left"] > .sub-ed-title {
+	flex-direction: row-reverse;
+	translate: 50% 0;
+}
+
+.sub-ed[data-help="off"] > .sub-ed-help {
+	display: none;
+}
+
 /* FloatingCard over its scrim */
 .sub-card-layer {
 	position: absolute;

@@ -10,12 +10,12 @@ await sleep(800);
 const probe = () =>
 	page.evaluate(() => {
 		const width = (sel) => Math.round(document.querySelector(sel)?.getBoundingClientRect().width ?? 0);
-		const dock = document.querySelector('.sub-omni-dock.is-bottom')?.getBoundingClientRect();
+		const bar = document.querySelector('.sub-ed-bar.is-bottom')?.getBoundingClientRect();
 		return {
 			inner: window.innerWidth,
 			canvas: width('.canvas-container'),
 			area: width('.sub-shell-canvas-area'),
-			dockCentre: dock ? Math.round(dock.left + dock.width / 2) : null,
+			barCentre: bar ? Math.round(bar.left + bar.width / 2) : null,
 			wider: [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().width > window.innerWidth + 2).length,
 		};
 	});
@@ -27,12 +27,12 @@ await page.setViewport({ width: 900, height: 700 });
 await sleep(1000);
 const narrow = await probe();
 check('narrow: canvas shrinks with the window', narrow.canvas === 900 && narrow.area === 900, JSON.stringify(narrow));
-check('narrow: bottom dock is centred', narrow.dockCentre === 450, `${narrow.dockCentre}`);
+check('narrow: the tool settings bar is centred', narrow.barCentre === 450, `${narrow.barCentre}`);
 check('narrow: nothing is wider than the window', narrow.wider === 0, `${narrow.wider}`);
 
 await page.setViewport({ width: 1400, height: 900 });
 await sleep(1000);
 const back = await probe();
-check('grown back: canvas follows', back.canvas === 1400 && back.dockCentre === 700, JSON.stringify(back));
+check('grown back: canvas follows', back.canvas === 1400 && back.barCentre === 700, JSON.stringify(back));
 
 await finish(browser);
