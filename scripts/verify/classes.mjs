@@ -16,6 +16,10 @@ const UNSTYLED_CONTAINERS = new Set([
 	'sub-ed-panel-keys', // Cells groups, styled by .sub-cells
 	'sub-ed-stack',
 	'sub-ed-tools',
+	'sub-ct-types', // CanonSegmented carries styling
+	'sub-pg-zoom', // CanonGrid carries styling
+	'sub-ring-band', // focus targets over the ring canvas
+	'sub-ring-keys',
 	'sub-grip', // draggable modifier handle
 	'sub-preset-strip', // .segmented carries styling
 	'sub-topbar-seg-hook', // span[title] rigs read
