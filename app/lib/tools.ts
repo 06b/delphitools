@@ -619,6 +619,7 @@ export const toolCategories: ToolCategory[] = [
 					'Turn video clips into looping GIFs',
 				icon: 'clapperboard',
 				href: '/tools/video-to-gif',
+				canon: true,
 				produces: ['image/gif'],
 				accepts: VIDEO_ACCEPT,
 				new: true,
