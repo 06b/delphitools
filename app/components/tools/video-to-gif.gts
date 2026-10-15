@@ -55,6 +55,8 @@ const TOO_MANY_FRAMES =
 	'Over 300 frames. Please lower the fps or shorten the range';
 const DROP_TITLE = 'Drop a video here or click to upload';
 const ENCODE_ERROR = "Couldn't read frames from this video.";
+
+const frameLabel = (n: number) => (n === 1 ? '1 frame' : `${n} frames`);
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 const whole = (value: number) => String(Math.round(value));
 
@@ -203,7 +205,7 @@ export default class VideoToGif extends Component {
 		return [
 			{
 				label: 'Frames',
-				value: `${this.frameCount} frames`,
+				value: frameLabel(this.frameCount),
 				level:
 					Math.min(this.frameCount, maxFrames) /
 					maxFrames,
@@ -230,7 +232,7 @@ export default class VideoToGif extends Component {
 		if (!this.gifUrl) return null;
 		return {
 			name: this.fileName,
-			detail: `${Math.max(1, Math.round(this.gifBytes / 1024))} KB · ${this.gifFrames} frames`,
+			detail: `${Math.max(1, Math.round(this.gifBytes / 1024))} KB · ${frameLabel(this.gifFrames)}`,
 		};
 	}
 
