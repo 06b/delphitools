@@ -623,6 +623,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Cut a video in/out style',
 				icon: 'scissors',
 				href: '/tools/video-trimmer',
+				canon: true,
 				produces: ['video/mp4', 'video/webm'],
 				accepts: VIDEO_ACCEPT,
 				new: true,

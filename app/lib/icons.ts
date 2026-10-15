@@ -20,8 +20,10 @@ import iArrowDownRight from 'lucide-static/icons/arrow-down-right.svg?raw';
 import iArrowDownToLine from 'lucide-static/icons/arrow-down-to-line.svg?raw';
 import iArrowLeft from 'lucide-static/icons/arrow-left.svg?raw';
 import iArrowLeftRight from 'lucide-static/icons/arrow-left-right.svg?raw';
+import iArrowLeftToLine from 'lucide-static/icons/arrow-left-to-line.svg?raw';
 import iArrowRight from 'lucide-static/icons/arrow-right.svg?raw';
 import iArrowRightLeft from 'lucide-static/icons/arrow-right-left.svg?raw';
+import iArrowRightToLine from 'lucide-static/icons/arrow-right-to-line.svg?raw';
 import iArrowUp from 'lucide-static/icons/arrow-up.svg?raw';
 import iArrowUpDown from 'lucide-static/icons/arrow-up-down.svg?raw';
 import iArrowUpLeft from 'lucide-static/icons/arrow-up-left.svg?raw';
@@ -284,8 +286,10 @@ export const icons: Record<string, string> = {
 	'arrow-down-to-line': iArrowDownToLine,
 	'arrow-left': iArrowLeft,
 	'arrow-left-right': iArrowLeftRight,
+	'arrow-left-to-line': iArrowLeftToLine,
 	'arrow-right': iArrowRight,
 	'arrow-right-left': iArrowRightLeft,
+	'arrow-right-to-line': iArrowRightToLine,
 	'arrow-up': iArrowUp,
 	'arrow-up-down': iArrowUpDown,
 	'arrow-up-left': iArrowUpLeft,
