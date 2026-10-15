@@ -636,6 +636,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/voice-recorder',
 				produces: ['audio/webm'],
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'waveform-genny',
