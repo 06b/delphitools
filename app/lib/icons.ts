@@ -216,6 +216,8 @@ import iShieldCheck from 'lucide-static/icons/shield-check.svg?raw';
 import iShrink from 'lucide-static/icons/shrink.svg?raw';
 import iShuffle from 'lucide-static/icons/shuffle.svg?raw';
 import iSignature from 'lucide-static/icons/signature.svg?raw';
+import iSkipBack from 'lucide-static/icons/skip-back.svg?raw';
+import iSkipForward from 'lucide-static/icons/skip-forward.svg?raw';
 import iSlash from 'lucide-static/icons/slash.svg?raw';
 import iSlidersHorizontal from 'lucide-static/icons/sliders-horizontal.svg?raw';
 import iSmartphone from 'lucide-static/icons/smartphone.svg?raw';
@@ -482,6 +484,8 @@ export const icons: Record<string, string> = {
 	shrink: iShrink,
 	shuffle: iShuffle,
 	signature: iSignature,
+	'skip-back': iSkipBack,
+	'skip-forward': iSkipForward,
 	slash: iSlash,
 	'sliders-horizontal': iSlidersHorizontal,
 	smartphone: iSmartphone,

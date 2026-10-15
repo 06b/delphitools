@@ -585,6 +585,7 @@ export const toolCategories: ToolCategory[] = [
 				produces: ['video/webm'],
 				accepts: [...VIDEO_ACCEPT, ...SUBTITLE_ACCEPT],
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'timecode-calc',
