@@ -1156,6 +1156,11 @@ body {
 	font-family: var(--canon-mono-font);
 }
 
+// the sticky kit footer uses up the gap above it at scroll end
+.dt-canon-tool .canon-split-main > .canon-split-footer {
+	margin-block-end: var(--canon-panel-padding);
+}
+
 // porting progress: tools already on the canon kit
 .dt-drawer .canon-sidebar-row[data-canon]::after {
 	content: "C" / "";

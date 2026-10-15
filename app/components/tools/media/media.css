@@ -207,10 +207,3 @@
 	block-size: 100%;
 	object-fit: contain;
 }
-
-/* the kit footer is sticky in flow; at the end of the scroll it sits flush
-   on the last row, so this keeps one panel gap between them */
-.canon-split-footer:has(> .media-transport),
-.canon-split-footer:has(> .media-recorder-transport) {
-	margin-block-end: var(--canon-panel-padding);
-}
