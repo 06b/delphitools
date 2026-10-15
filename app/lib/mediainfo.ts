@@ -113,9 +113,12 @@ export function formatRatio(ratio: number): string {
 	return hit ? hit[1] : `${ratio.toFixed(2)}:1`;
 }
 
-const ms = (track: Track, key = 'Duration') => {
+// mediainfo's JSON gives durations in seconds
+const clock = (track: Track, key = 'Duration') => {
 	const value = num(track, key);
-	return value === undefined ? undefined : formatTimestamp(value, '.');
+	return value === undefined
+		? undefined
+		: formatTimestamp(value * 1000, '.');
 };
 
 const bitrate = (track: Track, key: string, modeKey: string) => {
@@ -172,7 +175,7 @@ type Spec = [label: string, render: (track: Track) => string | undefined];
 const GENERAL: Spec[] = [
 	['Container', codec],
 	['Size', (t) => mapNum(t, 'FileSize', formatBytes)],
-	['Duration', ms],
+	['Duration', clock],
 	[
 		'Overall bitrate',
 		(t) => bitrate(t, 'OverallBitRate', 'OverallBitRate_Mode'),
@@ -242,7 +245,7 @@ const VIDEO: Spec[] = [
 	['HDR', (t) => str(t, 'HDR_Format')],
 	['GOP', (t) => str(t, 'Format_Settings_GOP')],
 	['Stream size', (t) => mapNum(t, 'StreamSize', formatBytes)],
-	['Duration', ms],
+	['Duration', clock],
 	['Language', (t) => str(t, 'Language')],
 	['Flags', flags],
 	['Encoded with', (t) => str(t, 'Encoded_Library')],
@@ -265,7 +268,7 @@ const AUDIO: Spec[] = [
 	['Bit depth', (t) => mapNum(t, 'BitDepth', (v) => `${v} bit`)],
 	['Compression', (t) => str(t, 'Compression_Mode')],
 	['Stream size', (t) => mapNum(t, 'StreamSize', formatBytes)],
-	['Duration', ms],
+	['Duration', clock],
 	['Language', (t) => str(t, 'Language')],
 	['Title', (t) => str(t, 'Title')],
 	['Flags', flags],
@@ -275,7 +278,7 @@ const TEXT: Spec[] = [
 	['Format', codec],
 	['Codec ID', (t) => str(t, 'CodecID')],
 	['Cues', (t) => mapNum(t, 'ElementCount', String)],
-	['Duration', ms],
+	['Duration', clock],
 	['Language', (t) => str(t, 'Language')],
 	['Title', (t) => str(t, 'Title')],
 	['Flags', flags],
