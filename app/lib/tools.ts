@@ -562,6 +562,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/screen-recorder',
 				produces: ['video/webm'],
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'subtitle-converter',

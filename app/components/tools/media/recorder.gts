@@ -245,6 +245,8 @@ export interface RecorderTransportSignature {
 		onPause: () => void;
 		/** Turns Record off. */
 		disabled?: boolean;
+		/** The Record button's text; default Record. */
+		recordText?: string;
 	};
 }
 
@@ -373,7 +375,11 @@ export class RecorderTransport extends Component<RecorderTransportSignature> {
 				<CanonButton
 					class="media-recorder-record"
 					@kind="primary"
-					@text="Record"
+					@text={{if
+						@recordText
+						@recordText
+						"Record"
+					}}
 					@icon={{RecordIcon}}
 					@disabled={{@disabled}}
 					@onClick={{@onRecord}}
