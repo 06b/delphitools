@@ -14,7 +14,6 @@ import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import type CanonToastService from 'delphicanon/services/canon-toast';
-import AtlasOpenIn from 'delphitools-v2/components/atlas-open-in';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { VideoIntake } from 'delphitools-v2/lib/video';
@@ -26,6 +25,7 @@ import {
 	type Track,
 } from 'delphitools-v2/lib/mediainfo';
 import Drop from 'delphitools-v2/components/tools/media/drop';
+import OpenIn from 'delphitools-v2/components/tools/media/open-in';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
 import Slot from 'delphitools-v2/components/tools/media/slot';
@@ -289,16 +289,11 @@ export default class VideoAtlas extends Component {
 							}}
 						></video>
 					</CanonCanvas>
-					<CanonRows
+					<OpenIn
 						class="va-open"
-						@framed={{true}}
-					>
-						<CanonHeading @text="Open in" />
-						<AtlasOpenIn
-							@file={{this.intake.file}}
-							@self="video-atlas"
-						/>
-					</CanonRows>
+						@file={{this.intake.file}}
+						@self="video-atlas"
+					/>
 				{{else if this.warning}}
 					<CanonRows @framed={{true}}>
 						<CanonStatus

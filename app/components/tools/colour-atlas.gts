@@ -22,7 +22,7 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
-import AtlasOpenIn from 'delphitools-v2/components/atlas-open-in';
+import OpenIn from 'delphitools-v2/components/tools/media/open-in';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
 import { carryColour, colourToQuery } from 'delphitools-v2/lib/colour-query';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
@@ -334,15 +334,10 @@ export default class ColourAtlas extends Component {
 						/>
 					{{/each}}
 				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Open in" />
-					<AtlasOpenIn
-						@tools={{openIn}}
-						@query={{hash
-							color=this.queryColour
-						}}
-					/>
-				</CanonRows>
+				<OpenIn
+					@tools={{openIn}}
+					@query={{hash color=this.queryColour}}
+				/>
 			</:main>
 		</CanonSplit>
 	</template>

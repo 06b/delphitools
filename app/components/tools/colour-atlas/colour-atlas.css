@@ -108,37 +108,3 @@
 	clip-path: inset(50%);
 	white-space: nowrap;
 }
-
-/* the shared open-in list, in the kit's cells; the app rule is crayon */
-.colour-atlas .dt-atlas-open {
-	grid-template-columns: repeat(3, 1fr);
-	gap: var(--canon-hairline);
-	border: 0;
-	background: var(--canon-border);
-}
-
-.colour-atlas .dt-atlas-open a {
-	gap: 6px;
-	padding: 14px 8px;
-	background: var(--canon-card);
-	color: var(--canon-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-}
-
-.colour-atlas .dt-atlas-open a .dt-icon {
-	color: var(--canon-primary);
-}
-
-.colour-atlas .dt-atlas-open a:focus-visible {
-	outline: 2px solid var(--canon-primary);
-	outline-offset: -2px;
-}
-
-@media (hover: hover) {
-	.colour-atlas .dt-atlas-open a:hover {
-		background: var(--canon-accent-bg);
-		color: var(--canon-foreground);
-	}
-}
