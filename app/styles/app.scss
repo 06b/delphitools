@@ -1283,8 +1283,10 @@ body {
 		border-inline-color: transparent;
 	}
 
-	// the settings keep their half of 1200; only the picture grows
-	.dt-canon-tool.is-expandable .canon-split-body {
+	// the settings keep their half of 1200; only the picture grows.
+	// a banner is the picture and already spans the column
+	.dt-canon-tool.is-expandable
+		.canon-split-body:not(:has(> .canon-split-banner)) {
 		--canon-split-columns: minmax(0, 1fr) var(--canon-hairline)
 			600px;
 	}
