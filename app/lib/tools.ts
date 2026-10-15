@@ -539,6 +539,7 @@ export const toolCategories: ToolCategory[] = [
 					'Transcribe audio and video to subtitles',
 				icon: 'captions',
 				href: '/tools/auto-subtitle',
+				canon: true,
 				produces: ['.srt', '.vtt'],
 				accepts: [...AUDIO_ACCEPT, ...VIDEO_ACCEPT],
 				new: true,

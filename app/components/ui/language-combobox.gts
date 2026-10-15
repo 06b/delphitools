@@ -1,4 +1,4 @@
-// styled in _auto-subtitle.scss; flags from scripts/copy-flags.mjs
+// styled in styles/_language-combobox.scss; flags from scripts/copy-flags.mjs
 
 import { array, fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
