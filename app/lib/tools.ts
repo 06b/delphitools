@@ -550,6 +550,8 @@ export const toolCategories: ToolCategory[] = [
 					'Grab stills and contact sheets from video',
 				icon: 'film',
 				href: '/tools/frame-extractor',
+				canon: true,
+				expands: true,
 				produces: ['image/png', 'application/zip'],
 				accepts: VIDEO_ACCEPT,
 				new: true,

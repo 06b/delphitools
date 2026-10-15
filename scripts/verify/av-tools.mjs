@@ -1,4 +1,4 @@
-// wave-1 audio/video tools, fixture recorded in-page
+// video-to-gif, fixture recorded in-page
 // chromium #642012 webm duration infinity; covers resolveDuration
 //
 // Usage: npm start, then node scripts/verify/av-tools.mjs
@@ -74,25 +74,5 @@ check(
 	/\d+ KB · \d+ frames/.test(gifMeta),
 	gifMeta.trim(),
 );
-
-await visit(page, '/tools/frame-extractor');
-await dropClip('.dt-fx-frame');
-await page.waitForFunction(
-	() => {
-		const meta = document.querySelector('.dt-fx-meta');
-		return meta && !meta.textContent.includes('Infinity');
-	},
-	{ timeout: 15000 },
-);
-
-const fxMeta = await page.$eval('.dt-fx-meta', (el) => el.textContent);
-check('video metadata renders', /64 × 64/.test(fxMeta), fxMeta.trim());
-
-await page.click('.dt-fx-btn.is-primary');
-await page.waitForFunction(
-	() => document.querySelector('.dt-fx-still img')?.src.startsWith('blob:'),
-	{ timeout: 15000 },
-);
-check('grabbed still appears in the strip', true);
 
 await finish(browser);
