@@ -480,6 +480,8 @@ export const toolCategories: ToolCategory[] = [
 				atlas: true,
 				accepts: AUDIO_ACCEPT,
 				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'video-atlas',

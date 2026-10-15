@@ -73,7 +73,7 @@ await dropFile('.video-atlas', 'clip.mp4', 'video/mp4');
 check('video-atlas: open-in lists video tools', (await openInIds()).includes('video-muter'));
 
 await visit(page, '/tools/audio-atlas');
-await dropFile('.dt-aa-frame', 'take.mp3', 'audio/mpeg');
+await dropFile('.audio-atlas', 'take.mp3', 'audio/mpeg');
 check('audio-atlas: open-in lists audio tools', (await openInIds()).includes('audio-trimmer'));
 
 const nav = await page.evaluate(() => {
@@ -81,7 +81,12 @@ const nav = await page.evaluate(() => {
 	const first = (needle, n) => {
 		const start = rows.findIndex((el) => el.matches('.canon-heading') && el.textContent.includes(needle));
 		const end = rows.findIndex((el, i) => i > start && el.matches('.canon-heading'));
-		return rows.slice(start + 1, end).slice(0, n).map((a) => a.textContent.trim());
+		// the drawer puts a description line under the open tool's row
+		return rows
+			.slice(start + 1, end)
+			.filter((el) => el.matches('.canon-sidebar-row'))
+			.slice(0, n)
+			.map((a) => a.textContent.trim());
 	};
 	return { images: first('Image', 2), av: first('Audio', 3), colour: first('Colour', 2) };
 });

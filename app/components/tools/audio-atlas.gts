@@ -1,719 +1,519 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
-import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import AtlasOpenIn from 'delphitools-v2/components/atlas-open-in';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import WaveMinimap from 'delphitools-v2/components/wave-minimap';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import filePaste from 'delphitools-v2/modifiers/file-paste';
 import {
 	AudioIntake,
-	audioContext,
 	channelsOf,
-	drawWaveform,
 	extractPeaks,
-	fftMagnitudes,
 	integratedLufs,
 	peakDb,
 	ViewWindow,
 } from 'delphitools-v2/lib/audio';
-import { probeAudio, type AudioProbe } from 'delphitools-v2/lib/media-probe';
+import {
+	analyzeMedia,
+	sections,
+	type Section,
+	type Track,
+} from 'delphitools-v2/lib/mediainfo';
 import { AUDIO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import OpenIn from 'delphitools-v2/components/tools/media/open-in';
+import Playback from 'delphitools-v2/components/tools/media/playback';
+import Sections from 'delphitools-v2/components/tools/media/sections';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Strips from 'delphitools-v2/components/tools/media/strips';
+import Transport from 'delphitools-v2/components/tools/media/transport';
+import { peakBuckets } from 'delphitools-v2/components/tools/media/frames';
+import { label } from 'delphitools-v2/components/tools/audio-atlas/ruler';
+import {
+	loudnessTiles,
+	rmsDb,
+} from 'delphitools-v2/components/tools/audio-atlas/loudness';
+import Sheet from 'delphitools-v2/components/tools/audio-atlas/sheet';
+import './media/media.css';
+import './audio-atlas/audio-atlas.css';
 
 const ACCEPT = acceptAttr(AUDIO_ACCEPT);
+const DROP_PROMPT = 'Drop an audio file here or click to upload';
+const noFrames: string[] = [];
 
-const DROP_TITLE = 'Drop an audio file here or click to upload';
+// iOS AudioAtlasViewController: band 150; sheet 120 + 24 + 160
+const bandHeight = 150;
+const sheetHeight = 304;
+const slotHeight = 180;
 
-const PEAK_BUCKETS = 1000;
-const FFT_SIZE = 1024;
-const SPECTRO_MAX_COLUMNS = 800;
-const SPECTRO_ROWS = 256;
-const SPECTRO_FLOOR_DB = -90;
-const COLUMNS_PER_FRAME = 24;
+const flag = (name: string) =>
+	typeof window !== 'undefined' &&
+	new URLSearchParams(window.location.search).get(name) === 'yes';
 
-interface MetaRow {
-	label: string;
-	value: string;
-}
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const ZoomOut = <template><IconSvg @name="zoom-out" /></template>;
+const ZoomIn = <template><IconSvg @name="zoom-in" /></template>;
+const Fit = <template><IconSvg @name="maximize" /></template>;
 
-function formatBytes(bytes: number): string {
-	if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-	if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-	return `${bytes} B`;
-}
+/** iOS playRange: Loop plays the view, else the whole file. */
+class ViewPlayback extends Playback {
+	#view: ViewWindow;
 
-function spectroPalette(): Uint8ClampedArray {
-	const lut = new Uint8ClampedArray(256 * 3);
-	const stops: [number, number, number][] = [
-		[16, 18, 16],
-		[46, 125, 50],
-		[240, 255, 240],
-	];
-	for (let i = 0; i < 256; i++) {
-		const t = i / 255;
-		const seg = t < 0.5 ? 0 : 1;
-		const local = (t - seg * 0.5) * 2;
-		for (let c = 0; c < 3; c++)
-			lut[i * 3 + c] =
-				stops[seg]![c]! +
-				(stops[seg + 1]![c]! - stops[seg]![c]!) * local;
+	constructor(view: ViewWindow) {
+		super();
+		this.#view = view;
 	}
-	return lut;
+
+	toggleLoop = () => {
+		this.looping = !this.looping;
+		this.follow();
+		return this.looping;
+	};
+
+	follow() {
+		const { start, end } = this.#view;
+		this.range = this.looping ? [start, end] : null;
+		const at = this.playhead;
+		if (this.looping && this.playing && at !== null)
+			if (at < start || at >= end) this.scrub(start);
+	}
 }
 
-export default class AudioAtlasTool extends Component {
-	@tracked lufs: number | null = null;
-	@tracked playing = false;
-	@tracked looping = false;
-	@tracked playheadS = 0;
-
+/** The port of AudioAtlasViewController, on the web tool's decode, loudness and spectrogram. */
+export default class AudioAtlas extends Component {
 	view = new ViewWindow();
-
-	#spectroToken = 0;
-	#source: AudioBufferSourceNode | null = null;
-	#pausedAt = 0;
-	#startOffset = 0;
-	#startedCtxTime = 0;
-	#rafId = 0;
-
-	@tracked source: AudioProbe | null = null;
-
+	playback = new ViewPlayback(this.view);
 	intake = new AudioIntake({
-		onLoad: (file) => {
-			this.source = null;
-			void this.#probeSource(file);
-		},
-		onDecoded: (buffer) => {
-			this.view.reset(buffer.duration);
-			this.#resetPlayback();
-			void this.#measureLoudness(buffer);
-		},
+		onLoad: (file) => this.#load(file),
+		onDecoded: (buffer) => this.#decoded(buffer),
 	});
+	drop = new Drop(ACCEPT, (file) => this.intake.load(file));
+
+	@tracked url = '';
+	@tracked tracks: Track[] = [];
+	@tracked lufs: number | null = null;
+	#token = 0;
 
 	willDestroy() {
 		super.willDestroy();
-		this.#spectroToken++;
-		this.#resetPlayback();
+		this.#token++;
+		this.playback.unload();
+		this.#releaseUrl();
+	}
+
+	get loaded() {
+		return this.intake.fileName !== '';
+	}
+
+	get decoded() {
+		return this.intake.buffer !== null;
+	}
+
+	get undecoded() {
+		return !this.decoded;
 	}
 
 	get duration() {
 		return this.intake.buffer?.duration ?? 0;
 	}
 
-	#resetPlayback() {
-		this.#pause();
-		this.#pausedAt = 0;
-		this.playheadS = 0;
-		this.looping = false;
-	}
-
-	#position(): number {
-		const source = this.#source;
-		if (!source) return this.#pausedAt;
-		const elapsed =
-			audioContext().currentTime - this.#startedCtxTime;
-		let position = this.#startOffset + elapsed;
-		if (source.loop && source.loopEnd > source.loopStart) {
-			const a = source.loopStart;
-			const b = source.loopEnd;
-			if (position > b)
-				position = a + ((position - a) % (b - a));
-		}
-		return Math.min(position, this.duration);
-	}
-
-	#tick = () => {
-		if (!this.playing) return;
-		this.playheadS = this.#position();
-		this.#rafId = requestAnimationFrame(this.#tick);
-	};
-
-	#pause() {
-		cancelAnimationFrame(this.#rafId);
-		const source = this.#source;
-		if (!source) {
-			this.playing = false;
-			return;
-		}
-		this.#pausedAt = this.#position();
-		this.playheadS = this.#pausedAt;
-
-		this.#source = null;
-		source.onended = null;
-		source.stop();
-		this.playing = false;
-	}
-
-	#play() {
+	get detail() {
+		if (this.intake.error) return this.intake.error;
 		const buffer = this.intake.buffer;
-		if (!buffer) return;
-		const ctx = audioContext();
-		void ctx.resume();
+		if (!buffer) return 'Decoding…';
+		return `${buffer.duration.toFixed(2)} s · ${buffer.sampleRate} Hz · ${buffer.numberOfChannels} ch`;
+	}
 
-		const source = ctx.createBufferSource();
-		source.buffer = buffer;
-		source.connect(ctx.destination);
+	get viewText() {
+		if (!this.decoded) return '';
+		return `${label(this.view.start, 0.01)} – ${label(this.view.end, 0.01)}`;
+	}
 
-		let offset = Math.min(this.#pausedAt, buffer.duration);
-		if (this.looping) {
-			source.loop = true;
-			source.loopStart = this.view.start;
-			source.loopEnd = this.view.end;
-			if (offset < this.view.start || offset >= this.view.end)
-				offset = this.view.start;
-		}
+	get notZoomed() {
+		return !this.view.isZoomed;
+	}
 
-		source.onended = () => {
-			if (this.#source === source) {
-				this.#source = null;
-				this.playing = false;
-				this.#pausedAt = 0;
-				this.playheadS = 0;
-			}
+	get selection(): [number, number] | null {
+		return this.view.isZoomed
+			? [this.view.start, this.view.end]
+			: null;
+	}
+
+	@cached
+	get channels() {
+		const buffer = this.intake.buffer;
+		return buffer ? channelsOf(buffer) : null;
+	}
+
+	@cached
+	get levels() {
+		const channels = this.channels;
+		return channels
+			? { peak: peakDb(channels), rms: rmsDb(channels) }
+			: null;
+	}
+
+	get loudness(): Section | null {
+		const levels = this.levels;
+		if (!levels) return null;
+		return {
+			type: 'Other',
+			title: 'Loudness',
+			rows: loudnessTiles(levels.peak, levels.rms, this.lufs),
 		};
-		this.#source = source;
-		this.#startOffset = offset;
-		this.#startedCtxTime = ctx.currentTime;
-		this.playing = true;
-		source.start(0, offset);
-		this.#rafId = requestAnimationFrame(this.#tick);
 	}
 
-	togglePlay = () => {
-		if (this.playing) this.#pause();
-		else this.#play();
-	};
+	@cached
+	get sections() {
+		const loudness = this.loudness;
+		const all = sections(this.tracks);
+		return loudness ? [...all, loudness] : all;
+	}
 
-	toggleLoop = () => {
-		this.looping = !this.looping;
-		if (this.playing) {
-			this.#pause();
-			this.#play();
-		}
-	};
-
-	seek = (event: MouseEvent) => {
-		if (!this.duration) return;
-		const element = event.currentTarget as HTMLElement;
-		const rect = element.getBoundingClientRect();
-		const x = Math.min(
-			rect.width,
-			Math.max(0, event.clientX - rect.left),
+	/** iOS AudioAtlasTagRow, less the artwork: MediaInfo's title, performer and album. */
+	get tags() {
+		const general = this.tracks.find(
+			(t) => t['@type'] === 'General',
 		);
-		const time =
-			this.view.start + (x / rect.width) * this.view.span;
-
-		const wasPlaying = this.playing;
-		if (wasPlaying) this.#pause();
-		this.#pausedAt = time;
-		this.playheadS = time;
-		if (wasPlaying) this.#play();
-	};
-
-	clear = () => {
-		this.#resetPlayback();
-		this.intake.clear();
-	};
-
-	get playheadMiniStyle() {
-		if (!this.duration) return null;
-		const pct = (this.playheadS / this.duration) * 100;
-		return htmlSafe(`left: ${pct.toFixed(3)}%`);
+		const text = (key: string) => {
+			const value = general?.[key];
+			return value === undefined || value === ''
+				? ''
+				: String(value);
+		};
+		const tags = {
+			title: text('Title') || text('Track'),
+			artist: text('Performer'),
+			album: text('Album'),
+		};
+		return tags.title || tags.artist || tags.album ? tags : null;
 	}
 
-	get playheadViewStyle() {
-		if (!this.duration) return null;
-		if (
-			this.playheadS < this.view.start ||
-			this.playheadS > this.view.end
-		)
-			return null;
-		const pct =
-			((this.playheadS - this.view.start) / this.view.span) *
-			100;
-		return htmlSafe(`left: ${pct.toFixed(3)}%`);
+	@cached
+	get peaks() {
+		const channels = this.channels;
+		return channels ? extractPeaks(channels, peakBuckets) : null;
 	}
 
-	async #probeSource(file: File) {
-		const probe = await probeAudio(file);
-		if (this.isDestroyed || this.intake.file !== file) return;
-		this.source = probe;
+	// ponytail: the view's peaks rescan its samples on every move; slice the overview while moving if long files drag
+	@cached
+	get viewPeaks() {
+		const buffer = this.intake.buffer;
+		const channels = this.channels;
+		if (!buffer || !channels || !this.view.isZoomed)
+			return this.peaks;
+		const from = Math.floor(this.view.start * buffer.sampleRate);
+		const to = Math.max(
+			from + 2,
+			Math.ceil(this.view.end * buffer.sampleRate),
+		);
+		return extractPeaks(
+			channels.map((c) => c.subarray(from, to)),
+			peakBuckets,
+		);
 	}
 
-	async #measureLoudness(buffer: AudioBuffer) {
-		this.lufs = null;
-		// defer loudness scan.
+	#load(file: File) {
+		this.#reset();
+		this.url = URL.createObjectURL(file);
+		const token = this.#token;
+		void analyzeMedia(file)
+			.then((tracks) => {
+				if (token === this.#token) this.tracks = tracks;
+			})
+			.catch((error: unknown) =>
+				console.error('MediaInfo failed:', error),
+			);
+	}
+
+	#decoded(buffer: AudioBuffer) {
+		this.view.reset(buffer.duration);
+		void this.#measure(buffer);
+		// iOS -atlasZoom yes
+		if (flag('atlasZoom'))
+			this.moveWindow(
+				buffer.duration * 0.3,
+				buffer.duration * 0.2,
+			);
+		// iOS -atlasLoop yes
+		if (flag('atlasLoop')) {
+			this.playback.toggleLoop();
+			this.playback.play();
+		}
+	}
+
+	async #measure(buffer: AudioBuffer) {
+		const token = this.#token;
+		// the gated loudness scan is slow; the page shows first
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		if (this.isDestroyed || this.intake.buffer !== buffer) return;
+		if (this.isDestroyed || token !== this.#token) return;
 		this.lufs = integratedLufs(
 			channelsOf(buffer),
 			buffer.sampleRate,
 		);
 	}
 
-	// cache full-buffer peak.
-	@cached
-	get peak(): number {
-		const buffer = this.intake.buffer;
-		return buffer ? peakDb(channelsOf(buffer)) : -Infinity;
+	#setView(start: number, end: number) {
+		this.view.set(start, end);
+		this.playback.follow();
 	}
 
-	@cached
-	get rows(): MetaRow[] {
-		const buffer = this.intake.buffer;
-		if (!buffer) return [];
-		const format =
-			this.intake.fileType ||
-			this.intake.fileName.split('.').pop()?.toUpperCase() ||
-			'';
-		const source = this.source;
-		const peak = this.peak;
-		const lufs = this.lufs;
-
-		return [
-			{
-				label: 'Duration',
-				value: `${buffer.duration.toFixed(2)} s`,
-			},
-			{
-				label: 'Sample rate',
-				value:
-					source &&
-					source.sampleRate !== buffer.sampleRate
-						? `${source.sampleRate} Hz (decoded at ${buffer.sampleRate})`
-						: `${source?.sampleRate ?? buffer.sampleRate} Hz`,
-			},
-			...(source?.codec
-				? [{ label: 'Codec', value: source.codec }]
-				: []),
-			{
-				label: 'Channels',
-				value: `${buffer.numberOfChannels}`,
-			},
-			{
-				label: 'File size',
-				value: formatBytes(this.intake.fileBytes),
-			},
-			{ label: 'Format', value: format },
-			{
-				label: 'Peak',
-				value:
-					peak === -Infinity
-						? '-∞ dBFS'
-						: `${peak.toFixed(1)} dBFS`,
-			},
-			{
-				label: 'Loudness',
-				value:
-					lufs === null
-						? '…'
-						: Number.isNaN(lufs)
-							? '—'
-							: `${lufs.toFixed(1)} LUFS`,
-			},
-		];
-	}
-
-	@cached
-	get peaks() {
-		const buffer = this.intake.buffer;
-		if (!buffer) return null;
-		return extractPeaks(channelsOf(buffer), PEAK_BUCKETS);
-	}
-
-	#viewChannels(): Float32Array[] | null {
-		const buffer = this.intake.buffer;
-		if (!buffer) return null;
-		const from = Math.floor(this.view.start * buffer.sampleRate);
-		const to = Math.max(
-			from + 2,
-			Math.ceil(this.view.end * buffer.sampleRate),
+	/** iOS AudioAtlasModel.moveWindow: the length kept inside the file. */
+	moveWindow = (start: number, span: number) => {
+		const length = Math.min(
+			Math.max(span, ViewWindow.MIN_SPAN_S),
+			this.duration,
 		);
-		return channelsOf(buffer).map((channel) =>
-			channel.subarray(from, to),
+		const from = Math.min(
+			Math.max(0, start),
+			this.duration - length,
 		);
-	}
+		this.#setView(from, from + length);
+	};
 
-	@cached
-	get viewPeaks() {
-		const channels = this.#viewChannels();
-		if (!channels) return null;
-		return extractPeaks(channels, PEAK_BUCKETS);
-	}
+	zoomIn = () => {
+		this.view.zoomIn();
+		this.playback.follow();
+	};
 
-	drawWave = modifier((canvas: HTMLCanvasElement) => {
-		const render = () => {
-			const peaks = this.viewPeaks;
-			const dpr = window.devicePixelRatio || 1;
-			canvas.width = canvas.clientWidth * dpr;
-			canvas.height = canvas.clientHeight * dpr;
-			const ctx = canvas.getContext('2d');
-			if (!ctx || !peaks) return;
-			ctx.fillStyle =
-				getComputedStyle(canvas).getPropertyValue(
-					'--primary',
-				);
-			drawWaveform(ctx, peaks, canvas.width, canvas.height);
-		};
-		render();
-		const observer = new ResizeObserver(render);
-		observer.observe(canvas);
-		return () => observer.disconnect();
-	});
+	zoomOut = () => {
+		this.view.zoomOut();
+		this.playback.follow();
+	};
 
-	drawSpectrogram = modifier((canvas: HTMLCanvasElement) => {
-		const buffer = this.intake.buffer;
-		if (!buffer) return;
-		const token = ++this.#spectroToken;
+	fit = () => this.#setView(0, this.duration);
 
-		const sampleRate = buffer.sampleRate;
-		const from = Math.floor(this.view.start * sampleRate);
-		const to = Math.min(
-			buffer.length,
+	seek = (seconds: number) => this.playback.scrub(seconds);
+
+	/** iOS nudge: a twentieth of the view, paging the view to follow. */
+	nudge = (direction: number) => {
+		if (!this.decoded) return;
+		const { start, end, span } = this.view;
+		const target = Math.min(
 			Math.max(
-				from + FFT_SIZE,
-				Math.ceil(this.view.end * sampleRate),
+				0,
+				(this.playback.playhead ?? start) +
+					(direction * span) / 20,
 			),
+			this.duration,
 		);
-		const channels = channelsOf(buffer);
-		const mono = new Float32Array(to - from);
-		for (const channel of channels)
-			for (let i = 0; i < mono.length; i++)
-				mono[i]! +=
-					channel[from + i]! / channels.length;
+		if (target < start || target > end)
+			this.moveWindow(target - span / 2, span);
+		this.seek(target);
+	};
 
-		const hop = Math.max(
-			FFT_SIZE / 8,
-			Math.floor(
-				(mono.length - FFT_SIZE) / SPECTRO_MAX_COLUMNS,
-			),
-		);
-		const columns = Math.max(
-			1,
-			Math.floor((mono.length - FFT_SIZE) / hop) + 1,
-		);
+	#releaseUrl() {
+		if (this.url) URL.revokeObjectURL(this.url);
+		this.url = '';
+	}
 
-		canvas.width = columns;
-		canvas.height = SPECTRO_ROWS;
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
+	#reset() {
+		this.#token++;
+		this.playback.unload();
+		this.#releaseUrl();
+		this.view.reset(0);
+		this.playback.follow();
+		this.tracks = [];
+		this.lufs = null;
+	}
 
-		const lut = spectroPalette();
-		const window_ = new Float32Array(FFT_SIZE);
-		for (let i = 0; i < FFT_SIZE; i++)
-			window_[i] =
-				0.5 *
-				(1 -
-					Math.cos(
-						(2 * Math.PI * i) /
-							(FFT_SIZE - 1),
-					));
-
-		const block = new Float32Array(FFT_SIZE);
-		const binsPerRow = FFT_SIZE / 2 / SPECTRO_ROWS;
-		let column = 0;
-
-		const paintSome = () => {
-			if (token !== this.#spectroToken) return;
-			const image = ctx.createImageData(
-				Math.min(COLUMNS_PER_FRAME, columns - column),
-				SPECTRO_ROWS,
-			);
-
-			for (
-				let batch = 0;
-				batch < image.width;
-				batch++, column++
-			) {
-				const offset = column * hop;
-				for (let i = 0; i < FFT_SIZE; i++)
-					block[i] =
-						mono[offset + i]! * window_[i]!;
-				const magnitudes = fftMagnitudes(block);
-
-				for (let row = 0; row < SPECTRO_ROWS; row++) {
-					const bin = Math.floor(
-						(SPECTRO_ROWS - 1 - row) *
-							binsPerRow,
-					);
-					const db =
-						20 *
-						Math.log10(
-							magnitudes[bin]! +
-								1e-12,
-						);
-					const t = Math.min(
-						1,
-						Math.max(
-							0,
-							1 -
-								db /
-									SPECTRO_FLOOR_DB,
-						),
-					);
-					const index = Math.round(t * 255) * 3;
-					const px =
-						(row * image.width + batch) * 4;
-					image.data[px] = lut[index]!;
-					image.data[px + 1] = lut[index + 1]!;
-					image.data[px + 2] = lut[index + 2]!;
-					image.data[px + 3] = 255;
-				}
-			}
-
-			ctx.putImageData(image, column - image.width, 0);
-			if (column < columns) requestAnimationFrame(paintSome);
-		};
-
-		requestAnimationFrame(paintSome);
-		return () => {
-			this.#spectroToken++;
-		};
-	});
+	clear = () => {
+		this.#reset();
+		this.playback.looping = false;
+		this.playback.follow();
+		this.intake.clear();
+	};
 
 	<template>
-		<div class="dt-aa" {{filePaste this.intake.load accept=ACCEPT}}>
-			<div
-				class="dt-aa-frame"
-				{{on "drop" this.intake.drop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				{{#unless this.intake.fileName}}
-					<label class="dt-aa-drop">
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.intake.chooseFile
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-aa-drop-title"
-						>{{DROP_TITLE}}</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.intake.busy}}
-					<p class="dt-aa-status">
-						<NdsLoader />
-						Decoding…
-					</p>
-				{{/if}}
-
-				{{#if this.intake.buffer}}
-					<div class="dt-aa-bar">
-						<p
-							class="dt-aa-name"
-						>{{this.intake.fileName}}</p>
-						<button
-							type="button"
-							class="dt-aa-btn"
-							{{on
-								"click"
-								this.togglePlay
-							}}
-						>
-							<Icon
-								@name={{if
-									this.playing
-									"pause"
-									"play"
-								}}
-							/>
-							{{if
-								this.playing
-								"Pause"
-								"Play"
-							}}
-						</button>
-						<button
-							type="button"
-							class="dt-aa-btn
-								{{if
-									this.looping
-									'is-active'
-								}}"
-							aria-pressed={{if
-								this.looping
-								"true"
-								"false"
-							}}
-							{{on
-								"click"
-								this.toggleLoop
-							}}
-						>
-							<Icon @name="repeat" />
-							Loop A–B
-						</button>
-						<button
-							type="button"
-							class="dt-aa-btn"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-
-					<dl class="dt-aa-meta">
-						{{#each
-							this.rows key="label"
-							as |row|
+		<CanonSplit
+			class="audio-atlas"
+			@bannerSticks={{true}}
+			@mainLeadsStacked={{true}}
+			@footerHidden={{if this.loaded false true}}
+			{{filePaste this.intake.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<CanonReadoutBand
+						@transport={{this.playback.transport}}
+						@idle={{if
+							this.decoded
+							this.view.span
+							null
 						}}
-							<div class="dt-aa-cell">
-								<dt
-								>{{row.label}}</dt>
-								<dd
-								>{{row.value}}</dd>
-							</div>
-						{{/each}}
-					</dl>
-
-					<div class="dt-aa-panel">
-						<div class="dt-aa-panel-head">
-							<h3
-								class="dt-aa-panel-title"
-							>Waveform</h3>
-							{{#if
-								this.view.isZoomed
-							}}
-								<span
-									class="dt-aa-view"
-								>{{this.view.label}}</span>
+					>
+						<Strips
+							class="aa-band"
+							@thumbnails={{noFrames}}
+							@waveform={{true}}
+							@peaks={{this.peaks}}
+							@duration={{this.duration}}
+							@playhead={{this.playback.playhead}}
+							@selection={{this.selection}}
+							@onScrub={{this.seek}}
+						/>
+					</CanonReadoutBand>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				{{#if this.tags}}
+					<CanonRows
+						class="aa-tags"
+						@framed={{true}}
+					>
+						<div class="aa-tags-text">
+							{{#if this.tags.title}}
+								<p
+									class="aa-tags-title"
+								>{{this.tags.title}}</p>
 							{{/if}}
-							<div class="dt-aa-zoom">
-								<button
-									type="button"
-									class="dt-aa-zoom-btn"
-									aria-label="Zoom out"
-									{{on
-										"click"
-										this.view.zoomOut
-									}}
-								>
-									<Icon
-										@name="zoom-out"
-									/>
-								</button>
-								<button
-									type="button"
-									class="dt-aa-zoom-btn"
-									aria-label="Zoom in"
-									{{on
-										"click"
-										this.view.zoomIn
-									}}
-								>
-									<Icon
-										@name="zoom-in"
-									/>
-								</button>
-								<button
-									type="button"
-									class="dt-aa-zoom-btn"
-									aria-label="Reset zoom"
-									{{on
-										"click"
-										this.view.fit
-									}}
-								>
-									<Icon
-										@name="maximize"
-									/>
-								</button>
-							</div>
-						</div>
-						{{#if this.peaks}}
-							<div
-								class="dt-wavewrap"
-							>
-								<WaveMinimap
-									@peaks={{this.peaks}}
-									@duration={{this.view.duration}}
-									@viewStart={{this.view.start}}
-									@viewEnd={{this.view.end}}
-									@onView={{this.view.set}}
-								/>
-								{{#if
-									this.playheadMiniStyle
-								}}
-									<span
-										class="dt-playhead"
-										style={{this.playheadMiniStyle}}
-									></span>
-								{{/if}}
-							</div>
-						{{/if}}
-						<div class="dt-wavewrap">
-							{{! keyboard controls available }}
-							{{! template-lint-disable no-invalid-interactive }}
-							<canvas
-								class="dt-aa-wave"
-								{{this.drawWave}}
-								{{on
-									"click"
-									this.seek
-								}}
-							></canvas>
-							{{#if
-								this.playheadViewStyle
-							}}
-								<span
-									class="dt-playhead"
-									style={{this.playheadViewStyle}}
-								></span>
+							{{#if this.tags.artist}}
+								<p
+									class="aa-tags-artist"
+								>{{this.tags.artist}}</p>
+							{{/if}}
+							{{#if this.tags.album}}
+								<p
+									class="aa-tags-album"
+								>{{this.tags.album}}</p>
 							{{/if}}
 						</div>
-					</div>
-
-					<div class="dt-aa-panel">
-						<h3
-							class="dt-aa-panel-title"
-						>Spectrogram</h3>
-						<div class="dt-wavewrap">
-							{{! keyboard controls available }}
-							{{! template-lint-disable no-invalid-interactive }}
-							<canvas
-								class="dt-aa-spectro"
-								{{this.drawSpectrogram}}
-								{{on
-									"click"
-									this.seek
-								}}
-							></canvas>
-							{{#if
-								this.playheadViewStyle
-							}}
-								<span
-									class="dt-playhead"
-									style={{this.playheadViewStyle}}
-								></span>
-							{{/if}}
-						</div>
-					</div>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			<AtlasOpenIn
-				@file={{this.intake.file}}
-				@self="audio-atlas"
-			/>
-
-			{{#if this.intake.error}}
-				<p
-					class="dt-aa-error"
-					role="alert"
-				>{{this.intake.error}}</p>
-			{{/if}}
-		</div>
+				<Sections @sections={{this.sections}} />
+			</:sidebar>
+			<:main>
+				{{#if this.loaded}}
+					{{! the transport is its control; user media lacks captions }}
+					{{! template-lint-disable require-media-caption }}
+					<audio
+						class="aa-audio"
+						src={{this.url}}
+						preload="auto"
+						{{this.playback.register}}
+					></audio>
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="aa-source
+								{{if
+									this.intake.error
+									'aa-source--failed'
+								}}"
+							@title={{this.intake.fileName}}
+							@detail={{this.detail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="aa-view"
+							@title="View"
+							@detail={{this.viewText}}
+							@form="flush"
+						>
+							<CanonGrid
+								class="aa-zoom"
+							>
+								<CanonButton
+									class="aa-zoom-out"
+									@kind="cell"
+									@label="Zoom out"
+									@icon={{ZoomOut}}
+									@disabled={{this.notZoomed}}
+									@onClick={{this.zoomOut}}
+								/>
+								<CanonButton
+									class="aa-zoom-in"
+									@kind="cell"
+									@label="Zoom in"
+									@icon={{ZoomIn}}
+									@disabled={{this.undecoded}}
+									@onClick={{this.zoomIn}}
+								/>
+								<CanonButton
+									class="aa-fit"
+									@kind="cell"
+									@label="Reset zoom"
+									@icon={{Fit}}
+									@disabled={{this.notZoomed}}
+									@onClick={{this.fit}}
+								/>
+							</CanonGrid>
+						</CanonRow>
+					</CanonRows>
+					{{#if this.intake.buffer}}
+						<CanonCanvas
+							class="aa-picture"
+							@height={{sheetHeight}}
+							@boxing="unlessWide"
+							@background="var(--canon-muted)"
+						>
+							<Sheet
+								@buffer={{this.intake.buffer}}
+								@peaks={{this.viewPeaks}}
+								@start={{this.view.start}}
+								@end={{this.view.end}}
+								@playhead={{this.playback.playhead}}
+								@onSeek={{this.seek}}
+								@onWindow={{this.moveWindow}}
+								@onNudge={{this.nudge}}
+								@onFit={{this.fit}}
+							/>
+						</CanonCanvas>
+					{{/if}}
+					<OpenIn
+						class="aa-open"
+						@file={{this.intake.file}}
+						@self="audio-atlas"
+					/>
+				{{else}}
+					<CanonCanvas
+						class="aa-drop"
+						@height={{slotHeight}}
+						@boxing="unlessWide"
+					>
+						<Slot
+							class="aa-slot"
+							@prompt={{DROP_PROMPT}}
+							@icon="audio-waveform"
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+					</CanonCanvas>
+					{{#if this.intake.error}}
+						<CanonRows @framed={{true}}>
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						</CanonRows>
+					{{/if}}
+				{{/if}}
+			</:main>
+			<:footer>
+				<Transport
+					@playback={{this.playback}}
+					@ready={{this.decoded}}
+				/>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

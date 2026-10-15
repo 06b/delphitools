@@ -27,14 +27,14 @@ const qrVisible = await page.evaluate(
 );
 check("gradient-genny per-tool sticker renders and loads", hasQrBtn && qrVisible);
 
-// no lousy art: image 404 removes whole sticker block
-await visit(page, "/tools/audio-atlas");
+// no lousy art: image 404 removes whole sticker block (a tool with no art, not canon)
+await visit(page, "/tools/image-masker");
 await page.evaluate(() => {
 	const el = document.querySelector(".dt-tool-sticker");
 	if (el) el.scrollIntoView({ block: "center" });
 });
 await sleep(600);
-const atlas = await page.evaluate(() => {
+const bare = await page.evaluate(() => {
 	const box = document.querySelector(".dt-tool-sticker");
 	return {
 		noBtn: !document.querySelector(
@@ -49,10 +49,10 @@ const atlas = await page.evaluate(() => {
 	};
 });
 check(
-	"audio-atlas per-tool sticker degrades to nothing",
-	atlas.noBtn && atlas.noCaption,
+	"image-masker per-tool sticker degrades to nothing",
+	bare.noBtn && bare.noCaption,
 );
-check("audio-atlas sticker block collapses", atlas.collapsed);
+check("image-masker sticker block collapses", bare.collapsed);
 
 await visit(page, "/tools/subtitle-converter");
 await page.evaluate(() => {
