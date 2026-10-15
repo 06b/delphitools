@@ -61,6 +61,23 @@ const decoded = () =>
 		}
 		return { duration: video.duration, type: blob.type };
 	});
+// at max scroll the floating footer leaves the last row clear
+const footerClear = () =>
+	page.evaluate(async () => {
+		const footer = document.querySelector('.canon-split-footer');
+		const pane = footer.parentElement;
+		const stacked = getComputedStyle(pane).display === 'contents';
+		const scroller = stacked ? pane.closest('.canon-split-body') : pane;
+		scroller.scrollTop = scroller.scrollHeight;
+		await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+		const rows = [
+			...(stacked ? document.querySelectorAll('.canon-split-pane > *') : pane.children),
+		].filter((c) => c !== footer && c.getBoundingClientRect().height > 0);
+		const last = Math.max(...rows.map((c) => c.getBoundingClientRect().bottom));
+		const top = footer.getBoundingClientRect().top;
+		scroller.scrollTop = 0;
+		return { ok: last < top, last: Math.round(last), top: Math.round(top) };
+	});
 const videoTime = () => page.$eval('.vt-preview video', (v) => v.currentTime);
 
 check(
@@ -224,6 +241,9 @@ check(
 	String(await videoTime()),
 );
 
+let clear = await footerClear();
+check('wide: at the end of the scroll the footer clears the last row', clear.ok, JSON.stringify(clear));
+
 await page.$eval('.vt-preview video', (v) => (v.currentTime = 1));
 await sleep(200);
 await page.click('.vt-set-in');
@@ -283,6 +303,8 @@ check(
 	'phone: nothing scrolls sideways',
 	await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
 );
+clear = await footerClear();
+check('phone: at the end of the scroll the footer clears the last row', clear.ok, JSON.stringify(clear));
 check(
 	'phone: the grips keep 44 px targets',
 	await page.$$eval('.media-trim-grip', (grips) =>
