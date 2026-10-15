@@ -29,6 +29,8 @@ export interface TrimSignature {
 		disabled?: boolean;
 		/** Seconds an arrow key moves a handle; default a hundredth of the file, at least 0.1. */
 		step?: number;
+		/** Seconds at the strip's leading edge, added to what the grips announce; default 0. */
+		origin?: number;
 		/** The new points, already through clampSpan, and the edge that moved. */
 		onChange: (start: number, end: number, moved: TrimEdge) => void;
 	};
@@ -63,22 +65,44 @@ export default class Trim extends Component<TrimSignature> {
 		return this.args.step ?? nudgeStep(this.args.duration);
 	}
 
+	get origin() {
+		return this.args.origin ?? 0;
+	}
+
+	#shift(seconds: number) {
+		return this.origin ? roundMs(seconds + this.origin) : seconds;
+	}
+
+	get startNow() {
+		return this.#shift(this.args.start);
+	}
+
+	get endNow() {
+		return this.#shift(this.args.end);
+	}
+
 	get startText() {
-		return tc(this.args.start);
+		return tc(this.startNow);
 	}
 
 	get endText() {
-		return tc(this.args.end);
+		return tc(this.endNow);
 	}
 
 	get startMax() {
-		return Math.max(0, this.args.end - minimumSpan);
+		return this.#shift(Math.max(0, this.args.end - minimumSpan));
+	}
+
+	get endMax() {
+		return this.#shift(this.args.duration);
 	}
 
 	get endMin() {
-		return Math.min(
-			this.args.duration,
-			this.args.start + minimumSpan,
+		return this.#shift(
+			Math.min(
+				this.args.duration,
+				this.args.start + minimumSpan,
+			),
 		);
 	}
 
@@ -179,9 +203,9 @@ export default class Trim extends Component<TrimSignature> {
 						role="slider"
 						tabindex="0"
 						aria-label="Start"
-						aria-valuemin="0"
+						aria-valuemin={{this.origin}}
 						aria-valuemax={{this.startMax}}
-						aria-valuenow={{@start}}
+						aria-valuenow={{this.startNow}}
 						aria-valuetext={{this.startText}}
 						{{this.drags "start"}}
 						{{on "keydown" this.keyStart}}
@@ -192,8 +216,8 @@ export default class Trim extends Component<TrimSignature> {
 						tabindex="0"
 						aria-label="End"
 						aria-valuemin={{this.endMin}}
-						aria-valuemax={{@duration}}
-						aria-valuenow={{@end}}
+						aria-valuemax={{this.endMax}}
+						aria-valuenow={{this.endNow}}
 						aria-valuetext={{this.endText}}
 						{{this.drags "end"}}
 						{{on "keydown" this.keyEnd}}

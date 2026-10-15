@@ -1,631 +1,680 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
-import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import WaveMinimap from 'delphitools-v2/components/wave-minimap';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
+import { formatBytes } from 'delphitools-v2/lib/image-compress';
+import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import {
 	applyFades,
 	AudioIntake,
-	audioContext,
 	channelsOf,
-	drawWaveform,
 	encodeWav,
 	extractPeaks,
 	ViewWindow,
 } from 'delphitools-v2/lib/audio';
 import { AUDIO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Playback from 'delphitools-v2/components/tools/media/playback';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Strips from 'delphitools-v2/components/tools/media/strips';
+import Transport from 'delphitools-v2/components/tools/media/transport';
+import Trim, {
+	type TrimEdge,
+} from 'delphitools-v2/components/tools/media/trim';
+import {
+	clampSpan,
+	minimumSpan,
+} from 'delphitools-v2/components/tools/media/trim-span';
+import { peakBuckets } from 'delphitools-v2/components/tools/media/frames';
+import {
+	centredOn,
+	envelope,
+	fadeGain,
+	fadeLimit,
+	gainAt,
+} from 'delphitools-v2/components/tools/audio-trimmer/fades';
+import './media/media.css';
+import './audio-trimmer/audio-trimmer.css';
 
 const ACCEPT = acceptAttr(AUDIO_ACCEPT);
+const DROP_PROMPT = 'Drop an audio file here or click to upload';
+const EXPORT_ERROR = "Couldn't write the trimmed file.";
+const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
+const fixed = (seconds: number) => seconds.toFixed(2);
+const noFrames: string[] = [];
 
-const DROP_TITLE = 'Drop an audio file here or click to upload';
+// iOS AudioTrimmerViewController: band 150, editor 180
+const bandHeight = 150;
+const editorHeight = 180;
 
-const PEAK_BUCKETS = 800;
-const MIN_SELECTION_S = 0.01;
+const flag = (name: string) =>
+	typeof window !== 'undefined' &&
+	new URLSearchParams(window.location.search).get(name) === 'yes';
 
-export default class AudioTrimmerTool extends Component {
-	@tracked startS = 0;
-	@tracked endS = 0;
-	@tracked fadeInS = 0;
-	@tracked fadeOutS = 0;
-	@tracked playing = false;
-	@tracked looping = false;
-	@tracked playheadS: number | null = null;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name="download" /></template>;
+const SetIn = <template><IconSvg @name="arrow-right-to-line" /></template>;
+const SetOut = <template><IconSvg @name="arrow-left-to-line" /></template>;
+const ZoomOut = <template><IconSvg @name="zoom-out" /></template>;
+const ZoomIn = <template><IconSvg @name="zoom-in" /></template>;
+const Fit = <template><IconSvg @name="maximize" /></template>;
 
+/** The port of AudioTrimmerViewController, on the web tool's decode, fades and WAV encode. */
+export default class AudioTrimmer extends Component {
+	intake = new AudioIntake({
+		onLoad: (file) => this.#load(file),
+		onDecoded: (buffer) => this.#decoded(buffer),
+	});
+	drop = new Drop(ACCEPT, (file) => this.intake.load(file));
+	playback = new Playback();
 	view = new ViewWindow();
 
-	#source: AudioBufferSourceNode | null = null;
-	#dragging = false;
-	#rafId = 0;
-	#startedCtxTime = 0;
-	#playedFromS = 0;
-	#playedSpanS = 0;
-
-	intake = new AudioIntake({
-		onDecoded: (buffer) => {
-			this.startS = 0;
-			this.endS = Math.floor(buffer.duration * 100) / 100;
-			this.fadeInS = 0;
-			this.fadeOutS = 0;
-			this.view.reset(buffer.duration);
-		},
-	});
+	@tracked url = '';
+	@tracked start = 0;
+	@tracked end = 0;
+	@tracked fadeIn = 0;
+	@tracked fadeOut = 0;
+	@tracked busy = false;
+	@tracked failed = false;
+	@tracked result: Blob | null = null;
+	@tracked resultUrl = '';
+	#cut: [number, number] = [0, 0];
+	#token = 0;
 
 	willDestroy() {
 		super.willDestroy();
-		this.#stopSource();
+		this.#token++;
+		this.playback.unload();
+		this.#releaseUrl();
+		this.#releaseResult();
+	}
+
+	get loaded() {
+		return this.intake.fileName !== '';
+	}
+
+	get decoded() {
+		return this.intake.buffer !== null;
+	}
+
+	get undecoded() {
+		return !this.decoded;
 	}
 
 	get duration() {
 		return this.intake.buffer?.duration ?? 0;
 	}
 
-	get meta() {
+	get detail() {
+		if (this.intake.error) return this.intake.error;
 		const buffer = this.intake.buffer;
-		if (!buffer) return '';
+		if (!buffer) return 'Decoding…';
 		return `${buffer.duration.toFixed(2)} s · ${buffer.sampleRate} Hz · ${buffer.numberOfChannels} ch`;
 	}
 
-	get selectionLabel() {
-		const from = Math.min(this.startS, this.endS);
-		const to = Math.max(this.startS, this.endS);
-		return `${from.toFixed(2)} – ${to.toFixed(2)} s · ${(to - from).toFixed(2)} s`;
+	get selection(): [number, number] | null {
+		return this.decoded ? [this.start, this.end] : null;
+	}
+
+	get startMax() {
+		return Math.max(0, this.end - minimumSpan);
+	}
+
+	get endMin() {
+		return Math.min(this.duration, this.start + minimumSpan);
+	}
+
+	get startText() {
+		return tc(this.start);
+	}
+
+	get endText() {
+		return tc(this.end);
+	}
+
+	get length() {
+		return Math.max(0, this.end - this.start);
+	}
+
+	get fadeMax() {
+		return fadeLimit(this.start, this.end);
+	}
+
+	get noPlayhead() {
+		return this.playback.playhead === null;
 	}
 
 	@cached
 	get peaks() {
 		const buffer = this.intake.buffer;
-		if (!buffer) return null;
-		return extractPeaks(channelsOf(buffer), PEAK_BUCKETS);
+		return buffer
+			? extractPeaks(channelsOf(buffer), peakBuckets)
+			: null;
 	}
 
 	// subarrays avoid copies
 	@cached
 	get viewPeaks() {
 		const buffer = this.intake.buffer;
-		if (!buffer) return null;
+		if (!buffer || !this.view.isZoomed) return this.peaks;
 		const from = Math.floor(this.view.start * buffer.sampleRate);
 		const to = Math.max(
 			from + 2,
 			Math.ceil(this.view.end * buffer.sampleRate),
 		);
 		return extractPeaks(
-			channelsOf(buffer).map((channel) =>
-				channel.subarray(from, to),
-			),
-			PEAK_BUCKETS,
+			channelsOf(buffer).map((c) => c.subarray(from, to)),
+			peakBuckets,
 		);
 	}
 
-	drawWave = modifier(
-		(
-			canvas: HTMLCanvasElement,
-			_positional: [],
-			named: { start: number; end: number },
-		) => {
-			const render = () => {
-				const peaks = this.viewPeaks;
-				const dpr = window.devicePixelRatio || 1;
-				const width = canvas.clientWidth * dpr;
-				const height = canvas.clientHeight * dpr;
-				canvas.width = width;
-				canvas.height = height;
-				const ctx = canvas.getContext('2d');
-				if (!ctx || !peaks) return;
-
-				const styles = getComputedStyle(canvas);
-				ctx.clearRect(0, 0, width, height);
-				ctx.fillStyle =
-					styles.getPropertyValue('--primary');
-				drawWaveform(ctx, peaks, width, height);
-
-				const toX = (time: number) =>
-					Math.min(
-						width,
-						Math.max(
-							0,
-							((time -
-								this.view
-									.start) /
-								this.view
-									.span) *
-								width,
-						),
-					);
-				const from = toX(
-					Math.min(named.start, named.end),
-				);
-				const to = toX(
-					Math.max(named.start, named.end),
-				);
-				ctx.fillStyle =
-					styles.getPropertyValue(
-						'--muted-foreground',
-					);
-				ctx.globalAlpha = 0.55;
-				ctx.fillRect(0, 0, from, height);
-				ctx.fillRect(to, 0, width - to, height);
-				ctx.globalAlpha = 1;
-			};
-
-			render();
-			const observer = new ResizeObserver(render);
-			observer.observe(canvas);
-			return () => observer.disconnect();
-		},
-	);
-
-	#timeAt(canvas: HTMLCanvasElement, clientX: number): number {
-		const rect = canvas.getBoundingClientRect();
-		const x = Math.min(
-			rect.width,
-			Math.max(0, clientX - rect.left),
-		);
-		const time =
-			this.view.start + (x / rect.width) * this.view.span;
-		return Math.round(time * 1000) / 1000;
+	#inView(seconds: number) {
+		const { start, span } = this.view;
+		return Math.min(Math.max(seconds - start, 0), span);
 	}
 
-	pointerDown = (event: PointerEvent) => {
-		if (!this.duration) return;
-		const canvas = event.currentTarget as HTMLCanvasElement;
-		canvas.setPointerCapture(event.pointerId);
-		this.#dragging = true;
-		this.startS = this.#timeAt(canvas, event.clientX);
-		this.endS = this.startS;
-	};
+	get viewStart() {
+		return this.#inView(this.start);
+	}
 
-	pointerMove = (event: PointerEvent) => {
-		if (!this.#dragging) return;
-		const canvas = event.currentTarget as HTMLCanvasElement;
-		this.endS = this.#timeAt(canvas, event.clientX);
-	};
+	get viewEnd() {
+		return this.#inView(this.end);
+	}
 
-	pointerUp = () => {
-		if (!this.#dragging) return;
-		this.#dragging = false;
-		if (Math.abs(this.endS - this.startS) < MIN_SELECTION_S) {
-			this.startS = 0;
-			this.endS = this.duration;
+	get viewPlayhead() {
+		const at = this.playback.playhead;
+		if (at === null) return null;
+		const { start, end } = this.view;
+		return at >= start && at <= end ? at - start : null;
+	}
+
+	get viewLabel() {
+		return this.view.isZoomed ? this.view.label : '';
+	}
+
+	/** The gain curve over the editor, in a 1 by 1 box. */
+	get curve() {
+		if (!this.decoded || !(this.fadeIn > 0 || this.fadeOut > 0))
+			return '';
+		const { start, span } = this.view;
+		return envelope(this.start, this.end, this.fadeIn, this.fadeOut)
+			.map(([t, gain]) => `${(t - start) / span},${1 - gain}`)
+			.join(' ');
+	}
+
+	get fileName() {
+		return `${this.intake.baseName || 'audio'}-trimmed.wav`;
+	}
+
+	get resultRow() {
+		const blob = this.result;
+		if (!blob) return null;
+		const [from, to] = this.#cut;
+		return {
+			name: this.fileName,
+			detail: `wav · ${formatBytes(blob.size)} · ${tc(from)} – ${tc(to)}`,
+		};
+	}
+
+	gain = (seconds: number) =>
+		gainAt(
+			seconds,
+			this.start,
+			this.end,
+			this.fadeIn,
+			this.fadeOut,
+		);
+
+	#load(file: File) {
+		this.#reset();
+		this.url = URL.createObjectURL(file);
+	}
+
+	#decoded(buffer: AudioBuffer) {
+		this.view.reset(buffer.duration);
+		// iOS: the out point rounds down to the hundredth
+		this.select(0, Math.floor(buffer.duration * 100) / 100);
+		// iOS -trimFades yes
+		if (flag('trimFades')) this.#fades(1.5, 2.5);
+		// iOS -trimLoop yes
+		if (flag('trimLoop')) {
+			this.playback.looping = true;
+			this.select(1, 1.6);
+			this.playback.play();
 		}
-	};
+	}
 
-	#number = (event: Event) =>
-		parseFloat((event.target as HTMLInputElement).value);
-
-	setStart = (event: Event) => {
-		const value = this.#number(event);
-		if (Number.isFinite(value))
-			this.startS = Math.max(
-				0,
-				Math.min(this.duration, value),
-			);
-	};
-
-	setEnd = (event: Event) => {
-		const value = this.#number(event);
-		if (Number.isFinite(value))
-			this.endS = Math.max(0, Math.min(this.duration, value));
-	};
-
-	setFadeIn = (event: Event) => {
-		const value = this.#number(event);
-		if (Number.isFinite(value)) this.fadeInS = Math.max(0, value);
-	};
-
-	setFadeOut = (event: Event) => {
-		const value = this.#number(event);
-		if (Number.isFinite(value)) this.fadeOutS = Math.max(0, value);
-	};
-
-	#selectionChannels(): {
-		channels: Float32Array<ArrayBuffer>[];
-		sampleRate: number;
-	} | null {
-		const buffer = this.intake.buffer;
-		if (!buffer) return null;
-		const sampleRate = buffer.sampleRate;
-		const from = Math.floor(
-			Math.min(this.startS, this.endS) * sampleRate,
+	select = (start: number, end: number, moved?: TrimEdge) => {
+		[this.start, this.end] = clampSpan(
+			start,
+			end,
+			this.duration,
+			moved,
 		);
+		this.playback.range = [this.start, this.end];
+		this.#fades(this.fadeIn, this.fadeOut);
+	};
+
+	selectStart = (seconds: number) => this.select(seconds, this.end);
+	selectEnd = (seconds: number) =>
+		this.select(this.start, seconds, 'end');
+
+	/** The editor reports points inside the view; only the moved edge is new. */
+	edit = (start: number, end: number, moved: TrimEdge) => {
+		const origin = this.view.start;
+		if (moved === 'start') this.select(start + origin, this.end);
+		else this.select(this.start, end + origin, 'end');
+		this.playback.scrub(moved === 'start' ? this.start : this.end);
+	};
+
+	setIn = () => {
+		const at = this.playback.playhead;
+		if (at !== null) this.select(at, this.end);
+	};
+
+	setOut = () => {
+		const at = this.playback.playhead;
+		if (at !== null) this.select(this.start, at, 'end');
+	};
+
+	setFadeIn = (seconds: number) => this.#fades(seconds, this.fadeOut);
+	setFadeOut = (seconds: number) => this.#fades(this.fadeIn, seconds);
+
+	#fades(fadeIn: number, fadeOut: number) {
+		const most = this.fadeMax;
+		this.fadeIn = Math.min(Math.max(fadeIn, 0), most);
+		this.fadeOut = Math.min(Math.max(fadeOut, 0), most);
+		this.#invalidate();
+	}
+
+	/** Pages the zoomed editor to a playhead outside it. */
+	follow = (event: Event) => {
+		const at = (event.target as HTMLMediaElement).currentTime;
+		const { start, end, span, isZoomed } = this.view;
+		if (!isZoomed || (at >= start && at <= end)) return;
+		this.view.set(...centredOn(at, span, this.duration));
+	};
+
+	zoomIn = () => this.view.zoomIn();
+	zoomOut = () => this.view.zoomOut();
+	fit = () => this.view.fit();
+
+	/** iOS job.reset: a new cut or fade drops the result. */
+	#invalidate() {
+		if (this.busy) this.#token++;
+		this.busy = false;
+		this.failed = false;
+		this.#releaseResult();
+	}
+
+	export = () => void this.#export();
+
+	async #export() {
+		const buffer = this.intake.buffer;
+		if (!buffer || this.busy) return;
+		const token = ++this.#token;
+		this.busy = true;
+		this.failed = false;
+		this.#releaseResult();
+		this.playback.pause();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		if (this.isDestroyed || token !== this.#token) return;
+		const { sampleRate } = buffer;
+		const from = Math.floor(this.start * sampleRate);
 		const to = Math.min(
 			buffer.length,
-			Math.ceil(
-				Math.max(this.startS, this.endS) * sampleRate,
-			),
+			Math.ceil(this.end * sampleRate),
 		);
-		if (to - from < 1) return null;
-
-		// copytochannel requires arraybuffer
-		const channels = channelsOf(buffer).map(
-			(channel) =>
-				new Float32Array(channel.subarray(from, to)),
-		);
-		applyFades(channels, sampleRate, this.fadeInS, this.fadeOutS);
-		return { channels, sampleRate };
-	}
-
-	#stopSource() {
-		cancelAnimationFrame(this.#rafId);
-		this.#source?.stop();
-		this.#source = null;
-		this.playing = false;
-		this.playheadS = null;
-	}
-
-	#tick = () => {
-		if (!this.playing || this.#playedSpanS <= 0) return;
-		const elapsed =
-			audioContext().currentTime - this.#startedCtxTime;
-		this.playheadS =
-			this.#playedFromS + (elapsed % this.#playedSpanS);
-		this.#rafId = requestAnimationFrame(this.#tick);
-	};
-
-	toggleLoop = () => {
-		this.looping = !this.looping;
-		// loop changes avoid restart
-		if (this.#source) this.#source.loop = this.looping;
-	};
-
-	get playheadMiniStyle() {
-		if (this.playheadS === null || !this.duration) return null;
-		const pct = (this.playheadS / this.duration) * 100;
-		return htmlSafe(`left: ${pct.toFixed(3)}%`);
-	}
-
-	get playheadViewStyle() {
-		if (this.playheadS === null || !this.duration) return null;
-		if (
-			this.playheadS < this.view.start ||
-			this.playheadS > this.view.end
-		)
-			return null;
-		const pct =
-			((this.playheadS - this.view.start) / this.view.span) *
-			100;
-		return htmlSafe(`left: ${pct.toFixed(3)}%`);
-	}
-
-	togglePlay = () => {
-		if (this.playing) {
-			this.#stopSource();
-			return;
+		try {
+			// copies: applyFades writes in place
+			const channels = channelsOf(buffer).map(
+				(c) => new Float32Array(c.subarray(from, to)),
+			);
+			applyFades(
+				channels,
+				sampleRate,
+				this.fadeIn,
+				this.fadeOut,
+			);
+			this.result = new Blob(
+				[encodeWav(channels, sampleRate)],
+				{
+					type: 'audio/wav',
+				},
+			);
+			this.resultUrl = URL.createObjectURL(this.result);
+			this.#cut = [this.start, this.end];
+		} catch (error) {
+			console.error('Export failed:', error);
+			this.failed = true;
 		}
-		const selection = this.#selectionChannels();
-		if (!selection) return;
+		this.busy = false;
+	}
 
-		const ctx = audioContext();
-		void ctx.resume();
-		const buffer = ctx.createBuffer(
-			selection.channels.length,
-			selection.channels[0]!.length,
-			selection.sampleRate,
-		);
-		selection.channels.forEach((channel, i) =>
-			buffer.copyToChannel(channel, i),
-		);
-
-		const source = ctx.createBufferSource();
-		source.buffer = buffer;
-		source.loop = this.looping;
-		source.connect(ctx.destination);
-		source.onended = () => {
-			if (this.#source === source) {
-				this.#source = null;
-				this.playing = false;
-				this.playheadS = null;
-			}
-		};
-		this.#source = source;
-		this.playing = true;
-		this.#playedFromS = Math.min(this.startS, this.endS);
-		this.#playedSpanS = buffer.duration;
-		this.#startedCtxTime = ctx.currentTime;
-		this.playheadS = this.#playedFromS;
-		source.start();
-		this.#rafId = requestAnimationFrame(this.#tick);
+	save = () => {
+		if (this.result) downloadBlob(this.result, this.fileName);
 	};
 
-	exportWav = () => {
-		const selection = this.#selectionChannels();
-		if (!selection) return;
-		downloadBlob(
-			new Blob(
-				[
-					encodeWav(
-						selection.channels,
-						selection.sampleRate,
-					),
-				],
-				{ type: 'audio/wav' },
-			),
-			`${this.intake.baseName || 'audio'}-trimmed.wav`,
-		);
+	preview = () => {
+		if (this.resultUrl) window.open(this.resultUrl, '_blank');
 	};
+
+	#releaseResult() {
+		if (this.resultUrl) URL.revokeObjectURL(this.resultUrl);
+		this.resultUrl = '';
+		this.result = null;
+	}
+
+	#releaseUrl() {
+		if (this.url) URL.revokeObjectURL(this.url);
+		this.url = '';
+	}
+
+	#reset() {
+		this.#token++;
+		this.playback.unload();
+		this.playback.range = null;
+		this.#releaseUrl();
+		this.#releaseResult();
+		this.view.reset(0);
+		this.start = 0;
+		this.end = 0;
+		this.fadeIn = 0;
+		this.fadeOut = 0;
+		this.busy = false;
+		this.failed = false;
+	}
 
 	clear = () => {
-		this.#stopSource();
-		this.looping = false;
+		this.#reset();
+		this.playback.looping = false;
 		this.intake.clear();
 	};
 
 	<template>
-		<div class="dt-at" {{filePaste this.intake.load accept=ACCEPT}}>
-			<div
-				class="dt-at-frame"
-				{{on "drop" this.intake.drop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				{{#unless this.intake.fileName}}
-					<label class="dt-at-drop">
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.intake.chooseFile
-							}}
+		<CanonSplit
+			class="audio-trimmer"
+			@sidebarWidth={{380}}
+			@bannerSticks={{true}}
+			@footerHidden={{if this.loaded false true}}
+			{{filePaste this.intake.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<CanonReadoutBand
+						@transport={{this.playback.transport}}
+						@idle={{if
+							this.decoded
+							this.length
+							null
+						}}
+					>
+						<Strips
+							class="at-band"
+							@thumbnails={{noFrames}}
+							@waveform={{true}}
+							@peaks={{this.peaks}}
+							@duration={{this.duration}}
+							@playhead={{this.playback.playhead}}
+							@selection={{this.selection}}
+							@onScrub={{this.playback.scrub}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-at-drop-title"
-						>{{DROP_TITLE}}</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.intake.busy}}
-					<p class="dt-at-status">
-						<NdsLoader />
-						Decoding…
-					</p>
-				{{/if}}
-
-				{{#if this.intake.buffer}}
-					<div class="dt-at-bar">
-						<div class="dt-at-info">
-							<p
-								class="dt-at-name"
-							>{{this.intake.fileName}}</p>
-							<p
-								class="dt-at-meta"
-							>{{this.meta}}</p>
-						</div>
-						<button
-							type="button"
-							class="dt-at-btn"
-							{{on
-								"click"
-								this.togglePlay
-							}}
-						>
-							<Icon
-								@name={{if
-									this.playing
-									"square"
-									"play"
-								}}
-							/>
-							{{if
-								this.playing
-								"Stop"
-								"Play"
-							}}
-						</button>
-						<button
-							type="button"
-							class="dt-at-btn
+					</CanonReadoutBand>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				{{#if this.loaded}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="at-source
 								{{if
-									this.looping
-									'is-active'
+									this.intake.error
+									'at-source--failed'
 								}}"
-							aria-pressed={{if
-								this.looping
-								"true"
-								"false"
-							}}
-							{{on
-								"click"
-								this.toggleLoop
-							}}
+							@title={{this.intake.fileName}}
+							@detail={{this.detail}}
+							@form="flush"
 						>
-							<Icon @name="repeat" />
-							Loop
-						</button>
-						<button
-							type="button"
-							class="dt-at-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+						<CanonHeading @text="Fades" />
+						<CanonRow
+							class="at-fade at-fade-in"
+							@title="Fade in (s)"
+							@form="flush"
+							as |titleId|
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-at-btn is-primary"
-							{{on
-								"click"
-								this.exportWav
-							}}
+							<CanonSlider
+								@value={{this.fadeIn}}
+								@max={{this.fadeMax}}
+								@step={{0.01}}
+								@readout={{fixed}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setFadeIn}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="at-fade at-fade-out"
+							@title="Fade out (s)"
+							@form="flush"
+							as |titleId|
 						>
-							<DownloadLabel
-								@label="Export WAV"
+							<CanonSlider
+								@value={{this.fadeOut}}
+								@max={{this.fadeMax}}
+								@step={{0.01}}
+								@readout={{fixed}}
+								@fillsFromTrailing={{true}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setFadeOut}}
 							/>
-						</button>
-					</div>
-
-					<div class="dt-at-fields">
-						<label class="dt-at-field">
-							<span>Start (s)</span>
-							<input
-								type="number"
-								min="0"
-								step="0.01"
-								value={{this.startS}}
-								{{on
-									"input"
-									this.setStart
-								}}
-							/>
-						</label>
-						<label class="dt-at-field">
-							<span>End (s)</span>
-							<input
-								type="number"
-								min="0"
-								step="0.01"
-								value={{this.endS}}
-								{{on
-									"input"
-									this.setEnd
-								}}
-							/>
-						</label>
-						<label class="dt-at-field">
-							<span>Fade in (s)</span>
-							<input
-								type="number"
-								min="0"
-								step="0.1"
-								value={{this.fadeInS}}
-								{{on
-									"input"
-									this.setFadeIn
-								}}
-							/>
-						</label>
-						<label class="dt-at-field">
-							<span>Fade out (s)</span>
-							<input
-								type="number"
-								min="0"
-								step="0.1"
-								value={{this.fadeOutS}}
-								{{on
-									"input"
-									this.setFadeOut
-								}}
-							/>
-						</label>
-					</div>
-
-					<div class="dt-at-viewbar">
-						<button
-							type="button"
-							class="dt-at-zoom-btn"
-							aria-label="Zoom out"
-							{{on
-								"click"
-								this.view.zoomOut
-							}}
-						>
-							<Icon
-								@name="zoom-out"
-							/>
-						</button>
-						<button
-							type="button"
-							class="dt-at-zoom-btn"
-							aria-label="Zoom in"
-							{{on
-								"click"
-								this.view.zoomIn
-							}}
-						>
-							<Icon @name="zoom-in" />
-						</button>
-						<button
-							type="button"
-							class="dt-at-zoom-btn"
-							aria-label="Reset zoom"
-							{{on
-								"click"
-								this.view.fit
-							}}
-						>
-							<Icon
-								@name="maximize"
-							/>
-						</button>
-						{{#if this.view.isZoomed}}
-							<span
-								class="dt-at-view"
-							>{{this.view.label}}</span>
-						{{/if}}
-					</div>
-
-					{{#if this.peaks}}
-						<div class="dt-wavewrap">
-							<WaveMinimap
-								@peaks={{this.peaks}}
-								@duration={{this.view.duration}}
-								@viewStart={{this.view.start}}
-								@viewEnd={{this.view.end}}
-								@onView={{this.view.set}}
-							/>
-							{{#if
-								this.playheadMiniStyle
-							}}
-								<span
-									class="dt-playhead"
-									style={{this.playheadMiniStyle}}
-								></span>
-							{{/if}}
-						</div>
-					{{/if}}
-
-					<div class="dt-wavewrap">
-						{{! drag selection needs the down event; the
-							start/end fields are the keyboard path }}
-						{{! template-lint-disable no-pointer-down-event-binding }}
-						<canvas
-							class="dt-at-wave"
-							{{this.drawWave
-								start=this.startS
-								end=this.endS
-							}}
-							{{on
-								"pointerdown"
-								this.pointerDown
-							}}
-							{{on
-								"pointermove"
-								this.pointerMove
-							}}
-							{{on
-								"pointerup"
-								this.pointerUp
-							}}
-						></canvas>
-						{{#if this.playheadViewStyle}}
-							<span
-								class="dt-playhead"
-								style={{this.playheadViewStyle}}
-							></span>
-						{{/if}}
-					</div>
-
-					<p
-						class="dt-at-selection"
-					>{{this.selectionLabel}}</p>
+						</CanonRow>
+						<Job
+							@title="Export WAV"
+							@icon={{Save}}
+							@failure={{EXPORT_ERROR}}
+							@disabled={{this.undecoded}}
+							@busy={{this.busy}}
+							@failed={{this.failed}}
+							@result={{this.resultRow}}
+							@onRun={{this.export}}
+							@onSave={{this.save}}
+							@onPreview={{this.preview}}
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			{{#if this.intake.error}}
-				<p
-					class="dt-at-error"
-					role="alert"
-				>{{this.intake.error}}</p>
-			{{/if}}
-		</div>
+			</:sidebar>
+			<:main>
+				{{#if this.loaded}}
+					{{! the transport is its control; user media lacks captions }}
+					{{! template-lint-disable require-media-caption }}
+					<audio
+						class="at-audio"
+						src={{this.url}}
+						preload="auto"
+						{{this.playback.register}}
+						{{fadeGain this.gain}}
+						{{on "timeupdate" this.follow}}
+					></audio>
+					<CanonCanvas
+						class="at-editor"
+						@height={{editorHeight}}
+						@boxing="unlessWide"
+						@background="var(--canon-muted)"
+					>
+						<Trim
+							@duration={{this.view.span}}
+							@start={{this.viewStart}}
+							@end={{this.viewEnd}}
+							@origin={{this.view.start}}
+							@disabled={{this.undecoded}}
+							@onChange={{this.edit}}
+						>
+							<div class="at-lane">
+								<Strips
+									@thumbnails={{noFrames}}
+									@waveform={{true}}
+									@peaks={{this.viewPeaks}}
+									@duration={{this.view.span}}
+									@playhead={{this.viewPlayhead}}
+								/>
+								{{#if
+									this.curve
+								}}
+									<svg
+										class="at-curve"
+										viewBox="0 0 1 1"
+										preserveAspectRatio="none"
+										aria-hidden="true"
+									><polyline
+											points={{this.curve}}
+										/></svg>
+								{{/if}}
+							</div>
+						</Trim>
+					</CanonCanvas>
+					<CanonRows @framed={{true}}>
+						<CanonRow
+							class="at-start"
+							@title="Start"
+							@detail={{this.startText}}
+							@form="flush"
+							as |titleId|
+						>
+							<CanonDecimalField
+								@value={{this.start}}
+								@max={{this.startMax}}
+								@labelledBy={{titleId}}
+								@disabled={{this.undecoded}}
+								@onChange={{this.selectStart}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="at-end"
+							@title="End"
+							@detail={{this.endText}}
+							@form="flush"
+							as |titleId|
+						>
+							<CanonDecimalField
+								@value={{this.end}}
+								@min={{this.endMin}}
+								@max={{this.duration}}
+								@labelledBy={{titleId}}
+								@disabled={{this.undecoded}}
+								@onChange={{this.selectEnd}}
+							/>
+						</CanonRow>
+						<CanonGrid>
+							<CanonButton
+								class="at-set-in"
+								@text="Set in"
+								@icon={{SetIn}}
+								@disabled={{this.noPlayhead}}
+								@onClick={{this.setIn}}
+							/>
+							<CanonButton
+								class="at-set-out"
+								@text="Set out"
+								@icon={{SetOut}}
+								@disabled={{this.noPlayhead}}
+								@onClick={{this.setOut}}
+							/>
+						</CanonGrid>
+						<CanonGrid class="at-zoom">
+							<CanonButton
+								class="at-zoom-out"
+								@label="Zoom out"
+								@icon={{ZoomOut}}
+								@disabled={{if
+									this.view.isZoomed
+									false
+									true
+								}}
+								@onClick={{this.zoomOut}}
+							/>
+							<CanonButton
+								class="at-zoom-in"
+								@label="Zoom in"
+								@icon={{ZoomIn}}
+								@disabled={{this.undecoded}}
+								@onClick={{this.zoomIn}}
+							/>
+							<CanonButton
+								class="at-fit"
+								@label="Reset zoom"
+								@icon={{Fit}}
+								@disabled={{if
+									this.view.isZoomed
+									false
+									true
+								}}
+								@onClick={{this.fit}}
+							/>
+						</CanonGrid>
+						{{#if this.viewLabel}}
+							<CanonRow
+								class="at-view"
+								@title="View"
+								@detail={{this.viewLabel}}
+							/>
+						{{/if}}
+					</CanonRows>
+				{{else}}
+					<CanonCanvas
+						class="at-drop"
+						@height={{editorHeight}}
+						@boxing="unlessWide"
+					>
+						<Slot
+							class="at-slot"
+							@prompt={{DROP_PROMPT}}
+							@icon="audio-waveform"
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+					</CanonCanvas>
+					{{#if this.intake.error}}
+						<CanonRows @framed={{true}}>
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						</CanonRows>
+					{{/if}}
+				{{/if}}
+			</:main>
+			<:footer>
+				<Transport
+					@playback={{this.playback}}
+					@ready={{this.decoded}}
+				/>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

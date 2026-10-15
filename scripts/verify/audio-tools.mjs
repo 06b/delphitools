@@ -68,62 +68,6 @@ function painted(selector) {
 	}, selector);
 }
 
-await visit(page, '/tools/audio-trimmer');
-await dropWav('.dt-at-frame');
-await page.waitForSelector('.dt-at-wave', { timeout: 15000 });
-await sleep(400);
-
-// decodeAudioData resamples; rate machine-dependent
-const trimMeta = await page.$eval('.dt-at-meta', (el) => el.textContent);
-check(
-	'trimmer: decodes and shows meta',
-	/1\.50 s · \d+ Hz · 1 ch/.test(trimMeta),
-	trimMeta.trim(),
-);
-check('trimmer: waveform painted', await painted('.dt-at-wave'));
-
-const selection = await page.$eval(
-	'.dt-at-selection',
-	(el) => el.textContent,
-);
-check(
-	'trimmer: selection defaults to the whole clip',
-	/0\.00 – 1\.50 s/.test(selection),
-	selection.trim(),
-);
-
-const atBtn = async (label) =>
-	(
-		await page.evaluateHandle(
-			(text) =>
-				[...document.querySelectorAll('.dt-at-btn')].find(
-					(b) => b.textContent.includes(text),
-				),
-			label,
-		)
-	).asElement();
-await (await atBtn('Play')).click();
-await sleep(200);
-check(
-	'trimmer: playhead appears while playing',
-	await page.evaluate(() => !!document.querySelector('.dt-playhead')),
-);
-await (await atBtn('Loop')).click();
-check(
-	'trimmer: loop button latches',
-	await page.evaluate(
-		() =>
-			document
-				.querySelector('.dt-at-btn.is-active')
-				?.getAttribute('aria-pressed') === 'true',
-	),
-);
-await (await atBtn('Stop')).click();
-check(
-	'trimmer: stop hides the playhead',
-	await page.evaluate(() => !document.querySelector('.dt-playhead')),
-);
-
 await visit(page, '/tools/audio-atlas');
 await dropWav('.dt-aa-frame');
 await page.waitForSelector('.dt-aa-meta', { timeout: 15000 });

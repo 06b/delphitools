@@ -527,6 +527,7 @@ export const toolCategories: ToolCategory[] = [
 					'Cut and fade audio, export as WAV',
 				icon: 'scissors',
 				href: '/tools/audio-trimmer',
+				canon: true,
 				produces: ['audio/wav'],
 				accepts: AUDIO_ACCEPT,
 				new: true,

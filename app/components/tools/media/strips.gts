@@ -146,7 +146,15 @@ export default class Strips extends Component<StripsSignature> {
 			render();
 			const observer = new ResizeObserver(render);
 			observer.observe(canvas);
-			return () => observer.disconnect();
+			// the theme flips colours on the root
+			const theme = new MutationObserver(render);
+			theme.observe(document.documentElement, {
+				attributeFilter: ['class'],
+			});
+			return () => {
+				observer.disconnect();
+				theme.disconnect();
+			};
 		},
 	);
 
