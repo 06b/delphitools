@@ -5,7 +5,6 @@ import {
 	parseRatePair,
 	ratePair,
 } from 'delphitools-v2/components/tools/subtitle-converter/rates';
-import { blocks } from 'delphitools-v2/components/tools/subtitle-converter/timeline';
 
 module('Unit | Tool | subtitle-converter', function () {
 	test('a rate pair scales by from over to', function (assert) {
@@ -42,16 +41,5 @@ module('Unit | Tool | subtitle-converter', function () {
 		assert.strictEqual(downloadName('', 'vtt'), 'subtitles.vtt');
 		assert.strictEqual(downloadName('Film.SRT', 'vtt'), 'Film.vtt');
 		assert.strictEqual(downloadName('a.vtt', 'srt'), 'a.srt');
-	});
-
-	test('timeline blocks are shares of the span', function (assert) {
-		const [style] = blocks(
-			[{ start: 250, end: 750, text: '' }],
-			1000,
-		);
-		assert.strictEqual(
-			style?.toString(),
-			'inset-inline-start: 25%; inline-size: 50%',
-		);
 	});
 });

@@ -42,10 +42,10 @@ const state = () =>
 			rate: [...document.querySelectorAll('.sc-rate .canon-menu-cell-title')].map(
 				(el) => el.textContent.trim(),
 			),
-			lanes: [...document.querySelectorAll('.sc-lane')].map(
-				(lane) => lane.querySelectorAll('.sc-cue').length,
+			lanes: [...document.querySelectorAll('.sc-timeline .cue-timeline-lane')].map(
+				(lane) => lane.querySelectorAll('.cue-timeline-cue').length,
 			),
-			labels: [...document.querySelectorAll('.sc-lane-label')].map((el) =>
+			labels: [...document.querySelectorAll('.sc-timeline .cue-timeline-label')].map((el) =>
 				el.textContent.trim(),
 			),
 			picture: document.querySelector('.sc-timeline').getAttribute('aria-label'),

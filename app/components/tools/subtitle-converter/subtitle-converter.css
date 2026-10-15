@@ -19,47 +19,18 @@
 }
 
 /* SubtitleTimeline: label column 44 px, two lanes 10 px apart, 16 px above and below */
-.sc-timeline {
+.cue-timeline.sc-timeline {
 	position: absolute;
 	inset: 0;
-	display: grid;
-	grid-template-columns: 44px minmax(0, 1fr);
-	grid-template-rows: repeat(2, minmax(8px, 1fr));
+	grid-auto-rows: minmax(8px, 1fr);
 	row-gap: 10px;
-	box-sizing: border-box;
 	padding: 16px var(--canon-panel-padding);
 }
 
-.sc-lane-label {
-	align-self: center;
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-}
-
-.sc-lane-label--result {
-	color: var(--canon-primary);
-}
-
-.sc-lane {
-	position: relative;
-	overflow: hidden;
+.sc-timeline .cue-timeline-lane {
 	border-block-end: var(--canon-hairline) solid var(--canon-border);
-	color: color-mix(
-		in srgb,
-		var(--canon-muted-foreground) 45%,
-		transparent
-	);
 }
 
-.sc-lane--result {
-	color: var(--canon-primary);
-}
-
-.sc-cue {
-	position: absolute;
+.sc-timeline .cue-timeline-cue {
 	inset-block: 0 2px;
-	min-inline-size: 1px;
-	background: currentcolor;
 }

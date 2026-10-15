@@ -18,7 +18,9 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import Timeline from 'delphitools-v2/components/tools/subtitle-converter/timeline';
+import CueTimeline, {
+	type CueLane,
+} from 'delphitools-v2/components/tools/media/cue-timeline';
 import {
 	RATES,
 	downloadName,
@@ -171,6 +173,17 @@ export default class SubtitleConverterTool extends Component {
 		return this.target === 'vtt';
 	}
 
+	get lanes(): CueLane[] {
+		return [
+			{ cues: this.cues, label: this.sourceFormat },
+			{
+				cues: this.adjusted,
+				label: this.resultFormat,
+				lit: true,
+			},
+		];
+	}
+
 	get timelineLabel() {
 		return this.stats || 'Timeline';
 	}
@@ -309,11 +322,9 @@ export default class SubtitleConverterTool extends Component {
 					@height={{BAND_HEIGHT}}
 					@background="var(--canon-muted)"
 				>
-					<Timeline
-						@source={{this.cues}}
-						@result={{this.adjusted}}
-						@sourceFormat={{this.sourceFormat}}
-						@resultFormat={{this.resultFormat}}
+					<CueTimeline
+						class="sc-timeline"
+						@lanes={{this.lanes}}
 						@label={{this.timelineLabel}}
 					/>
 				</CanonCanvas>
