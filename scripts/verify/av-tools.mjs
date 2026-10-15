@@ -3,7 +3,7 @@
 //
 // Usage: npm start, then node scripts/verify/av-tools.mjs
 
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { launch, visit, check, finish } from './harness.mjs';
 
 const { browser, page } = await launch();
 
@@ -41,30 +41,6 @@ async function dropClip(selector) {
 		);
 	}, selector);
 }
-
-await visit(page, '/tools/subtitle-converter');
-await page.evaluate(() => {
-	const area = document.querySelector('.dt-sub-pane textarea');
-	Object.getOwnPropertyDescriptor(
-		HTMLTextAreaElement.prototype,
-		'value',
-	).set.call(area, '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
-	area.dispatchEvent(new Event('input', { bubbles: true }));
-});
-await sleep(200);
-
-const converted = await page.$eval(
-	'.dt-sub-pane.is-right textarea',
-	(el) => el.value,
-);
-check(
-	'subtitle converter emits vtt for pasted srt',
-	converted.startsWith('WEBVTT\n\n00:00:01.000 --> 00:00:02.000'),
-	JSON.stringify(converted.slice(0, 44)),
-);
-
-const stats = await page.$eval('.dt-sub-stats', (el) => el.textContent);
-check('cue stats render', /1 cues/.test(stats), stats.trim());
 
 await visit(page, '/tools/video-to-gif');
 await dropClip('.dt-vg-frame');

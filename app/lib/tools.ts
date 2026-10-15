@@ -573,6 +573,7 @@ export const toolCategories: ToolCategory[] = [
 				produces: ['.srt', '.vtt'],
 				accepts: SUBTITLE_ACCEPT,
 				new: true,
+				canon: true,
 			},
 			{
 				id: 'subtitle-studio',
