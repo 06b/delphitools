@@ -1,429 +1,436 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
+import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob, downloadText } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
 	AudioIntake,
 	channelsOf,
-	drawWaveform,
 	extractPeaks,
+	peakDb,
 } from 'delphitools-v2/lib/audio';
 import { AUDIO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import {
+	bars,
+	columnsFor,
+	waveformSvg,
+} from 'delphitools-v2/components/tools/waveform-genny/bars';
+import './media/media.css';
+import './waveform-genny/waveform-genny.css';
 
-// mirrors registry for drop routing
 const ACCEPT = acceptAttr(AUDIO_ACCEPT);
+const DROP_PROMPT = 'Drop an audio file here or click to upload';
 
-const DROP_TITLE = 'Drop an audio file here or click to upload';
-
-interface SizePreset {
-	id: string;
-	label: string;
-	width: number;
-	height: number;
-}
-
-const PRESETS: SizePreset[] = [
-	{ id: 'soundcloud', label: 'SoundCloud', width: 1500, height: 500 },
-	{ id: 'og', label: 'Open Graph', width: 1200, height: 630 },
-	{ id: 'hd', label: 'Full HD', width: 1920, height: 1080 },
-	{ id: 'square', label: 'Square', width: 1200, height: 1200 },
+const SIZES = [
+	{ label: 'SoundCloud', width: 1500, height: 500 },
+	{ label: 'Open Graph', width: 1200, height: 630 },
+	{ label: 'Full HD', width: 1920, height: 1080 },
+	{ label: 'Square', width: 1200, height: 1200 },
+	{ label: 'Custom', width: 0, height: 0 },
 ];
-
+const CUSTOM = SIZES.length - 1;
+const sizeLabels = SIZES.map((size) => size.label);
 // 1 = per-px, 8 = chunky
-const DETAIL_STEPS = [1, 2, 4, 8];
+const DETAILS = [1, 2, 4, 8];
+const detailLabels = DETAILS.map((px) => `${px} px`);
+const FORMATS = ['PNG', 'SVG'];
 const CUSTOM_MIN = 100;
 const CUSTOM_MAX = 4000;
 
-export default class WaveformGennyTool extends Component {
-	@tracked presetId = 'soundcloud';
-	@tracked waveColour = '#2e7d32';
-	@tracked backgroundColour = '#faf5e6';
-	@tracked detailPx = 2;
+// iOS AVInfoProbe.levelFloor
+const levelFloor = -60;
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+const pick = (value: string | null, count: number, fallback: number) => {
+	const index = Number(value ?? NaN);
+	return Number.isInteger(index) && index >= 0 && index < count
+		? index
+		: fallback;
+};
+
+/** The port of WaveformGeneratorViewController, on the web tool's decode and export. */
+export default class WaveformGenny extends Component {
+	intake = new AudioIntake();
+	drop = new Drop(ACCEPT, (file) => this.intake.load(file));
+
+	@tracked size: number;
+	@tracked detail: number;
+	@tracked format: number;
 	@tracked customWidth = 1500;
 	@tracked customHeight = 500;
+	@tracked wave: Rgb = parseHex('#2e7d32')!;
+	@tracked background: Rgb = parseHex('#faf5e6')!;
 
-	intake = new AudioIntake();
+	#canvas?: HTMLCanvasElement;
 
-	get preset(): SizePreset {
-		if (this.presetId === 'custom')
-			return {
-				id: 'custom',
-				label: 'Custom',
-				width: this.customWidth,
-				height: this.customHeight,
-			};
-		return (
-			PRESETS.find((p) => p.id === this.presetId) ??
-			PRESETS[0]!
-		);
+	// ?wgSize ?wgDetail ?wgFormat=<index>: the iOS -wgSize, -wgDetail, -wgFormat arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		this.size = pick(query.get('wgSize'), SIZES.length, 0);
+		this.detail = pick(query.get('wgDetail'), DETAILS.length, 1);
+		this.format = pick(query.get('wgFormat'), FORMATS.length, 0);
 	}
 
-	get presets() {
-		return [
-			...PRESETS,
-			{ id: 'custom', label: 'Custom', width: 0, height: 0 },
-		];
+	get loaded() {
+		return this.intake.fileName !== '';
 	}
 
-	get detailSteps() {
-		return DETAIL_STEPS;
+	get undecoded() {
+		return !this.intake.buffer;
 	}
 
 	get isCustom() {
-		return this.presetId === 'custom';
+		return this.size === CUSTOM;
 	}
 
-	get meta() {
-		const buffer = this.intake.buffer;
-		if (!buffer) return '';
-		return `${buffer.duration.toFixed(2)} s · ${this.preset.width} × ${this.preset.height}`;
+	get width() {
+		return this.isCustom
+			? this.customWidth
+			: SIZES[this.size]!.width;
+	}
+
+	get height() {
+		return this.isCustom
+			? this.customHeight
+			: SIZES[this.size]!.height;
+	}
+
+	get ratio() {
+		return this.width / this.height;
+	}
+
+	get ratioStyle() {
+		return htmlSafe(`--wg-ratio: ${this.ratio}`);
+	}
+
+	get columns() {
+		return columnsFor(this.width, DETAILS[this.detail]!);
+	}
+
+	get waveHex() {
+		return hex(this.wave).toLowerCase();
+	}
+
+	get backgroundHex() {
+		return hex(this.background).toLowerCase();
 	}
 
 	@cached
 	get peaks() {
 		const buffer = this.intake.buffer;
-		if (!buffer) return null;
-		return extractPeaks(
-			channelsOf(buffer),
-			Math.max(
-				10,
-				Math.round(this.preset.width / this.detailPx),
-			),
-		);
+		return buffer
+			? extractPeaks(channelsOf(buffer), this.columns)
+			: null;
 	}
 
-	setPreset = (id: string) => {
-		this.presetId = id;
-	};
-
-	setWaveColour = (event: Event) => {
-		this.waveColour = (event.target as HTMLInputElement).value;
-	};
-
-	setBackgroundColour = (event: Event) => {
-		this.backgroundColour = (
-			event.target as HTMLInputElement
-		).value;
-	};
-
-	setDetail = (event: Event) => {
-		const value = parseInt(
-			(event.target as HTMLSelectElement).value,
-			10,
-		);
-		if (DETAIL_STEPS.includes(value)) this.detailPx = value;
-	};
-
-	#dimension = (event: Event) => {
-		const value = parseInt(
-			(event.target as HTMLInputElement).value,
-			10,
-		);
-		if (!Number.isFinite(value)) return null;
-		return Math.max(CUSTOM_MIN, Math.min(CUSTOM_MAX, value));
-	};
-
-	setCustomWidth = (event: Event) => {
-		const value = this.#dimension(event);
-		if (value !== null) this.customWidth = value;
-	};
-
-	setCustomHeight = (event: Event) => {
-		const value = this.#dimension(event);
-		if (value !== null) this.customHeight = value;
-	};
-
-	#paint(canvas: HTMLCanvasElement | OffscreenCanvas): boolean {
-		const peaks = this.peaks;
-		const ctx = canvas.getContext(
-			'2d',
-		) as CanvasRenderingContext2D | null;
-		if (!ctx || !peaks) return false;
-		ctx.fillStyle = this.backgroundColour;
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
-		ctx.fillStyle = this.waveColour;
-		drawWaveform(ctx, peaks, canvas.width, canvas.height);
-		return true;
+	@cached
+	get peak() {
+		const buffer = this.intake.buffer;
+		return buffer ? peakDb(channelsOf(buffer)) : -Infinity;
 	}
 
-	drawPreview = modifier((canvas: HTMLCanvasElement) => {
-		canvas.width = this.preset.width;
-		canvas.height = this.preset.height;
-		this.#paint(canvas);
+	get detailText() {
+		if (this.intake.error) return this.intake.error;
+		const buffer = this.intake.buffer;
+		if (!buffer) return 'Decoding…';
+		return `${buffer.duration.toFixed(2)} s · ${buffer.sampleRate} Hz · ${buffer.numberOfChannels} ch`;
+	}
+
+	get audioTiles() {
+		const buffer = this.intake.buffer;
+		if (!buffer) return [];
+		const peak = this.peak;
+		return [
+			{
+				label: 'Duration',
+				value: `${buffer.duration.toFixed(2)} s`,
+			},
+			{
+				label: 'Sample rate',
+				value: `${buffer.sampleRate} Hz`,
+			},
+			{
+				label: 'Channels',
+				value: `${buffer.numberOfChannels}`,
+			},
+			{
+				label: 'Peak',
+				value: Number.isFinite(peak)
+					? `${peak.toFixed(1)} dBFS`
+					: '-∞ dBFS',
+				level: Number.isFinite(peak)
+					? Math.min(
+							1,
+							Math.max(
+								0,
+								1 -
+									peak /
+										levelFloor,
+							),
+						)
+					: 0,
+			},
+		];
+	}
+
+	get imageTiles() {
+		const { width, height } = this;
+		return [
+			{ label: 'Width', value: `${width} px` },
+			{ label: 'Height', value: `${height} px` },
+			{ label: 'Columns', value: `${this.columns}` },
+			{
+				label: 'Pixels',
+				value: `${((width * height) / 1_000_000).toFixed(2)} MP`,
+			},
+		];
+	}
+
+	get exportLabel() {
+		return passAlong(`Download ${FORMATS[this.format]!}`);
+	}
+
+	get fileName() {
+		const extension = FORMATS[this.format]!.toLowerCase();
+		return `${this.intake.baseName || 'waveform'}.${extension}`;
+	}
+
+	// autotracked: redraws on a new size, detail, colour or file
+	paint = modifier((canvas: HTMLCanvasElement) => {
+		this.#canvas = canvas;
+		const { width, height, peaks } = this;
+		canvas.width = width;
+		canvas.height = height;
+		const context = canvas.getContext('2d');
+		if (!context) return;
+		context.fillStyle = this.backgroundHex;
+		context.fillRect(0, 0, width, height);
+		if (!peaks) return;
+		context.fillStyle = this.waveHex;
+		for (const bar of bars(peaks, width, height))
+			context.fillRect(bar.x, bar.y, bar.width, bar.height);
 	});
 
-	exportPng = () => {
-		const canvas = document.createElement('canvas');
-		canvas.width = this.preset.width;
-		canvas.height = this.preset.height;
-		if (!this.#paint(canvas)) return;
-		canvas.toBlob((blob) => {
-			if (blob)
-				downloadBlob(
-					blob,
-					`${this.intake.baseName || 'waveform'}.png`,
-				);
+	pickSize = (index: number) => (this.size = index);
+	pickDetail = (index: number) => (this.detail = index);
+	pickFormat = (index: number) => (this.format = index);
+	setCustomWidth = (value: number) => (this.customWidth = value);
+	setCustomHeight = (value: number) => (this.customHeight = value);
+	setWave = (colour: Rgb) => (this.wave = colour);
+	setBackground = (colour: Rgb) => (this.background = colour);
+
+	download = () => {
+		const peaks = this.peaks;
+		if (!peaks) return;
+		const name = this.fileName;
+		if (this.format === 1) {
+			downloadText(
+				waveformSvg(
+					peaks,
+					this.width,
+					this.height,
+					this.waveHex,
+					this.backgroundHex,
+				),
+				name,
+				'image/svg+xml',
+			);
+			return;
+		}
+		this.#canvas?.toBlob((blob) => {
+			if (blob) downloadBlob(blob, name);
 		}, 'image/png');
 	};
 
-	exportSvg = () => {
-		const peaks = this.peaks;
-		if (!peaks) return;
-		const { width, height } = this.preset;
-		const mid = height / 2;
-		const columns = peaks.min.length;
-		const w = width / columns;
-
-		const bars: string[] = [];
-		for (let x = 0; x < columns; x++) {
-			const top = mid - peaks.max[x]! * mid;
-			const bottom = mid - peaks.min[x]! * mid;
-			bars.push(
-				`<rect x="${(x * w).toFixed(2)}" y="${top.toFixed(2)}" width="${w.toFixed(2)}" height="${Math.max(1, bottom - top).toFixed(2)}"/>`,
-			);
-		}
-
-		const svg =
-			`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
-			`<rect width="${width}" height="${height}" fill="${this.backgroundColour}"/>` +
-			`<g fill="${this.waveColour}">${bars.join('')}</g>` +
-			`</svg>`;
-		downloadText(
-			svg,
-			`${this.intake.baseName || 'waveform'}.svg`,
-			'image/svg+xml',
-		);
-	};
-
 	<template>
-		<div class="dt-wg" {{filePaste this.intake.load accept=ACCEPT}}>
-			<div
-				class="dt-wg-frame"
-				{{on "drop" this.intake.drop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				{{#unless this.intake.fileName}}
-					<label class="dt-wg-drop">
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.intake.chooseFile
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-wg-drop-title"
-						>{{DROP_TITLE}}</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.intake.busy}}
-					<p class="dt-wg-status">
-						<NdsLoader />
-						Decoding…
-					</p>
-				{{/if}}
-
-				{{#if this.intake.buffer}}
-					<div class="dt-wg-bar">
-						<div class="dt-wg-info">
-							<p
-								class="dt-wg-name"
-							>{{this.intake.fileName}}</p>
-							<p
-								class="dt-wg-meta"
-							>{{this.meta}}</p>
-						</div>
-						<button
-							type="button"
-							class="dt-wg-btn"
-							{{on
-								"click"
-								this.intake.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-wg-btn"
-							{{on
-								"click"
-								this.exportSvg
-							}}
-						>
-							<DownloadLabel
-								@label="SVG"
-							/>
-						</button>
-						<button
-							type="button"
-							class="dt-wg-btn is-primary"
-							{{on
-								"click"
-								this.exportPng
-							}}
-						>
-							<DownloadLabel
-								@label="PNG"
-							/>
-						</button>
-					</div>
-
-					<div class="dt-wg-settings">
+		<CanonSplit
+			class="waveform-genny"
+			@collapsesTo={{120}}
+			{{filePaste this.intake.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas
+					@aspect={{this.ratio}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.loaded}}
 						<div
-							class="dt-wg-field is-size"
+							class="wg-picture"
+							style={{this.ratioStyle}}
 						>
-							<span>Size</span>
-							<div
-								class="segmented dt-wg-presets"
-							>
-								{{#each
-									this.presets
-									key="id"
-									as |preset|
-								}}
-									<button
-										type="button"
-										class="dt-wg-preset
-											{{if
-												(eq
-													this.presetId
-													preset.id
-												)
-												'is-active'
-											}}"
-										aria-pressed={{if
-											(eq
-												this.presetId
-												preset.id
-											)
-											"true"
-											"false"
-										}}
-										{{on
-											"click"
-											(fn
-												this.setPreset
-												preset.id
-											)
-										}}
-									>
-										{{preset.label}}
-									</button>
-								{{/each}}
-							</div>
+							<canvas
+								class="wg-image"
+								role="img"
+								aria-label="Waveform"
+								{{this.paint}}
+							></canvas>
 						</div>
+					{{else}}
+						<Slot
+							class="wg-slot"
+							@prompt={{DROP_PROMPT}}
+							@icon="audio-waveform"
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+					{{/if}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				{{#if this.loaded}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="wg-source
+								{{if
+									this.intake.error
+									'wg-source--failed'
+								}}"
+							@title={{this.intake.fileName}}
+							@detail={{this.detailText}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.intake.clear}}
+							/>
+						</CanonRow>
+						<CanonHeading @text="Size" />
+						<CanonSegmented
+							class="wg-sizes"
+							@items={{sizeLabels}}
+							@selected={{this.size}}
+							@columns={{3}}
+							@onChange={{this.pickSize}}
+						/>
 						{{#if this.isCustom}}
-							<label
-								class="dt-wg-field"
+							<CanonRow
+								class="wg-width"
+								@title="Width"
+								@form="flush"
+								as |titleId|
 							>
-								<span
-								>Width</span>
-								<input
-									type="number"
-									min="100"
-									max="4000"
-									step="10"
-									value={{this.customWidth}}
-									{{on
-										"input"
-										this.setCustomWidth
-									}}
+								<CanonNumberField
+									@value={{this.customWidth}}
+									@min={{CUSTOM_MIN}}
+									@max={{CUSTOM_MAX}}
+									@step={{10}}
+									@unit="px"
+									@labelledBy={{titleId}}
+									@onChange={{this.setCustomWidth}}
 								/>
-							</label>
-							<label
-								class="dt-wg-field"
+							</CanonRow>
+							<CanonRow
+								class="wg-height"
+								@title="Height"
+								@form="flush"
+								as |titleId|
 							>
-								<span
-								>Height</span>
-								<input
-									type="number"
-									min="100"
-									max="4000"
-									step="10"
-									value={{this.customHeight}}
-									{{on
-										"input"
-										this.setCustomHeight
-									}}
+								<CanonNumberField
+									@value={{this.customHeight}}
+									@min={{CUSTOM_MIN}}
+									@max={{CUSTOM_MAX}}
+									@step={{10}}
+									@unit="px"
+									@labelledBy={{titleId}}
+									@onChange={{this.setCustomHeight}}
 								/>
-							</label>
+							</CanonRow>
 						{{/if}}
-						<label class="dt-wg-field">
-							<span>Wave</span>
-							<input
-								type="color"
-								value={{this.waveColour}}
-								{{on
-									"input"
-									this.setWaveColour
-								}}
-							/>
-						</label>
-						<label class="dt-wg-field">
-							<span>Background</span>
-							<input
-								type="color"
-								value={{this.backgroundColour}}
-								{{on
-									"input"
-									this.setBackgroundColour
-								}}
-							/>
-						</label>
-						<label class="dt-wg-field">
-							<span>Detail</span>
-							<select
-								{{on
-									"change"
-									this.setDetail
-								}}
-							>
-								{{#each
-									this.detailSteps
-									key="@index"
-									as |step|
-								}}
-									<option
-										value={{step}}
-										selected={{eq
-											this.detailPx
-											step
-										}}
-									>{{step}}
-										px</option>
-								{{/each}}
-							</select>
-						</label>
-					</div>
-
-					<div class="dt-wg-stage">
-						<canvas
-							class="dt-wg-preview"
-							{{this.drawPreview}}
-						></canvas>
-					</div>
+						<CanonHeading @text="Detail" />
+						<CanonSegmented
+							class="wg-details"
+							@items={{detailLabels}}
+							@selected={{this.detail}}
+							@onChange={{this.pickDetail}}
+						/>
+						<CanonHeading @text="Colours" />
+						<CanonColourWell
+							class="wg-wave"
+							@label="Wave"
+							@colour={{this.wave}}
+							@onChange={{this.setWave}}
+						/>
+						<CanonColourWell
+							class="wg-background"
+							@label="Background"
+							@colour={{this.background}}
+							@onChange={{this.setBackground}}
+						/>
+						<CanonHeading @text="Format" />
+						<CanonSegmented
+							class="wg-formats"
+							@items={{FORMATS}}
+							@selected={{this.format}}
+							@onChange={{this.pickFormat}}
+						/>
+						<CanonButton
+							class="wg-download"
+							@kind="primary"
+							@text={{this.exportLabel}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{this.undecoded}}
+							@onClick={{this.download}}
+						/>
+					</CanonRows>
+				{{else if this.intake.error}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							@text={{this.intake.error}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			{{#if this.intake.error}}
-				<p
-					class="dt-wg-error"
-					role="alert"
-				>{{this.intake.error}}</p>
-			{{/if}}
-		</div>
+			</:sidebar>
+			<:main>
+				{{#if this.intake.buffer}}
+					<CanonRows
+						class="wg-readings"
+						@framed={{true}}
+					>
+						<CanonHeading @text="Audio" />
+						<CanonTiles
+							class="wg-audio"
+							@items={{this.audioTiles}}
+						/>
+						<CanonHeading @text="Image" />
+						<CanonTiles
+							class="wg-image-tiles"
+							@items={{this.imageTiles}}
+						/>
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }

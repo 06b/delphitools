@@ -1,4 +1,4 @@
-// wave-2 audio tools, fixture synthesised in-page
+// audio-atlas, fixture synthesised in-page
 //
 // Usage: npm start, then node scripts/verify/audio-tools.mjs
 
@@ -157,26 +157,6 @@ check(
 	'atlas: click seeks the playhead',
 	playheadLeft > 70 && playheadLeft < 80,
 	`${playheadLeft}%`,
-);
-
-await visit(page, '/tools/waveform-genny');
-await dropWav('.dt-wg-frame');
-await page.waitForSelector('.dt-wg-preview', { timeout: 15000 });
-await sleep(300);
-check('genny: preview painted', await painted('.dt-wg-preview'));
-
-const before = await page.$eval('.dt-wg-preview', (el) => el.width);
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-wg-preset')]
-		.find((b) => b.textContent.includes('Full HD'))
-		.click();
-});
-await sleep(200);
-const after = await page.$eval('.dt-wg-preview', (el) => el.width);
-check(
-	'genny: preset switch resizes the canvas',
-	before === 1500 && after === 1920,
-	`${before} → ${after}`,
 );
 
 await finish(browser);

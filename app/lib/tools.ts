@@ -651,6 +651,8 @@ export const toolCategories: ToolCategory[] = [
 					'Render audio waveforms as PNG or SVG',
 				icon: 'audio-waveform',
 				href: '/tools/waveform-genny',
+				canon: true,
+				expands: true,
 				produces: ['image/png', 'image/svg+xml'],
 				accepts: AUDIO_ACCEPT,
 				new: true,
