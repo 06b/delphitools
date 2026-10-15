@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import { drawWaveform, type WaveformPeaks } from 'delphitools-v2/lib/audio';
 import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import { spread } from 'delphitools-v2/components/tools/media/frames';
+import { share } from 'delphitools-v2/components/tools/media/trim-span';
 
 export interface StripsSignature {
 	Args: {
@@ -21,6 +22,8 @@ export interface StripsSignature {
 		duration: number;
 		playhead?: number | null;
 		onScrub?: (seconds: number) => void;
+		/** In and out seconds; the frames outside are dimmed (iOS AVEditFilmstrip selection). */
+		selection?: [number, number] | null;
 	};
 	Element: HTMLDivElement;
 }
@@ -66,6 +69,18 @@ export default class Strips extends Component<StripsSignature> {
 					)
 				: 0;
 		return htmlSafe(`inset-inline-start: ${share * 100}%`);
+	}
+
+	get shades() {
+		const { selection } = this.args;
+		if (!selection || !(this.duration > 0)) return null;
+		const [start, end] = selection.map(
+			(s) => share(s, this.duration) * 100,
+		);
+		return {
+			before: htmlSafe(`--trim-start: ${start}%`),
+			after: htmlSafe(`--trim-end: ${end}%`),
+		};
 	}
 
 	get showsHead() {
@@ -213,6 +228,16 @@ export default class Strips extends Component<StripsSignature> {
 					></canvas>
 					<span class="media-wave-strike"></span>
 				</div>
+			{{/if}}
+			{{#if this.shades}}
+				<span
+					class="media-shade media-shade--before"
+					style={{this.shades.before}}
+				></span>
+				<span
+					class="media-shade media-shade--after"
+					style={{this.shades.after}}
+				></span>
 			{{/if}}
 			{{#if this.showsHead}}
 				<span

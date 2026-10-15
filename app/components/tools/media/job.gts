@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import CanonBar from 'delphicanon/components/canon-bar';
 import CanonButton from 'delphicanon/components/canon-button';
+import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonRow from 'delphicanon/components/canon-row';
@@ -31,10 +32,13 @@ export interface JobSignature {
 		/** Shows Cancel while busy. */
 		onCancel?: () => void;
 		onSave: () => void;
+		/** Shows Preview beside Download, as iOS. */
+		onPreview?: () => void;
 	};
 }
 
 const Cancel = <template><IconSvg @name="x" /></template>;
+const Eye = <template><IconSvg @name="eye" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
 /**
@@ -105,13 +109,33 @@ export default class Job extends Component<JobSignature> {
 					@title={{@result.name}}
 					@detail={{@result.detail}}
 				/>
-				<CanonButton
-					class="media-job-save"
-					@kind="primary"
-					@text={{passAlong "Download"}}
-					@icon={{Save}}
-					@onClick={{@onSave}}
-				/>
+				{{#if @onPreview}}
+					<CanonGrid>
+						<CanonButton
+							class="media-job-preview"
+							@text="Preview"
+							@icon={{Eye}}
+							@onClick={{@onPreview}}
+						/>
+						<CanonButton
+							class="media-job-save"
+							@kind="primary"
+							@text={{passAlong
+								"Download"
+							}}
+							@icon={{Save}}
+							@onClick={{@onSave}}
+						/>
+					</CanonGrid>
+				{{else}}
+					<CanonButton
+						class="media-job-save"
+						@kind="primary"
+						@text={{passAlong "Download"}}
+						@icon={{Save}}
+						@onClick={{@onSave}}
+					/>
+				{{/if}}
 			{{/if}}
 		{{/if}}
 	</template>
