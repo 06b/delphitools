@@ -1,0 +1,14 @@
+/* menu cells and unit text in the mode panel rows */
+.err-mode .err-menu-cell {
+	inline-size: 176px;
+	min-block-size: 32px;
+	padding-block: 0;
+	outline: var(--canon-hairline) solid var(--canon-border);
+	font-size: var(--canon-text-subheadline);
+}
+
+.err-unit {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	white-space: nowrap;
+}

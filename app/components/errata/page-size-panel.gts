@@ -2,7 +2,13 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import PaperMenu from 'delphitools-v2/components/errata/paper-menu';
+import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
+import Fresh, {
+	both,
+} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import ToolPanel, {
 	AnchorPicker,
 	Field,
@@ -13,8 +19,6 @@ import ToolPanel, {
 	Segmented,
 	readText,
 } from 'delphitools-v2/components/errata/tool-panel';
-import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
-import Switch from 'delphitools-v2/components/ui/switch';
 import {
 	flipAnchor,
 	pageSize,
@@ -36,6 +40,7 @@ import { closeMode, onMode } from 'delphitools-v2/lib/errata/ui';
 import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
 import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './page-size-panel.css';
 
 // mm shown, points stored
 
@@ -44,6 +49,8 @@ const PRESETS = PRESET_IDS.map((id) => {
 	const size = PAPER_SIZES.find((p) => p.id === id)!;
 	return { ...size, value: id, label: size.label.split(' ')[0]! };
 });
+
+const PRESET_LABELS = PRESETS.map((p) => p.label);
 
 const PLACEMENTS = [
 	{ value: 'anchor', label: 'Anchor to page' },
@@ -172,6 +179,13 @@ export default class PageSizePanel extends Component<{
 		);
 	}
 
+	// -1 shows no cell picked; CanonSegmented reads undefined as the first
+	get presetIndex(): number {
+		return PRESETS.findIndex((p) => p.id === this.activePreset);
+	}
+
+	pickPreset = (index: number) => this.preset(PRESETS[index]!.id);
+
 	swap = () => {
 		[this.width, this.height] = [this.height, this.width];
 	};
@@ -244,31 +258,40 @@ export default class PageSizePanel extends Component<{
 			@canApply={{this.valid}}
 		>
 			<:actions>
-				<button
-					type="button"
-					class="sub-modal-btn is-ghost"
-					disabled={{if this.indices false true}}
-					{{on "click" this.reset}}
-				>
-					<Icon @name="undo-2" />
-					Reset
-				</button>
+				<Cell
+					@label="Reset"
+					@icon="undo-2"
+					@text="Reset"
+					@disabled={{if this.indices false true}}
+					@onClick={{this.reset}}
+				/>
 			</:actions>
 			<:default>
 				<Group class="is-tall">
 					<Field @label="Preset">
-						<Segmented
-							@options={{PRESETS}}
-							@value={{this.activePreset}}
-							@onChange={{this.preset}}
-						/>
+						<Fresh
+							@value={{this.presetIndex}}
+							as |mine|
+						>
+							<CanonSegmented
+								class="err-mode-seg"
+								@items={{PRESET_LABELS}}
+								@columns={{3}}
+								@selected={{this.presetIndex}}
+								@onChange={{both
+									mine
+									this.pickPreset
+								}}
+								aria-label="Preset"
+							/>
+						</Fresh>
 					</Field>
 					<Field @label="">
-						<PaperSizeCombobox
+						<PaperMenu
 							@value={{this.otherId}}
-							@onValueChange={{this.pickOther}}
-							@customLabel="Other…"
-							@caret="chevron-down"
+							@label="Paper size"
+							@placeholder="Other…"
+							@onChange={{this.pickOther}}
 						/>
 					</Field>
 					<Field @label="Size">
@@ -284,24 +307,12 @@ export default class PageSizePanel extends Component<{
 								)
 							}}
 						/>
-						<span
-							class="segmented err-mode-seg"
-						>
-							<button
-								type="button"
-								class="sub-seg-cell"
-								aria-label="Swap"
-								title="Swap"
-								{{on
-									"click"
-									this.swap
-								}}
-							>
-								<Icon
-									@name="arrow-left-right"
-								/>
-							</button>
-						</span>
+						<Cell
+							class="err-swap"
+							@label="Swap"
+							@icon="arrow-left-right"
+							@onClick={{this.swap}}
+						/>
 						<input
 							class="err-mode-input is-narrow"
 							inputmode="decimal"
@@ -314,18 +325,15 @@ export default class PageSizePanel extends Component<{
 								)
 							}}
 						/>
-						<span
-							class="sub-tool-row-label"
-						>mm</span>
+						<span class="err-unit">mm</span>
 					</Field>
 					<InputField @label="Bleed">
-						<Switch
-							@checked={{this.bleed}}
+						<CanonSwitch
+							@on={{this.bleed}}
 							@onChange={{this.setBleed}}
+							aria-label="Bleed"
 						/>
-						<span
-							class="sub-tool-row-label"
-						>3 mm</span>
+						<span class="err-unit">3 mm</span>
 					</InputField>
 				</Group>
 				<Group>
