@@ -5,3 +5,12 @@
 	min-block-size: 32px;
 	padding: 0;
 }
+
+/* "Other…" takes its own line under the presets */
+.err-mode-control > .err-paper-other {
+	flex-basis: 100%;
+}
+
+.err-mode-control > .err-size-input {
+	inline-size: 72px;
+}

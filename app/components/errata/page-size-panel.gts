@@ -285,9 +285,8 @@ export default class PageSizePanel extends Component<{
 								aria-label="Preset"
 							/>
 						</Fresh>
-					</Field>
-					<Field @label="">
 						<PaperMenu
+							class="err-paper-other"
 							@value={{this.otherId}}
 							@label="Paper size"
 							@placeholder="Other…"
@@ -296,7 +295,7 @@ export default class PageSizePanel extends Component<{
 					</Field>
 					<Field @label="Size">
 						<input
-							class="err-mode-input is-narrow"
+							class="err-mode-input err-size-input"
 							inputmode="decimal"
 							aria-label="Width"
 							value={{this.width}}
@@ -314,7 +313,7 @@ export default class PageSizePanel extends Component<{
 							@onClick={{this.swap}}
 						/>
 						<input
-							class="err-mode-input is-narrow"
+							class="err-mode-input err-size-input"
 							inputmode="decimal"
 							aria-label="Height"
 							value={{this.height}}
