@@ -472,8 +472,14 @@
 	align-items: start;
 	min-block-size: 0;
 	padding-block-start: var(--canon-hairline);
+	background: var(--canon-card);
 	overflow-y: auto;
 	overscroll-behavior: contain;
+}
+
+/* fields outline each other; an empty slot stays card */
+.err-mode-body > * {
+	outline: var(--canon-hairline) solid var(--canon-border);
 }
 
 .err-mode-body:not(:has(> *)) {
