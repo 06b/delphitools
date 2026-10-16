@@ -693,3 +693,9 @@
 		transition: none;
 	}
 }
+
+/* icon-only cells a panel yields stay square */
+.err-mode-head > .sub-cell.canon-button--symbol {
+	inline-size: var(--sub-cell);
+	padding: 0;
+}

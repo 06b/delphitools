@@ -162,8 +162,16 @@ export default class ErrataShell extends Component {
 		return this.pagesChoice ?? !this.phone;
 	}
 
+	// on the phone a panel or the toolbox takes the tray's place
+	get phonePanel() {
+		return (
+			this.phone &&
+			(this.boxOpen.current || this.mode.current !== null)
+		);
+	}
+
 	get railShown() {
-		return this.hasDoc && this.pagesOpen;
+		return this.hasDoc && this.pagesOpen && !this.phonePanel;
 	}
 
 	// a mode or the toolbox takes the settings bar's place
@@ -420,6 +428,15 @@ export default class ErrataShell extends Component {
 		if (title) inset.top = title.bottom - box.top + PAD;
 		const column = rect('.sub-ed-column');
 		if (column) inset.right = box.right - column.left + PAD;
+		// the findings rail slides in; its offset ignores the slide
+		const findings = root.querySelector<HTMLElement>(
+			':scope > .err-preflight.is-open',
+		);
+		if (findings && !this.phone)
+			inset.right = Math.max(
+				inset.right,
+				root.clientWidth - findings.offsetLeft + PAD,
+			);
 		const rail = rect('.err-rail');
 		root.style.setProperty(
 			'--sub-tray-h',
@@ -445,6 +462,15 @@ export default class ErrataShell extends Component {
 		area.dataset['inset'] = next;
 		area.dispatchEvent(new CustomEvent('err-inset'));
 	};
+
+	// a mode opening or closing moves the findings rail
+	reinset = modifier((root: HTMLElement, [mode]: [BoxMode | null]) => {
+		void mode;
+		const frame = requestAnimationFrame(() =>
+			this.placeInset(root),
+		);
+		return () => cancelAnimationFrame(frame);
+	});
 
 	// with a document open an image file lands on the page; a pdf always opens
 	take = (file: File) =>
@@ -496,6 +522,7 @@ export default class ErrataShell extends Component {
 		<div
 			class="sub-ed err-ed {{this.layoutClass}}"
 			{{this.measure}}
+			{{this.reinset this.mode.current}}
 			{{this.rig}}
 			{{errataShortcuts}}
 			{{filePaste
