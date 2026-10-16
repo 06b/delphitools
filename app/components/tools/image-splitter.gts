@@ -1,425 +1,438 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import type {
+	CanonMenuEntry,
+	CanonMenuItem,
+} from 'delphicanon/components/canon-menu';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { stem } from 'delphicanon/lib/files';
+import { springEasing } from 'delphicanon/lib/motion';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import {
+	downloadIcon,
+	passAlong,
+	reducedMotion,
+} from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import {
+	cellRect,
+	cells,
+	counts,
+	tileSize,
+	trimmed,
+	type Cell,
+	type Size,
+} from 'delphitools-v2/components/tools/image-splitter/split';
+import Picture from 'delphitools-v2/components/tools/image-splitter/picture';
+import './image-splitter/image-splitter.css';
 
-const MIN_TILES = 1;
-const MAX_TILES = 20;
+// iOS: usingSpringWithDamping 0.62 over 0.6 s
+const spring = htmlSafe(`--split-spring: ${springEasing(0.62)}`);
+const springMs = 650;
+const downloadGapMs = 100;
+const emptyPixels = { width: 4, height: 3 };
 
-const DOWNLOAD_GAP_MS = 100;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-export interface TileRect {
-	row: number;
-	col: number;
-	x: number;
-	y: number;
-	width: number;
-	height: number;
+interface Source {
+	url: string;
+	image: HTMLImageElement;
+	pixels: Size;
+	stem: string;
 }
 
-interface Tile extends TileRect {
-	key: string;
-	label: string;
-	dataUrl: string;
-}
-
-export function tileSize(
-	imageWidth: number,
-	imageHeight: number,
-	rows: number,
-	cols: number,
-): { width: number; height: number } {
-	return {
-		width: Math.floor(imageWidth / cols),
-		height: Math.floor(imageHeight / rows),
-	};
-}
-
-export function splitGeometry(
-	imageWidth: number,
-	imageHeight: number,
-	rows: number,
-	cols: number,
-): TileRect[] {
-	const { width, height } = tileSize(imageWidth, imageHeight, rows, cols);
-	const rects: TileRect[] = [];
-
-	for (let row = 0; row < rows; row++) {
-		for (let col = 0; col < cols; col++) {
-			rects.push({
-				row,
-				col,
-				x: col * width,
-				y: row * height,
-				width,
-				height,
-			});
-		}
-	}
-
-	return rects;
-}
-
-function clampCount(value: string): number {
-	return Math.max(
-		MIN_TILES,
-		Math.min(MAX_TILES, parseInt(value, 10) || MIN_TILES),
-	);
-}
-
-export default class ImageSplitterTool extends Component {
-	@tracked sourceImage: string | null = null;
-	@tracked fileName = '';
+/** The port of ImageSplitterViewController, on the web tool's downloads. */
+export default class ImageSplitter extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 	@tracked rows = 3;
 	@tracked cols = 3;
-	@tracked tiles: Tile[] = [];
-	@tracked imageWidth = 0;
-	@tracked imageHeight = 0;
+	@tracked source?: Source;
+	@tracked exporting = false;
+	@tracked joined = false;
+	@tracked springs = false;
 
-	#image: HTMLImageElement | null = null;
-	#timers: ReturnType<typeof setTimeout>[] = [];
+	drop = new Drop('image/*', (file) => void this.load(file));
+	#input?: HTMLInputElement;
+	#loading = 0;
+	#frame?: number;
+	#timers: number[] = [];
 
-	willDestroy() {
-		super.willDestroy();
-		this.#timers.forEach(clearTimeout);
+	// ?splitGrid=<columns>x<rows> ?splitSample: the iOS -splitGrid, -splitSample
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const grid = /^(\d+)x(\d+)$/.exec(query.get('splitGrid') ?? '');
+		if (grid) {
+			this.cols = clampCount(Number(grid[1]));
+			this.rows = clampCount(Number(grid[2]));
+		}
+		if (query.has('splitSample'))
+			void drawnSample().then((file) => this.load(file));
+		registerDestructor(this, () => {
+			if (this.#frame) cancelAnimationFrame(this.#frame);
+			this.#timers.forEach((timer) =>
+				window.clearTimeout(timer),
+			);
+			if (this.source) URL.revokeObjectURL(this.source.url);
+		});
 	}
 
-	get total() {
-		return this.rows * this.cols;
+	get pixels() {
+		return this.source?.pixels ?? emptyPixels;
 	}
 
 	get tile() {
-		return tileSize(
-			this.imageWidth,
-			this.imageHeight,
+		return tileSize(this.pixels, this.rows, this.cols);
+	}
+
+	get cuttable() {
+		return (
+			!!this.source &&
+			this.tile.width > 0 &&
+			this.tile.height > 0
+		);
+	}
+
+	get sourceText() {
+		const pixels = this.source?.pixels;
+		return pixels ? `${pixels.width} × ${pixels.height}` : '';
+	}
+
+	get tiles() {
+		const dash = '—';
+		const { width, height } = trimmed(
+			this.pixels,
 			this.rows,
 			this.cols,
 		);
+		return [
+			{ label: 'Tiles', value: `${this.rows * this.cols}` },
+			{
+				label: 'Size',
+				value: this.source
+					? `${this.tile.width} × ${this.tile.height} px`
+					: dash,
+			},
+			{
+				label: 'Trimmed',
+				value: !this.source
+					? dash
+					: width === 0 && height === 0
+						? '0 px'
+						: `${width} × ${height} px`,
+			},
+		];
 	}
 
-	get overlayCells() {
-		return Array.from({ length: this.total }, (_, i) => i);
+	get menu(): CanonMenuEntry[] {
+		return [
+			{ title: passAlong('Download'), icon: Save },
+			{ title: 'Copy', icon: Copy },
+		];
 	}
 
-	get overlayStyle() {
-		return htmlSafe(
-			`grid-template-columns: repeat(${this.cols}, 1fr); grid-template-rows: repeat(${this.rows}, 1fr)`,
-		);
+	get exportDisabled() {
+		return !this.cuttable || this.exporting;
 	}
 
-	get tileGridStyle() {
-		return htmlSafe(
-			`grid-template-columns: repeat(${this.cols}, 1fr)`,
-		);
-	}
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
 
-	readFile = (file: File) => {
-		this.fileName = file.name.replace(/\.[^.]+$/, '');
-		const reader = new FileReader();
-		reader.onload = () => {
-			const dataUrl = reader.result as string;
-			const image = new Image();
-			image.onload = () => {
-				this.#image = image;
-				this.imageWidth = image.width;
-				this.imageHeight = image.height;
-				this.sourceImage = dataUrl;
-				this.tiles = [];
-			};
-			image.src = dataUrl;
-		};
-		reader.readAsDataURL(file);
-	};
+	choose = () => this.#input?.click();
 
-	handleFileSelect = (event: Event) => {
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// reset file input
+		// the same file twice fires change again
 		input.value = '';
+		if (file) void this.load(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readFile(file);
-	};
-
-	// prevent file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	setCols = (event: Event) => {
-		this.cols = clampCount(
-			(event.target as HTMLInputElement).value,
-		);
-		this.tiles = [];
-	};
-
-	setRows = (event: Event) => {
-		this.rows = clampCount(
-			(event.target as HTMLInputElement).value,
-		);
-		this.tiles = [];
+	load = async (file: File) => {
+		if (!file.type.startsWith('image/')) return;
+		const run = ++this.#loading;
+		const url = URL.createObjectURL(file);
+		const image = new Image();
+		image.src = url;
+		try {
+			await image.decode();
+		} catch {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		if (run !== this.#loading || isDestroying(this)) {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.source = {
+			url,
+			image,
+			pixels: {
+				width: image.naturalWidth,
+				height: image.naturalHeight,
+			},
+			stem: stem(file.name) || 'image',
+		};
+		this.#cut();
 	};
 
 	clear = () => {
-		this.#image = null;
-		this.sourceImage = null;
-		this.fileName = '';
-		this.tiles = [];
-		this.imageWidth = 0;
-		this.imageHeight = 0;
+		this.#loading++;
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.source = undefined;
 	};
 
-	splitImage = () => {
-		const image = this.#image;
-		if (!image) return;
+	setCols = (value: number) => {
+		this.cols = value;
+		this.#cut();
+	};
 
-		const canvas = document.createElement('canvas');
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
+	setRows = (value: number) => {
+		this.rows = value;
+		this.#cut();
+	};
 
-		this.tiles = splitGeometry(
-			image.width,
-			image.height,
+	/** The tiles part again from the whole picture: seams closed, then sprung open. */
+	#cut() {
+		if (!this.source || reducedMotion()) return;
+		this.joined = true;
+		this.springs = false;
+		if (this.#frame) cancelAnimationFrame(this.#frame);
+		// two frames: the closed seams are painted before they open
+		this.#frame = requestAnimationFrame(() => {
+			this.#frame = requestAnimationFrame(() => {
+				this.#frame = undefined;
+				this.joined = false;
+				this.springs = true;
+				this.#later(
+					() => (this.springs = false),
+					springMs,
+				);
+			});
+		});
+	}
+
+	#later(run: () => void, ms: number) {
+		this.#timers.push(window.setTimeout(run, ms));
+	}
+
+	#png(cell: Cell): Promise<Blob | null> {
+		const { source } = this;
+		if (!source) return Promise.resolve(null);
+		const { x, y, width, height } = cellRect(
+			cell,
+			source.pixels,
 			this.rows,
 			this.cols,
-		).map((rect) => {
-			canvas.width = rect.width;
-			canvas.height = rect.height;
-			ctx.clearRect(0, 0, rect.width, rect.height);
-			ctx.drawImage(
-				image,
-				rect.x,
-				rect.y,
-				rect.width,
-				rect.height,
-				0,
-				0,
-				rect.width,
-				rect.height,
-			);
-			return {
-				...rect,
-				key: `${rect.row}-${rect.col}`,
-				label: `${rect.row + 1}-${rect.col + 1}`,
-				dataUrl: canvas.toDataURL('image/png'),
-			};
-		});
+		);
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		const context = canvas.getContext('2d');
+		if (!context || !width || !height) return Promise.resolve(null);
+		context.drawImage(
+			source.image,
+			x,
+			y,
+			width,
+			height,
+			0,
+			0,
+			width,
+			height,
+		);
+		return new Promise((resolve) =>
+			canvas.toBlob(resolve, 'image/png'),
+		);
+	}
+
+	#name(cell: Cell) {
+		return `${this.source?.stem ?? 'image'}-${cell.label}.png`;
+	}
+
+	pick = async (cell: Cell, item: CanonMenuItem) => {
+		const blob = await this.#png(cell);
+		if (!blob) return;
+		if (item.title !== 'Copy')
+			return downloadBlob(blob, this.#name(cell));
+		try {
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob }),
+			]);
+		} catch {
+			// a denied clipboard leaves no toast
+			return;
+		}
+		this.toast.show();
 	};
 
-	downloadTile = (tile: Tile) => {
-		downloadUrl(tile.dataUrl, `${this.fileName}-${tile.label}.png`);
-	};
-
-	downloadAll = () => {
-		this.tiles.forEach((tile, i) => {
-			this.#timers.push(
-				setTimeout(
-					() => this.downloadTile(tile),
-					i * DOWNLOAD_GAP_MS,
-				),
-			);
-		});
+	downloadAll = async () => {
+		if (this.exportDisabled) return;
+		this.exporting = true;
+		try {
+			const all = cells(this.rows, this.cols);
+			for (const [i, cell] of all.entries()) {
+				const blob = await this.#png(cell);
+				if (isDestroying(this)) return;
+				if (blob) downloadBlob(blob, this.#name(cell));
+				// the web tool's gap between downloads
+				if (i < all.length - 1)
+					await new Promise((resolve) =>
+						this.#later(
+							() =>
+								resolve(
+									undefined,
+								),
+							downloadGapMs,
+						),
+					);
+			}
+		} finally {
+			if (!isDestroying(this)) this.exporting = false;
+		}
 	};
 
 	<template>
-		<div
-			class="dt-split"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="image-splitter"
+			@halves={{true}}
+			@collapsesTo={{200}}
+			style={{spring}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div class="dt-split-frame">
-				{{#if this.sourceImage}}
-					<div class="dt-split-bar">
-						<span
-							class="dt-split-bar-title"
-						>Source Image</span>
-						<button
-							type="button"
-							class="dt-split-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1.25}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@url={{this.source.url}}
+						@pixels={{this.pixels}}
+						@rows={{this.rows}}
+						@cols={{this.cols}}
+						@joined={{this.joined}}
+						@springs={{this.springs}}
+						@over={{this.drop.over}}
+						@menu={{this.menu}}
+						@onChoose={{this.choose}}
+						@onPick={{this.pick}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="split-source"
+							@title={{this.source.stem}}
+							@detail={{this.sourceText}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-
-					<div class="dt-split-preview">
-						<span class="dt-split-stage">
-							<img
-								src={{this.sourceImage}}
-								alt="Source"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							<span
-								class="dt-split-overlay"
-								style={{this.overlayStyle}}
-							>
-								{{#each
-									this.overlayCells
-									key="@index"
-									as |cell|
-								}}
-									<span
-										data-cell={{cell}}
-									></span>
-								{{/each}}
-							</span>
-						</span>
-					</div>
-
-					<div class="dt-split-settings">
-						<div class="dt-split-field">
-							<label
-								for="dt-split-cols"
-							>Columns</label>
-							<input
-								id="dt-split-cols"
-								type="number"
-								min="1"
-								max="20"
-								value={{this.cols}}
-								{{on
-									"input"
-									this.setCols
-								}}
-							/>
-						</div>
-						<div class="dt-split-field">
-							<label
-								for="dt-split-rows"
-							>Rows</label>
-							<input
-								id="dt-split-rows"
-								type="number"
-								min="1"
-								max="20"
-								value={{this.rows}}
-								{{on
-									"input"
-									this.setRows
-								}}
-							/>
-						</div>
-						<div class="dt-split-field">
-							<span
-								class="dt-split-field-label"
-							>Tile Size</span>
-							<span
-								class="dt-split-readout"
-							>{{this.tile.width}}
-								×
-								{{this.tile.height}}
-								px</span>
-						</div>
-						<div class="dt-split-field">
-							<span
-								class="dt-split-field-label"
-							>Total</span>
-							<span
-								class="dt-split-readout"
-							>{{this.total}}
-								tiles</span>
-						</div>
-					</div>
-
-					<button
-						type="button"
-						class="dt-split-run"
-						{{on "click" this.splitImage}}
-					>
-						<Icon @name="layout-grid" />
-						Split Image into
-						{{this.total}}
-						Tiles
-					</button>
-				{{else}}
-					<label
-						class="dt-split-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-split-drop-title"
-						>Drop image here</span>
-						<span
-							class="dt-split-drop-hint"
-						>PNG, JPG, or any image format,
-							or paste</span>
-					</label>
+						</CanonRow>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			{{#if this.tiles.length}}
-				<div class="dt-split-frame">
-					<div class="dt-split-bar">
-						<span
-							class="dt-split-bar-title"
-						>Generated Tiles</span>
-						<button
-							type="button"
-							class="dt-split-bar-btn is-primary"
-							{{on
-								"click"
-								this.downloadAll
-							}}
-						>
-							<DownloadLabel
-								@label="Download All"
-							/>
-						</button>
-					</div>
-
-					<div
-						class="dt-split-tiles"
-						style={{this.tileGridStyle}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Grid" />
+					<CanonRow
+						@title="Columns"
+						@form="flush"
+						as |titleId|
 					>
-						{{#each
-							this.tiles key="key"
-							as |tile|
+						<CanonNumberField
+							class="split-cols"
+							@value={{this.cols}}
+							@min={{counts.min}}
+							@max={{counts.max}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setCols}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Rows"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonNumberField
+							class="split-rows"
+							@value={{this.rows}}
+							@min={{counts.min}}
+							@max={{counts.max}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setRows}}
+						/>
+					</CanonRow>
+					<CanonHeading @text="Tiles" />
+					<CanonTiles @items={{this.tiles}} />
+					<CanonButton
+						class="split-download"
+						@kind="primary"
+						@text={{passAlong
+							"Download All"
 						}}
-							<button
-								type="button"
-								class="dt-split-tile"
-								{{on
-									"click"
-									(fn
-										this.downloadTile
-										tile
-									)
-								}}
-							>
-								<img
-									src={{tile.dataUrl}}
-									alt={{tile.label}}
-								/>
-								<span
-									class="dt-split-tile-badge"
-								>{{tile.label}}</span>
-							</button>
-						{{/each}}
-					</div>
-				</div>
-			{{/if}}
-		</div>
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{this.exportDisabled}}
+						@onClick={{this.downloadAll}}
+					/>
+					{{#if this.exporting}}
+						<CanonRow
+							class="split-busy"
+							@title="Processing…"
+						>
+							<CanonLoader
+								@cell={{5}}
+								@gap={{1}}
+							/>
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function clampCount(value: number) {
+	return Math.min(counts.max, Math.max(counts.min, value));
 }

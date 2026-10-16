@@ -388,6 +388,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Split images into tiles',
 				icon: 'scissors',
 				href: '/tools/image-splitter',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
