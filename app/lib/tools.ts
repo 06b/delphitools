@@ -100,6 +100,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/social-cropper',
 				produces: ['image/png'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'watermarker',

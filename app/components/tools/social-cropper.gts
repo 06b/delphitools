@@ -1,489 +1,445 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { stem } from 'delphicanon/lib/files';
+import { springEasing } from 'delphicanon/lib/motion';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
 import {
-	SOCIAL_PLATFORMS,
-	type SocialPlatform,
-	type SocialRatio,
-} from 'delphitools-v2/lib/social-presets';
+	crop,
+	emptyPixels,
+	fileName,
+	instagram,
+	middle,
+	platforms,
+	sameRatio,
+	type CropPlatform,
+	type CropRatio,
+	type Point,
+	type Size,
+} from 'delphitools-v2/components/tools/social-cropper/crop';
+import Picture from 'delphitools-v2/components/tools/social-cropper/picture';
+import './social-cropper/social-cropper.css';
 
-const LOAD_FAILED = 'Image could not be read. Try another file?';
+const loadFailed = 'Image could not be read. Try another file?';
 
-const FIRST_PLATFORM = SOCIAL_PLATFORMS[0]!;
-const FIRST_RATIO = FIRST_PLATFORM.ratios[0]!;
+// iOS: CASpringAnimation damping 20, stiffness 190, mass 1 (ratio 0.725)
+const spring = htmlSafe(`--social-spring: ${springEasing(0.725)}`);
+const springMs = 500;
 
-interface Size {
-	width: number;
-	height: number;
+const platformNames = platforms.map(({ name }) => name);
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+interface Source {
+	url: string;
+	image: HTMLImageElement;
+	pixels: Size;
+	stem: string;
 }
 
-export function cropSize(
-	imageWidth: number,
-	imageHeight: number,
-	aspect: number,
-): Size {
-	if (!imageWidth || !imageHeight) return { width: 0, height: 0 };
-	if (aspect > imageWidth / imageHeight) {
-		return { width: imageWidth, height: imageWidth / aspect };
+/** The port of SocialCropperViewController, on the web tool's export. */
+export default class SocialCropper extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+	@tracked platform: CropPlatform;
+	@tracked ratio: CropRatio;
+	@tracked centre: Point = middleOf(emptyPixels);
+	@tracked source?: Source;
+	@tracked failed = false;
+	@tracked exporting = false;
+	@tracked springs = false;
+
+	drop = new Drop('image/*', (file) => void this.load(file));
+	#input?: HTMLInputElement;
+	#loading = 0;
+	#springTimer?: number;
+
+	// ?cropPlatform=<id> ?cropRatio=<index> ?cropSample ?cropMove=<px>: the iOS -cropPlatform, -cropRatio, -cropSample, -cropMove
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const platform =
+			platforms.find(
+				({ id }) => id === query.get('cropPlatform'),
+			) ?? instagram;
+		const { ratios } = platform;
+		const index = Number(query.get('cropRatio')) || 0;
+		this.platform = platform;
+		this.ratio =
+			ratios[
+				Math.min(Math.max(index, 0), ratios.length - 1)
+			]!;
+		const move = Number(query.get('cropMove'));
+		if (query.has('cropSample'))
+			void drawnSample()
+				.then((file) => this.load(file))
+				.then(() => {
+					if (move)
+						this.move({ x: move, y: move });
+				});
+		registerDestructor(this, () => {
+			window.clearTimeout(this.#springTimer);
+			if (this.source) URL.revokeObjectURL(this.source.url);
+		});
 	}
-	return { width: imageHeight * aspect, height: imageHeight };
-}
 
-function clamp(value: number, max: number): number {
-	return Math.max(0, Math.min(max, value));
-}
+	get pixels() {
+		return this.source?.pixels ?? emptyPixels;
+	}
 
-export default class SocialCropperTool extends Component {
-	@tracked sourceImage: string | null = null;
-	@tracked fileName = '';
-	@tracked imageWidth = 0;
-	@tracked imageHeight = 0;
-	@tracked platform: SocialPlatform = FIRST_PLATFORM;
-	@tracked ratio: SocialRatio = FIRST_RATIO;
-	@tracked cropX = 0;
-	@tracked cropY = 0;
-	@tracked dragging = false;
-	@tracked croppedImage: string | null = null;
-	@tracked loadFailed = false;
+	get crop() {
+		return crop(
+			this.ratio.width / this.ratio.height,
+			this.pixels,
+			this.centre,
+		);
+	}
 
-	#image: HTMLImageElement | null = null;
-	#drag: {
-		scale: number;
-		pointerX: number;
-		pointerY: number;
-		x: number;
-		y: number;
-	} | null = null;
-	#destroyed = false;
-
-	willDestroy() {
-		super.willDestroy();
-		this.#destroyed = true;
+	get others() {
+		const centre = middle(this.crop);
+		return this.platform.ratios
+			.filter((ratio) => ratio !== this.ratio)
+			.map((ratio) => ({
+				label: ratio.label,
+				rect: crop(
+					ratio.width / ratio.height,
+					this.pixels,
+					centre,
+				),
+			}));
 	}
 
 	get aspect() {
-		return this.ratio.width / this.ratio.height;
+		const { width, height } = this.pixels;
+		return Math.max(0.5, width / height);
 	}
 
-	get crop(): Size {
-		return cropSize(this.imageWidth, this.imageHeight, this.aspect);
+	get platformKey() {
+		return [this.platform];
 	}
 
-	get cropLabel() {
-		const { width, height } = this.crop;
-		return `${Math.round(width)} × ${Math.round(height)}`;
+	get platformIndex() {
+		return platforms.indexOf(this.platform);
 	}
 
-	get offsetLabel() {
-		return `${Math.round(this.cropX)}, ${Math.round(this.cropY)}`;
-	}
-
-	get frameStyle() {
-		if (!this.imageWidth || !this.imageHeight) return htmlSafe('');
-		const { width, height } = this.crop;
-		const percent = (part: number, whole: number) =>
-			(part / whole) * 100;
-		return htmlSafe(
-			`left: ${percent(this.cropX, this.imageWidth)}%;` +
-				`top: ${percent(this.cropY, this.imageHeight)}%;` +
-				`width: ${percent(width, this.imageWidth)}%;` +
-				`height: ${percent(height, this.imageHeight)}%`,
+	get ratioNames() {
+		return this.platform.ratios.map(
+			({ name, label }) => `${name} ${label}`,
 		);
 	}
 
-	readFile = (file: File) => {
-		this.fileName = file.name.replace(/\.[^.]+$/, '');
-		this.loadFailed = false;
-		const reader = new FileReader();
-		reader.onload = () => {
-			const dataUrl = reader.result as string;
-			const image = new Image();
-			image.onload = () => {
-				if (this.#destroyed) return;
-				this.#image = image;
-				this.imageWidth = image.width;
-				this.imageHeight = image.height;
-				this.sourceImage = dataUrl;
-				this.cropX = 0;
-				this.cropY = 0;
-				this.render();
-			};
-			// decode errors must surface
-			image.onerror = this.fail;
-			image.src = dataUrl;
-		};
-		reader.onerror = this.fail;
-		reader.readAsDataURL(file);
-	};
+	get ratioIndex() {
+		return this.platform.ratios.indexOf(this.ratio);
+	}
 
-	handleFileSelect = (event: Event) => {
+	get sourceText() {
+		const pixels = this.source?.pixels;
+		return pixels ? `${pixels.width} × ${pixels.height}` : '';
+	}
+
+	get tiles() {
+		const loaded = !!this.source;
+		const dash = '—';
+		const { x, y, width, height } = this.crop;
+		return [
+			{
+				label: 'Crop size',
+				value: loaded
+					? `${width} × ${height} px`
+					: dash,
+			},
+			{
+				label: 'Offset',
+				value: loaded ? `${x}, ${y}` : dash,
+			},
+			{
+				label: 'Original',
+				value: loaded ? `${this.sourceText} px` : dash,
+			},
+		];
+	}
+
+	get exportDisabled() {
+		return !this.source || this.exporting;
+	}
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// rearm for same-file change
+		// the same file twice fires change again
 		input.value = '';
+		if (file) void this.load(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readFile(file);
-	};
-
-	// else browser navigates to file
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	fail = () => {
-		if (this.#destroyed) return;
-		this.clear();
-		this.loadFailed = true;
+	load = async (file: File) => {
+		if (!file.type.startsWith('image/')) return;
+		const run = ++this.#loading;
+		const url = URL.createObjectURL(file);
+		const image = new Image();
+		image.src = url;
+		try {
+			await image.decode();
+		} catch {
+			URL.revokeObjectURL(url);
+			if (run !== this.#loading) return;
+			this.clear();
+			this.failed = true;
+			return;
+		}
+		if (run !== this.#loading || isDestroying(this)) {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		const pixels = {
+			width: image.naturalWidth,
+			height: image.naturalHeight,
+		};
+		this.source = {
+			url,
+			image,
+			pixels,
+			stem: stem(file.name) || 'image',
+		};
+		this.centre = middleOf(pixels);
+		this.failed = false;
 	};
 
 	clear = () => {
-		this.#image = null;
-		this.sourceImage = null;
-		this.fileName = '';
-		this.imageWidth = 0;
-		this.imageHeight = 0;
-		this.cropX = 0;
-		this.cropY = 0;
-		this.croppedImage = null;
-		this.loadFailed = false;
+		this.#loading++;
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.source = undefined;
+		this.centre = middleOf(emptyPixels);
+		this.failed = false;
 	};
 
-	selectPlatform = (platform: SocialPlatform) => {
-		this.platform = platform;
-		this.ratio = platform.ratios[0] ?? this.ratio;
-		this.recrop();
-	};
-
-	selectRatio = (ratio: SocialRatio) => {
-		this.ratio = ratio;
-		this.recrop();
-	};
-
-	recrop = () => {
-		this.cropX = 0;
-		this.cropY = 0;
-		this.render();
-	};
-
-	setOffset(x: number, y: number) {
-		const { width, height } = this.crop;
-		this.cropX = clamp(x, this.imageWidth - width);
-		this.cropY = clamp(y, this.imageHeight - height);
+	#spring() {
+		this.springs = true;
+		window.clearTimeout(this.#springTimer);
+		this.#springTimer = window.setTimeout(
+			() => (this.springs = false),
+			springMs,
+		);
 	}
 
-	// pointer path; capture keeps moves outside preview
-	startDrag = (event: PointerEvent) => {
-		const stage = event.currentTarget as HTMLElement;
-		const rect = stage.getBoundingClientRect();
-		if (!rect.width || !this.imageWidth) return;
+	#settle() {
+		this.centre = middle(this.crop);
+	}
 
-		this.#drag = {
-			scale: this.imageWidth / rect.width,
-			pointerX: event.clientX,
-			pointerY: event.clientY,
-			x: this.cropX,
-			y: this.cropY,
-		};
-		this.dragging = true;
-		stage.setPointerCapture(event.pointerId);
+	pickPlatform = (index: number) => {
+		this.platform = platforms[index]!;
+		this.ratio = sameRatio(this.platform, this.ratio);
+		this.#settle();
+		this.#spring();
 	};
 
-	moveDrag = (event: PointerEvent) => {
-		const drag = this.#drag;
-		if (!drag) return;
-		this.setOffset(
-			drag.x + (event.clientX - drag.pointerX) * drag.scale,
-			drag.y + (event.clientY - drag.pointerY) * drag.scale,
-		);
+	pickRatio = (index: number) => {
+		this.ratio = this.platform.ratios[index]!;
+		this.#settle();
+		this.#spring();
 	};
 
-	endDrag = (event: PointerEvent) => {
-		const stage = event.currentTarget as HTMLElement;
-		if (stage.hasPointerCapture(event.pointerId)) {
-			stage.releasePointerCapture(event.pointerId);
-		}
-		if (!this.#drag) return;
-		this.#drag = null;
-		this.dragging = false;
-		this.render();
+	move = ({ x, y }: Point) => {
+		this.centre = { x: this.centre.x + x, y: this.centre.y + y };
+		this.#settle();
 	};
 
-	render = () => {
-		if (this.#destroyed) return;
-		this.croppedImage = null;
-
-		const image = this.#image;
-		if (!image) return;
-
-		const { width, height } = this.crop;
-		if (width < 1 || height < 1) return;
-
+	#png(): Promise<Blob | null> {
+		const { source } = this;
+		if (!source) return Promise.resolve(null);
+		const { x, y, width, height } = this.crop;
 		const canvas = document.createElement('canvas');
-		canvas.width = Math.round(width);
-		canvas.height = Math.round(height);
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
-
-		ctx.drawImage(
-			image,
-			this.cropX,
-			this.cropY,
+		canvas.width = width;
+		canvas.height = height;
+		const context = canvas.getContext('2d');
+		if (!context) return Promise.resolve(null);
+		context.drawImage(
+			source.image,
+			x,
+			y,
 			width,
 			height,
 			0,
 			0,
-			canvas.width,
-			canvas.height,
+			width,
+			height,
 		);
-		this.croppedImage = canvas.toDataURL('image/png');
+		return new Promise((resolve) =>
+			canvas.toBlob(resolve, 'image/png'),
+		);
+	}
+
+	copy = async () => {
+		const blob = await this.#png();
+		if (!blob) return;
+		try {
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob }),
+			]);
+		} catch {
+			return;
+		}
+		this.toast.show();
 	};
 
-	download = () => {
-		if (!this.croppedImage) return;
-		downloadUrl(
-			this.croppedImage,
-			`${this.fileName}-${this.platform.name.toLowerCase()}-${this.ratio.label}.png`,
-		);
+	export = async () => {
+		const { source } = this;
+		if (this.exportDisabled || !source) return;
+		const name = fileName(source.stem, this.platform, this.ratio);
+		this.exporting = true;
+		try {
+			const blob = await this.#png();
+			if (blob) downloadBlob(blob, name);
+		} finally {
+			this.exporting = false;
+		}
 	};
 
 	<template>
-		<div
-			class="dt-cropper"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="social-cropper"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			style={{spring}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div class="dt-cropper-frame">
-				{{#if this.sourceImage}}
-					<div class="dt-cropper-bar">
-						<span class="dt-cropper-source">
-							<Icon @name="image" />
-							<span
-								class="dt-cropper-name"
-							>{{this.fileName}}</span>
-							<span
-								class="dt-cropper-dims"
-							>{{this.imageWidth}}
-								×
-								{{this.imageHeight}}</span>
-						</span>
-						<button
-							type="button"
-							class="dt-cropper-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@url={{this.source.url}}
+						@pixels={{this.pixels}}
+						@crop={{this.crop}}
+						@label={{this.ratio.label}}
+						@others={{this.others}}
+						@springs={{this.springs}}
+						@busy={{this.exporting}}
+						@over={{this.drop.over}}
+						@onChoose={{this.choose}}
+						@onMove={{this.move}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="social-source"
+							@title={{this.source.stem}}
+							@detail={{this.sourceText}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-
-					<div class="dt-cropper-section">
-						<span
-							class="dt-cropper-label"
-						>Platform</span>
-						<div
-							class="segmented dt-cropper-platforms"
-						>
-							{{#each
-								SOCIAL_PLATFORMS
-								key="name"
-								as |option|
-							}}
-								<button
-									type="button"
-									class="dt-cropper-choice
-										{{if
-											(eq
-												option
-												this.platform
-											)
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.selectPlatform
-											option
-										)
-									}}
-								>{{option.name}}</button>
-							{{/each}}
-						</div>
-					</div>
-
-					<div class="dt-cropper-section">
-						<span
-							class="dt-cropper-label"
-						>Ratio</span>
-						<div
-							class="segmented dt-cropper-ratios"
-						>
-							{{#each
-								this.platform.ratios
-								key="name"
-								as |option|
-							}}
-								<button
-									type="button"
-									class="dt-cropper-choice is-stacked
-										{{if
-											(eq
-												option
-												this.ratio
-											)
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.selectRatio
-											option
-										)
-									}}
-								>
-									<span
-										class="dt-cropper-choice-label"
-									>{{option.label}}</span>
-									<span
-										class="dt-cropper-choice-name"
-									>{{option.name}}</span>
-								</button>
-							{{/each}}
-						</div>
-					</div>
-
-					<div
-						class="dt-cropper-section is-stage"
-					>
-						<span class="dt-cropper-label">
-							<Icon @name="move" />
-							{{! wording from next app }}
-							Drag to reposition
-						</span>
-						{{! drag, not click }}
-						{{! template-lint-disable no-pointer-down-event-binding }}
-						<div
-							class="dt-cropper-stage
-								{{if
-									this.dragging
-									'is-dragging'
-								}}"
-							{{on
-								"pointerdown"
-								this.startDrag
-							}}
-							{{on
-								"pointermove"
-								this.moveDrag
-							}}
-							{{on
-								"pointerup"
-								this.endDrag
-							}}
-							{{on
-								"pointercancel"
-								this.endDrag
-							}}
-						>
-							<img
-								src={{this.sourceImage}}
-								alt="Source"
-								draggable="false"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							<div
-								class="dt-cropper-window"
-								style={{this.frameStyle}}
-							></div>
-						</div>
-					</div>
-
-					<div class="dt-cropper-stats">
-						<span>Crop:
-							{{this.cropLabel}}
-							px</span>
-						<span>Offset:
-							{{this.offsetLabel}}</span>
-					</div>
-
-					{{#if this.croppedImage}}
-						<div class="dt-cropper-result">
-							<img
-								src={{this.croppedImage}}
-								alt="Cropped"
-							/>
-						</div>
-
-						<div class="dt-cropper-actions">
-							<span
-								class="dt-cropper-summary"
-							>
-								{{this.platform.name}}
-								·
-								{{this.ratio.label}}
-								{{this.ratio.name}}
-							</span>
-							<button
-								type="button"
-								class="dt-cropper-download"
-								{{on
-									"click"
-									this.download
-								}}
-							>
-								<DownloadLabel
-									@label="Download PNG"
-								/>
-							</button>
-						</div>
-					{{/if}}
-				{{else}}
-					<label
-						class="dt-cropper-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+						</CanonRow>
+					</CanonRows>
+				{{else if this.failed}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							@text={{loadFailed}}
+							@tone="warn"
+							@row={{true}}
 						/>
-						<Icon @name="upload" />
-						{{! wording from next app }}
-						<span
-							class="dt-cropper-drop-title"
-						>Drop image here</span>
-						{{! wording from next app }}
-						<span
-							class="dt-cropper-drop-hint"
-						>PNG, JPG, or any image format,
-							or paste</span>
-					</label>
+					</CanonRows>
 				{{/if}}
-
-				{{#if this.loadFailed}}
-					<p
-						class="dt-cropper-error"
-						role="alert"
-					>{{LOAD_FAILED}}</p>
-				{{/if}}
-			</div>
-		</div>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Platform" />
+					<CanonSegmented
+						class="social-platforms"
+						@items={{platformNames}}
+						@columns={{3}}
+						@selected={{this.platformIndex}}
+						@onChange={{this.pickPlatform}}
+					/>
+					<CanonHeading @text="Ratio" />
+					{{! a held pick outlives the platform (kit picked.over); remount per platform }}
+					{{#each this.platformKey key="id"}}
+						<CanonSegmented
+							class="social-ratios"
+							@items={{this.ratioNames}}
+							@columns={{2}}
+							@selected={{this.ratioIndex}}
+							@onChange={{this.pickRatio}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Crop" />
+					<CanonTiles @items={{this.tiles}} />
+					<CanonGrid>
+						<CanonButton
+							class="social-copy"
+							@text="Copy"
+							@icon={{Copy}}
+							@disabled={{this.exportDisabled}}
+							@onClick={{this.copy}}
+						/>
+						<CanonButton
+							class="social-download"
+							@kind="primary"
+							@text={{passAlong
+								"Download PNG"
+							}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{this.exportDisabled}}
+							@onClick={{this.export}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function middleOf({ width, height }: Size): Point {
+	return { x: width / 2, y: height / 2 };
 }

@@ -1,0 +1,217 @@
+.social-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.social-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+}
+
+.social-image,
+.social-slot,
+.social-sheet,
+.social-sheet > * {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.social-image {
+	display: block;
+	max-inline-size: none;
+	user-select: none;
+}
+
+/* the dashed image slot of background-remover */
+.social-slot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: var(--canon-frame) dashed
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 50%,
+			transparent
+		);
+	outline: none;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+}
+
+/* the prompt over the crop preview drawn after the slot */
+.social-slot > * {
+	position: relative;
+	z-index: 1;
+}
+
+.social-slot:focus-visible {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+.social-slot--over {
+	background: var(--canon-accent-bg);
+	color: var(--canon-primary);
+}
+
+.social-slot-icon {
+	display: flex;
+	opacity: 0.6;
+}
+
+.social-slot-icon svg {
+	inline-size: 44px;
+	block-size: 44px;
+}
+
+.social-sheet {
+	overflow: hidden;
+	pointer-events: none;
+}
+
+/* empty: the crop is a tint behind the slot's prompt */
+.social-shade {
+	background: color-mix(in srgb, var(--canon-accent-bg) 70%, transparent);
+	background-image:
+		linear-gradient(var(--canon-border), var(--canon-border)),
+		linear-gradient(var(--canon-border), var(--canon-border)),
+		linear-gradient(var(--canon-border), var(--canon-border)),
+		linear-gradient(var(--canon-border), var(--canon-border));
+	background-repeat: no-repeat;
+	background-position:
+		33.333% 0,
+		66.667% 0,
+		0 33.333%,
+		0 66.667%;
+	background-size:
+		var(--canon-hairline) 100%,
+		var(--canon-hairline) 100%,
+		100% var(--canon-hairline),
+		100% var(--canon-hairline);
+}
+
+.social-sheet--image .social-shade {
+	--social-thirds: rgb(255 255 255 / 35%);
+
+	background-color: transparent;
+	background-image:
+		linear-gradient(var(--social-thirds), var(--social-thirds)),
+		linear-gradient(var(--social-thirds), var(--social-thirds)),
+		linear-gradient(var(--social-thirds), var(--social-thirds)),
+		linear-gradient(var(--social-thirds), var(--social-thirds));
+	box-shadow: 0 0 0 100vmax rgb(0 0 0 / 50%);
+}
+
+.social-ghost {
+	border: 1px dashed var(--canon-muted-foreground);
+}
+
+.social-sheet--image .social-ghost {
+	border-color: rgb(255 255 255 / 80%);
+}
+
+.social-crop {
+	border: var(--canon-frame) solid var(--canon-primary);
+	outline: none;
+}
+
+.social-sheet--image .social-crop {
+	pointer-events: auto;
+	cursor: grab;
+	touch-action: none;
+}
+
+.social-picture--dragging .social-crop {
+	cursor: grabbing;
+}
+
+.social-crop:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-foreground);
+	outline-offset: var(--canon-frame);
+}
+
+.social-tag,
+.social-ghost-label {
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 13px;
+	text-align: center;
+	white-space: nowrap;
+}
+
+.social-tag {
+	padding: 2px 5px;
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.social-ghost-label {
+	color: var(--canon-muted-foreground);
+	opacity: 0;
+}
+
+.social-sheet--image .social-ghost-label {
+	color: rgb(255 255 255 / 80%);
+}
+
+.social-ghost-label--shown {
+	opacity: 1;
+}
+
+.social-hint {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 5px 10px 5px 8px;
+	background: color-mix(in srgb, var(--canon-card) 88%, transparent);
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 200ms;
+}
+
+.social-hint svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+.social-hint--shown {
+	opacity: 1;
+}
+
+.social-picture--springs .social-sheet > * {
+	transition:
+		left 500ms var(--social-spring),
+		top 500ms var(--social-spring),
+		width 500ms var(--social-spring),
+		height 500ms var(--social-spring),
+		opacity 200ms;
+}
+
+.social-loader {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+	color: var(--canon-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.social-picture--springs .social-sheet > *,
+	.social-hint {
+		transition: none;
+	}
+}
