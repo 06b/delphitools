@@ -61,6 +61,7 @@ import {
 	setMode,
 	toolbox,
 	type BoxMode,
+	type ModalId,
 } from 'delphitools-v2/lib/errata/ui';
 import { pageContent } from 'delphitools-v2/lib/errata/content';
 import {
@@ -105,6 +106,7 @@ export default class ErrataShell extends Component {
 	undoable = new TrackedExternal(store.subscribe, store.canUndo);
 	redoable = new TrackedExternal(store.subscribe, store.canRedo);
 	mode = new TrackedExternal(boxMode.subscribe, boxMode.get);
+	sheet = new TrackedExternal(modal.subscribe, modal.get);
 	boxOpen = new TrackedExternal(toolbox.subscribe, toolbox.get);
 	tool = new TrackedExternal(activeTool.subscribe, activeTool.get);
 	loading = new TrackedExternal(opening.subscribe, opening.get);
@@ -119,6 +121,7 @@ export default class ErrataShell extends Component {
 		this.undoable.unsubscribe();
 		this.redoable.unsubscribe();
 		this.mode.unsubscribe();
+		this.sheet.unsubscribe();
 		this.boxOpen.unsubscribe();
 		this.tool.unsubscribe();
 		this.loading.unsubscribe();
@@ -179,7 +182,8 @@ export default class ErrataShell extends Component {
 		return (
 			this.hasDoc &&
 			!this.boxOpen.current &&
-			this.mode.current === null
+			this.mode.current === null &&
+			this.sheet.current === null
 		);
 	}
 
@@ -464,13 +468,19 @@ export default class ErrataShell extends Component {
 	};
 
 	// a mode opening or closing moves the findings rail
-	reinset = modifier((root: HTMLElement, [mode]: [BoxMode | null]) => {
-		void mode;
-		const frame = requestAnimationFrame(() =>
-			this.placeInset(root),
-		);
-		return () => cancelAnimationFrame(frame);
-	});
+	reinset = modifier(
+		(
+			root: HTMLElement,
+			[mode, sheet]: [BoxMode | null, ModalId | null],
+		) => {
+			void mode;
+			void sheet;
+			const frame = requestAnimationFrame(() =>
+				this.placeInset(root),
+			);
+			return () => cancelAnimationFrame(frame);
+		},
+	);
 
 	// with a document open an image file lands on the page; a pdf always opens
 	take = (file: File) =>
@@ -522,7 +532,7 @@ export default class ErrataShell extends Component {
 		<div
 			class="sub-ed err-ed {{this.layoutClass}}"
 			{{this.measure}}
-			{{this.reinset this.mode.current}}
+			{{this.reinset this.mode.current this.sheet.current}}
 			{{this.rig}}
 			{{errataShortcuts}}
 			{{filePaste

@@ -1,9 +1,3 @@
-/* the shell keeps the settings bar while Fill & sign is open (it reads
-   the mode, not the modal channel); the panel takes its place */
-.err-ed:has(> .err-sig.is-open) > .sub-ed-bar {
-	display: none;
-}
-
 .err-sig-draw {
 	display: flex;
 	background: var(--canon-card);
