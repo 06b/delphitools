@@ -395,8 +395,9 @@ check('page size range one undo step', JSON.stringify(await sizesOf()) === JSON.
 
 // signature: draw, place
 await page.keyboard.press('g');
-await sleep(200);
-check('signature dialog', await page.$eval('.sub-modal', (d) => d.open));
+await sleep(700);
+const barVisible = () => page.evaluate(() => document.querySelector('.sub-ed-bar')?.offsetParent != null);
+check('signature panel', (await modeOpen('signature')) && !(await page.$('dialog[open]')) && !(await barVisible()));
 const pad = await page.$eval('.err-sig-pad', (c) => {
 	const r = c.getBoundingClientRect();
 	return { x: r.left, y: r.top };
@@ -406,8 +407,9 @@ await page.mouse.down();
 await page.mouse.move(pad.x + 200, pad.y + 60, { steps: 10 });
 await page.mouse.move(pad.x + 300, pad.y + 120, { steps: 10 });
 await page.mouse.up();
-await page.click('.sub-modal-footer .is-primary');
+await clickIn('Place');
 await sleep(400);
+check('signature panel closes on place', !(await modeOpen('signature')) && (await barVisible()));
 objs = await objects();
 check('signature placed', objs.length === 1 && objs[0].kind === 'image' && objs[0].dataUrl.startsWith('data:image/png'));
 check('signature saved', await page.evaluate(() => JSON.parse(localStorage.getItem('errata:signatures') ?? '[]').length === 1));
@@ -940,11 +942,25 @@ pop = await popover();
 check('comment popover switches note', pop?.text === 'Imported note\nline two' && pop.author === 'Ann' && (await comments()).length === 2, JSON.stringify(pop));
 await page.keyboard.press('Escape');
 await sleep(200);
-await page.click(`${bar} .dt-select-trigger`);
-await sleep(300);
-const options = await page.$$eval('.dt-select-item', (els) => els.map((e) => e.textContent.trim()));
+const listSelect = `${bar} select[aria-label="List"]`;
+const options = await page.$$eval(`${listSelect} option:not([hidden])`, (els) => els.map((e) => e.textContent.trim()));
 check('comment list', options.length === 2 && options[0] === '1 · Imported note line two' && options[1] === '1 · Fresh note second line', JSON.stringify(options));
-await page.evaluate(() => [...document.querySelectorAll('.dt-select-item')].find((e) => e.textContent.includes('Imported'))?.click());
+// a native select fires no change for the option already shown
+const pickListed = (text) =>
+	page.$eval(
+		listSelect,
+		(s, t) => {
+			s.value = [...s.options].find((o) => o.textContent.includes(t)).value;
+			s.dispatchEvent(new Event('change', { bubbles: true }));
+		},
+		text,
+	);
+await pickListed('Fresh');
+await sleep(400);
+check('comment list shows the pick', (await popover())?.text === 'Fresh note\nsecond line' && (await page.$eval(listSelect, (s) => s.selectedOptions[0]?.textContent.trim())) === '1 · Fresh note second line');
+await page.keyboard.press('Escape');
+await sleep(200);
+await pickListed('Imported');
 await sleep(400);
 check('comment list opens popover', (await popover())?.text === 'Imported note\nline two' && (await page.evaluate(() => !!window.__errataCanvas.getActiveObject())));
 await page.focus('.err-note-text');
@@ -1239,24 +1255,24 @@ await page.keyboard.up('Meta');
 await sleep(200);
 check('form rename undo', (await fieldObjs())[0].name === 'email');
 
-await drag(fr0, [300, 450], [301, 451]);
+await drag(fr0, [370, 20], [371, 21]);
 check('form click deselects', (await fieldObjs()).length === 1 && (await nameValue()) === 'email');
 await setInput('Name', '');
 await clickIn('Radio');
 await sleep(100);
 await setInput('Options', 'Yes, No');
 await drag(fr0, [60, 220], [160, 270]);
-await drag(fr0, [300, 450], [301, 451]);
+await drag(fr0, [370, 20], [371, 21]);
 await clickIn('Dropdown');
 await sleep(100);
 await setInput('Options', 'Red, Green');
 await drag(fr0, [200, 220], [320, 242]);
-await drag(fr0, [300, 450], [301, 451]);
+await drag(fr0, [370, 20], [371, 21]);
 await clickIn('Checkbox');
 await sleep(100);
 await toggle('Checked');
 await drag(fr0, [60, 300], [76, 316]);
-await drag(fr0, [300, 450], [301, 451]);
+await drag(fr0, [370, 20], [371, 21]);
 await clickIn('Signature');
 await drag(fr0, [200, 300], [360, 340]);
 fobjs = await fieldObjs();
@@ -1292,7 +1308,7 @@ check('form stays selected after rebuild', (await nameValue()) === 'email');
 await page.keyboard.press(']');
 await sleep(700);
 const fr1 = await page.evaluate(() => window.__errata.pageRect(1));
-await drag(fr0, [300, 450], [301, 451]);
+await drag(fr0, [370, 20], [371, 21]);
 await clickIn('Text');
 await setInput('Name', 'turned');
 await drag({ ...fr1, w: (fr1.w * 400) / 500 }, [100, 100], [250, 120]);
@@ -1332,7 +1348,7 @@ for (const [name, w, h] of [['tall', 60, 600], ['wide', 1200, 80]]) {
 	await sleep(500);
 }
 await page.keyboard.press('g');
-await sleep(400);
+await sleep(700);
 const thumbs = await page.$$eval('.err-sig-cell', (cells) => cells.map((c) => {
 	const a = c.getBoundingClientRect();
 	const b = c.querySelector('.err-sig-img').getBoundingClientRect();

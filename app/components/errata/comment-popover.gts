@@ -8,7 +8,7 @@ import {
 	shift,
 } from '@floating-ui/dom';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
 import type { CommentObject } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	findObject,
@@ -22,6 +22,7 @@ import {
 	pushDismiss,
 } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './comment-popover.css';
 
 interface Open {
 	pageId: string;
@@ -143,7 +144,7 @@ export default class CommentPopover extends Component {
 	<template>
 		{{#if this.open}}
 			<div
-				class="dt-popover err-note"
+				class="err-note"
 				role="dialog"
 				aria-label="Comment"
 				{{this.place this.open.note.id}}
@@ -165,15 +166,12 @@ export default class CommentPopover extends Component {
 					<time
 						datetime={{this.open.note.date}}
 					>{{this.date}}</time>
-					<button
-						type="button"
+					<Cell
 						class="err-note-delete"
-						aria-label="Delete"
-						title="Delete"
-						{{on "click" this.remove}}
-					>
-						<Icon @name="trash-2" />
-					</button>
+						@label="Delete"
+						@icon="trash-2"
+						@onClick={{this.remove}}
+					/>
 				</div>
 			</div>
 		{{/if}}

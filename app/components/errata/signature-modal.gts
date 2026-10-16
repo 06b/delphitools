@@ -2,7 +2,8 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
+import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
 import { newId, pageSize } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	addSignature,
@@ -12,8 +13,16 @@ import {
 } from 'delphitools-v2/lib/errata/signatures';
 import { addObject, currentPage } from 'delphitools-v2/lib/errata/store';
 import { activeTool } from 'delphitools-v2/lib/errata/tool';
-import { modal, selectObject } from 'delphitools-v2/lib/errata/ui';
+import {
+	boxMode,
+	closeMode,
+	modal,
+	pushDismiss,
+	selectObject,
+	toolbox,
+} from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './signature-modal.css';
 
 const PAD_W = 480;
 const PAD_H = 180;
@@ -46,33 +55,43 @@ function placeSignature(dataUrl: string): void {
 	img.src = dataUrl;
 }
 
-// substrata modal-host chrome
+// Fill & sign as a tool panel in the settings bar's place: the draw pad,
+// the saved signatures, Upload; Place puts the drawing on the page
 export default class SignatureModal extends Component {
 	shown = new TrackedExternal(modal.subscribe, modal.get);
 	saved = new TrackedExternal(signatures.subscribe, signatures.get);
 	#pad: HTMLCanvasElement | null = null;
 	#input: HTMLInputElement | null = null;
+	#whileOpen: (() => void)[] = [];
+	#offModal = modal.subscribe(() =>
+		this.opened(modal.get() === 'signature'),
+	);
 
 	willDestroy() {
 		super.willDestroy();
 		this.shown.unsubscribe();
 		this.saved.unsubscribe();
+		this.#offModal();
+		this.opened(false);
 		modal.set(null);
 	}
 
-	sync = modifier((dialog: HTMLDialogElement, [open]: [boolean]) => {
-		if (open && !dialog.open) dialog.showModal();
-		else if (!open && dialog.open) dialog.close();
-	});
-
-	// dialog click requires modifier
-	backdropDismiss = modifier((dialog: HTMLDialogElement) => {
-		const onClick = (event: MouseEvent) => {
-			if (event.target === dialog) dialog.close();
-		};
-		dialog.addEventListener('click', onClick);
-		return () => dialog.removeEventListener('click', onClick);
-	});
+	// one panel at a time: a mode or the toolbox closes this one
+	opened(open: boolean) {
+		for (const off of this.#whileOpen.splice(0)) off();
+		if (!open) return;
+		closeMode();
+		toolbox.set(false);
+		this.#whileOpen.push(
+			pushDismiss(this.onClose),
+			boxMode.subscribe(() => {
+				if (boxMode.get()) this.onClose();
+			}),
+			toolbox.subscribe(() => {
+				if (toolbox.get()) this.onClose();
+			}),
+		);
+	}
 
 	onClose = () => {
 		modal.set(null);
@@ -81,10 +100,6 @@ export default class SignatureModal extends Component {
 	get open() {
 		return this.shown.current === 'signature';
 	}
-
-	dismiss = (event: Event) => {
-		(event.currentTarget as HTMLElement).closest('dialog')?.close();
-	};
 
 	pad = modifier((canvas: HTMLCanvasElement) => {
 		this.#pad = canvas;
@@ -98,9 +113,13 @@ export default class SignatureModal extends Component {
 		ctx.lineJoin = 'round';
 		ctx.strokeStyle = '#111';
 		let drawing = false;
+		// the pad's css size follows the panel column
 		const pt = (e: PointerEvent) => {
 			const r = canvas.getBoundingClientRect();
-			return [e.clientX - r.left, e.clientY - r.top] as const;
+			return [
+				((e.clientX - r.left) * PAD_W) / r.width,
+				((e.clientY - r.top) * PAD_H) / r.height,
+			] as const;
 		};
 		const down = (e: PointerEvent) => {
 			drawing = true;
@@ -184,117 +203,88 @@ export default class SignatureModal extends Component {
 	remove = (dataUrl: string) => removeSignature(dataUrl);
 
 	<template>
-		<dialog
-			class="sub-modal"
-			{{this.sync this.open}}
-			{{on "close" this.onClose}}
-			{{this.backdropDismiss}}
+		<ToolPanel
+			class="err-sig"
+			@open={{this.open}}
+			@mode="signature"
+			@icon="signature"
+			@label="Signatures"
+			@onCancel={{this.onClose}}
+			@onApply={{this.useDrawn}}
+			@applyLabel="Place"
 		>
-			<button
-				type="button"
-				class="sub-modal-x"
-				aria-label="Close"
-				{{on "click" this.dismiss}}
-			>
-				<Icon @name="x" />
-			</button>
-			<div class="sub-modal-frame is-wide">
-				<div class="sub-modal-header">
-					<h2
-						class="sub-modal-title"
-					>Signatures</h2>
-				</div>
-				<div class="sub-modal-body">
-					{{#if this.saved.current.length}}
-						<div
-							class="segmented err-sig-grid"
-						>
-							{{#each
-								this.saved.current
-								as |url|
-							}}
-								<div
-									class="err-sig-cell"
-								>
-									<button
-										type="button"
-										class="err-sig-place"
-										aria-label="Place signature"
-										{{on
-											"click"
-											(fn
-												this.place
-												url
-											)
-										}}
-									>
-										<img
-											src={{url}}
-											alt=""
-											class="err-sig-img"
-										/>
-									</button>
-									<button
-										type="button"
-										class="err-sig-remove"
-										aria-label="Remove signature"
-										{{on
-											"click"
-											(fn
-												this.remove
-												url
-											)
-										}}
-									>
-										<Icon
-											@name="x"
-										/>
-									</button>
-								</div>
-							{{/each}}
-						</div>
-					{{/if}}
+			<:actions>
+				<Cell
+					@label="Upload"
+					@text="Upload"
+					@icon="upload"
+					@onClick={{this.pickUpload}}
+				/>
+				<Cell
+					@label="Clear"
+					@text="Clear"
+					@icon="eraser"
+					@onClick={{this.clear}}
+				/>
+			</:actions>
+			<:default>
+				<div class="err-sig-draw">
 					<canvas
 						class="err-sig-pad"
 						aria-label="Draw signature"
 						{{this.pad}}
 					></canvas>
+					<input
+						type="file"
+						accept="image/png,image/jpeg"
+						class="dt-sr-only"
+						aria-label="Upload signature"
+						{{this.registerInput}}
+						{{on "change" this.onUpload}}
+					/>
 				</div>
-				<input
-					type="file"
-					accept="image/png,image/jpeg"
-					class="dt-sr-only"
-					aria-label="Upload signature"
-					{{this.registerInput}}
-					{{on "change" this.onUpload}}
-				/>
-				<div class="sub-modal-footer">
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost"
-						{{on "click" this.pickUpload}}
-					>
-						<Icon @name="upload" />
-						Upload
-					</button>
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost"
-						{{on "click" this.clear}}
-					>
-						<Icon @name="eraser" />
-						Clear
-					</button>
-					<button
-						type="button"
-						class="sub-modal-btn is-primary"
-						{{on "click" this.useDrawn}}
-					>
-						<Icon @name="signature" />
-						Place
-					</button>
-				</div>
-			</div>
-		</dialog>
+				{{#if this.saved.current.length}}
+					<div class="err-sig-grid">
+						{{#each
+							this.saved.current
+							as |url|
+						}}
+							<div
+								class="err-sig-cell"
+							>
+								<button
+									type="button"
+									class="err-sig-place"
+									aria-label="Place signature"
+									title="Place signature"
+									{{on
+										"click"
+										(fn
+											this.place
+											url
+										)
+									}}
+								>
+									<img
+										src={{url}}
+										alt=""
+										class="err-sig-img"
+									/>
+								</button>
+								<Cell
+									class="err-sig-remove"
+									@label="Remove signature"
+									@icon="x"
+									@onClick={{fn
+										this.remove
+										url
+									}}
+								/>
+							</div>
+						{{/each}}
+					</div>
+				{{/if}}
+			</:default>
+		</ToolPanel>
 	</template>
 }

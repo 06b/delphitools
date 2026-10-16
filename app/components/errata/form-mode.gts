@@ -2,6 +2,8 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { eq, or } from 'ember-truth-helpers';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonSwitch from 'delphicanon/components/canon-switch';
 import ToolPanel, {
 	Field,
 	InputField,
@@ -10,14 +12,6 @@ import ToolPanel, {
 	readText,
 	type SegmentedOption,
 } from 'delphitools-v2/components/errata/tool-panel';
-import Switch from 'delphitools-v2/components/ui/switch';
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from 'delphitools-v2/components/ui/select';
 import type {
 	FieldObject,
 	FieldType,
@@ -41,6 +35,7 @@ import {
 	widgetStandIns,
 } from 'delphitools-v2/lib/errata/widgets';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './form-mode.css';
 
 const TYPES: SegmentedOption<FieldType>[] = [
 	{ value: 'text', icon: 'text-cursor-input', label: 'Text' },
@@ -90,6 +85,22 @@ export default class FormPanel extends Component<{ Args: { open: boolean } }> {
 		return this.target?.field ?? this.draft.current;
 	}
 
+	get choices(): string[] {
+		return ['None', ...this.props.options];
+	}
+
+	// 0 is None; a value outside the options shows the placeholder
+	get choice(): number | undefined {
+		const { value, options } = this.props;
+		if (value === '') return 0;
+		const i = options.indexOf(value);
+		return i === -1 ? undefined : i + 1;
+	}
+
+	get checked() {
+		return this.props.value !== '';
+	}
+
 	get optionsText() {
 		return this.props.options.join(', ');
 	}
@@ -121,6 +132,10 @@ export default class FormPanel extends Component<{ Args: { open: boolean } }> {
 	setChoice = (value: string) => this.patch({ value });
 	setChecked = (on: boolean) => this.patch({ value: on ? 'on' : '' });
 	setRequired = (required: boolean) => this.patch({ required });
+	pickChoice = (index: number) =>
+		this.setChoice(
+			index === 0 ? '' : this.props.options[index - 1]!,
+		);
 	setOptions = (text: string) => {
 		const options = parseOptions(text);
 		this.patch({
@@ -183,33 +198,13 @@ export default class FormPanel extends Component<{ Args: { open: boolean } }> {
 					/>
 				</InputField>
 				<Field @label="Default">
-					<Select
-						@value={{this.props.value}}
-						@onValueChange={{this.setChoice}}
-					>
-						<SelectTrigger
-							aria-label="Default"
-						>
-							<SelectValue>{{if
-									this.props.value
-									this.props.value
-									"None"
-								}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem
-								@value=""
-							>None</SelectItem>
-							{{#each
-								this.props.options
-								as |o|
-							}}
-								<SelectItem
-									@value={{o}}
-								>{{o}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
+					<CanonMenuCell
+						class="err-form-menu"
+						@items={{this.choices}}
+						@selected={{this.choice}}
+						@label="Default"
+						@onChange={{this.pickChoice}}
+					/>
 				</Field>
 			{{else if (eq this.props.field "text")}}
 				<InputField @label="Default">
@@ -225,20 +220,18 @@ export default class FormPanel extends Component<{ Args: { open: boolean } }> {
 				</InputField>
 			{{else if (eq this.props.field "checkbox")}}
 				<InputField @label="Checked">
-					<Switch
-						@checked={{if
-							this.props.value
-							true
-							false
-						}}
+					<CanonSwitch
+						@on={{this.checked}}
 						@onChange={{this.setChecked}}
+						aria-label="Checked"
 					/>
 				</InputField>
 			{{/if}}
 			<InputField @label="Required">
-				<Switch
-					@checked={{this.props.required}}
+				<CanonSwitch
+					@on={{this.props.required}}
 					@onChange={{this.setRequired}}
+					aria-label="Required"
 				/>
 			</InputField>
 		</ToolPanel>

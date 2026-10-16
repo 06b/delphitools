@@ -1,18 +1,12 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
 import ToolPanel, {
 	Field,
 	InputField,
 	readText,
 } from 'delphitools-v2/components/errata/tool-panel';
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from 'delphitools-v2/components/ui/select';
 import {
 	commentAuthor,
 	setCommentAuthor,
@@ -25,6 +19,7 @@ import {
 	selection,
 } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './comment-mode.css';
 
 interface Entry {
 	id: string;
@@ -73,6 +68,25 @@ export default class CommentPanel extends Component<{
 		return this.entries.find((e) => e.id === ids[0]) ?? null;
 	}
 
+	get labels(): string[] {
+		return this.entries.map((e) => e.label);
+	}
+
+	// none selected: the menu shows the count
+	get entryIndex(): number | undefined {
+		const entry = this.entry;
+		return entry ? this.entries.indexOf(entry) : undefined;
+	}
+
+	get count() {
+		return String(this.entries.length);
+	}
+
+	pickIndex = (index: number) => {
+		const entry = this.entries[index];
+		if (entry) this.pick(entry.id);
+	};
+
 	pick = (id: string) => {
 		const entry = this.entries.find((e) => e.id === id);
 		if (!entry) return;
@@ -96,7 +110,7 @@ export default class CommentPanel extends Component<{
 			@applyLabel="Done"
 		>
 			<:status>
-				<span class="sub-omni-tag">Click to place</span>
+				<span class="err-mode-tag">Click to place</span>
 			</:status>
 			<:default>
 				<InputField @label="Author">
@@ -113,35 +127,19 @@ export default class CommentPanel extends Component<{
 					/>
 				</InputField>
 				<Field @label="List">
-					<Select
-						@value={{this.entry.id}}
-						@onValueChange={{this.pick}}
-					>
-						<SelectTrigger
-							aria-label="List"
-						>
-							<SelectValue>
-								{{#if
-									this.entry
-								}}
-									{{this.entry.label}}
-								{{else}}
-									{{this.entries.length}}
-								{{/if}}
-							</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each
-								this.entries
-								key="id"
-								as |e|
-							}}
-								<SelectItem
-									@value={{e.id}}
-								>{{e.label}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
+					<CanonMenuCell
+						class="err-comment-menu"
+						@items={{this.labels}}
+						@selected={{this.entryIndex}}
+						@placeholder={{this.count}}
+						@label="List"
+						@disabled={{if
+							this.entries.length
+							false
+							true
+						}}
+						@onChange={{this.pickIndex}}
+					/>
 				</Field>
 			</:default>
 		</ToolPanel>

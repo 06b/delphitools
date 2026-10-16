@@ -1,0 +1,93 @@
+/* the shell keeps the settings bar while Fill & sign is open (it reads
+   the mode, not the modal channel); the panel takes its place */
+.err-ed:has(> .err-sig.is-open) > .sub-ed-bar {
+	display: none;
+}
+
+.err-sig-draw {
+	display: flex;
+	background: var(--canon-card);
+}
+
+.err-sig-pad {
+	display: block;
+	inline-size: 100%;
+	aspect-ratio: 480 / 180;
+	background: #fff;
+	touch-action: none;
+	cursor: crosshair;
+}
+
+/* saved signatures: a flush grid of white tiles */
+.err-sig-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--canon-hairline);
+	align-content: start;
+}
+
+.err-sig-cell {
+	position: relative;
+	block-size: 56px;
+	overflow: hidden;
+	background: #fff;
+}
+
+.err-sig-place {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 100%;
+	margin: 0;
+	padding: 6px;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.err-sig-place:hover {
+	background: color-mix(in srgb, var(--canon-primary) 8%, #fff);
+}
+
+.err-sig-place:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.err-sig-img {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: contain;
+}
+
+.err-sig-cell > .err-sig-remove {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	inline-size: 22px;
+	block-size: 22px;
+	min-block-size: 22px;
+	padding: 0;
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+	border-inline-start: var(--canon-hairline) solid var(--canon-border);
+}
+
+.err-sig-cell > .err-sig-remove .canon-button-icon {
+	inline-size: 12px;
+	block-size: 12px;
+}
+
+@container err-ed (width < 600px) {
+	.err-sig
+		.err-mode-head
+		> .sub-cell:has(.canon-button-icon)
+		.canon-button-title {
+		display: none;
+	}
+
+	.err-sig .err-mode-head > .sub-cell:has(.canon-button-icon) {
+		inline-size: var(--sub-cell);
+		padding-inline: 0;
+	}
+}
