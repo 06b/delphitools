@@ -1,6 +1,8 @@
 import type { TOC } from '@ember/component/template-only';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonTooltip from 'delphicanon/components/canon-tooltip';
+import type { CanonPlacement } from 'delphicanon/lib/popover';
 import { IconSvg } from 'delphitools-v2/components/icon';
 
 // iOS FloatingCells: cells under hairlines in a 2 px frame, floating with
@@ -31,21 +33,43 @@ export const Cell: TOC<{
 		selected?: boolean;
 		disabled?: boolean;
 		onClick?: () => void;
+		/** the label as a kit tooltip on this side, in place of title */
+		tip?: CanonPlacement;
 	};
 	Element: HTMLButtonElement;
 }> = <template>
-	<CanonButton
-		class="sub-cell"
-		@kind="segment"
-		@text={{@text}}
-		@icon={{if @icon (component IconSvg name=@icon)}}
-		@label={{@label}}
-		@selected={{@selected}}
-		@disabled={{@disabled}}
-		@onClick={{@onClick}}
-		title={{@label}}
-		...attributes
-	/>
+	{{#if @tip}}
+		<CanonTooltip @text={{@label}} @placement={{@tip}} as |t|>
+			<CanonButton
+				class="sub-cell"
+				@kind="segment"
+				@text={{@text}}
+				@icon={{if
+					@icon
+					(component IconSvg name=@icon)
+				}}
+				@label={{@label}}
+				@selected={{@selected}}
+				@disabled={{@disabled}}
+				@onClick={{@onClick}}
+				{{t.trigger}}
+				...attributes
+			/>
+		</CanonTooltip>
+	{{else}}
+		<CanonButton
+			class="sub-cell"
+			@kind="segment"
+			@text={{@text}}
+			@icon={{if @icon (component IconSvg name=@icon)}}
+			@label={{@label}}
+			@selected={{@selected}}
+			@disabled={{@disabled}}
+			@onClick={{@onClick}}
+			title={{@label}}
+			...attributes
+		/>
+	{{/if}}
 </template>;
 
 // iOS PanelHeader: the title, any extra cells, then a close cell

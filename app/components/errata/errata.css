@@ -285,6 +285,26 @@
 	outline: var(--canon-hairline) solid var(--canon-border);
 }
 
+/* block-size is BOX_KEY in errata-shell.gts */
+.sub-ed-column .sub-cells > .sub-cell.err-box-key {
+	flex-direction: column;
+	gap: 10px;
+	inline-size: var(--sub-cell);
+	block-size: 112px;
+	padding: 0;
+}
+
+.err-box-key .canon-button-title {
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.sub-ed-column .err-box-key .canon-button-title {
+	writing-mode: vertical-rl;
+}
+
 /* the toolbox drawer and the mode panels share the bar's place */
 .err-sheet,
 .err-mode {

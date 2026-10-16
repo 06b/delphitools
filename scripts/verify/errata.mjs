@@ -53,7 +53,7 @@ check('open loader shown', loaderSeen);
 check('open loader gone', !(await page.$('.err-opening')));
 
 const doc = () => page.evaluate(() => window.__errata.doc());
-const activeTool = () => page.evaluate(() => document.querySelector('.sub-ed-tools [aria-pressed="true"]')?.title);
+const activeTool = () => page.evaluate(() => document.querySelector('.sub-ed-tools [aria-pressed="true"]')?.getAttribute("aria-label"));
 const objects = async () => (await doc()).pages[await page.evaluate(() => window.__errata.pageIndex())].objects;
 
 check('page label', (await page.$eval('[data-page-label]', (e) => e.textContent.trim())) === 'Page 1 / 2');

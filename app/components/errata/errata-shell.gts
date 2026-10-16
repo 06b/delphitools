@@ -80,9 +80,12 @@ const FRAME = 2;
 const PAD = 16;
 const GAP = 8;
 const PHONE_WIDTH = 600;
+// the Toolbox key with its upright label, .err-box-key in errata.css
+const BOX_KEY = 112;
 // edit stack, tools, panel keys, the gaps and the frame
 const COLUMN_FULL =
-	(4 + TOOL_ORDER.length + 2) * CELL +
+	(4 + TOOL_ORDER.length + 1) * CELL +
+	BOX_KEY +
 	(4 - 1) +
 	(TOOL_ORDER.length - 1) +
 	(2 - 1) +
@@ -726,6 +729,8 @@ export default class ErrataShell extends Component {
 							/>
 							<Cell
 								@label="Toolbox"
+								@text="Toolbox"
+								class="err-box-key"
 								@icon="briefcase"
 								@selected={{this.boxOpen.current}}
 								aria-expanded={{if
@@ -743,6 +748,7 @@ export default class ErrataShell extends Component {
 				<div class="sub-ed-column">
 					<Cells class="sub-ed-stack">
 						<Cell
+							@tip="left"
 							@label="Menu"
 							@icon="menu"
 							@selected={{if
@@ -754,6 +760,7 @@ export default class ErrataShell extends Component {
 							{{this.keepMenuCell}}
 						/>
 						<Cell
+							@tip="left"
 							@label="Undo"
 							@icon="undo-2"
 							@disabled={{if
@@ -764,6 +771,7 @@ export default class ErrataShell extends Component {
 							@onClick={{this.doUndo}}
 						/>
 						<Cell
+							@tip="left"
 							@label="Redo"
 							@icon="redo-2"
 							@disabled={{if
@@ -774,6 +782,7 @@ export default class ErrataShell extends Component {
 							@onClick={{this.doRedo}}
 						/>
 						<Cell
+							@tip="left"
 							@label="Export"
 							@icon="download"
 							@disabled={{if
@@ -804,6 +813,7 @@ export default class ErrataShell extends Component {
 										as |t|
 									}}
 										<Cell
+											@tip="left"
 											@label={{this.toolLabel
 												t
 											}}
@@ -831,13 +841,17 @@ export default class ErrataShell extends Component {
 								class="sub-ed-panel-keys"
 							>
 								<Cell
+									@tip="left"
 									@label="Pages"
 									@icon="panel-left"
 									@selected={{this.pagesOpen}}
 									@onClick={{this.togglePages}}
 								/>
 								<Cell
+									@tip="left"
 									@label="Toolbox"
+									@text="Toolbox"
+									class="err-box-key"
 									@icon="briefcase"
 									@selected={{this.boxOpen.current}}
 									aria-expanded={{if

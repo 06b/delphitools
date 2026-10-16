@@ -3,6 +3,7 @@ import { fn } from '@ember/helper';
 import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonTooltip from 'delphicanon/components/canon-tooltip';
 import StampPanel, {
 	CompressPanel,
 	ImposePanel,
@@ -257,15 +258,20 @@ export default class Toolbox extends Component<{ Args: { phone: boolean } }> {
 								key="label"
 								as |c|
 							}}
-								<MenuCard
-									@title={{c.label}}
-									@icon={{c.icon}}
-									title={{c.description}}
-									@onClick={{fn
-										this.run
-										c.tool
-									}}
-								/>
+								<CanonTooltip
+									@text={{c.description}}
+									as |t|
+								>
+									<MenuCard
+										@title={{c.label}}
+										@icon={{c.icon}}
+										@onClick={{fn
+											this.run
+											c.tool
+										}}
+										{{t.trigger}}
+									/>
+								</CanonTooltip>
 							{{/each}}
 						</div>
 					</div>
