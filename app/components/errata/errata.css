@@ -1,0 +1,688 @@
+/* Errata on the Substrata frame (substrata/editor/editor.css): what the
+   PDF editor has beyond it */
+.err-ed {
+	--err-rail: 148px;
+	--err-field: 320px;
+
+	container: err-ed / inline-size;
+}
+
+/* title capsule: the name, the page stepper, the zoom figure */
+.err-ed .sub-ed-title > .sub-ed-title-name {
+	display: flex;
+	align-items: center;
+	min-inline-size: 0;
+	background: var(--canon-card);
+}
+
+.err-ed .sub-ed-title > .err-title-step {
+	flex: none;
+	justify-content: center;
+	inline-size: 32px;
+	padding: 0;
+	color: var(--canon-muted-foreground);
+}
+
+.err-title-step svg {
+	inline-size: 16px;
+	block-size: 16px;
+}
+
+.err-ed .sub-ed-title > .err-title-step:hover {
+	color: var(--canon-foreground);
+}
+
+.err-title-page {
+	display: flex;
+	flex: none;
+	align-items: center;
+	padding-inline: 10px;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.err-ed.is-phone .sub-ed-title {
+	inset-inline: var(--sub-pad)
+		calc(
+			var(--sub-pad) + 2 * var(--sub-small) + 1px + 2 *
+				var(--sub-frame) + var(--sub-gap)
+		);
+}
+
+.err-ed.is-phone .sub-ed-title-zoom {
+	display: none;
+}
+
+/* the pages: a floating panel on the leading edge */
+.err-rail {
+	position: absolute;
+	inset-block: var(--sub-pad);
+	inset-inline-start: var(--sub-pad);
+	z-index: 15;
+	display: flex;
+	flex-direction: column;
+	inline-size: var(--err-rail);
+	box-sizing: border-box;
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+	pointer-events: auto;
+}
+
+.err-rail.is-tray {
+	inset-block: auto
+		calc(var(--sub-row-bottom) + var(--sub-box) + var(--sub-gap));
+	inset-inline: var(--sub-pad);
+	inline-size: auto;
+	max-block-size: 45%;
+}
+
+.err-rail > .sub-panel-header > .sub-cell {
+	flex: none;
+	inline-size: var(--sub-small);
+	block-size: var(--sub-small);
+	min-block-size: var(--sub-small);
+	padding: 0;
+}
+
+.err-rail .sub-panel-title.canon-heading {
+	padding-inline: 12px;
+}
+
+.err-pages-list {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-block-size: 0;
+	padding: 8px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	background: var(--canon-card);
+}
+
+.err-rail.is-tray .err-pages-list {
+	flex-direction: row;
+	align-items: flex-start;
+	overflow: auto hidden;
+}
+
+.err-rail.is-tray .err-page-cell {
+	flex: none;
+	inline-size: 96px;
+}
+
+.err-rail.is-tray .err-page-gap {
+	flex-direction: column;
+	inline-size: 8px;
+	block-size: auto;
+	margin-block: 0;
+	margin-inline: -4px;
+}
+
+.err-page-cell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 6px;
+}
+
+.err-page-cell.is-drag-over {
+	outline: var(--canon-frame) dashed var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.err-page-pick {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	inline-size: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.err-page-pick:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+}
+
+.err-page-thumb {
+	display: block;
+	inline-size: 100%;
+	max-inline-size: 112px;
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: #fff;
+	pointer-events: none;
+}
+
+.err-page-cell.is-current .err-page-thumb {
+	outline: var(--canon-frame) solid var(--canon-primary);
+}
+
+.err-page-num {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-variant-numeric: tabular-nums;
+}
+
+.err-page-cell.is-current .err-page-num {
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.err-page-actions {
+	display: flex;
+	gap: var(--canon-hairline);
+	padding: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.err-page-action,
+.err-page-gap-btn {
+	display: grid;
+	place-items: center;
+	inline-size: 28px;
+	block-size: 28px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	cursor: pointer;
+}
+
+.err-page-action .dt-icon,
+.err-page-gap-btn .dt-icon {
+	inline-size: 15px;
+	block-size: 15px;
+}
+
+.err-page-action:hover:enabled,
+.err-page-gap-btn:hover {
+	background: var(--canon-accent-bg);
+	color: var(--canon-foreground);
+}
+
+.err-page-action:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+/* insert zone between cells; its cells show on hover */
+.err-page-gap {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	justify-content: center;
+	gap: var(--canon-hairline);
+	block-size: 8px;
+	margin-block: -4px;
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.err-page-gap:hover,
+.err-page-gap:focus-within {
+	block-size: 28px;
+	margin-block: 0;
+	opacity: 1;
+}
+
+.err-page-gap-btn {
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+/* settings bar: the colour cell shows its swatch before the hex */
+.err-colour-cell {
+	gap: 8px;
+}
+
+.err-colour-cell::before {
+	flex: none;
+	inline-size: 16px;
+	block-size: 16px;
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: var(--err-colour);
+	content: "";
+}
+
+.err-colour-cell .canon-button-title {
+	font-family: var(--canon-mono-font);
+}
+
+/* the ≡ card: MenuCards under headings */
+.err-menu {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+}
+
+.err-menu > .canon-heading {
+	margin: 0;
+	padding: 10px 12px 4px;
+	background: var(--canon-card);
+}
+
+.err-menu-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--canon-hairline);
+}
+
+/* the toolbox drawer and the mode panels share the bar's place */
+.err-sheet,
+.err-mode {
+	position: absolute;
+	inset-block-end: var(--sub-pad);
+	inset-inline: var(--sub-pad)
+		calc(var(--sub-pad) + var(--sub-box) + var(--sub-gap));
+	z-index: 22;
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	margin-inline: auto;
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+	visibility: hidden;
+	opacity: 0;
+	translate: 0 calc(100% + 40px);
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+		opacity 200ms,
+		visibility 0s 260ms;
+}
+
+.err-sheet.is-open,
+.err-mode.is-open {
+	visibility: visible;
+	opacity: 1;
+	translate: 0 0;
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1) 170ms,
+		opacity 200ms 170ms,
+		visibility 0s;
+}
+
+.err-ed.is-phone :is(.err-sheet, .err-mode) {
+	inset-block-end: calc(
+		var(--sub-row-bottom) + var(--sub-box) + var(--sub-gap)
+	);
+	inset-inline: var(--sub-pad);
+}
+
+.err-sheet {
+	inline-size: auto;
+	max-inline-size: 760px;
+	max-block-size: min(70%, 600px);
+}
+
+.err-modes {
+	display: contents;
+}
+
+.err-sheet-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	min-block-size: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.err-sheet-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+}
+
+.err-sheet-group > .canon-heading {
+	margin: 0;
+	padding: 10px 12px 4px;
+	background: var(--canon-card);
+}
+
+.err-sheet-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+	gap: var(--canon-hairline);
+}
+
+.err-mode {
+	--err-cols: 3;
+
+	/* legacy panel parts (styles/_errata.scss) */
+	--err-h: 32px;
+	--err-gap: 8px;
+	--err-wide: 176px;
+
+	inline-size: max-content;
+	max-inline-size: calc(
+		100% - 3 * var(--sub-pad) - var(--sub-box) - var(--sub-gap)
+	);
+	max-block-size: calc(
+		100% - 2 * var(--sub-pad) - var(--sub-small-box) -
+			var(--sub-gap)
+	);
+}
+
+.err-ed.is-phone .err-mode {
+	inline-size: auto;
+	max-inline-size: none;
+}
+
+.err-mode-head > .sub-cell {
+	inline-size: auto;
+	padding-inline: var(--sub-pad);
+}
+
+.err-mode-head > .err-mode-apply {
+	min-inline-size: 96px;
+}
+
+.err-mode-status,
+.err-mode-busy,
+.err-mode-head > .err-mode-failed {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+	padding-inline: 12px;
+	background: var(--canon-card);
+}
+
+.err-mode-status:not(:has(> *)) {
+	display: none;
+}
+
+.err-mode-tag,
+.err-mode .sub-omni-tag {
+	display: flex;
+	align-items: center;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.err-mode-failed,
+.err-mode .err-mode-failed {
+	color: var(--canon-destructive);
+}
+
+/* actions the panels yield before Cancel and Apply */
+.err-mode-head .sub-modal-btn {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	min-block-size: var(--sub-cell);
+	margin: 0;
+	padding-inline: var(--sub-pad);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+}
+
+.err-mode-head .sub-modal-btn:hover:enabled {
+	background: var(--canon-accent-bg);
+}
+
+.err-mode-head .sub-modal-btn.is-primary {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.err-mode-head .sub-modal-btn:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.err-mode-head .sub-modal-btn .dt-icon {
+	inline-size: 16px;
+	block-size: 16px;
+}
+
+/* fields: CanonRows in columns, the gaps showing the border colour */
+.err-mode-body {
+	display: grid;
+	grid-template-columns: repeat(var(--err-cols), var(--err-field));
+	gap: var(--canon-hairline);
+	align-items: start;
+	min-block-size: 0;
+	padding-block-start: var(--canon-hairline);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.err-mode-body:not(:has(> *)) {
+	display: none;
+}
+
+.err-mode-body:not(:has(> :nth-child(3))) {
+	--err-cols: 2;
+}
+
+.err-mode-body:not(:has(> :nth-child(2))) {
+	--err-cols: 1;
+}
+
+@container err-ed (width < 1200px) {
+	.err-mode-body {
+		--err-cols: 2;
+	}
+
+	.err-mode-body:not(:has(> :nth-child(2))) {
+		--err-cols: 1;
+	}
+}
+
+@container err-ed (width < 800px) {
+	.err-mode-body,
+	.err-mode-body:not(:has(> :nth-child(3))) {
+		--err-cols: 1;
+
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.err-mode-group {
+	display: grid;
+	gap: var(--canon-hairline);
+	align-content: start;
+}
+
+.err-mode-field.is-tall {
+	grid-row: span 3;
+}
+
+.err-mode-control {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	min-inline-size: 0;
+	padding-inline-end: 8px;
+}
+
+.err-mode-control > .err-mode-seg {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.err-mode-slider {
+	flex: 1;
+	min-inline-size: 160px;
+}
+
+.err-mode-input {
+	box-sizing: border-box;
+	inline-size: 160px;
+	block-size: 32px;
+	padding-inline: 8px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-background);
+	color: var(--canon-foreground);
+	font: inherit;
+	font-size: var(--canon-text-subheadline);
+	outline: none;
+}
+
+.err-mode-input:focus {
+	border-color: var(--canon-primary);
+}
+
+.err-mode-input.is-narrow {
+	inline-size: 96px;
+}
+
+.err-mode-input[aria-invalid="true"] {
+	border-color: var(--canon-destructive);
+}
+
+/* a page-shaped 3 x 3 grid */
+.err-anchor-page {
+	display: grid;
+	grid-template-rows: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	inline-size: 76px;
+	block-size: 108px;
+	margin-block: 8px;
+	padding: 3px;
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-background);
+}
+
+.err-anchor-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 3px;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.err-anchor-cell[data-anchor^="top"] {
+	align-items: flex-start;
+}
+
+.err-anchor-cell[data-anchor^="bottom"] {
+	align-items: flex-end;
+}
+
+.err-anchor-cell[data-anchor$="left"] {
+	justify-content: flex-start;
+}
+
+.err-anchor-cell[data-anchor$="right"] {
+	justify-content: flex-end;
+}
+
+.err-anchor-cell::after {
+	inline-size: 3px;
+	block-size: 3px;
+	background: var(--canon-muted-foreground);
+	opacity: 0.5;
+	content: "";
+}
+
+.err-anchor-cell:hover {
+	background: var(--canon-accent-bg);
+}
+
+.err-anchor-cell:hover::after {
+	inline-size: 12px;
+	opacity: 1;
+}
+
+.err-anchor-cell.is-active::after {
+	inline-size: 12px;
+	block-size: 4px;
+	background: var(--canon-primary);
+	opacity: 1;
+}
+
+.err-anchor-cell:focus-visible {
+	outline: var(--canon-hairline) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-hairline));
+}
+
+/* content tool hud, above the hovered or selected object */
+.err-hud {
+	position: absolute;
+	z-index: 3;
+	display: flex;
+	gap: 8px;
+	padding: 3px 7px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	line-height: 1.4;
+	white-space: nowrap;
+	box-shadow: var(--sub-shadow);
+	translate: 0 calc(-100% - 6px);
+	pointer-events: none;
+}
+
+.err-hud.is-below {
+	translate: 0 0;
+}
+
+.err-hud[hidden] {
+	display: none;
+}
+
+.err-hud.is-warn {
+	border-color: var(--canon-destructive);
+	color: var(--canon-destructive);
+}
+
+.err-hud-kind {
+	font-weight: var(--canon-weight-semibold);
+}
+
+.err-hud-dims {
+	color: var(--canon-muted-foreground);
+}
+
+.err-opening {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: grid;
+	place-items: center;
+	background: color-mix(in srgb, var(--canon-muted) 70%, transparent);
+}
+
+.err-export-failed {
+	color: var(--canon-destructive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.err-sheet,
+	.err-mode,
+	.err-sheet.is-open,
+	.err-mode.is-open,
+	.err-page-gap {
+		transition: none;
+	}
+}

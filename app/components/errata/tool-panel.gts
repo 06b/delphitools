@@ -3,10 +3,17 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
+import type { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
-import { eq, or } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
+import { eq } from 'ember-truth-helpers';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
+import { menuIcon } from 'delphitools-v2/components/substrata/editor/tool-bar/bar-cells';
 import type { Stamped } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	scopePages,
@@ -16,17 +23,18 @@ import { preview } from 'delphitools-v2/lib/errata/ui';
 import { ANCHORS, type Anchor } from 'delphitools-v2/lib/pdf-stamp';
 
 export interface ToolPanelSignature {
-	Element: HTMLDivElement;
+	Element: HTMLElement;
 	Args: {
 		open: boolean;
 		/** data-mode, for rigs */
 		mode?: string | null;
-		icon: string;
+		/** kept for callers; the panel header shows the title only */
+		icon?: string;
 		label: string;
-		/** absent: no cancel button */
+		/** absent: no cancel cell */
 		onCancel?: () => void;
 		cancelLabel?: string;
-		/** absent: no primary button */
+		/** absent: no primary cell */
 		onApply?: () => void;
 		applyLabel?: string;
 		/** default true */
@@ -39,29 +47,29 @@ export interface ToolPanelSignature {
 		default: [];
 		/** tags after the title */
 		status: [];
-		/** buttons before cancel and apply */
+		/** cells before cancel and apply */
 		actions: [];
 	};
 }
 
-/** a header row, then a grid of fields */
+function applyOff(busy?: boolean, canApply?: boolean): boolean {
+	return busy === true || canApply === false;
+}
+
+/** Substrata's PanelHeader over a hairline grid of rows, in the bar's place */
 const ToolPanel: TOC<ToolPanelSignature> = <template>
-	<div
-		class="err-mode pointer-events-auto {{if @open 'is-open'}}"
+	<section
+		class="err-mode {{if @open 'is-open'}}"
 		data-mode={{@mode}}
+		aria-label={{@label}}
 		inert={{unless @open true}}
 		...attributes
 	>
-		<div class="err-mode-head">
-			<span class="err-mode-title">
-				<Icon
-					@name={{@icon}}
-					class="sub-omni-tool-glyph"
-				/>
-				<span
-					class="sub-omni-tool-name"
-				>{{@label}}</span>
-			</span>
+		<div class="sub-panel-header err-mode-head">
+			<CanonHeading
+				@text={{@label}}
+				class="sub-panel-title"
+			/>
 			{{#if (has-block "status")}}
 				<span class="err-mode-status">{{yield
 						to="status"
@@ -69,54 +77,47 @@ const ToolPanel: TOC<ToolPanelSignature> = <template>
 			{{/if}}
 			{{#if @failed}}
 				<span
-					class="sub-omni-tag err-mode-failed"
+					class="err-mode-tag err-mode-failed"
 				>Failed</span>
 			{{/if}}
-			<span class="err-mode-actions">
-				{{yield to="actions"}}
-				{{#if @onCancel}}
-					<button
-						type="button"
-						class="sub-modal-btn is-ghost"
-						{{on "click" @onCancel}}
-					>
-						<Icon @name="x" />
-						{{if
-							@cancelLabel
-							@cancelLabel
-							"Cancel"
-						}}
-					</button>
-				{{/if}}
-				{{#if @onApply}}
-					<button
-						type="button"
-						class="sub-modal-btn is-primary"
-						disabled={{if
-							@busy
-							true
-							(eq @canApply false)
-						}}
-						{{on "click" @onApply}}
-					>
-						{{#if @busy}}
-							<NdsLoader />
-						{{else}}
-							<Icon @name="check" />
-						{{/if}}
-						{{if
-							@applyLabel
-							@applyLabel
-							"Apply"
-						}}
-					</button>
-				{{/if}}
-			</span>
+			{{#if @busy}}
+				<span class="err-mode-busy"><CanonLoader
+					/></span>
+			{{/if}}
+			{{yield to="actions"}}
+			{{#if @onCancel}}
+				<Cell
+					@label={{if
+						@cancelLabel
+						@cancelLabel
+						"Cancel"
+					}}
+					@text={{if
+						@cancelLabel
+						@cancelLabel
+						"Cancel"
+					}}
+					@onClick={{@onCancel}}
+				/>
+			{{/if}}
+			{{#if @onApply}}
+				<CanonButton
+					class="sub-cell err-mode-apply"
+					@kind="primary"
+					@text={{if
+						@applyLabel
+						@applyLabel
+						"Apply"
+					}}
+					@disabled={{applyOff @busy @canApply}}
+					@onClick={{@onApply}}
+				/>
+			{{/if}}
 		</div>
 		{{#if (has-block)}}
 			<div class="err-mode-body">{{yield}}</div>
 		{{/if}}
-	</div>
+	</section>
 </template>;
 
 export default ToolPanel;
@@ -129,29 +130,24 @@ export const Group: TOC<{
 	<div class="err-mode-group" ...attributes>{{yield}}</div>
 </template>;
 
-/** label column, control column */
+/** a CanonRow: the label, the control flush to the trailing edge */
 export const Field: TOC<{
-	Element: HTMLSpanElement;
+	Element: HTMLDivElement;
 	Args: { label: string };
 	Blocks: { default: [] };
 }> = <template>
-	<span class="err-mode-field" ...attributes>
-		<span class="sub-tool-row-label">{{@label}}</span>
+	<CanonRow
+		@title={{@label}}
+		@form="flush"
+		class="err-mode-field"
+		...attributes
+	>
 		<span class="err-mode-control">{{yield}}</span>
-	</span>
+	</CanonRow>
 </template>;
 
-/** a Field whose label focuses its one input */
-export const InputField: TOC<{
-	Element: HTMLLabelElement;
-	Args: { label: string };
-	Blocks: { default: [] };
-}> = <template>
-	<label class="err-mode-field" ...attributes>
-		<span class="sub-tool-row-label">{{@label}}</span>
-		<span class="err-mode-control">{{yield}}</span>
-	</label>
-</template>;
+/** kept for callers: the control names itself */
+export const InputField = Field;
 
 export interface SegmentedOption<V> {
 	value: V;
@@ -160,43 +156,49 @@ export interface SegmentedOption<V> {
 	icon?: string;
 }
 
+/** CanonSegmented over values instead of indices */
 export class Segmented<V extends string | number> extends Component<{
+	Element: HTMLDivElement;
 	Args: {
 		options: readonly SegmentedOption<V>[];
 		value: V | null;
 		onChange: (value: V) => void;
+		label?: string;
 	};
 }> {
+	get items(): string[] {
+		return this.args.options.map((o) => o.label ?? String(o.value));
+	}
+
+	get icons(): ComponentLike[] | undefined {
+		const options = this.args.options;
+		return options.every((o) => o.icon)
+			? options.map((o) => menuIcon(o.icon!))
+			: undefined;
+	}
+
+	// -1 shows no cell picked; CanonSegmented reads undefined as the first
+	get selected(): number {
+		return this.args.options.findIndex(
+			(o) => o.value === this.args.value,
+		);
+	}
+
+	change = (index: number) => {
+		const option = this.args.options[index];
+		if (option) this.args.onChange(option.value);
+	};
+
 	<template>
-		<span class="segmented err-mode-seg">
-			{{#each @options key="value" as |o|}}
-				<button
-					type="button"
-					class="sub-seg-cell
-						{{if
-							(eq @value o.value)
-							'is-active'
-						}}"
-					aria-label={{if
-						o.icon
-						(or o.label o.value)
-					}}
-					aria-pressed={{if
-						(eq @value o.value)
-						"true"
-						"false"
-					}}
-					title={{if o.icon (or o.label o.value)}}
-					{{on "click" (fn @onChange o.value)}}
-				>
-					{{#if o.icon}}
-						<Icon @name={{o.icon}} />
-					{{else}}
-						{{o.label}}
-					{{/if}}
-				</button>
-			{{/each}}
-		</span>
+		<CanonSegmented
+			class="err-mode-seg"
+			@items={{this.items}}
+			@icons={{this.icons}}
+			@selected={{this.selected}}
+			@onChange={{this.change}}
+			aria-label={{@label}}
+			...attributes
+		/>
 	</template>
 }
 
@@ -217,6 +219,10 @@ export const livePreview = modifier(
 	},
 );
 
+function readout(unit?: string) {
+	return (value: number) => `${value}${unit ?? ''}`;
+}
+
 export const Slider: TOC<{
 	Args: {
 		label: string;
@@ -229,17 +235,16 @@ export const Slider: TOC<{
 	};
 }> = <template>
 	<Field @label={{@label}}>
-		<input
-			type="range"
-			class="sub-slider err-mode-slider"
-			min={{@min}}
-			max={{@max}}
-			step={{if @step @step 1}}
-			value={{@value}}
-			aria-label={{@label}}
-			{{on "input" (readNumber @onChange)}}
+		<CanonSlider
+			class="err-mode-slider"
+			@value={{@value}}
+			@min={{@min}}
+			@max={{@max}}
+			@step={{if @step @step 1}}
+			@label={{@label}}
+			@readout={{readout @unit}}
+			@onChange={{@onChange}}
 		/>
-		<span class="err-mode-readout">{{@value}}{{@unit}}</span>
 	</Field>
 </template>;
 
@@ -283,6 +288,7 @@ export const PageScope: TOC<{
 			@options={{SCOPES}}
 			@value={{@state.scope}}
 			@onChange={{@state.setScope}}
+			@label="Pages"
 		/>
 		{{#if (eq @state.scope "range")}}
 			<input
@@ -297,7 +303,7 @@ export const PageScope: TOC<{
 	</Field>
 </template>;
 
-/** a page-shaped 3x3 grid, three rows tall */
+/** a page-shaped 3x3 grid */
 export const AnchorPicker: TOC<{
 	Args: {
 		value: Anchor;

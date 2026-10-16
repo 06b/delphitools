@@ -26,7 +26,8 @@ export function scopePages(
 	current: number,
 ): number[] | null {
 	if (scope === 'all') return [...Array(count).keys()];
-	if (scope === 'current') return [current];
+	// the page index trails a page count that just shrank
+	if (scope === 'current') return current < count ? [current] : [];
 	try {
 		const pages = new Set(parsePageRanges(range, count).flat());
 		return [...pages].sort((a, b) => a - b);

@@ -37,7 +37,7 @@ const bytes = [...(await src.save())];
 const loaderSeen = await page.evaluate((b) => {
 	let seen = false;
 	const watch = new MutationObserver(() => {
-		seen ||= !!document.querySelector('.err-opening .nds-loader');
+		seen ||= !!document.querySelector('.err-opening .canon-loader');
 	});
 	watch.observe(document.body, { childList: true, subtree: true });
 	return window.__errata.open(new Uint8Array(b).buffer, 'fixture.pdf', 'application/pdf').then(() => {
@@ -53,6 +53,7 @@ check('open loader shown', loaderSeen);
 check('open loader gone', !(await page.$('.err-opening')));
 
 const doc = () => page.evaluate(() => window.__errata.doc());
+const activeTool = () => page.evaluate(() => document.querySelector('.sub-ed-tools [aria-pressed="true"]')?.title);
 const objects = async () => (await doc()).pages[await page.evaluate(() => window.__errata.pageIndex())].objects;
 
 check('page label', (await page.$eval('[data-page-label]', (e) => e.textContent.trim())) === 'Page 1 / 2');
@@ -169,7 +170,7 @@ await chooser.accept([pngPath]);
 await sleep(800);
 let objs = await objects();
 check('image placed', objs.length === 1 && objs[0].kind === 'image' && Math.round(objs[0].cx) === 200 && Math.round(objs[0].cy) === 250 && objs[0].w === 64 && objs[0].h === 64, JSON.stringify(objs[0]).slice(0, 160));
-check('image tool returns to select', (await page.$eval('.sub-omni-box .is-active', (b) => b.title)) === 'Select');
+check('image tool returns to select', (await activeTool()) === 'Select (V)');
 // dragged past the page edge it dims; back inside it is opaque again
 const imgOpacity = () => page.evaluate(() => window.__errataCanvas.getActiveObject()?.opacity);
 check('image opaque inside', (await imgOpacity()) === 1);
@@ -289,8 +290,8 @@ check('page key', (await page.evaluate(() => window.__errata.pageIndex())) === 2
 await page.click('[data-toolbox]');
 await sleep(500);
 check('sheet opens', await page.$eval('.err-sheet', (e) => e.classList.contains('is-open')));
-check('bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
-await page.evaluate(() => [...document.querySelectorAll('.err-sheet-cell')].find((b) => b.querySelector('.dt-cell-name')?.textContent.trim() === 'Crop')?.click());
+check('bar hidden', !(await page.$('.sub-ed-bar')));
+await page.evaluate(() => [...document.querySelectorAll('.err-sheet .sub-menu-card')].find((b) => b.querySelector('.sub-menu-card-title')?.textContent.trim() === 'Crop')?.click());
 await sleep(500);
 check('sheet closes', !(await page.$eval('.err-sheet', (e) => e.classList.contains('is-open'))));
 check('mode bar', await page.$eval('.err-mode', (e) => e.classList.contains('is-open')));
@@ -347,8 +348,9 @@ check('crop draft gone', await page.evaluate(() => !window.__errataCanvas.getObj
 const modeOpen = (m) => page.$(`.err-mode.is-open[data-mode="${m}"]`).then((e) => !!e);
 const clickIn = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open button')].find((b) => b.textContent.trim() === l || b.getAttribute('aria-label') === l)?.click(), label);
 
-await page.click('.sub-topbar-menu-btn');
-await page.evaluate(() => [...document.querySelectorAll('.sub-topbar-item')].find((b) => b.textContent.includes('Page size'))?.click());
+await page.click('.sub-ed-stack [aria-label="Menu"]');
+await sleep(300);
+await page.evaluate(() => [...document.querySelectorAll('.sub-menu-card')].find((b) => b.textContent.includes('Page size'))?.click());
 await sleep(500);
 check('page size panel', await modeOpen('page-size'));
 check('page size not a dialog', !(await page.$('dialog[open]')));
@@ -369,13 +371,13 @@ const sizesOf = async () => (await doc()).pages.map((p) => p.resize && [Math.rou
 const sizesBefore = await sizesOf();
 await page.click('[data-toolbox]');
 await sleep(400);
-await page.evaluate(() => [...document.querySelectorAll('.err-sheet-cell')].find((b) => b.querySelector('.dt-cell-name')?.textContent.trim() === 'Page size')?.click());
+await page.evaluate(() => [...document.querySelectorAll('.err-sheet .sub-menu-card')].find((b) => b.querySelector('.sub-menu-card-title')?.textContent.trim() === 'Page size')?.click());
 await sleep(500);
 check('page size from toolbox', await modeOpen('page-size'));
 await clickIn('A3');
 await clickIn('Range');
 await sleep(100);
-check('page size waits for a range', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+check('page size waits for a range', await page.$eval('.err-mode.is-open .err-mode-apply', (b) => b.disabled));
 await page.type('.err-mode.is-open input[aria-label="Range"]', '1-2');
 await sleep(100);
 await clickIn('Apply');
@@ -435,7 +437,7 @@ check('export blank size', result.getPage(1).getWidth() === 500 && result.getPag
 const openCell = async (name) => {
 	await page.click('[data-toolbox]');
 	await sleep(400);
-	await page.evaluate((n) => [...document.querySelectorAll('.err-sheet-cell')].find((b) => b.querySelector('.dt-cell-name')?.textContent.trim() === n)?.click(), name);
+	await page.evaluate((n) => [...document.querySelectorAll('.err-sheet .sub-menu-card')].find((b) => b.querySelector('.sub-menu-card-title')?.textContent.trim() === n)?.click(), name);
 	await sleep(500);
 };
 const previews = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && typeof o.text === 'string').map((o) => o.text));
@@ -444,7 +446,7 @@ const texts = async () => (await doc()).pages.map((p) => p.objects.filter((o) =>
 await openCell('Page numbers');
 check('numbers mode bar', await modeOpen('page-numbers'));
 // distinct label x positions
-const fieldColumns = (sel = '.err-mode.is-open') => page.$$eval(`${sel} .err-mode-body > .err-mode-field > .sub-tool-row-label`, (ls) => new Set(ls.map((l) => Math.round(l.getBoundingClientRect().left))).size);
+const fieldColumns = (sel = '.err-mode.is-open') => page.$$eval(`${sel} .err-mode-body > .err-mode-field .canon-row-title`, (ls) => new Set(ls.map((l) => Math.round(l.getBoundingClientRect().left))).size);
 const panelBox = () => page.$eval('.err-mode.is-open', (e) => {
 	const r = e.getBoundingClientRect();
 	return { left: r.left, right: r.right, h: r.height, vw: innerWidth };
@@ -470,10 +472,10 @@ const narrowColumns = await fieldColumns();
 check('numbers panel one column when narrow', narrow.h > wide.h && narrowColumns === 1 && narrow.left >= 0 && narrow.right <= narrow.vw, JSON.stringify({ ...narrow, narrowColumns }));
 await page.setViewport({ width: 1400, height: 1000 });
 await sleep(400);
-check('numbers markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
+check('numbers markup bar hidden', !(await page.$('.sub-ed-bar')));
 check('numbers preview', JSON.stringify(await previews()) === JSON.stringify(['1 / 3', '2 / 3', '3 / 3']), JSON.stringify(await previews()));
 await page.keyboard.press('t');
-check('numbers mode swallows tool keys', (await page.evaluate(() => document.querySelector('.sub-omni-box .is-active')?.title)) === 'Select');
+check('numbers mode swallows tool keys', (await activeTool()) === 'Select (V)');
 const beforeNumbers = await texts();
 await clickIn('Apply');
 await sleep(500);
@@ -497,12 +499,18 @@ check('watermark mode bar', await modeOpen('watermark'));
 await clickIn('Current');
 await sleep(200);
 check('watermark preview current only', (await previews()).length === 1);
-const slide = (label, value) => page.$eval(`.err-mode.is-open input[type="range"][aria-label="${label}"]`, (el, v) => {
-	el.value = String(v);
-	el.dispatchEvent(new Event('input', { bubbles: true }));
-}, value);
+const slide = async (label, value) => {
+	const sel = `.err-mode.is-open [role="slider"][aria-label="${label}"]`;
+	await page.focus(sel);
+	await page.keyboard.press('Home');
+	for (let i = 0; i < 400; i++) {
+		const now = await page.$eval(sel, (el) => Number(el.getAttribute('aria-valuenow')));
+		if (now >= value) break;
+		await page.keyboard.press('ArrowRight');
+	}
+};
 const wmPreview = () => page.evaluate(() => window.__errataCanvas.getObjects().filter((o) => !o.evented && o.text === 'DRAFT').map((o) => [Math.round(o.opacity * 100), o.angle]));
-const sliderRange = await page.$$eval('.err-mode.is-open input[type="range"]', (els) => els.map((e) => `${e.getAttribute('aria-label')}:${e.min}..${e.max}`));
+const sliderRange = await page.$$eval('.err-mode.is-open [role="slider"]', (els) => els.map((e) => `${e.getAttribute('aria-label')}:${e.getAttribute('aria-valuemin')}..${e.getAttribute('aria-valuemax')}`));
 check('watermark sliders', sliderRange.join() === 'Opacity:5..100,Angle:-90..90', sliderRange.join());
 await slide('Opacity', 60);
 await slide('Angle', 45);
@@ -513,7 +521,7 @@ await slide('Angle', 20);
 await sleep(100);
 const wmEnd = await wmPreview();
 check('watermark preview follows sliders', JSON.stringify(wmMid) === '[[60,45]]' && JSON.stringify(wmEnd) === '[[30,20]]', JSON.stringify([wmMid, wmEnd]));
-check('watermark slider readout', (await page.$$eval('.err-mode.is-open .err-mode-readout', (els) => els.map((e) => e.textContent.trim()))).join() === '30%,20°');
+check('watermark slider readout', (await page.$$eval('.err-mode.is-open .canon-slider-readout', (els) => els.map((e) => e.textContent.trim()))).join() === '30%,20°');
 const wmPage = await page.evaluate(() => window.__errata.pageIndex());
 await clickIn('Apply');
 await sleep(500);
@@ -525,7 +533,7 @@ await openCell('Stamp');
 check('stamp mode bar', await modeOpen('stamp'));
 await clickIn('Range');
 await sleep(200);
-check('stamp apply waits for a range', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+check('stamp apply waits for a range', await page.$eval('.err-mode.is-open .err-mode-apply', (b) => b.disabled));
 await page.type('.err-mode.is-open input[aria-label="Range"]', '1, 3');
 await sleep(200);
 await clickIn('Apply');
@@ -540,7 +548,7 @@ await page.click('.err-mode.is-open [aria-label="Label"]');
 await sleep(200);
 await page.evaluate(() => [...document.querySelectorAll('.dt-select-item')].find((i) => i.textContent.trim() === 'Custom')?.click());
 await sleep(200);
-check('stamp custom waits for text', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+check('stamp custom waits for text', await page.$eval('.err-mode.is-open .err-mode-apply', (b) => b.disabled));
 await page.type('.err-mode.is-open input[aria-label="Custom label"]', 'Seen ok');
 await page.click('.err-mode.is-open input[aria-label="Bold"]');
 await page.click('.err-mode.is-open .err-swatch[aria-label="Blue"]');
@@ -716,7 +724,7 @@ const pageIds = async () => (await doc()).pages.map((p) => p.id);
 
 await openCell('Organise');
 check('organise grid', (await orgCells()).length === 3 && (await page.$eval('.err-organise .err-mode', (e) => e.dataset.mode === 'organise')));
-check('organise markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
+check('organise markup bar hidden', !(await page.$('.sub-ed-bar')));
 await sleep(600);
 check('organise thumbs', await page.$$eval('.err-organise .err-page-thumb', (imgs) => imgs.every((i) => i.naturalWidth >= 270)));
 let cs = await orgCells();
@@ -786,9 +794,9 @@ check('organise drag one undo', JSON.stringify(await pageIds()) === JSON.stringi
 
 cs = await orgCells();
 await cs[2].click();
-await page.evaluate(() => [...document.querySelectorAll('.err-organise .sub-modal-btn')].find((b) => b.textContent.trim() === 'Done')?.click());
+await page.evaluate(() => document.querySelector('.err-organise .err-mode-apply')?.click());
 await sleep(300);
-check('organise done', (await orgCells()).length === 0 && !(await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden'))));
+check('organise done', (await orgCells()).length === 0 && !!(await page.$('.sub-ed-bar')));
 check('organise done opens selected page', (await page.evaluate(() => window.__errata.pageIndex())) === 2);
 
 await openCell('Organise');
@@ -809,7 +817,7 @@ await page.keyboard.press('[');
 await sleep(300);
 await openCell('Preflight');
 check('preflight mode bar', await preflightOpen());
-check('preflight markup bar hidden', await page.$eval('.err-barrow', (e) => e.classList.contains('is-hidden')));
+check('preflight markup bar hidden', !(await page.$('.sub-ed-bar')));
 await page.waitForSelector('.err-preflight.is-open .err-preflight-group', { timeout: 15000 }).catch(() => {});
 const groups = await findings();
 check('preflight pages', JSON.stringify(groups.filter((g) => g.head !== 'Document').map((g) => g.head)) === JSON.stringify(['Page 1', 'Page 2', 'Page 3']), JSON.stringify(groups.map((g) => g.head)));
@@ -822,7 +830,8 @@ await sleep(500);
 check('preflight finding goes to page', (await page.evaluate(() => window.__errata.pageIndex())) === 2);
 const canvasTop = await page.$eval('.sub-canvas-wrap canvas', (c) => c.getBoundingClientRect().top);
 const p3 = await page.evaluate(() => window.__errata.pageRect(2));
-check('preflight finding scrolls', p3 && Math.abs(p3.y - canvasTop) < 60, `${p3?.y} vs ${canvasTop}`);
+const insetTop = await page.$eval('.sub-shell-canvas-area', (a) => Number(a.dataset.inset?.split(',')[0] ?? 0));
+check('preflight finding scrolls', p3 && Math.abs(p3.y - canvasTop - insetTop) < 40, `${p3?.y} vs ${canvasTop} + ${insetTop}`);
 await clickIn('Close');
 await sleep(400);
 check('preflight close', !(await preflightOpen()) && !(await page.$('.err-preflight.is-open')));
@@ -1038,7 +1047,7 @@ const clickBox = async (r, b, w) => {
 
 await openCell('Redact');
 check('redact mode bar', await modeOpen('redact'));
-check('redact apply waits for a mark', await page.$eval('.err-mode.is-open .sub-modal-btn.is-primary', (b) => b.disabled));
+check('redact apply waits for a mark', await page.$eval('.err-mode.is-open .err-mode-apply', (b) => b.disabled));
 let rr = await pageRectR(0);
 let rz = rr.w / 400;
 await page.mouse.move(rr.x + 20 * rz, rr.y + 5 * rz);
@@ -1194,15 +1203,15 @@ check('form source widgets shown', !!standIn && Math.abs(standIn.x - (fr0.x + 11
 const setInput = (label, value) =>
 	page.evaluate(
 		(l, v) => {
-			const i = [...document.querySelectorAll('.err-mode.is-open label')].find((e) => e.textContent.trim().startsWith(l)).querySelector('input');
+			const i = [...document.querySelectorAll('.err-mode.is-open .err-mode-field')].find((e) => e.querySelector('.canon-row-title')?.textContent.trim().startsWith(l)).querySelector('input');
 			i.value = v;
 			i.dispatchEvent(new Event('change', { bubbles: true }));
 		},
 		label,
 		value,
 	);
-const toggle = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open label')].find((e) => e.textContent.trim().startsWith(l)).querySelector('input').click(), label);
-const nameValue = () => page.evaluate(() => [...document.querySelectorAll('.err-mode.is-open label')].find((e) => e.textContent.trim().startsWith('Name')).querySelector('input').value);
+const toggle = (label) => page.evaluate((l) => [...document.querySelectorAll('.err-mode.is-open .err-mode-field')].find((e) => e.querySelector('.canon-row-title')?.textContent.trim().startsWith(l)).querySelector('input').click(), label);
+const nameValue = () => page.evaluate(() => [...document.querySelectorAll('.err-mode.is-open .err-mode-field')].find((e) => e.querySelector('.canon-row-title')?.textContent.trim().startsWith('Name')).querySelector('input').value);
 const fieldObjs = async (i = 0) => (await doc()).pages[i].objects.filter((o) => o.kind === 'field');
 const drag = async (r, a, b) => {
 	const z = r.w / 400;
@@ -1291,7 +1300,7 @@ check('form field on turned page', (await fieldObjs(1)).length === 1);
 
 await clickIn('Done');
 await sleep(400);
-check('form done closes', !(await modeOpen('form')) && (await page.evaluate(() => document.querySelector('.sub-omni-box .is-active')?.title)) === 'Select');
+check('form done closes', !(await modeOpen('form')) && (await activeTool()) === 'Select (V)');
 
 const formOut = await exported();
 const form = formOut.getForm();
@@ -1526,7 +1535,7 @@ await page.keyboard.press('Escape');
 await sleep(400);
 
 const cropNow = async () => (await pagesNow())[await page.evaluate(() => window.__errata.pageIndex())].crop;
-for (const [cell, control] of [['Stamp', 'input[aria-label="Bold"]'], ['Watermark', 'input[type="range"][aria-label="Opacity"]']]) {
+for (const [cell, control] of [['Stamp', 'input[aria-label="Bold"]'], ['Watermark', '[role="slider"][aria-label="Opacity"]']]) {
 	await page.evaluate(() => window.__errata.crop({ x: 0, y: 0, width: 100, height: 100 }));
 	await sleep(200);
 	await openCell(cell);
@@ -1554,7 +1563,7 @@ await sleep(400);
 await page.keyboard.press('Tab');
 await page.keyboard.press('Tab');
 await sleep(200);
-check('shell stays unscrolled', await page.$eval('.sub-shell', (e) => e.scrollTop === 0));
+check('shell stays unscrolled', await page.$eval('.err-ed', (e) => e.scrollTop === 0));
 
 for (const [m, want] of [['page-numbers', /^\d+ \/ \d+$/], ['watermark', /^DRAFT$/], ['stamp', /^(?!DRAFT$|\d+ \/ \d+$)/]]) {
 	await page.evaluate((id) => window.__errata.setMode(id), m);

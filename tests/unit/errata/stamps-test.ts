@@ -23,6 +23,7 @@ module('Unit | errata | stamps', function () {
 	test('scopePages', function (assert) {
 		assert.deepEqual(scopePages('all', '', 3, 1), [0, 1, 2]);
 		assert.deepEqual(scopePages('current', '', 3, 1), [1]);
+		assert.deepEqual(scopePages('current', '', 2, 2), []);
 		assert.deepEqual(
 			scopePages('range', '3, 1-2, 2', 3, 0),
 			[0, 1, 2],
