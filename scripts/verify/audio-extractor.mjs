@@ -207,4 +207,13 @@ check(
 	),
 );
 
+await page.setViewport({ width: 800, height: 800 });
+await visit(page, '/tools/audio-extractor');
+const bannerGap = await page.evaluate(
+	() =>
+		document.querySelector('.canon-split-banner').getBoundingClientRect().top -
+		document.querySelector('.canon-split-body').getBoundingClientRect().top,
+);
+check('stacked: the band meets the top edge', bannerGap === 0, bannerGap);
+
 await finish(browser);
