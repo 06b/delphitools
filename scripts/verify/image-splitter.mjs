@@ -184,8 +184,27 @@ await page.evaluate(() => {
 		return click.call(this);
 	};
 });
-await page.click('.split-tile[aria-label="2-3"]');
+const at = await page.evaluate(() => {
+	const r = document
+		.querySelector('.split-tile[aria-label="2-3"]')
+		.getBoundingClientRect();
+	return { x: r.x + r.width * 0.7, y: r.y + r.height * 0.6 };
+});
+await page.mouse.click(at.x, at.y);
 await sleep(200);
+const opened = await page.evaluate(() => {
+	const r = document
+		.querySelector('.canon-menu:popover-open')
+		?.getBoundingClientRect();
+	return r && { x: r.x, y: r.y };
+});
+check(
+	'the menu opens at the pointer',
+	opened &&
+		Math.abs(opened.x - at.x) < 2 &&
+		Math.abs(opened.y - at.y) < 2,
+	JSON.stringify({ at, opened }),
+);
 const items = await page.evaluate(() =>
 	[...document.querySelectorAll('.canon-menu-item')]
 		.filter((item) => item.checkVisibility())
@@ -214,6 +233,20 @@ await browser
 await page.focus('.split-tile[aria-label="1-1"]');
 await page.keyboard.press('Enter');
 await sleep(200);
+const below = await page.evaluate(() => {
+	const tile = document
+		.querySelector('.split-tile[aria-label="1-1"]')
+		.getBoundingClientRect();
+	const menu = document
+		.querySelector('.canon-menu:popover-open')
+		?.getBoundingClientRect();
+	return (
+		!!menu &&
+		Math.abs(menu.x - tile.left) < 2 &&
+		Math.abs(menu.y - tile.bottom) < 2
+	);
+});
+check('Enter opens the menu below the tile', below);
 await page.evaluate(() =>
 	[...document.querySelectorAll('.canon-menu-item')]
 		.find((item) => item.checkVisibility() && item.textContent.trim() === 'Copy')

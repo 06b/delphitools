@@ -1,12 +1,16 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import CanonMenu, {
+import {
+	CanonMenuList,
+	showMenu,
 	type CanonMenuEntry,
 	type CanonMenuItem,
 } from 'delphicanon/components/canon-menu';
+import { attach } from 'delphicanon/lib/popover';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	cellRect,
@@ -46,6 +50,10 @@ const percent = (value: number) => `${Math.round(value * 10000) / 100}%`;
  */
 export default class Picture extends Component<PictureSignature> {
 	@tracked area: Size = { width: 0, height: 0 };
+	#chosen?: Cell;
+	#tile?: HTMLElement;
+	#point?: HTMLElement;
+	#panel?: HTMLElement;
 
 	get tiles() {
 		const { pixels, rows, cols, joined } = this.args;
@@ -93,6 +101,43 @@ export default class Picture extends Component<PictureSignature> {
 		return () => observer.disconnect();
 	});
 
+	// one menu for every tile, anchored to a point placed at the pointer
+	menu = modifier((panel: HTMLElement) => {
+		this.#panel = panel;
+		this.#point = panel.previousElementSibling as HTMLElement;
+		return attach(panel, this.#point, {
+			placement: 'bottom-start',
+			gap: '0px',
+			returnFocus: () => this.#tile,
+		});
+	});
+
+	open = (cell: Cell, event: MouseEvent) => {
+		const tile = event.currentTarget as HTMLElement;
+		const point = this.#point;
+		const panel = this.#panel;
+		if (!point || !panel) return;
+		this.#chosen = cell;
+		this.#tile = tile;
+		const frame = point.offsetParent!.getBoundingClientRect();
+		const box = tile.getBoundingClientRect();
+		// a keyboard click has detail 0 and no position: below the tile
+		const pointer = event.detail > 0;
+		const x = pointer
+			? event.clientX
+			: tile.matches(':dir(rtl)')
+				? box.right
+				: box.left;
+		const y = pointer ? event.clientY : box.bottom;
+		point.style.left = px(x - frame.left);
+		point.style.top = px(y - frame.top);
+		showMenu(panel, 'first');
+	};
+
+	pick = (item: CanonMenuItem) => {
+		if (this.#chosen) this.args.onPick(this.#chosen, item);
+	};
+
 	<template>
 		<div
 			class="split-picture
@@ -101,37 +146,33 @@ export default class Picture extends Component<PictureSignature> {
 			<div class="split-area" {{this.measure}}>
 				{{#if @url}}
 					{{#each this.tiles key="key" as |tile|}}
-						<CanonMenu
-							@items={{@menu}}
-							@onSelect={{fn
-								@onPick
-								tile.cell
+						<button
+							type="button"
+							class="split-tile"
+							style={{tile.style}}
+							aria-label={{tile.cell.label}}
+							aria-haspopup="menu"
+							{{on
+								"click"
+								(fn
+									this.open
+									tile.cell
+								)
 							}}
-							as |m|
 						>
-							<button
-								type="button"
-								class="split-tile"
-								style={{tile.style}}
-								aria-label={{tile.cell.label}}
-								{{m.trigger}}
-							>
-								<img
-									src={{@url}}
-									alt=""
-									draggable="false"
-									style={{tile.image}}
-								/>
-								{{#if
-									tile.labelled
-								}}
-									<span
-										class="split-tile-label"
-										aria-hidden="true"
-									>{{tile.cell.label}}</span>
-								{{/if}}
-							</button>
-						</CanonMenu>
+							<img
+								src={{@url}}
+								alt=""
+								draggable="false"
+								style={{tile.image}}
+							/>
+							{{#if tile.labelled}}
+								<span
+									class="split-tile-label"
+									aria-hidden="true"
+								>{{tile.cell.label}}</span>
+							{{/if}}
+						</button>
 					{{/each}}
 				{{else}}
 					<Slot
@@ -145,6 +186,12 @@ export default class Picture extends Component<PictureSignature> {
 					/>
 				{{/if}}
 			</div>
+			<span class="split-point" aria-hidden="true"></span>
+			<CanonMenuList
+				@items={{@menu}}
+				@onSelect={{this.pick}}
+				{{this.menu}}
+			/>
 		</div>
 	</template>
 }

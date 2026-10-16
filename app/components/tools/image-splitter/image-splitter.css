@@ -11,6 +11,13 @@
 	inset: var(--canon-panel-padding);
 }
 
+.split-point {
+	position: absolute;
+	inline-size: 0;
+	block-size: 0;
+	pointer-events: none;
+}
+
 .split-tile {
 	position: absolute;
 	overflow: hidden;
