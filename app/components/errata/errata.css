@@ -705,6 +705,35 @@
 	background: color-mix(in srgb, var(--canon-muted) 70%, transparent);
 }
 
+/* the main menu card's ink; tile size from backdrop.gts */
+.err-backdrop {
+	--err-ink: #b96f08;
+
+	position: absolute;
+	inset: -160px 0 0 -240px;
+	visibility: hidden;
+	background: var(--err-ink);
+	opacity: 0.1;
+	mask-image: var(--err-tile);
+	mask-size: 240px 160px;
+	pointer-events: none;
+	animation: err-backdrop 60s linear infinite;
+}
+
+.dark .err-backdrop {
+	--err-ink: #db9334;
+}
+
+.err-backdrop.is-ready {
+	visibility: visible;
+}
+
+@keyframes err-backdrop {
+	to {
+		translate: 240px 160px;
+	}
+}
+
 .err-export-failed {
 	color: var(--canon-destructive);
 }
@@ -716,6 +745,10 @@
 	.err-mode.is-open,
 	.err-page-gap {
 		transition: none;
+	}
+
+	.err-backdrop {
+		animation: none;
 	}
 }
 

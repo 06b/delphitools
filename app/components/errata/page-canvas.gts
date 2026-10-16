@@ -76,6 +76,7 @@ import { fieldDraft, newField } from 'delphitools-v2/lib/errata/fields';
 import { FONT, fieldVisual } from 'delphitools-v2/lib/errata/field-visual';
 import { STAMP_RED, textObject } from 'delphitools-v2/lib/errata/stamps';
 import { takenNames } from 'delphitools-v2/lib/errata/widgets';
+import Backdrop from 'delphitools-v2/components/errata/backdrop';
 import {
 	registerViewportController,
 	reportZoom,
@@ -2488,6 +2489,7 @@ export default class PageCanvas extends Component {
 
 	<template>
 		<div class="sub-canvas-wrap" {{this.mount}}>
+			<Backdrop />
 			<canvas></canvas>
 			<div class="err-hud" hidden></div>
 		</div>
