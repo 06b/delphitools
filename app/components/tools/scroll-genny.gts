@@ -1,759 +1,446 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import { downloadIcon } from 'delphitools-v2/lib/flow-hooks';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { parseHex, type Rgb } from 'delphicanon/lib/colour';
+import { stem } from 'delphicanon/lib/files';
+import { springEasing } from 'delphicanon/lib/motion';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { bytes } from 'delphitools-v2/components/tools/matte-genny/matte';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Picture from 'delphitools-v2/components/tools/scroll-genny/picture';
+import {
+	drawSlide,
+	drawnPanorama,
+	fileName,
+	geometry,
+	pngOf,
+	decode,
+	ratios,
+	type Fill,
+} from 'delphitools-v2/components/tools/scroll-genny/scroll';
+import './scroll-genny/scroll-genny.css';
 
-// color input form: #rrggbb
-const HEX = /^#[0-9a-f]{6}$/i;
+const loadFailed = 'Image could not be read. Try another file?';
+const shapes = ['4:5 Portrait', '1:1 Square'];
+const fills = ['Blur', 'Solid Colour'];
 
-// stagger multiple file downloads
-const DOWNLOAD_GAP_MS = 300;
+// web value: stagger multiple file downloads
+const downloadGap = 300;
 
-// blur radius, canvas px
-const FILL_BLUR_PX = 30;
+// iOS: spring over 0.5 s, damping 0.8
+const spring = htmlSafe(`--scroll-spring: ${springEasing(0.8)}`);
 
-// keeps blurred edges off-tile
-const FILL_OVERSCAN = 1.2;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
 
-// exact-fit tolerance
-const FIT_TOLERANCE = 0.01;
-
-const LOAD_FAILED = 'Image could not be read. Try another file?';
-
-const PRESET_COLOURS = ['#ffffff', '#000000', '#f5f5f5', '#1a1a1a'];
-
-export type FillMode = 'colour' | 'blur';
-
-export interface AspectRatio {
-	name: string;
-	label: string;
-	value: number;
+interface Source {
+	full: ImageBitmap;
+	preview: ImageBitmap;
+	stem: string;
 }
 
-export const ASPECT_RATIOS: AspectRatio[] = [
-	{ name: 'portrait', label: '4:5 Portrait', value: 4 / 5 },
-	{ name: 'square', label: '1:1 Square', value: 1 },
-];
-
-export interface ScrollGeometry {
-	tileWidth: number;
-	tileHeight: number;
-	slideCount: number;
-	needsFill: boolean;
-	exactFit: number;
-}
-
-// tiles span full source height
-export function tileGeometry(
-	imageWidth: number,
-	imageHeight: number,
-	ratio: number,
-): ScrollGeometry {
-	if (!imageWidth || !imageHeight) {
-		return {
-			tileWidth: 0,
-			tileHeight: 0,
-			slideCount: 0,
-			needsFill: false,
-			exactFit: 0,
-		};
-	}
-
-	const tileHeight = imageHeight;
-	const tileWidth = Math.round(tileHeight * ratio);
-	const exactFit = imageWidth / tileWidth;
-	const slideCount = Math.round(exactFit);
-
+// ?scrollShape=<index> ?scrollFill=<index> ?scrollColour=<rrggbb> ?scrollSample: the iOS -scrollShape, -scrollFill, -scrollColour, -scrollSample flags
+function launchFlags() {
+	const query = new URLSearchParams(window.location.search);
+	const index = (name: string) =>
+		Math.abs(Number(query.get(name)) || 0) % 2;
 	return {
-		tileWidth,
-		tileHeight,
-		slideCount: Math.max(1, slideCount),
-		needsFill: Math.abs(exactFit - slideCount) > FIT_TOLERANCE,
-		exactFit,
+		shape: index('scrollShape'),
+		fill: index('scrollFill'),
+		colour: parseHex(query.get('scrollColour') ?? '') ?? [0, 0, 0],
+		sample: query.has('scrollSample'),
 	};
 }
 
-export interface SliceRect {
-	index: number;
-	// source x, native px
-	sourceX: number;
-	// native px, 0 when all-fill
-	sourceWidth: number;
-	// tile x
-	drawX: number;
-	// outer tiles when strip uneven
-	isFillEdge: boolean;
-}
+/** The port of ScrollGeneratorViewController. */
+export default class ScrollGenny extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 
-// layout: image centred in tile strip
-export function sliceRects(
-	geometry: ScrollGeometry,
-	imageWidth: number,
-): SliceRect[] {
-	const { tileWidth, slideCount, needsFill } = geometry;
-	if (!tileWidth || !slideCount) return [];
+	@tracked shape: number;
+	@tracked fill: number;
+	@tracked colour: Rgb;
+	@tracked source?: Source;
+	@tracked failed = false;
+	@tracked exporting = false;
+	@tracked slides: string[] = [];
 
-	const fillPerSide = needsFill
-		? (tileWidth * slideCount - imageWidth) / 2
-		: 0;
-	const imageStart = fillPerSide;
-	const imageEnd = fillPerSide + imageWidth;
+	drop = new Drop('image/*', (file) => this.load(file));
 
-	const rects: SliceRect[] = [];
+	#loading = 0;
+	#rendering = 0;
+	#frame = 0;
+	#timers: number[] = [];
 
-	for (let index = 0; index < slideCount; index++) {
-		const tileStart = index * tileWidth;
-		const tileEnd = tileStart + tileWidth;
-		const overlapStart = Math.max(tileStart, imageStart);
-		const overlapEnd = Math.min(tileEnd, imageEnd);
-		const hasContent = overlapEnd > overlapStart;
-
-		rects.push({
-			index,
-			sourceX: hasContent ? overlapStart - imageStart : 0,
-			sourceWidth: hasContent ? overlapEnd - overlapStart : 0,
-			drawX: hasContent ? overlapStart - tileStart : 0,
-			isFillEdge:
-				needsFill &&
-				(index === 0 || index === slideCount - 1),
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags();
+		this.shape = flags.shape;
+		this.fill = flags.fill;
+		this.colour = flags.colour;
+		if (flags.sample) void drawnPanorama().then(this.load);
+		registerDestructor(this, () => {
+			cancelAnimationFrame(this.#frame);
+			this.#timers.forEach(clearTimeout);
+			this.#release();
 		});
 	}
 
-	return rects;
-}
-
-interface Tile {
-	index: number;
-	number: number;
-	dataUrl: string;
-}
-
-function swatchStyle(colour: string) {
-	return htmlSafe(HEX.test(colour) ? `background-color: ${colour}` : '');
-}
-
-export default class ScrollGeneratorTool extends Component {
-	@tracked sourceImage: string | null = null;
-	@tracked fileName = '';
-	@tracked imageWidth = 0;
-	@tracked imageHeight = 0;
-	@tracked selectedRatio = 0;
-	@tracked fillMode: FillMode = 'blur';
-	@tracked fillColour = '#000000';
-	@tracked tiles: Tile[] = [];
-	@tracked loadFailed = false;
-
-	#timers: ReturnType<typeof setTimeout>[] = [];
-	#destroyed = false;
-
-	willDestroy() {
-		super.willDestroy();
-		this.#destroyed = true;
-		this.#timers.forEach(clearTimeout);
+	get geometry() {
+		const full = this.source?.full;
+		return full
+			? geometry(full.width, full.height, ratios[this.shape]!)
+			: undefined;
 	}
 
-	get currentRatio(): AspectRatio {
-		return ASPECT_RATIOS[this.selectedRatio] ?? ASPECT_RATIOS[0]!;
+	get fillChoice(): Fill {
+		return this.fill === 1 ? bytes(this.colour) : 'blur';
 	}
 
-	get geometry(): ScrollGeometry {
-		return tileGeometry(
-			this.imageWidth,
-			this.imageHeight,
-			this.currentRatio.value,
+	get needsFill() {
+		return this.geometry?.needsFill ?? false;
+	}
+
+	get showsColour() {
+		return this.needsFill && this.fill === 1;
+	}
+
+	get fillNotNeeded() {
+		return !!this.geometry && !this.needsFill;
+	}
+
+	get sourceText() {
+		const full = this.source?.full;
+		return full ? `${full.width} × ${full.height} px` : '';
+	}
+
+	get bannerAspect() {
+		const g = this.geometry;
+		const ratio = g
+			? (g.tileWidth * g.slideCount) / g.tileHeight
+			: 0;
+		return Math.min(Math.max(ratio, 2), 4);
+	}
+
+	get tiles() {
+		const g = this.geometry;
+		const fit = g
+			? g.needsFill
+				? 'Edge fill'
+				: 'Perfect fit'
+			: '—';
+		return [
+			{ label: 'Count', value: g ? `${g.slideCount}` : '—' },
+			{
+				label: 'Size',
+				value: g
+					? `${g.tileWidth} × ${g.tileHeight} px`
+					: '—',
+			},
+			{ label: 'Fit', value: fit },
+		];
+	}
+
+	get pages(): CanonPage[] {
+		const g = this.geometry;
+		if (!g) return [];
+		const size = { width: g.tileWidth, height: g.tileHeight };
+		return this.slides.map((picture) => ({ size, picture }));
+	}
+
+	get exportDisabled() {
+		return !this.source || this.exporting;
+	}
+
+	menu = (index: number) => [
+		{
+			title: passAlong('Download'),
+			action: () => void this.export(index),
+		},
+		{ title: 'Copy', action: () => void this.copy(index) },
+	];
+
+	load = (file: File) => {
+		const id = ++this.#loading;
+		void decode(file).then(
+			({ full, preview }) => {
+				if (id !== this.#loading) {
+					full.close();
+					preview.close();
+					return;
+				}
+				this.#release();
+				this.source = {
+					full,
+					preview,
+					stem: stem(file.name) || 'image',
+				};
+				this.failed = false;
+				this.#rerender();
+			},
+			() => {
+				if (id !== this.#loading) return;
+				this.clear();
+				this.failed = true;
+			},
 		);
-	}
-
-	get ratios() {
-		return ASPECT_RATIOS.map((ratio, index) => ({
-			ratio,
-			index,
-			isActive: index === this.selectedRatio,
-		}));
-	}
-
-	// dashed-preview slide markers
-	get slideMarkers() {
-		return Array.from(
-			{ length: this.geometry.slideCount },
-			(_, i) => i + 1,
-		);
-	}
-
-	get overlayStyle() {
-		// count is user-input free
-		return htmlSafe(
-			`grid-template-columns: repeat(${this.geometry.slideCount}, 1fr)`,
-		);
-	}
-
-	get swatches() {
-		return PRESET_COLOURS.map((colour) => ({
-			colour,
-			style: swatchStyle(colour),
-			isActive: colour === this.fillColour,
-		}));
-	}
-
-	get isCustomColour() {
-		return !PRESET_COLOURS.includes(this.fillColour);
-	}
-
-	get customSwatchStyle() {
-		return swatchStyle(this.isCustomColour ? this.fillColour : '');
-	}
-
-	// picker resets on invalid hex
-	get pickerValue() {
-		return HEX.test(this.fillColour) ? this.fillColour : '#000000';
-	}
-
-	readFile = (file: File) => {
-		this.fileName = file.name.replace(/\.[^.]+$/, '');
-		this.loadFailed = false;
-		const reader = new FileReader();
-		reader.onload = () => {
-			const dataUrl = reader.result as string;
-			const image = new Image();
-			image.onload = () => {
-				if (this.#destroyed) return;
-				this.imageWidth = image.width;
-				this.imageHeight = image.height;
-				this.sourceImage = dataUrl;
-				this.tiles = [];
-			};
-			// decode errors must surface
-			image.onerror = this.fail;
-			image.src = dataUrl;
-		};
-		reader.onerror = this.fail;
-		reader.readAsDataURL(file);
-	};
-
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// rearm for same-file change
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readFile(file);
-	};
-
-	// else browser navigates to file
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	fail = () => {
-		if (this.#destroyed) return;
-		this.sourceImage = null;
-		this.fileName = '';
-		this.imageWidth = 0;
-		this.imageHeight = 0;
-		this.tiles = [];
-		this.loadFailed = true;
 	};
 
 	clear = () => {
-		this.sourceImage = null;
-		this.fileName = '';
-		this.imageWidth = 0;
-		this.imageHeight = 0;
-		this.tiles = [];
-		this.loadFailed = false;
+		this.#loading++;
+		this.#release();
+		this.source = undefined;
+		this.failed = false;
 	};
 
-	selectRatio = (index: number) => {
-		this.selectedRatio = index;
-		this.tiles = [];
+	pickShape = (index: number) => {
+		this.shape = index;
+		this.#rerender();
 	};
 
-	setFillMode = (mode: FillMode) => {
-		this.fillMode = mode;
-		this.tiles = [];
+	pickFill = (index: number) => {
+		this.fill = index;
+		this.#rerender();
 	};
 
-	setFillColour = (colour: string) => {
-		this.fillColour = colour;
-		this.tiles = [];
+	pickColour = (colour: Rgb) => {
+		this.colour = colour;
+		this.#rerender();
 	};
 
-	pickFillColour = (event: Event) => {
-		this.setFillColour((event.target as HTMLInputElement).value);
-	};
+	exportAll = () => void this.export();
 
-	generate = () => {
-		const source = this.sourceImage;
-		if (!source) return;
-
-		const image = new Image();
-		image.onload = () => {
-			if (this.#destroyed) return;
-
-			const canvas = document.createElement('canvas');
-			const ctx = canvas.getContext('2d');
-			if (!ctx) return this.fail();
-
-			const geometry = this.geometry;
-			const { tileWidth, tileHeight } = geometry;
-			const rects = sliceRects(geometry, this.imageWidth);
-
-			this.tiles = rects.map((rect) => {
-				canvas.width = tileWidth;
-				canvas.height = tileHeight;
-				ctx.clearRect(0, 0, tileWidth, tileHeight);
-
-				if (rect.isFillEdge)
-					this.#drawFill(
-						ctx,
-						image,
-						rect,
-						geometry,
-					);
-
-				if (rect.sourceWidth > 0) {
-					ctx.drawImage(
-						image,
-						rect.sourceX,
-						0,
-						rect.sourceWidth,
-						image.height,
-						rect.drawX,
-						0,
-						rect.sourceWidth,
-						tileHeight,
-					);
-				}
-
-				return {
-					index: rect.index,
-					number: rect.index + 1,
-					dataUrl: canvas.toDataURL('image/png'),
-				};
-			});
-		};
-		image.onerror = this.fail;
-		image.src = source;
-	};
-
-	#drawFill(
-		ctx: CanvasRenderingContext2D,
-		image: HTMLImageElement,
-		rect: SliceRect,
-		geometry: ScrollGeometry,
-	) {
-		const { tileWidth, tileHeight } = geometry;
-
-		if (this.fillMode === 'colour') {
-			ctx.fillStyle = this.pickerValue;
-			ctx.fillRect(0, 0, tileWidth, tileHeight);
-			return;
+	/** No index: every slide, as the web tool did, a download apart. */
+	async export(index?: number) {
+		const { source, geometry: g } = this;
+		if (!source || !g || this.exporting) return;
+		this.exporting = true;
+		const fill = this.fillChoice;
+		const indices =
+			index === undefined
+				? [...Array(g.slideCount).keys()]
+				: [index];
+		try {
+			for (const [k, i] of indices.entries()) {
+				const blob = await pngOf(
+					drawSlide(source.full, g, i, fill),
+				);
+				if (!blob || source !== this.source) return;
+				const name = fileName(source.stem, i);
+				this.#timers.push(
+					window.setTimeout(
+						() => downloadBlob(blob, name),
+						k * downloadGap,
+					),
+				);
+			}
+		} finally {
+			this.exporting = false;
 		}
-
-		if (rect.sourceWidth <= 0) return;
-
-		ctx.filter = `blur(${FILL_BLUR_PX}px)`;
-		const scale =
-			Math.max(
-				tileWidth / rect.sourceWidth,
-				tileHeight / image.height,
-			) * FILL_OVERSCAN;
-		const blurWidth = rect.sourceWidth * scale;
-		const blurHeight = image.height * scale;
-		ctx.drawImage(
-			image,
-			rect.sourceX,
-			0,
-			rect.sourceWidth,
-			image.height,
-			(tileWidth - blurWidth) / 2,
-			(tileHeight - blurHeight) / 2,
-			blurWidth,
-			blurHeight,
-		);
-		ctx.filter = 'none';
 	}
 
-	download = (tile: Tile) => {
-		downloadUrl(
-			tile.dataUrl,
-			`${this.fileName}-scroll-${tile.number}.png`,
+	async copy(index: number) {
+		const { source, geometry: g } = this;
+		if (!source || !g) return;
+		const blob = await pngOf(
+			drawSlide(source.full, g, index, this.fillChoice),
 		);
-	};
+		if (!blob) return;
+		try {
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob }),
+			]);
+		} catch {
+			return;
+		}
+		this.toast.show();
+	}
 
-	downloadAll = () => {
-		this.tiles.forEach((tile, i) => {
-			this.#timers.push(
-				setTimeout(
-					() => this.download(tile),
-					i * DOWNLOAD_GAP_MS,
-				),
-			);
-		});
-	};
+	select = (index: number) => void this.export(index);
+
+	// one draw a frame however fast the colour picker reports
+	#rerender() {
+		cancelAnimationFrame(this.#frame);
+		this.#frame = requestAnimationFrame(() => void this.#render());
+	}
+
+	async #render() {
+		const { source, geometry: g } = this;
+		const id = ++this.#rendering;
+		if (!source || !g) return;
+		const fill = this.fillChoice;
+		const blobs = await Promise.all(
+			Array.from({ length: g.slideCount }, (_, i) =>
+				pngOf(drawSlide(source.preview, g, i, fill)),
+			),
+		);
+		if (id !== this.#rendering || source !== this.source) return;
+		this.#revokeSlides();
+		this.slides = blobs.map((blob) =>
+			blob ? URL.createObjectURL(blob) : '',
+		);
+	}
+
+	#revokeSlides() {
+		this.slides.forEach((url) => url && URL.revokeObjectURL(url));
+		this.slides = [];
+	}
+
+	#release() {
+		this.#rendering++;
+		this.#revokeSlides();
+		const source = this.source;
+		if (!source) return;
+		source.full.close();
+		source.preview.close();
+	}
 
 	<template>
-		<div
-			class="dt-scroll"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="scroll-genny"
+			@collapsesTo={{120}}
+			style={{spring}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div class="dt-scroll-frame">
-				{{#if this.sourceImage}}
-					<div class="dt-scroll-bar">
-						<span class="dt-scroll-source">
-							<Icon @name="image" />
-							<span
-								class="dt-scroll-name"
-							>{{this.fileName}}</span>
-							<span
-								class="dt-scroll-dims"
-							>{{this.imageWidth}}
-								×
-								{{this.imageHeight}}</span>
-						</span>
-						<button
-							type="button"
-							class="dt-scroll-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+			<:banner>
+				<CanonCanvas
+					@aspect={{this.bannerAspect}}
+					@maxHeight={{360}}
+					@background="var(--canon-muted)"
+				>
+					<Picture
+						@geometry={{this.geometry}}
+						@slides={{this.slides}}
+						@busy={{this.exporting}}
+						@over={{this.drop.over}}
+						@onFile={{this.load}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="scroll-source"
+							@title={{this.source.stem}}
+							@detail={{this.sourceText}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-
-					<div class="dt-scroll-section">
-						{{! wording from next app }}
-						<span
-							class="dt-scroll-label"
-						>Slice Preview</span>
-						<div class="dt-scroll-preview">
-							<img
-								src={{this.sourceImage}}
-								alt="Source"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							{{#if
-								this.geometry.slideCount
-							}}
-								<div
-									class="dt-scroll-overlay"
-									style={{this.overlayStyle}}
-								>
-									{{#each
-										this.slideMarkers
-										as |marker|
-									}}
-										<span
-											class="dt-scroll-marker"
-										><span
-												class="dt-scroll-chip"
-											>{{marker}}</span></span>
-									{{/each}}
-								</div>
-							{{/if}}
-						</div>
-					</div>
-
-					<div
-						class="dt-scroll-section is-padded"
-					>
-						{{! wording from next app }}
-						<span
-							class="dt-scroll-label"
-						>Tile Shape</span>
-						<div
-							class="segmented dt-scroll-choices"
-						>
-							{{#each
-								this.ratios
-								key="ratio.name"
-								as |option|
-							}}
-								<button
-									type="button"
-									class="dt-scroll-choice
-										{{if
-											option.isActive
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.selectRatio
-											option.index
-										)
-									}}
-								>{{option.ratio.label}}</button>
-							{{/each}}
-						</div>
-					</div>
-
-					<div
-						class="dt-scroll-section is-padded
-							{{unless
-								this.geometry.needsFill
-								'is-inert'
-							}}"
-					>
-						<span class="dt-scroll-label">
-							{{! wording from next app }}
-							Edge Fill
-							{{#unless
-								this.geometry.needsFill
-							}}
-								{{! wording from next app }}
-								<span
-									class="dt-scroll-note"
-								>(not needed)</span>
-							{{/unless}}
-						</span>
-						<div
-							class="segmented dt-scroll-choices"
-						>
-							<button
-								type="button"
-								class="dt-scroll-choice
-									{{if
-										(eq
-											this.fillMode
-											'blur'
-										)
-										'is-active'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.setFillMode
-										"blur"
-									)
-								}}
-							>Blurred</button>
-							<button
-								type="button"
-								class="dt-scroll-choice
-									{{if
-										(eq
-											this.fillMode
-											'colour'
-										)
-										'is-active'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.setFillMode
-										"colour"
-									)
-								}}
-							>{{! wording from next app }}Solid
-								Colour</button>
-						</div>
-
-						{{#if
-							(eq
-								this.fillMode
-								"colour"
-							)
-						}}
-							<div
-								class="dt-scroll-swatches"
-							>
-								{{#each
-									this.swatches
-									key="colour"
-									as |swatch|
-								}}
-									<button
-										type="button"
-										class="dt-scroll-swatch
-											{{if
-												swatch.isActive
-												'is-active'
-											}}"
-										style={{swatch.style}}
-										title={{swatch.colour}}
-										aria-label={{swatch.colour}}
-										{{on
-											"click"
-											(fn
-												this.setFillColour
-												swatch.colour
-											)
-										}}
-									></button>
-								{{/each}}
-								<span
-									class="dt-scroll-custom"
-									style={{this.customSwatchStyle}}
-								>
-									{{#unless
-										this.isCustomColour
-									}}
-										+
-									{{/unless}}
-									<input
-										type="color"
-										value={{this.pickerValue}}
-										aria-label="Custom colour"
-										{{on
-											"input"
-											this.pickFillColour
-										}}
-									/>
-								</span>
-							</div>
-						{{/if}}
-					</div>
-
-					<div class="dt-scroll-stats">
-						<span
-							class="dt-scroll-count"
-						>{{this.geometry.slideCount}}</span>
-						{{! wording from next app }}
-						<span
-							class="dt-scroll-stat"
-						>slides at
-							{{this.geometry.tileWidth}}
-							×
-							{{this.geometry.tileHeight}}</span>
-						{{#if this.geometry.needsFill}}
-							{{! wording from next app }}
-							<span
-								class="dt-scroll-flag is-fill"
-							>+ edge fill</span>
-						{{else}}
-							{{! wording from next app }}
-							<span
-								class="dt-scroll-flag is-fit"
-							>perfect fit</span>
-						{{/if}}
-					</div>
-
-					<button
-						type="button"
-						class="dt-scroll-run"
-						{{on "click" this.generate}}
-					>
-						<Icon @name="layout-grid" />
-						{{! wording from next app }}
-						Generate Slides
-					</button>
-				{{else}}
-					<label
-						class="dt-scroll-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+						</CanonRow>
+					</CanonRows>
+				{{else if this.failed}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							@text={{loadFailed}}
+							@tone="warn"
+							@row={{true}}
 						/>
-						<Icon @name="upload" />
-						{{! wording from next app }}
-						<span
-							class="dt-scroll-drop-title"
-						>Drop panoramic image here</span>
-						{{! wording from next app }}
-						<span
-							class="dt-scroll-drop-hint"
-						>or click to select, or paste</span>
-					</label>
+					</CanonRows>
 				{{/if}}
-
-				{{#if this.loadFailed}}
-					<p
-						class="dt-scroll-error"
-						role="alert"
-					>{{LOAD_FAILED}}</p>
-				{{/if}}
-			</div>
-
-			{{#if this.tiles.length}}
-				<div class="dt-scroll-frame is-results">
-					<div class="dt-scroll-bar">
-						{{! wording from next app }}
-						<span
-							class="dt-scroll-ready"
-						>{{this.tiles.length}}
-							slides ready</span>
-						<button
-							type="button"
-							class="dt-scroll-bar-btn"
-							{{on
-								"click"
-								this.downloadAll
-							}}
-						>
-							<DownloadLabel
-								@label="Download All"
-							/>
-						</button>
-					</div>
-
-					<div class="dt-scroll-strip">
-						{{#each
-							this.tiles key="index"
-							as |tile|
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Shape" />
+					<CanonSegmented
+						class="scroll-shapes"
+						@items={{shapes}}
+						@selected={{this.shape}}
+						@onChange={{this.pickShape}}
+					/>
+					<CanonHeading @text="Fill" />
+					<CanonSegmented
+						class="scroll-fills"
+						@items={{fills}}
+						@selected={{this.fill}}
+						@disabled={{if
+							this.needsFill
+							false
+							true
 						}}
-							<button
-								type="button"
-								class="dt-scroll-tile"
-								{{on
-									"click"
-									(fn
-										this.download
-										tile
-									)
-								}}
-							>
-								<img
-									src={{tile.dataUrl}}
-									alt="Slide
-										{{tile.number}}"
-								/>
-								<span
-									class="dt-scroll-tile-hint"
-								>
-									{{! wording from next app }}
-									<span
-									>Slide
-										{{tile.number}}</span>
-									<Icon
-										@name={{(downloadIcon
-										)}}
-									/>
-								</span>
-							</button>
-						{{/each}}
-					</div>
-
-					<div class="dt-scroll-footer">
-						{{! wording from next app }}
-						<p>Post these slides in order to
-							create a seamless
-							scrolling carousel</p>
-					</div>
-				</div>
-			{{/if}}
-		</div>
+						@onChange={{this.pickFill}}
+					/>
+					{{#if this.showsColour}}
+						<CanonColourWell
+							@label="Colour"
+							@colour={{this.colour}}
+							@onChange={{this.pickColour}}
+						/>
+					{{/if}}
+					{{#if this.fillNotNeeded}}
+						<CanonStatus
+							class="scroll-not-needed"
+							@text="Not needed"
+							@tone="muted"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonButton
+						class="scroll-export"
+						@kind="primary"
+						@text={{passAlong
+							"Download All"
+						}}
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{this.exportDisabled}}
+						@onClick={{this.exportAll}}
+					/>
+					{{#if this.exporting}}
+						<CanonRow @title="Processing…">
+							<CanonLoader />
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Slides" />
+					<CanonTiles @items={{this.tiles}} />
+				</CanonRows>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
+					@boxing="unlessWide"
+				>
+					<CanonPageStrip
+						class="scroll-strip-pages"
+						@pages={{this.pages}}
+						@empty="Slides"
+						@menu={{this.menu}}
+						@onSelect={{this.select}}
+					/>
+				</CanonCanvas>
+			</:main>
+		</CanonSplit>
 	</template>
 }

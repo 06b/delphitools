@@ -86,6 +86,8 @@ export const toolCategories: ToolCategory[] = [
 					'Split images for Instagram carousel scrolls',
 				icon: 'gallery-vertical',
 				href: '/tools/scroll-genny',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
