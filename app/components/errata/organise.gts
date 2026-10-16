@@ -3,9 +3,9 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
 import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
 import { paintThumb } from 'delphitools-v2/components/errata/page-rail';
+import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
 import type { ErrataPage } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	deletePages,
@@ -18,6 +18,7 @@ import {
 import { setPageIndex, store } from 'delphitools-v2/lib/errata/store';
 import { closeMode, onMode } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './organise.css';
 
 // 2x the 140px frame
 const THUMB_PX = 280;
@@ -241,6 +242,28 @@ export default class Organise extends Component {
 		this.dropAt = null;
 	};
 
+	// padding is canvas inset
+	inset = modifier((grid: HTMLElement) => {
+		const area = grid
+			.closest('.sub-ed')
+			?.querySelector<HTMLElement>(
+				':scope > .sub-shell-canvas-area',
+			);
+		if (!area) return;
+		const place = () => {
+			const sides = (area.dataset['inset'] ?? '').split(',');
+			['top', 'right', 'bottom', 'left'].forEach((side, i) =>
+				grid.style.setProperty(
+					`--err-org-${side}`,
+					`${sides[i] || 16}px`,
+				),
+			);
+		};
+		place();
+		area.addEventListener('err-inset', place);
+		return () => area.removeEventListener('err-inset', place);
+	});
+
 	deselect = modifier((grid: HTMLElement) => {
 		const onClick = (e: MouseEvent) => {
 			if (e.target === grid) this.selected = new Set();
@@ -251,7 +274,11 @@ export default class Organise extends Component {
 
 	<template>
 		<div class="err-organise">
-			<div class="err-organise-grid" {{this.deselect}}>
+			<div
+				class="err-organise-grid"
+				{{this.inset}}
+				{{this.deselect}}
+			>
 				{{#each this.rows key="page.id" as |row|}}
 					<button
 						type="button"
@@ -331,7 +358,7 @@ export default class Organise extends Component {
 			>
 				<:status>
 					<span
-						class="sub-omni-tag"
+						class="err-mode-tag"
 					>{{this.count}}
 						selected</span>
 				</:status>
@@ -340,18 +367,12 @@ export default class Organise extends Component {
 						this.actions key="label"
 						as |a|
 					}}
-						<button
-							type="button"
-							class="sub-modal-btn is-ghost is-icon"
-							title={{a.label}}
-							aria-label={{a.label}}
-							disabled={{a.disabled}}
-							{{on "click" a.run}}
-						>
-							<Icon
-								@name={{a.icon}}
-							/>
-						</button>
+						<Cell
+							@label={{a.label}}
+							@icon={{a.icon}}
+							@disabled={{a.disabled}}
+							@onClick={{a.run}}
+						/>
 					{{/each}}
 				</:actions>
 			</ToolPanel>

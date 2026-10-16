@@ -809,8 +809,8 @@ await sleep(300);
 check('organise escape closes', (await orgCells()).length === 0);
 const preflightOpen = () => page.$('.err-mode.is-open[data-mode="preflight"]').then((e) => !!e);
 const findings = () => page.$$eval('.err-preflight.is-open .err-preflight-group', (gs) => gs.map((g) => ({
-	head: g.querySelector('.dt-preflight-page-btn')?.textContent.trim(),
-	issues: [...g.querySelectorAll('.dt-preflight-issue-message')].map((m) => m.textContent.trim()),
+	head: g.querySelector('.err-preflight-page')?.textContent.trim(),
+	issues: [...g.querySelectorAll('.err-preflight-message')].map((m) => m.textContent.trim()),
 })));
 await page.keyboard.press('[');
 await page.keyboard.press('[');
@@ -825,7 +825,7 @@ check('preflight checks run', groups.every((g) => g.head === 'Document' || g.iss
 // transparency comes from watermark
 check('preflight sees edits', groups.find((g) => g.head === `Page ${wmPage + 1}`)?.issues.some((m) => /transparency effects/.test(m)), JSON.stringify(groups));
 check('preflight counts', /\d+ (warnings?|errors?|info)/.test(await page.$eval('.err-mode.is-open[data-mode="preflight"]', (e) => e.textContent)));
-await page.evaluate(() => [...document.querySelectorAll('.err-preflight-group')].find((g) => g.querySelector('.dt-preflight-page-btn')?.textContent.trim() === 'Page 3')?.querySelector('.dt-preflight-issue')?.click());
+await page.evaluate(() => [...document.querySelectorAll('.err-preflight-group')].find((g) => g.querySelector('.err-preflight-page')?.textContent.trim() === 'Page 3')?.querySelector('.err-preflight-issue')?.click());
 await sleep(500);
 check('preflight finding goes to page', (await page.evaluate(() => window.__errata.pageIndex())) === 2);
 const canvasTop = await page.$eval('.sub-canvas-wrap canvas', (c) => c.getBoundingClientRect().top);
@@ -852,8 +852,8 @@ await page.evaluate((b) => window.__errata.open(new Uint8Array(b).buffer, 'lowre
 await page.waitForFunction(() => window.__errata.doc()?.name === 'lowres', { timeout: 10000 });
 await sleep(600);
 await openCell('Preflight');
-await page.waitForFunction(() => [...document.querySelectorAll('.err-preflight.is-open .dt-preflight-issue-message')].some((m) => m.textContent.includes('Very low resolution')), { timeout: 15000 }).catch(() => {});
-await page.evaluate(() => [...document.querySelectorAll('.err-preflight.is-open .dt-preflight-issue')].find((b) => b.textContent.includes('Very low resolution'))?.click());
+await page.waitForFunction(() => [...document.querySelectorAll('.err-preflight.is-open .err-preflight-message')].some((m) => m.textContent.includes('Very low resolution')), { timeout: 15000 }).catch(() => {});
+await page.evaluate(() => [...document.querySelectorAll('.err-preflight.is-open .err-preflight-issue')].find((b) => b.textContent.includes('Very low resolution'))?.click());
 await sleep(300);
 const highlighted = () => page.evaluate(() => {
 	const c = window.__errataCanvas;
@@ -870,7 +870,7 @@ await page.keyboard.press('Escape');
 await sleep(200);
 hl = await highlighted();
 check('preflight highlight escape clears first', hl.length === 0 && (await preflightOpen()));
-await page.evaluate(() => [...document.querySelectorAll('.err-preflight.is-open .dt-preflight-issue')].find((b) => b.textContent.includes('Very low resolution'))?.click());
+await page.evaluate(() => [...document.querySelectorAll('.err-preflight.is-open .err-preflight-issue')].find((b) => b.textContent.includes('Very low resolution'))?.click());
 await sleep(200);
 await page.mouse.click(irect.x + 10, irect.y + 10);
 await sleep(200);

@@ -1,0 +1,139 @@
+/* findings rail, clear of column */
+.err-ed > .err-preflight {
+	position: absolute;
+	inset-block-start: var(--sub-pad);
+	inset-inline-end: calc(
+		var(--sub-pad) + var(--sub-box) + var(--sub-gap)
+	);
+	z-index: 15;
+	inline-size: var(--sub-rail);
+	max-block-size: calc(
+		100% - 2 * var(--sub-pad) - var(--sub-box) - var(--sub-gap)
+	);
+	visibility: hidden;
+	opacity: 0;
+	translate: 24px 0;
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+		opacity 200ms,
+		visibility 0s 260ms;
+}
+
+.err-ed > .err-preflight.is-open {
+	visibility: visible;
+	opacity: 1;
+	translate: 0 0;
+	transition:
+		translate 260ms cubic-bezier(0.2, 0.8, 0.2, 1) 170ms,
+		opacity 200ms 170ms,
+		visibility 0s;
+}
+
+/* phone: tray above panel */
+.err-ed.is-phone > .err-preflight {
+	inset-block: auto
+		calc(
+			var(--sub-row-bottom) + 2 * var(--sub-box) + 2 *
+				var(--sub-gap)
+		);
+	inset-inline: var(--sub-pad);
+	inline-size: auto;
+	max-block-size: 45%;
+	translate: 0 24px;
+}
+
+.err-ed.is-phone > .err-preflight.is-open {
+	translate: 0 0;
+}
+
+.err-preflight-group + .err-preflight-group {
+	border-block-start: var(--canon-hairline) solid var(--canon-border);
+}
+
+.err-preflight-page {
+	display: block;
+	inline-size: 100%;
+	margin: 0;
+	padding: 10px 12px 4px;
+	border: 0;
+	background: none;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	text-align: start;
+}
+
+button.err-preflight-page {
+	cursor: pointer;
+}
+
+button.err-preflight-page:hover {
+	color: var(--canon-foreground);
+}
+
+.err-preflight-issue {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	inline-size: 100%;
+	margin: 0;
+	padding: 8px 12px;
+	border: 0;
+	border-block-start: var(--canon-hairline) solid var(--canon-border);
+	background: none;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+	text-align: start;
+	cursor: pointer;
+}
+
+.err-preflight-issue:hover:enabled {
+	background: var(--canon-accent-bg);
+}
+
+.err-preflight-issue:disabled {
+	cursor: default;
+}
+
+:is(.err-preflight-page, .err-preflight-issue):focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.err-preflight-message {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.err-preflight-count {
+	gap: 6px;
+}
+
+/* ios: only errors red */
+.err-preflight-sev {
+	flex: none;
+	inline-size: 16px;
+	block-size: 16px;
+	color: var(--canon-foreground);
+}
+
+.err-preflight-issue > .err-preflight-sev {
+	margin-block-start: 1px;
+}
+
+.err-preflight-sev.is-error {
+	color: var(--canon-destructive);
+}
+
+.err-preflight-sev.is-pass {
+	color: var(--canon-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.err-ed > .err-preflight,
+	.err-ed > .err-preflight.is-open {
+		transition: none;
+	}
+}
