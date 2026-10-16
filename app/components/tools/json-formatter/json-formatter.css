@@ -1,0 +1,421 @@
+/* iOS JSONListing.colour */
+.json-formatter {
+	--jf-object: var(--canon-primary);
+	--jf-array: var(--canon-math-yellow);
+	--jf-string: var(--canon-math-clay);
+	--jf-number: var(--canon-math-blue);
+	--jf-literal: var(--canon-muted-foreground);
+	--jf-selection: color-mix(
+		in srgb,
+		var(--canon-primary) 16%,
+		transparent
+	);
+}
+
+.jf-t--key,
+.jf-t--object {
+	color: var(--jf-object);
+}
+
+.jf-t--array {
+	color: var(--jf-array);
+}
+
+.jf-t--string {
+	color: var(--jf-string);
+}
+
+.jf-t--number {
+	color: var(--jf-number);
+}
+
+.jf-t--literal,
+.jf-t--punctuation {
+	color: var(--jf-literal);
+}
+
+.jf-gutter {
+	color: var(--canon-muted-foreground);
+	font-size: 11px;
+	text-align: end;
+	user-select: none;
+}
+
+/* picture: the source editor */
+.jf-editor {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	container-type: inline-size;
+}
+
+.jf-editor-head,
+.jf-editor-text {
+	box-sizing: border-box;
+	inline-size: min(100%, 736px);
+	margin-inline: auto;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.jf-editor-head {
+	display: flex;
+	flex: none;
+	gap: 16px;
+	align-items: center;
+	block-size: 44px;
+	margin-block-start: 6px;
+}
+
+.jf-editor-file {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.jf-editor-tools {
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-inline-start: auto;
+}
+
+.jf-editor-scroll {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+/* both in one cell, set alike, so the caret sits on the marks */
+.jf-editor-text {
+	display: grid;
+	padding-block: 4px var(--canon-panel-padding);
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+.jf-marks,
+.jf-source {
+	grid-area: 1 / 1;
+	min-inline-size: 0;
+}
+
+.jf-mark-line {
+	display: grid;
+	grid-template-columns: var(--jf-gutter) minmax(0, 1fr);
+}
+
+.jf-mark-line--error {
+	background: color-mix(
+		in srgb,
+		var(--canon-destructive) 14%,
+		transparent
+	);
+}
+
+.jf-mark-line > .jf-gutter {
+	padding-inline-end: 10px;
+	line-height: inherit;
+}
+
+.jf-mark-text,
+.jf-source {
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	tab-size: 8;
+}
+
+.jf-source {
+	box-sizing: border-box;
+	min-block-size: 96px;
+	margin: 0;
+	padding: 0 0 0 var(--jf-gutter);
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: transparent;
+	caret-color: var(--canon-foreground);
+	font: inherit;
+	line-height: inherit;
+	resize: none;
+	outline: none;
+}
+
+.jf-source::selection {
+	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
+}
+
+.jf-source::placeholder {
+	color: var(--canon-muted-foreground);
+}
+
+/* empty: the dashed box, the place to paste */
+.jf-source:placeholder-shown {
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.jf-source:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+/* the shape band */
+.jf-shape {
+	box-sizing: border-box;
+	block-size: 100%;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.jf-shape-rows {
+	position: relative;
+	overflow: hidden;
+	outline: none;
+	cursor: pointer;
+}
+
+.jf-shape-rows:focus-visible {
+	box-shadow: 0 0 0 2px var(--canon-primary);
+}
+
+.jf-k--object {
+	--jf-k: var(--jf-object);
+	--jf-fill: 16%;
+}
+
+.jf-k--array {
+	--jf-k: var(--jf-array);
+	--jf-fill: 16%;
+}
+
+.jf-k--string {
+	--jf-k: var(--jf-string);
+}
+
+.jf-k--number {
+	--jf-k: var(--jf-number);
+}
+
+.jf-k--literal {
+	--jf-k: var(--jf-literal);
+}
+
+.jf-cell {
+	position: absolute;
+	box-sizing: border-box;
+	min-inline-size: 0.5px;
+	block-size: 25px;
+	overflow: hidden;
+	border-block-start: 2px solid var(--jf-k);
+	background: color-mix(
+		in srgb,
+		var(--jf-k) var(--jf-fill, 26%),
+		transparent
+	);
+	container-type: inline-size;
+	transition:
+		left 0.5s ease-in-out,
+		width 0.5s ease-in-out,
+		top 0.5s ease-in-out,
+		opacity 0.5s ease-in-out;
+
+	@starting-style {
+		opacity: 0;
+	}
+}
+
+.jf-cell--selected {
+	box-shadow: inset 0 0 0 1.5px var(--canon-foreground);
+}
+
+.jf-cell-text {
+	display: block;
+	padding-inline: 5px;
+	overflow: hidden;
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 23px;
+	white-space: pre;
+	text-overflow: ellipsis;
+}
+
+@container (max-width: 26px) {
+	.jf-cell-text {
+		visibility: hidden;
+	}
+}
+
+.jf-cell-detail {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-regular);
+}
+
+.jf-shape-legend {
+	display: flex;
+	gap: 14px;
+	margin-block-start: 10px;
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 14px;
+	white-space: nowrap;
+}
+
+.jf-legend::before {
+	display: inline-block;
+	inline-size: 8px;
+	block-size: 8px;
+	margin-inline-end: 5px;
+	background: var(--jf-k);
+	content: "";
+}
+
+.jf-shape-empty {
+	box-sizing: border-box;
+	block-size: 24px;
+	padding-inline: 5px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 22px;
+}
+
+.jf-shape-empty--invalid {
+	border-color: var(--canon-destructive);
+	color: var(--canon-destructive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.jf-cell {
+		transition: none;
+	}
+}
+
+/* the result: listing, tree, error excerpt */
+.jf-listing,
+.jf-tree,
+.jf-excerpt {
+	box-sizing: border-box;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.jf-listing,
+.jf-tree {
+	max-block-size: 640px;
+	overflow: auto;
+	outline: none;
+}
+
+.jf-listing:focus-visible,
+.jf-tree:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--canon-primary);
+}
+
+.jf-listing {
+	display: grid;
+	grid-template-columns: minmax(100%, max-content);
+	padding-block: 10px;
+}
+
+.jf-listing-line {
+	display: grid;
+	grid-template-columns: calc(var(--jf-digits) * 1ch) max-content;
+	gap: 12px;
+	padding-inline: 12px var(--canon-panel-padding);
+	white-space: pre;
+}
+
+.jf-row--selected {
+	background: var(--jf-selection);
+}
+
+.jf-tree {
+	padding-block: 6px;
+}
+
+.jf-tree-row {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	padding-block: 3px;
+	padding-inline-end: var(--canon-panel-padding);
+	overflow-wrap: anywhere;
+	text-indent: -20px;
+	color: var(--canon-muted-foreground);
+}
+
+button.jf-tree-row {
+	margin: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+}
+
+button.jf-tree-row:hover {
+	background: var(--canon-muted);
+}
+
+button.jf-tree-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.jf-tree-glyph {
+	display: inline-block;
+	inline-size: 20px;
+	text-indent: 0;
+}
+
+.jf-tree-key {
+	color: var(--jf-object);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.jf-error {
+	overflow-wrap: anywhere;
+}
+
+.jf-excerpt {
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-muted);
+	overflow-x: auto;
+	white-space: pre;
+}
+
+.jf-excerpt-at {
+	background: color-mix(
+		in srgb,
+		var(--canon-destructive) 18%,
+		transparent
+	);
+	text-decoration: underline wavy var(--canon-destructive);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+}
+
+.jf-excerpt-caret {
+	display: inline-block;
+	inline-size: 0;
+	block-size: 1.2em;
+	vertical-align: text-bottom;
+	box-shadow: 0 0 0 1px var(--canon-destructive);
+}

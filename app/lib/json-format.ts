@@ -193,7 +193,7 @@ export type TreeNodeKind =
 export interface TreeNode {
 	kind: TreeNodeKind;
 	key: string | null;
-	/** stable collapse-state key. */
+	/** Index path, e.g. root.3.0; the collapse-state key, as the shape cells'. */
 	path: string;
 	entryCount: number;
 	children: TreeNode[] | null;
@@ -217,7 +217,7 @@ export function buildTree(
 
 	if (Array.isArray(value)) {
 		const children = value.map((entry, index) =>
-			buildTree(entry, String(index), `${path}\0${index}`),
+			buildTree(entry, String(index), `${path}.${index}`),
 		);
 		return {
 			kind: 'array',
@@ -232,8 +232,8 @@ export function buildTree(
 	if (typeof value === 'object') {
 		const children = Object.entries(
 			value as Record<string, unknown>,
-		).map(([childKey, entry]) =>
-			buildTree(entry, childKey, `${path}\0${childKey}`),
+		).map(([childKey, entry], index) =>
+			buildTree(entry, childKey, `${path}.${index}`),
 		);
 		return {
 			kind: 'object',

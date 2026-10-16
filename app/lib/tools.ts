@@ -924,6 +924,7 @@ export const toolCategories: ToolCategory[] = [
 				produces: ['application/json'],
 				new: true,
 				accepts: ['.json'],
+				canon: true,
 			},
 			{
 				id: 'jwt-decoder',
