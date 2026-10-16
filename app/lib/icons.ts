@@ -56,8 +56,6 @@ import iChevronDown from 'lucide-static/icons/chevron-down.svg?raw';
 import iChevronLeft from 'lucide-static/icons/chevron-left.svg?raw';
 import iChevronRight from 'lucide-static/icons/chevron-right.svg?raw';
 import iChevronUp from 'lucide-static/icons/chevron-up.svg?raw';
-import iChevronsLeft from 'lucide-static/icons/chevrons-left.svg?raw';
-import iChevronsRight from 'lucide-static/icons/chevrons-right.svg?raw';
 import iChevronsUpDown from 'lucide-static/icons/chevrons-up-down.svg?raw';
 import iCircle from 'lucide-static/icons/circle.svg?raw';
 import iCircleAlert from 'lucide-static/icons/circle-alert.svg?raw';
@@ -98,7 +96,6 @@ import iExpand from 'lucide-static/icons/expand.svg?raw';
 import iExternalLink from 'lucide-static/icons/external-link.svg?raw';
 import iEye from 'lucide-static/icons/eye.svg?raw';
 import iEyeOff from 'lucide-static/icons/eye-off.svg?raw';
-import iFastForward from 'lucide-static/icons/fast-forward.svg?raw';
 import iFile from 'lucide-static/icons/file.svg?raw';
 import iFileAudio from 'lucide-static/icons/file-audio.svg?raw';
 import iFileCode from 'lucide-static/icons/file-code.svg?raw';
@@ -195,7 +192,6 @@ import iRedo2 from 'lucide-static/icons/redo-2.svg?raw';
 import iRefreshCw from 'lucide-static/icons/refresh-cw.svg?raw';
 import iRegex from 'lucide-static/icons/regex.svg?raw';
 import iRepeat from 'lucide-static/icons/repeat.svg?raw';
-import iRewind from 'lucide-static/icons/rewind.svg?raw';
 import iRotateCcw from 'lucide-static/icons/rotate-ccw.svg?raw';
 import iRotateCw from 'lucide-static/icons/rotate-cw.svg?raw';
 import iRuler from 'lucide-static/icons/ruler.svg?raw';
@@ -324,8 +320,6 @@ export const icons: Record<string, string> = {
 	'chevron-left': iChevronLeft,
 	'chevron-right': iChevronRight,
 	'chevron-up': iChevronUp,
-	'chevrons-left': iChevronsLeft,
-	'chevrons-right': iChevronsRight,
 	'chevrons-up-down': iChevronsUpDown,
 	circle: iCircle,
 	'circle-alert': iCircleAlert,
@@ -366,7 +360,6 @@ export const icons: Record<string, string> = {
 	'external-link': iExternalLink,
 	eye: iEye,
 	'eye-off': iEyeOff,
-	'fast-forward': iFastForward,
 	file: iFile,
 	'file-audio': iFileAudio,
 	'file-code': iFileCode,
@@ -463,7 +456,6 @@ export const icons: Record<string, string> = {
 	'refresh-cw': iRefreshCw,
 	regex: iRegex,
 	repeat: iRepeat,
-	rewind: iRewind,
 	'rotate-ccw': iRotateCcw,
 	'rotate-cw': iRotateCw,
 	ruler: iRuler,
