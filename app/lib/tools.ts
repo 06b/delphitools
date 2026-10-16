@@ -447,6 +447,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/paste-image',
 				produces: ['image/png'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'placeholder-genny',

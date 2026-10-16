@@ -405,8 +405,8 @@ await page.click('.dt-pass-go');
 await page.waitForSelector('.dt-flow', { timeout: 15000 });
 await sleep(400);
 await paste('body', 'carried.png', '#16a34a');
-await page.waitForSelector('.dt-pi-image', { timeout: 10000 });
-await page.click('.dt-pi-btn.is-trailing.is-primary');
+await page.waitForSelector('.pi-image', { timeout: 10000 });
+await page.click('.pi-save');
 await page.waitForFunction(
 	() => location.pathname === '/tools/image-compressor',
 	{ timeout: 15000 },

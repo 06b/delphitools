@@ -141,13 +141,13 @@ await page.evaluate(async () => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await page.waitForSelector('.dt-pi-image', { timeout: 10000 });
+await page.waitForSelector('.pi-image', { timeout: 10000 });
 check(
 	'the tool control reads Pass along inside a flow',
-	(await buttonText('.dt-pi-btn.is-trailing.is-primary')) === 'Pass along',
-	await buttonText('.dt-pi-btn.is-trailing.is-primary'),
+	(await buttonText('.pi-save')) === 'Pass along',
+	await buttonText('.pi-save'),
 );
-await page.click('.dt-pi-btn.is-trailing.is-primary');
+await page.click('.pi-save');
 const ghostSeen = await page
 	.waitForSelector('.dt-flow-ghost', { timeout: 3000 })
 	.then(() => true)
@@ -206,8 +206,8 @@ await other.evaluate(async () => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await other.waitForSelector('.dt-pi-image', { timeout: 10000 });
-await other.click('.dt-pi-btn.is-trailing.is-primary');
+await other.waitForSelector('.pi-image', { timeout: 10000 });
+await other.click('.pi-save');
 await other.waitForFunction(() => location.pathname === '/tools/metadata-stripper', {
 	timeout: 15000,
 });

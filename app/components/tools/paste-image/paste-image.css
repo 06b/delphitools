@@ -1,0 +1,124 @@
+.pi-picture {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	font-family: var(--canon-font);
+	container-type: size;
+}
+
+/* iOS: a 4:3 box inset 24 in the pane */
+.pi-picture .pi-slot {
+	inline-size: min(100cqi - 48px, (100cqb - 48px) * 4 / 3);
+	block-size: auto;
+	aspect-ratio: 4 / 3;
+}
+
+.pi-area {
+	position: absolute;
+	inset: 0 0 calc(var(--canon-panel-padding) + 30px);
+}
+
+.pi-image,
+.pi-sheet,
+.pi-shade,
+.pi-crop,
+.pi-corner {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.pi-image {
+	display: block;
+	max-inline-size: none;
+	user-select: none;
+	pointer-events: none;
+}
+
+.pi-sheet {
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.pi-shade {
+	--pi-thirds: rgb(255 255 255 / 35%);
+
+	background-image:
+		linear-gradient(var(--pi-thirds), var(--pi-thirds)),
+		linear-gradient(var(--pi-thirds), var(--pi-thirds)),
+		linear-gradient(var(--pi-thirds), var(--pi-thirds)),
+		linear-gradient(var(--pi-thirds), var(--pi-thirds));
+	background-repeat: no-repeat;
+	background-position:
+		33.333% 0,
+		66.667% 0,
+		0 33.333%,
+		0 66.667%;
+	background-size:
+		var(--canon-hairline) 100%,
+		var(--canon-hairline) 100%,
+		100% var(--canon-hairline),
+		100% var(--canon-hairline);
+	box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%);
+}
+
+.pi-crop {
+	border: var(--canon-frame) solid var(--canon-primary);
+	outline: none;
+	cursor: move;
+}
+
+.pi-crop:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-foreground);
+	outline-offset: var(--canon-frame);
+}
+
+.pi-corner {
+	inline-size: 14px;
+	block-size: 14px;
+	background: var(--canon-primary);
+}
+
+.pi-corner--nw {
+	inset-block-start: -8px;
+	inset-inline-start: -8px;
+	cursor: nwse-resize;
+}
+
+.pi-corner--ne {
+	inset-block-start: -8px;
+	inset-inline-end: -8px;
+	cursor: nesw-resize;
+}
+
+.pi-corner--sw {
+	inset-block-end: -8px;
+	inset-inline-start: -8px;
+	cursor: nesw-resize;
+}
+
+.pi-corner--se {
+	inset-block-end: -8px;
+	inset-inline-end: -8px;
+	cursor: nwse-resize;
+}
+
+.pi-figure {
+	position: absolute;
+	inset-inline-start: 50%;
+	translate: -50% -50%;
+	pointer-events: none;
+}
+
+.pi-credit {
+	margin: 0;
+	padding: 0 var(--canon-panel-padding);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.pi-credit a {
+	color: inherit;
+}
