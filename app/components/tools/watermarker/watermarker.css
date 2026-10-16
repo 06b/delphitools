@@ -83,46 +83,9 @@
 	display: none;
 }
 
-.wm-slot {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	border: var(--canon-frame) dashed
-		color-mix(
-			in srgb,
-			var(--canon-muted-foreground) 50%,
-			transparent
-		);
+.wm-box--empty {
 	outline: none;
 	background: none;
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	cursor: pointer;
-}
-
-.wm-slot:focus-visible {
-	border-style: solid;
-	border-color: var(--canon-primary);
-}
-
-.wm-slot--over {
-	background: var(--canon-accent-bg);
-	color: var(--canon-primary);
-}
-
-.wm-slot-icon {
-	display: flex;
-	opacity: 0.6;
-}
-
-.wm-slot-icon svg {
-	inline-size: 44px;
-	block-size: 44px;
 }
 
 /* the text field spans its row, as on iOS */

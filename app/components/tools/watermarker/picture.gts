@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	family,
 	paint,
@@ -131,23 +131,20 @@ export default class Picture extends Component<PictureSignature> {
 						{{/unless}}
 					</div>
 				{{else}}
-					<button
-						type="button"
-						class="wm-box wm-slot
-							{{if
-								@over
-								'wm-slot--over'
-							}}"
+					<div
+						class="wm-box wm-box--empty"
 						style={{(aspectStyle)}}
-						{{on "click" @onChoose}}
 					>
-						<span
-							class="wm-slot-icon"
-						><IconSvg
-								@name="image"
-							/></span>
-						<span>Drop an image to watermark</span>
-					</button>
+						<Slot
+							class="wm-slot"
+							@prompt="Drop an image to watermark"
+							@icon="image"
+							@dashed={{true}}
+							@fills={{true}}
+							@over={{@over}}
+							@onChoose={{@onChoose}}
+						/>
+					</div>
 				{{/if}}
 			</div>
 		</div>

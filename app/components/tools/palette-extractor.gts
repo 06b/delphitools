@@ -23,6 +23,7 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import { parseHex, takesBlackInk } from 'delphicanon/lib/colour';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
@@ -439,28 +440,15 @@ export default class PaletteExtractor extends Component {
 									/>
 								{{/if}}
 							{{else}}
-								<button
-									type="button"
-									class="pe-slot
-										{{if
-											this.over
-											'pe-slot--over'
-										}}"
-									{{on
-										"click"
-										this.choose
-									}}
-								>
-									<span
-										class="pe-slot-icon"
-									><IconSvg
-											@name="palette"
-										/></span>
-									<span
-									>Drop an
-										image
-										here</span>
-								</button>
+								<Slot
+									class="pe-slot"
+									@prompt="Drop an image here"
+									@icon="palette"
+									@dashed={{true}}
+									@fills={{true}}
+									@over={{this.over}}
+									@onChoose={{this.choose}}
+								/>
 							{{/if}}
 						</div>
 						{{#if this.swatches.length}}

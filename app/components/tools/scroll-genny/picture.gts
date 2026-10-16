@@ -114,6 +114,8 @@ export default class Picture extends Component<PictureSignature> {
 						@prompt="Drop an image here"
 						@icon="image"
 						@accept="image/*"
+						@dashed={{true}}
+						@fills={{true}}
 						@over={{@over}}
 						@onFile={{@onFile}}
 					/>

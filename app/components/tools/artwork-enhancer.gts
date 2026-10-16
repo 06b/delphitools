@@ -19,6 +19,7 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import { stem } from 'delphicanon/lib/files';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
@@ -359,30 +360,20 @@ export default class ArtworkEnhancer extends Component {
 									/>
 								</div>
 							{{else}}
-								<button
-									type="button"
-									class="artwork-box artwork-slot
-										{{if
-											this.over
-											'artwork-slot--over'
-										}}"
+								<div
+									class="artwork-box"
 									style={{this.pictureFit}}
-									{{on
-										"click"
-										this.choose
-									}}
 								>
-									<span
-										class="artwork-slot-icon"
-									><IconSvg
-											@name="sparkles"
-										/></span>
-									<span
-									>Drop
-										your
-										artwork
-										here</span>
-								</button>
+									<Slot
+										class="artwork-slot"
+										@prompt="Drop your artwork here"
+										@icon="sparkles"
+										@dashed={{true}}
+										@fills={{true}}
+										@over={{this.over}}
+										@onChoose={{this.choose}}
+									/>
+								</div>
 							{{/if}}
 						</div>
 						{{#if this.busy}}

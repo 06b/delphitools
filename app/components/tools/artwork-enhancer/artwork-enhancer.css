@@ -38,44 +38,7 @@
 }
 
 .artwork-slot {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	border: var(--canon-frame) dashed
-		color-mix(
-			in srgb,
-			var(--canon-muted-foreground) 50%,
-			transparent
-		);
-	background: none;
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	cursor: pointer;
-}
-
-.artwork-slot:focus-visible {
-	border-style: solid;
-	border-color: var(--canon-primary);
-	outline: none;
-}
-
-.artwork-slot--over {
-	background: var(--canon-accent-bg);
-	color: var(--canon-primary);
-}
-
-.artwork-slot-icon {
-	display: flex;
-}
-
-.artwork-slot-icon svg {
-	inline-size: 34px;
-	block-size: 34px;
+	--media-slot-icon: 34px;
 }
 
 .artwork-loader {

@@ -5,6 +5,8 @@
 }
 
 .scroll-picture {
+	--media-slot-icon: 28px;
+
 	position: absolute;
 	inset: 0;
 	overflow: hidden;
@@ -99,52 +101,6 @@
 		#fff 0 1px,
 		rgb(0 0 0 / 60%) 1px 2px
 	);
-}
-
-.scroll-picture .scroll-slot {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	align-items: center;
-	justify-content: center;
-	inline-size: auto;
-	block-size: auto;
-	padding: 0;
-	border: var(--canon-frame) dashed
-		color-mix(
-			in srgb,
-			var(--canon-muted-foreground) 50%,
-			transparent
-		);
-	outline: none;
-	background: none;
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	cursor: pointer;
-}
-
-.scroll-picture .scroll-slot:focus-visible {
-	border-style: solid;
-	border-color: var(--canon-primary);
-}
-
-.scroll-picture .scroll-slot.media-slot--over {
-	background: var(--canon-accent-bg);
-	color: var(--canon-primary);
-}
-
-.scroll-picture .media-slot-icon {
-	display: flex;
-	opacity: 0.6;
-}
-
-.scroll-picture .media-slot-icon svg {
-	inline-size: 28px;
-	block-size: 28px;
 }
 
 .scroll-figure {

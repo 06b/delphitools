@@ -7,7 +7,7 @@ import CanonLoupe from 'delphicanon/components/canon-loupe';
 import { frame, type LoupeSides } from 'delphicanon/lib/loupe';
 import grabPan from 'delphicanon/modifiers/canon-grab-pan';
 import type { Rgb } from 'delphicanon/lib/colour';
-import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	clampPixel,
 	contains,
@@ -53,8 +53,6 @@ const keySteps: Record<string, Point> = {
 type Grab =
 	| { kind: 'crosshair'; offset: Point }
 	| { kind: 'loupe'; from: Point; at: Point };
-
-const Eyedropper = <template><IconSvg @name="pipette" /></template>;
 
 /**
  * The image fitted to the pane with a reticle on the sampled pixel and a
@@ -342,15 +340,14 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 					>{{@reading}}</output>
 				</div>
 			{{else}}
-				<button
-					type="button"
+				<Slot
 					class="pp-slot"
-					{{on "click" @onChoose}}
-				>
-					<span class="pp-slot-icon"><Eyedropper
-						/></span>
-					<span>Drop an image</span>
-				</button>
+					@prompt="Drop an image"
+					@icon="pipette"
+					@dashed={{true}}
+					@fills={{true}}
+					@onChoose={{@onChoose}}
+				/>
 			{{/if}}
 		</div>
 	</template>

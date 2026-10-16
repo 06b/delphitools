@@ -1,8 +1,7 @@
 import type { TOC } from '@ember/component/template-only';
-import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import CanonLoader from 'delphicanon/components/canon-loader';
-import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 
 interface CutoutPictureSignature {
 	Args: {
@@ -70,21 +69,20 @@ const CutoutPicture: TOC<CutoutPictureSignature> = <template>
 					{{/if}}
 				</div>
 			{{else}}
-				<button
-					type="button"
-					class="cutout-box cutout-slot
-						{{if
-							@over
-							'cutout-slot--over'
-						}}"
+				<div
+					class="cutout-box cutout-box--empty"
 					style={{(boxStyle)}}
-					{{on "click" @onChoose}}
 				>
-					<span class="cutout-slot-icon"><IconSvg
-							@name="image"
-						/></span>
-					<span>Drop an image here</span>
-				</button>
+					<Slot
+						class="cutout-slot"
+						@prompt="Drop an image here"
+						@icon="image"
+						@dashed={{true}}
+						@fills={{true}}
+						@over={{@over}}
+						@onChoose={{@onChoose}}
+					/>
+				</div>
 			{{/if}}
 		</div>
 		{{#if @busy}}

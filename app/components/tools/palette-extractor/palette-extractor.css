@@ -31,48 +31,7 @@ html:root .pe-compare {
 }
 
 .pe-slot {
-	position: absolute;
-	inset: var(--canon-panel-padding);
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	align-items: center;
-	justify-content: center;
-	margin: 0;
-	padding: 0;
-	border: var(--canon-frame) dashed
-		color-mix(
-			in srgb,
-			var(--canon-muted-foreground) 50%,
-			transparent
-		);
-	outline: none;
-	background: none;
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	cursor: pointer;
-}
-
-.pe-slot:focus-visible {
-	border-style: solid;
-	border-color: var(--canon-primary);
-}
-
-.pe-slot--over {
-	background: var(--canon-accent-bg);
-	color: var(--canon-primary);
-}
-
-.pe-slot-icon {
-	display: flex;
-	opacity: 0.6;
-}
-
-.pe-slot-icon svg {
-	inline-size: 44px;
-	block-size: 44px;
+	--media-slot-inset: var(--canon-panel-padding);
 }
 
 .pe-strip {

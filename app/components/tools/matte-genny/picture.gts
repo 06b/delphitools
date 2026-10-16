@@ -2,11 +2,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import { on } from '@ember/modifier';
 import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonDimensionLine from 'delphicanon/components/canon-dimension-line';
 import { dimensionLines, sheet } from 'delphicanon/lib/dimension-line';
-import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	blur,
 	blurred,
@@ -204,25 +203,14 @@ export default class Picture extends Component<PictureSignature> {
 							style={{this.photoStyle}}
 						/>
 					{{else}}
-						<button
-							type="button"
-							class="matte-photo matte-slot
-								{{if
-									@over
-									'matte-slot--over'
-								}}"
+						<Slot
+							class="matte-slot"
 							style={{this.photoStyle}}
-							{{on "click" @onChoose}}
-						>
-							<span
-								class="matte-slot-icon"
-							><IconSvg
-									@name="image"
-								/></span>
-							<span
-								class="matte-slot-prompt"
-							>Drop an image</span>
-						</button>
+							@prompt="Drop an image"
+							@icon="image"
+							@over={{@over}}
+							@onChoose={{@onChoose}}
+						/>
 					{{/if}}
 					{{#each this.guides as |guide|}}
 						<span

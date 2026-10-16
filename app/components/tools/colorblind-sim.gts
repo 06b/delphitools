@@ -26,6 +26,7 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import { hex, parseHex, takesBlackInk, type Rgb } from 'delphicanon/lib/colour';
 import { stem } from 'delphicanon/lib/files';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
 import {
 	MATRICES,
@@ -56,7 +57,6 @@ const closestName = (colour: Rgb) => getColourName(hex(colour));
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
-const PictureIcon = <template><IconSvg @name="image" /></template>;
 
 // the document paste (filePaste) would load a drop-zone paste a second time
 const keepPaste = (event: Event) => event.stopPropagation();
@@ -440,21 +440,14 @@ export default class ColorblindSim extends Component {
 								/>
 							{{/if}}
 						{{else}}
-							<button
-								type="button"
+							<Slot
 								class="cbs-slot"
-								{{on
-									"click"
-									this.chooseFile
-								}}
-							>
-								<span
-									class="cbs-slot-icon"
-								><PictureIcon
-									/></span>
-								<span>Drop an
-									image</span>
-							</button>
+								@prompt="Drop an image"
+								@icon="image"
+								@dashed={{true}}
+								@fills={{true}}
+								@onChoose={{this.chooseFile}}
+							/>
 						{{/if}}
 					{{else}}
 						<div class="cbs-picture">

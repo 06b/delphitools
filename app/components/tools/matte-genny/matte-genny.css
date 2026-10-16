@@ -46,40 +46,7 @@
 }
 
 .matte-slot {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	align-items: center;
-	justify-content: center;
 	overflow: hidden;
-	padding: 0;
-	border: 0;
-	background: var(--canon-muted);
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	cursor: pointer;
-}
-
-.matte-slot:focus-visible {
-	outline: var(--canon-frame) solid var(--canon-primary);
-	outline-offset: calc(-1 * var(--canon-frame));
-}
-
-.matte-slot--over {
-	background: var(--canon-accent-bg);
-	color: var(--canon-primary);
-}
-
-.matte-slot-icon {
-	display: flex;
-	opacity: 0.6;
-}
-
-.matte-slot-icon svg {
-	inline-size: 28px;
-	block-size: 28px;
 }
 
 /* the picture's transitions would otherwise drag the guides' fade to 500 ms */

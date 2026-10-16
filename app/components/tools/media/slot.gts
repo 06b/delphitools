@@ -2,16 +2,22 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import './slot.css';
 
 export interface SlotSignature {
 	Args: {
 		prompt: string;
 		icon: string;
 		/** As the file input's accept attribute. */
-		accept: string;
+		accept?: string;
+		/** The dashed image slot; `fills` covers the positioned parent. */
+		dashed?: boolean;
+		fills?: boolean;
 		/** A file is dragged over the tool. */
 		over?: boolean;
-		onFile: (file: File) => void;
+		onFile?: (file: File) => void;
+		/** Opens the tool's own file input instead of the slot's. */
+		onChoose?: () => void;
 	};
 	Element: HTMLButtonElement;
 }
@@ -24,20 +30,26 @@ export default class Slot extends Component<SlotSignature> {
 		this.#input = input;
 	});
 
-	choose = () => this.#input?.click();
+	choose = () =>
+		this.args.onChoose
+			? this.args.onChoose()
+			: this.#input?.click();
 
 	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
 		// the same file twice fires change again
 		input.value = '';
-		if (file) this.args.onFile(file);
+		if (file) this.args.onFile?.(file);
 	};
 
 	<template>
 		<button
 			type="button"
-			class="media-slot {{if @over 'media-slot--over'}}"
+			class="media-slot
+				{{if @dashed 'media-slot--dashed'}}
+				{{if @fills 'media-slot--fills'}}
+				{{if @over 'media-slot--over'}}"
 			{{on "click" this.choose}}
 			...attributes
 		>
@@ -46,14 +58,16 @@ export default class Slot extends Component<SlotSignature> {
 				/></span>
 			<span class="media-slot-prompt">{{@prompt}}</span>
 		</button>
-		{{! the slot is its label }}
-		{{! template-lint-disable require-input-label }}
-		<input
-			type="file"
-			accept={{@accept}}
-			hidden
-			{{this.keep}}
-			{{on "change" this.picked}}
-		/>
+		{{#if @onFile}}
+			{{! the slot is its label }}
+			{{! template-lint-disable require-input-label }}
+			<input
+				type="file"
+				accept={{@accept}}
+				hidden
+				{{this.keep}}
+				{{on "change" this.picked}}
+			/>
+		{{/if}}
 	</template>
 }

@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import CanonLoader from 'delphicanon/components/canon-loader';
 import grabPan from 'delphicanon/modifiers/canon-grab-pan';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import type {
 	Point,
 	Rect,
@@ -374,24 +375,15 @@ export default class Picture extends Component<PictureSignature> {
 							style={{this.frameStyle}}
 						/>
 					{{else}}
-						<button
-							type="button"
-							class="social-slot
-								{{if
-									@over
-									'social-slot--over'
-								}}"
+						<Slot
+							class="social-slot"
 							style={{this.frameStyle}}
-							{{on "click" @onChoose}}
-						>
-							<span
-								class="social-slot-icon"
-							><IconSvg
-									@name="image"
-								/></span>
-							<span>Drop an image to
-								crop</span>
-						</button>
+							@prompt="Drop an image to crop"
+							@icon="image"
+							@dashed={{true}}
+							@over={{@over}}
+							@onChoose={{@onChoose}}
+						/>
 					{{/if}}
 					<div
 						class="social-sheet

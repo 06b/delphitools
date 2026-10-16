@@ -25,53 +25,14 @@
 	user-select: none;
 }
 
-/* the dashed image slot of background-remover */
-.social-slot {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	border: var(--canon-frame) dashed
-		color-mix(
-			in srgb,
-			var(--canon-muted-foreground) 50%,
-			transparent
-		);
-	outline: none;
+.social-area .social-slot:not(.media-slot--over) {
 	background: var(--canon-card);
-	color: var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	cursor: pointer;
 }
 
 /* the prompt over the crop preview drawn after the slot */
 .social-slot > * {
 	position: relative;
 	z-index: 1;
-}
-
-.social-slot:focus-visible {
-	border-style: solid;
-	border-color: var(--canon-primary);
-}
-
-.social-slot--over {
-	background: var(--canon-accent-bg);
-	color: var(--canon-primary);
-}
-
-.social-slot-icon {
-	display: flex;
-	opacity: 0.6;
-}
-
-.social-slot-icon svg {
-	inline-size: 44px;
-	block-size: 44px;
 }
 
 .social-sheet {
