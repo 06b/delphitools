@@ -1,0 +1,132 @@
+.wm-picture {
+	position: absolute;
+	inset: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.wm-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+	display: grid;
+	place-items: center;
+	container-type: size;
+}
+
+.wm-box {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: min(100cqi, 100cqb * (var(--wm-aspect)));
+	aspect-ratio: var(--wm-aspect);
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0% 25%,
+			var(--canon-card) 0% 50%
+		)
+		0 0 / 16px 16px;
+}
+
+.wm-canvas {
+	position: absolute;
+	inset: 0;
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.wm-zones {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	grid-template-rows: repeat(3, 1fr);
+}
+
+.wm-zone {
+	position: relative;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+/* the iOS anchors sit at 10, 50 and 90 % of the image: 30, 50, 70 % of a third */
+.wm-mark {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	box-sizing: border-box;
+	inline-size: 7px;
+	block-size: 7px;
+	border: 1.5px solid var(--canon-primary);
+	background: color-mix(in srgb, var(--canon-card) 85%, transparent);
+	translate: -50% -50%;
+}
+
+.wm-zone--column0 .wm-mark {
+	inset-inline-start: 30%;
+}
+
+.wm-zone--column2 .wm-mark {
+	inset-inline-start: 70%;
+}
+
+.wm-zone--row0 .wm-mark {
+	inset-block-start: 30%;
+}
+
+.wm-zone--row2 .wm-mark {
+	inset-block-start: 70%;
+}
+
+.wm-zone--current .wm-mark {
+	display: none;
+}
+
+.wm-slot {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: var(--canon-frame) dashed
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 50%,
+			transparent
+		);
+	outline: none;
+	background: none;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+}
+
+.wm-slot:focus-visible {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+.wm-slot--over {
+	background: var(--canon-accent-bg);
+	color: var(--canon-primary);
+}
+
+.wm-slot-icon {
+	display: flex;
+	opacity: 0.6;
+}
+
+.wm-slot-icon svg {
+	inline-size: 44px;
+	block-size: 44px;
+}
+
+/* the text field spans its row, as on iOS */
+.watermarker .wm-text {
+	inline-size: 100%;
+	padding-inline: var(--canon-panel-padding);
+}

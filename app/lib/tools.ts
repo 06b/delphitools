@@ -107,6 +107,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Add watermarks to images',
 				icon: 'stamp',
 				href: '/tools/watermarker',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},

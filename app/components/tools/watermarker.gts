@@ -1,736 +1,550 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import { hex, type Rgb } from 'delphicanon/lib/colour';
+import { stem } from 'delphicanon/lib/files';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import Picture from 'delphitools-v2/components/tools/watermarker/picture';
+import {
+	blends,
+	fileName,
+	marks,
+	paint,
+	zones,
+	type BlendMode,
+	type Position,
+	type WatermarkSpec,
+} from 'delphitools-v2/components/tools/watermarker/watermark';
+import './watermarker/watermarker.css';
 
-// full res re-encode per input
-const RENDER_DEBOUNCE_MS = 120;
+const loadFailed = 'Image could not be read. Try another file?';
 
-const LOAD_FAILED = 'Image could not be read. Try another file?';
+const kinds = ['Text', 'Image'];
+const blendNames = blends.map((blend) => blend.name);
+const zoneNames = zones.map((zone) => zone.name);
 
-export type Position =
-	'tl' | 'tc' | 'tr' | 'ml' | 'mc' | 'mr' | 'bl' | 'bc' | 'br' | 'random';
-
-export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
-
-// canvas: 'normal' invalid, use source-over
-const COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
-	normal: 'source-over',
-	multiply: 'multiply',
-	screen: 'screen',
-	overlay: 'overlay',
-};
-
-export const BLEND_MODES: { id: BlendMode; label: string }[] = [
-	{ id: 'normal', label: 'Normal' },
-	{ id: 'multiply', label: 'Multiply' },
-	{ id: 'screen', label: 'Screen' },
-	{ id: 'overlay', label: 'Overlay' },
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Shuffle = <template><IconSvg @name="shuffle" /></template>;
+const zoneIcons = [
+	<template><IconSvg @name="arrow-up-left" /></template>,
+	<template><IconSvg @name="arrow-up" /></template>,
+	<template><IconSvg @name="arrow-up-right" /></template>,
+	<template><IconSvg @name="arrow-left" /></template>,
+	<template><IconSvg @name="dot" /></template>,
+	<template><IconSvg @name="arrow-right" /></template>,
+	<template><IconSvg @name="arrow-down-left" /></template>,
+	<template><IconSvg @name="arrow-down" /></template>,
+	<template><IconSvg @name="arrow-down-right" /></template>,
 ];
 
-// arrows visual, name = a11y
-export const POSITIONS: { id: Position; label: string; name: string }[] = [
-	{ id: 'tl', label: '↖', name: 'Top left' },
-	{ id: 'tc', label: '↑', name: 'Top centre' },
-	{ id: 'tr', label: '↗', name: 'Top right' },
-	{ id: 'ml', label: '←', name: 'Middle left' },
-	{ id: 'mc', label: '•', name: 'Centre' },
-	{ id: 'mr', label: '→', name: 'Middle right' },
-	{ id: 'bl', label: '↙', name: 'Bottom left' },
-	{ id: 'bc', label: '↓', name: 'Bottom centre' },
-	{ id: 'br', label: '↘', name: 'Bottom right' },
-];
+const points = (value: number) => `${value} pt`;
+const percent = (value: number) => `${value}%`;
+const pixels = ({ width, height }: { width: number; height: number }) =>
+	`${width} × ${height}`;
 
-export interface Placement {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+interface Loaded {
+	image: ImageBitmap;
+	name: string;
 }
 
-export interface PlacementOptions {
-	position: Position;
-	/** % of base width */
-	scale: number;
-	/** % inset per edge */
-	padding: number;
-	/** 0–1, only when random */
-	random: { x: number; y: number };
+const decode = (file: Blob) =>
+	createImageBitmap(file, { imageOrientation: 'from-image' });
+
+/** A drawn 256 px badge for ?wmStamp, which stands for the iOS -wmStamp path. */
+function drawnStamp() {
+	const canvas = document.createElement('canvas');
+	canvas.width = 256;
+	canvas.height = 256;
+	const context = canvas.getContext('2d')!;
+	context.fillStyle = '#ffffff';
+	context.beginPath();
+	context.arc(128, 128, 120, 0, Math.PI * 2);
+	context.fill();
+	context.fillStyle = '#1e6626';
+	context.fillRect(64, 64, 128, 128);
+	return createImageBitmap(canvas);
 }
 
-// base-image px; aspect kept; scale → width only
-export function watermarkPlacement(
-	baseWidth: number,
-	baseHeight: number,
-	markWidth: number,
-	markHeight: number,
-	options: PlacementOptions,
-): Placement {
-	const width = (baseWidth * options.scale) / 100;
-	const height = (markHeight / markWidth) * width;
+/** The port of WatermarkerViewController, with the web tool's placement, size, blend and random position. */
+export default class Watermarker extends Component {
+	@tracked source?: Loaded;
+	@tracked stamp?: Loaded;
+	@tracked kind = 0;
+	@tracked text = 'Watermark';
+	@tracked fontSize = 48;
+	@tracked colour: Rgb = [1, 1, 1];
+	@tracked scale = 20;
+	@tracked opacity = 0.3;
+	@tracked padding = 5;
+	@tracked position: Position = 'br';
+	@tracked random = { x: 0, y: 0 };
+	@tracked tiling = false;
+	@tracked blend: BlendMode = 'normal';
+	@tracked failed = false;
+	@tracked exporting = false;
 
-	const padX = (baseWidth * options.padding) / 100;
-	const padY = (baseHeight * options.padding) / 100;
+	drop = new Drop('image/*', (file) => void this.loadSource(file));
+	#input?: HTMLInputElement;
+	#loading = 0;
 
-	if (options.position === 'random') {
+	// ?wmSample ?wmStamp ?wmTile ?wmTap=<0-8>: the iOS -wmSample, -wmStamp, -wmTile, -wmTap launch arguments, with drawn images
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		this.tiling = query.has('wmTile');
+		const tap = zones[Number(query.get('wmTap') ?? NaN)];
+		if (tap) this.position = tap.id;
+		if (query.has('wmSample'))
+			void drawnSample().then((file) =>
+				this.loadSource(file),
+			);
+		if (query.has('wmStamp')) {
+			this.kind = 1;
+			void drawnStamp().then((image) =>
+				this.keepStamp(image, 'Logo'),
+			);
+		}
+		registerDestructor(this, () => {
+			this.source?.image.close();
+			this.stamp?.image.close();
+		});
+	}
+
+	get isText() {
+		return this.kind === 0;
+	}
+
+	get spec(): WatermarkSpec {
 		return {
-			x:
-				padX +
-				options.random.x *
-					(baseWidth - width - padX * 2),
-			y:
-				padY +
-				options.random.y *
-					(baseHeight - height - padY * 2),
-			width,
-			height,
+			kind: this.isText ? 'text' : 'image',
+			text: this.text,
+			fontSize: this.fontSize,
+			colour: hex(this.colour),
+			stamp: this.stamp?.image,
+			scale: this.scale,
+			opacity: this.opacity,
+			padding: this.padding,
+			position: this.position,
+			random: this.random,
+			tiling: this.tiling,
+			blend: this.blend,
 		};
 	}
 
-	const row = options.position[0];
-	const col = options.position[1];
-
-	let x = 0;
-	if (col === 'l') x = padX;
-	else if (col === 'c') x = (baseWidth - width) / 2;
-	else if (col === 'r') x = baseWidth - width - padX;
-
-	let y = 0;
-	if (row === 't') y = padY;
-	else if (row === 'm') y = (baseHeight - height) / 2;
-	else if (row === 'b') y = baseHeight - height - padY;
-
-	return { x, y, width, height };
-}
-
-function readNumber(event: Event): number {
-	return Number((event.target as HTMLInputElement).value);
-}
-
-export default class WatermarkerTool extends Component {
-	@tracked baseUrl: string | null = null;
-	@tracked markUrl: string | null = null;
-	@tracked baseFileName = '';
-	@tracked baseWidth = 0;
-	@tracked baseHeight = 0;
-	@tracked markWidth = 0;
-	@tracked markHeight = 0;
-	@tracked position: Position = 'br';
-	@tracked opacity = 50;
-	@tracked scale = 20;
-	@tracked padding = 5;
-	@tracked blendMode: BlendMode = 'normal';
-	@tracked resultImage: string | null = null;
-	@tracked loadFailed = false;
-
-	#randomX = 0;
-	#randomY = 0;
-	#baseImage: HTMLImageElement | null = null;
-	#markImage: HTMLImageElement | null = null;
-	#timer: ReturnType<typeof setTimeout> | null = null;
-	#destroyed = false;
-
-	willDestroy() {
-		super.willDestroy();
-		this.#destroyed = true;
-		if (this.#timer) clearTimeout(this.#timer);
+	get sourceText() {
+		return this.source ? pixels(this.source.image) : '';
 	}
 
-	get bothLoaded() {
-		return !!this.baseUrl && !!this.markUrl;
+	get stampText() {
+		return this.stamp ? pixels(this.stamp.image) : '';
+	}
+
+	get zoneIndex() {
+		return zones.findIndex((zone) => zone.id === this.position);
 	}
 
 	get isRandom() {
 		return this.position === 'random';
 	}
 
-	get noResult() {
-		return this.resultImage === null;
+	get blendIndex() {
+		return blends.findIndex((blend) => blend.id === this.blend);
 	}
 
-	get positions() {
-		return POSITIONS.map((entry) => ({
-			...entry,
-			isActive: entry.id === this.position,
-		}));
+	get exportDisabled() {
+		return !this.source || !marks(this.spec) || this.exporting;
 	}
 
-	get blendModes() {
-		return BLEND_MODES.map((mode) => ({
-			...mode,
-			isActive: mode.id === this.blendMode,
-		}));
-	}
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
 
-	// pre-decode so render is sync
-	#load(
-		file: File,
-		onReady: (image: HTMLImageElement, url: string) => void,
-	) {
-		this.loadFailed = false;
-		const reader = new FileReader();
-		reader.onload = () => {
-			const url = reader.result as string;
-			const image = new Image();
-			image.onload = () => {
-				if (this.#destroyed) return;
-				onReady(image, url);
-				this.queueRender();
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		// the same file twice fires change again
+		input.value = '';
+		if (file) void this.loadSource(file);
+	};
+
+	// the stamp drop zone takes its own drop
+	dropped = (event: DragEvent) => {
+		if (event.defaultPrevented) this.drop.over = false;
+		else this.drop.drop(event);
+	};
+
+	// the web tool's order: a source first, then the stamp
+	pasted = (file: File) => {
+		if (this.source && !this.isText) void this.loadStamp(file);
+		else void this.loadSource(file);
+	};
+
+	loadSource = async (file: File) => {
+		const run = ++this.#loading;
+		try {
+			const image = await decode(file);
+			if (run !== this.#loading || this.isDestroying) {
+				image.close();
+				return;
+			}
+			this.source?.image.close();
+			this.source = {
+				image,
+				name: stem(file.name) || 'Image',
 			};
-			// surface decode failure
-			image.onerror = this.fail;
-			image.src = url;
-		};
-		reader.onerror = this.fail;
-		reader.readAsDataURL(file);
-	}
-
-	readBase = (file: File) => {
-		this.baseFileName = file.name.replace(/\.[^.]+$/, '');
-		this.#load(file, (image, url) => {
-			this.#baseImage = image;
-			this.baseWidth = image.width;
-			this.baseHeight = image.height;
-			this.baseUrl = url;
-			this.resultImage = null;
-		});
+			this.failed = false;
+		} catch {
+			if (run === this.#loading) this.failed = true;
+		}
 	};
 
-	readMark = (file: File) => {
-		this.#load(file, (image, url) => {
-			this.#markImage = image;
-			this.markWidth = image.width;
-			this.markHeight = image.height;
-			this.markUrl = url;
-			this.resultImage = null;
-		});
+	loadStamp = async (file: File) => {
+		try {
+			this.keepStamp(await decode(file), stem(file.name));
+		} catch {
+			this.failed = true;
+		}
 	};
 
-	// paste fills base first
-	readPasted = (file: File) => {
-		if (this.baseUrl) this.readMark(file);
-		else this.readBase(file);
+	keepStamp = (image: ImageBitmap, name: string) => {
+		if (this.isDestroying) return image.close();
+		this.stamp?.image.close();
+		this.stamp = { image, name: name || 'Logo' };
+		this.failed = false;
 	};
 
-	selectBase = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readBase(file);
-		// same file twice still fires change
-		input.value = '';
+	droppedStamp = (images: ImageBitmap[], names: string[]) => {
+		const [image, ...rest] = images;
+		for (const extra of rest) extra.close();
+		if (image) this.keepStamp(image, names[0] ?? '');
 	};
 
-	selectMark = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readMark(file);
-		input.value = '';
+	clearSource = () => {
+		this.#loading++;
+		this.source?.image.close();
+		this.source = undefined;
+		this.failed = false;
 	};
 
-	dropBase = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readBase(file);
+	clearStamp = () => {
+		this.stamp?.image.close();
+		this.stamp = undefined;
 	};
 
-	dropMark = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readMark(file);
-	};
+	pickKind = (index: number) => (this.kind = index);
 
-	// else browser navigates to file
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
+	setText = (text: string) => (this.text = text);
 
-	fail = () => {
-		if (this.#destroyed) return;
-		this.resultImage = null;
-		this.loadFailed = true;
-	};
+	setFontSize = (value: number) => (this.fontSize = value);
 
-	clearBase = () => {
-		this.#baseImage = null;
-		this.baseUrl = null;
-		this.baseWidth = 0;
-		this.baseHeight = 0;
-		this.resultImage = null;
-	};
+	pickColour = (colour: Rgb) => (this.colour = colour);
 
-	clearMark = () => {
-		this.#markImage = null;
-		this.markUrl = null;
-		this.markWidth = 0;
-		this.markHeight = 0;
-		this.resultImage = null;
-	};
+	setScale = (value: number) => (this.scale = value);
 
-	clear = () => {
-		this.clearBase();
-		this.clearMark();
-		this.baseFileName = '';
-		this.loadFailed = false;
-	};
+	setOpacity = (value: number) => (this.opacity = value);
 
-	setPosition = (position: Position) => {
-		this.position = position;
-		this.queueRender();
-	};
+	setPadding = (value: number) => (this.padding = value);
+
+	pickBlend = (index: number) => (this.blend = blends[index]!.id);
+
+	pickZone = (index: number) => (this.position = zones[index]!.id);
+
+	place = (position: Position) => (this.position = position);
 
 	randomise = () => {
 		this.position = 'random';
-		this.#randomX = Math.random();
-		this.#randomY = Math.random();
-		this.queueRender();
+		this.random = { x: Math.random(), y: Math.random() };
 	};
 
-	setOpacity = (event: Event) => {
-		this.opacity = readNumber(event);
-		this.queueRender();
-	};
+	setTiling = (on: boolean) => (this.tiling = on);
 
-	setScale = (event: Event) => {
-		this.scale = readNumber(event);
-		this.queueRender();
-	};
-
-	setPadding = (event: Event) => {
-		this.padding = readNumber(event);
-		this.queueRender();
-	};
-
-	setBlendMode = (mode: BlendMode) => {
-		this.blendMode = mode;
-		this.queueRender();
-	};
-
-	queueRender = () => {
-		if (this.#timer) clearTimeout(this.#timer);
-		this.#timer = setTimeout(this.render, RENDER_DEBOUNCE_MS);
-	};
-
-	render = () => {
-		const base = this.#baseImage;
-		const mark = this.#markImage;
-		if (this.#destroyed || !base || !mark) return;
-
-		const canvas = document.createElement('canvas');
-		canvas.width = base.width;
-		canvas.height = base.height;
-
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return this.fail();
-
-		ctx.drawImage(base, 0, 0);
-
-		const placement = watermarkPlacement(
-			base.width,
-			base.height,
-			mark.width,
-			mark.height,
-			{
-				position: this.position,
-				scale: this.scale,
-				padding: this.padding,
-				random: { x: this.#randomX, y: this.#randomY },
-			},
-		);
-
-		ctx.globalAlpha = this.opacity / 100;
-		ctx.globalCompositeOperation = COMPOSITE[this.blendMode];
-		ctx.drawImage(
-			mark,
-			placement.x,
-			placement.y,
-			placement.width,
-			placement.height,
-		);
-		ctx.globalAlpha = 1;
-		ctx.globalCompositeOperation = 'source-over';
-
-		this.resultImage = canvas.toDataURL('image/png');
-	};
-
-	download = () => {
-		if (!this.resultImage) return;
-		downloadUrl(
-			this.resultImage,
-			`${this.baseFileName}-watermarked.png`,
-		);
+	export = async () => {
+		const { source } = this;
+		if (!source || this.exportDisabled) return;
+		this.exporting = true;
+		try {
+			const { image, name } = source;
+			const canvas = document.createElement('canvas');
+			canvas.width = image.width;
+			canvas.height = image.height;
+			const context = canvas.getContext('2d');
+			if (!context) return;
+			const size = {
+				width: image.width,
+				height: image.height,
+			};
+			paint(context, image, size, size, this.spec);
+			const blob = await new Promise<Blob | null>((resolve) =>
+				canvas.toBlob(resolve, 'image/png'),
+			);
+			if (blob) downloadBlob(blob, fileName(name));
+		} finally {
+			this.exporting = false;
+		}
 	};
 
 	<template>
-		<div
-			class="dt-wm"
-			{{filePaste this.readPasted accept="image/*"}}
+		<CanonSplit
+			class="watermarker"
+			@halves={{true}}
+			@collapsesTo={{200}}
+			{{filePaste this.pasted accept="image/*"}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.dropped}}
 		>
-			<div class="dt-wm-frame">
-				<div class="dt-wm-slots">
-					<div class="dt-wm-slot">
-						<div class="dt-wm-slot-head">
-							<span>Base Image</span>
-						</div>
-						{{#if this.baseUrl}}
-							<div
-								class="dt-wm-thumb"
-							>
-								<img
-									src={{this.baseUrl}}
-									alt="Base"
-								/>
-								<div
-									class="dt-wm-thumb-bar"
-								>
-									<span
-										class="dt-wm-thumb-dims"
-									>{{this.baseWidth}}
-										×
-										{{this.baseHeight}}</span>
-									<button
-										type="button"
-										class="dt-wm-thumb-btn"
-										aria-label="Remove base image"
-										{{on
-											"click"
-											this.clearBase
-										}}
-									>
-										<Icon
-											@name="trash-2"
-										/>
-									</button>
-								</div>
-							</div>
-						{{else}}
-							<label
-								class="dt-wm-drop"
-								{{on
-									"drop"
-									this.dropBase
-								}}
-								{{on
-									"dragover"
-									this.allowDrop
-								}}
-							>
-								<input
-									type="file"
-									accept="image/*"
-									class="dt-sr-only"
-									{{on
-										"change"
-										this.selectBase
-									}}
-								/>
-								<Icon
-									@name="upload"
-								/>
-								<span
-									class="dt-wm-drop-title"
-								>Drop image here</span>
-								<span
-									class="dt-wm-drop-hint"
-								>or click to
-									select</span>
-							</label>
-						{{/if}}
-					</div>
-
-					<div class="dt-wm-slot">
-						<div class="dt-wm-slot-head">
-							<span>Watermark (PNG)</span>
-						</div>
-						{{#if this.markUrl}}
-							<div
-								class="dt-wm-thumb is-checkered"
-							>
-								<img
-									src={{this.markUrl}}
-									alt="Watermark"
-								/>
-								<div
-									class="dt-wm-thumb-bar"
-								>
-									<span
-										class="dt-wm-thumb-dims"
-									>{{this.markWidth}}
-										×
-										{{this.markHeight}}</span>
-									<button
-										type="button"
-										class="dt-wm-thumb-btn"
-										aria-label="Remove watermark"
-										{{on
-											"click"
-											this.clearMark
-										}}
-									>
-										<Icon
-											@name="trash-2"
-										/>
-									</button>
-								</div>
-							</div>
-						{{else}}
-							<label
-								class="dt-wm-drop"
-								{{on
-									"drop"
-									this.dropMark
-								}}
-								{{on
-									"dragover"
-									this.allowDrop
-								}}
-							>
-								<input
-									type="file"
-									accept="image/png"
-									class="dt-sr-only"
-									{{on
-										"change"
-										this.selectMark
-									}}
-								/>
-								<Icon
-									@name="upload"
-								/>
-								<span
-									class="dt-wm-drop-title"
-								>Drop watermark
-									here</span>
-								<span
-									class="dt-wm-drop-hint"
-								>transparent PNG</span>
-							</label>
-						{{/if}}
-					</div>
-				</div>
-
-				{{#unless this.bothLoaded}}
-					<p class="dt-wm-hint">
-						Paste an image to load it
-						directly.
-					</p>
-				{{/unless}}
-
-				{{#if this.loadFailed}}
-					<p
-						class="dt-wm-error"
-						role="alert"
-					>{{LOAD_FAILED}}</p>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1.25}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@base={{this.source.image}}
+						@spec={{this.spec}}
+						@over={{this.drop.over}}
+						@onChoose={{this.choose}}
+						@onPosition={{this.place}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="wm-source"
+							@title={{this.source.name}}
+							@detail={{this.sourceText}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clearSource}}
+							/>
+						</CanonRow>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			{{#if this.bothLoaded}}
-				<div class="dt-wm-frame">
-					<div class="dt-wm-section">
-						<span
-							class="dt-wm-label"
-						>Position</span>
-						<div class="dt-wm-place">
-							<div
-								class="segmented dt-wm-grid"
-							>
-								{{#each
-									this.positions
-									key="id"
-									as |spot|
-								}}
-									<button
-										type="button"
-										class="dt-wm-spot
-											{{if
-												spot.isActive
-												'is-active'
-											}}"
-										aria-label={{spot.name}}
-										title={{spot.name}}
-										{{on
-											"click"
-											(fn
-												this.setPosition
-												spot.id
-											)
-										}}
-									>{{spot.label}}</button>
-								{{/each}}
-							</div>
-							<button
-								type="button"
-								class="dt-wm-random
-									{{if
-										this.isRandom
-										'is-active'
-									}}"
-								{{on
-									"click"
-									this.randomise
-								}}
-							>
-								<Icon
-									@name="shuffle"
-								/>
-								Random
-							</button>
-						</div>
-					</div>
-
-					<div class="dt-wm-sliders">
-						<div class="dt-wm-slider">
-							<label
-								for="dt-wm-opacity"
-							>Opacity</label>
-							<input
-								id="dt-wm-opacity"
-								type="range"
-								min="5"
-								max="100"
-								step="5"
-								value={{this.opacity}}
-								{{on
-									"input"
-									this.setOpacity
-								}}
-							/>
-							<span
-								class="dt-wm-readout"
-							>{{this.opacity}}%</span>
-						</div>
-
-						<div class="dt-wm-slider">
-							<label
-								for="dt-wm-size"
-							>Size</label>
-							<input
-								id="dt-wm-size"
-								type="range"
-								min="5"
-								max="50"
-								step="5"
-								value={{this.scale}}
-								{{on
-									"input"
-									this.setScale
-								}}
-							/>
-							<span
-								class="dt-wm-readout"
-							>{{this.scale}}%</span>
-						</div>
-
-						<div class="dt-wm-slider">
-							<label
-								for="dt-wm-padding"
-							>Padding</label>
-							<input
-								id="dt-wm-padding"
-								type="range"
-								min="0"
-								max="20"
-								step="1"
-								value={{this.padding}}
-								{{on
-									"input"
-									this.setPadding
-								}}
-							/>
-							<span
-								class="dt-wm-readout"
-							>{{this.padding}}%</span>
-						</div>
-					</div>
-
-					<div class="dt-wm-section">
-						<span class="dt-wm-label">Blend
-							Mode</span>
-						<div
-							class="segmented dt-wm-blends"
+				{{#if this.failed}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							class="wm-error"
+							@text={{loadFailed}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Watermark" />
+					<CanonSegmented
+						class="wm-kinds"
+						@items={{kinds}}
+						@selected={{this.kind}}
+						@onChange={{this.pickKind}}
+					/>
+					{{#if this.isText}}
+						<CanonTextCell
+							class="wm-text"
+							aria-label="Watermark text"
+							autocomplete="off"
+							spellcheck="false"
+							@value={{this.text}}
+							@placeholder="Watermark text"
+							@onChange={{this.setText}}
+						/>
+						<CanonRow
+							class="wm-font-size"
+							@title="Font Size"
+							@form="flush"
+							as |titleId|
 						>
-							{{#each
-								this.blendModes
-								key="id"
-								as |mode|
-							}}
-								<button
-									type="button"
-									class="dt-wm-blend
-										{{if
-											mode.isActive
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setBlendMode
-											mode.id
-										)
-									}}
-								>{{mode.label}}</button>
-							{{/each}}
-						</div>
-					</div>
-
-					{{#if this.resultImage}}
-						<div class="dt-wm-result">
-							<div
-								class="dt-wm-slot-head"
+							<CanonSlider
+								@value={{this.fontSize}}
+								@min={{12}}
+								@max={{200}}
+								@step={{1}}
+								@readout={{points}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setFontSize}}
+							/>
+						</CanonRow>
+						<CanonColourWell
+							class="wm-colour"
+							@label="Text Colour"
+							@colour={{this.colour}}
+							@onChange={{this.pickColour}}
+						/>
+					{{else}}
+						{{#if this.stamp}}
+							<CanonRow
+								class="wm-stamp"
+								@title={{this.stamp.name}}
+								@detail={{this.stampText}}
+								@form="flush"
 							>
-								<span
-								>Preview</span>
-							</div>
-							<div
-								class="dt-wm-canvas"
-							>
-								<img
-									src={{this.resultImage}}
-									alt="Result"
+								<CanonButton
+									@kind="cell"
+									@text="Clear"
+									@icon={{Trash}}
+									@onClick={{this.clearStamp}}
 								/>
-							</div>
-							<div
-								class="dt-wm-result-foot"
-							>
-								<span
-									class="dt-wm-readout"
-								>{{this.baseWidth}}
-									×
-									{{this.baseHeight}}
-									px</span>
-							</div>
-						</div>
+							</CanonRow>
+						{{else}}
+							<CanonDropZone
+								class="wm-stamp-drop"
+								@prompt="Drop a watermark image"
+								@onImages={{this.droppedStamp}}
+								{{on
+									"paste"
+									keepPaste
+								}}
+							/>
+						{{/if}}
+						<CanonRow
+							class="wm-size"
+							@title="Size"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.scale}}
+								@min={{5}}
+								@max={{50}}
+								@step={{5}}
+								@readout={{percent}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setScale}}
+							/>
+						</CanonRow>
 					{{/if}}
-
-					<div class="dt-wm-actions">
-						<button
-							type="button"
-							class="dt-wm-run"
-							disabled={{this.noResult}}
-							{{on
-								"click"
-								this.download
+					<CanonRow
+						class="wm-opacity"
+						@title="Opacity"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.opacity}}
+							@min={{0.05}}
+							@max={{1}}
+							@step={{0.05}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setOpacity}}
+						/>
+					</CanonRow>
+					<CanonHeading @text="Blend Mode" />
+					<CanonSegmented
+						class="wm-blends"
+						@items={{blendNames}}
+						@selected={{this.blendIndex}}
+						@onChange={{this.pickBlend}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Position" />
+					<CanonSegmented
+						class="wm-zones-picker"
+						@items={{zoneNames}}
+						@icons={{zoneIcons}}
+						@columns={{3}}
+						@selected={{this.zoneIndex}}
+						@disabled={{this.tiling}}
+						@onChange={{this.pickZone}}
+					/>
+					<CanonGrid>
+						<CanonButton
+							class="wm-random"
+							aria-pressed={{if
+								this.isRandom
+								"true"
+								"false"
 							}}
-						>
-							<DownloadLabel />
-						</button>
-						<button
-							type="button"
-							class="dt-wm-clear"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-				</div>
-			{{/if}}
-		</div>
+							@kind="segment"
+							@text="Random"
+							@icon={{Shuffle}}
+							@selected={{this.isRandom}}
+							@disabled={{this.tiling}}
+							@onClick={{this.randomise}}
+						/>
+					</CanonGrid>
+					<CanonRow
+						class="wm-padding"
+						@title="Padding"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.padding}}
+							@min={{0}}
+							@max={{20}}
+							@step={{1}}
+							@readout={{percent}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setPadding}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="wm-tile"
+						@title="Tile Watermark"
+						as |titleId|
+					>
+						<CanonSwitch
+							aria-labelledby={{titleId}}
+							@on={{this.tiling}}
+							@onChange={{this.setTiling}}
+						/>
+					</CanonRow>
+					<CanonButton
+						class="wm-download"
+						@kind="primary"
+						@text={{passAlong "Download"}}
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{this.exportDisabled}}
+						@onClick={{this.export}}
+					/>
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }
