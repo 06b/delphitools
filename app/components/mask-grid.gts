@@ -9,6 +9,7 @@ import {
 	MASK_SHAPES,
 	type MaskShape,
 } from 'delphitools-v2/lib/mask-shapes';
+import './mask-grid.css';
 
 const GRID_STYLE = htmlSafe(
 	`grid-template-columns: repeat(${MASK_COLUMNS}, var(--mask-cell, 4rem))`,

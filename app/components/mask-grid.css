@@ -1,0 +1,51 @@
+.dt-masker-grid {
+	display: grid;
+	overflow: auto;
+	max-height: 18rem;
+	grid-auto-rows: var(--mask-cell, 4rem);
+	gap: 1px;
+	border-bottom: 2px solid var(--border);
+	background: var(--border);
+	scrollbar-width: thin;
+	cursor: grab;
+	user-select: none;
+	transition: max-height 200ms ease;
+
+	@starting-style {
+		max-height: 0;
+	}
+
+	&.is-dragging,
+	&.is-dragging .dt-masker-cell {
+		cursor: grabbing;
+	}
+}
+
+.dt-masker-cell {
+	display: flex;
+	content-visibility: auto;
+	contain-intrinsic-size: var(--mask-cell, 4rem) var(--mask-cell, 4rem);
+	align-items: center;
+	justify-content: center;
+	padding: 0.5rem;
+	border: 0;
+	background: var(--background);
+	color: var(--foreground);
+	cursor: pointer;
+
+	svg {
+		width: 100%;
+		height: 100%;
+		fill: currentcolor;
+	}
+
+	&:hover {
+		background: var(--muted);
+		color: var(--primary);
+	}
+
+	&.is-active {
+		background: var(--primary);
+		color: var(--primary-foreground);
+	}
+}

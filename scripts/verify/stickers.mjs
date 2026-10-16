@@ -28,7 +28,7 @@ const qrVisible = await page.evaluate(
 check("image-converter per-tool sticker renders and loads", hasQrBtn && qrVisible);
 
 // no lousy art: image 404 removes whole sticker block (a tool with no art, not canon)
-await visit(page, "/tools/image-masker");
+await visit(page, "/tools/recipe-table");
 await page.evaluate(() => {
 	const el = document.querySelector(".dt-tool-sticker");
 	if (el) el.scrollIntoView({ block: "center" });
@@ -49,10 +49,10 @@ const bare = await page.evaluate(() => {
 	};
 });
 check(
-	"image-masker per-tool sticker degrades to nothing",
+	"recipe-table per-tool sticker degrades to nothing",
 	bare.noBtn && bare.noCaption,
 );
-check("image-masker sticker block collapses", bare.collapsed);
+check("recipe-table sticker block collapses", bare.collapsed);
 
 await visit(page, "/tools/subtitle-converter");
 await page.evaluate(() => {
