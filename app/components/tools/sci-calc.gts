@@ -1,612 +1,543 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCommand, {
+	type CanonCommandItem,
+} from 'delphicanon/components/canon-command';
+import CanonDialog, {
+	type CanonDialogClose,
+} from 'delphicanon/components/canon-dialog';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import type { CanonMenuItem } from 'delphicanon/components/canon-menu';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSheet from 'delphicanon/components/canon-sheet';
+import CanonSplit from 'delphicanon/components/canon-split';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Display, {
+	type Readout,
+} from 'delphitools-v2/components/tools/sci-calc/display';
 import {
-	Popover,
-	PopoverTrigger,
-	PopoverContent,
-} from 'delphitools-v2/components/ui/popover';
-import {
-	Command,
-	CommandInput,
-	CommandList,
-	CommandEmpty,
-	CommandGroup,
-	CommandItem,
-} from 'delphitools-v2/components/ui/command';
-import {
-	MATH_CONSTANTS,
-	formatScientific,
-} from 'delphitools-v2/lib/math-constants';
+	calculate,
+	formatNumber,
+	join,
+	keyIds,
+	kind,
+	openParens,
+	pieces,
+	printfG,
+	text,
+	toggledSign,
+	typed,
+	written,
+	type AngleMode,
+	type Kind,
+} from 'delphitools-v2/components/tools/sci-calc/entry';
+import Keypad from 'delphitools-v2/components/tools/sci-calc/keypad';
+import Tape, {
+	type TapeEntry,
+} from 'delphitools-v2/components/tools/sci-calc/tape';
+import { MATH_CONSTANTS } from 'delphitools-v2/lib/math-constants';
+import './sci-calc/sci-calc.css';
 
-export type AngleMode = 'deg' | 'rad';
+type MathModule = typeof import('mathjs');
 
-export interface HistoryItem {
-	id: number;
-	expression: string;
-	result: string;
+let mathModule: Promise<MathModule> | null = null;
+function loadMath(): Promise<MathModule> {
+	mathModule ??= import('mathjs');
+	return mathModule;
 }
 
-const HISTORY_LIMIT = 20;
-const COPIED_MS = 1500;
+type Phase =
+	| { kind: 'entry' }
+	/** Just evaluated; holds the expression as it was typed. */
+	| { kind: 'result'; typed: string }
+	| { kind: 'failure'; text: string };
 
-const BUTTON_ROWS = [
-	['C', '(', ')', '%', '⌫'],
-	['sin', 'cos', 'tan', 'π', '÷'],
-	['asin', 'acos', 'atan', 'e', '×'],
-	['x²', '√', 'xʸ', 'ʸ√x', '−'],
-	['log', 'ln', '!', '|x|', '+'],
-	['7', '8', '9', '10ˣ', 'eˣ'],
-	['4', '5', '6', 'Const', 'Ans'],
-];
+const historyLimit = 20;
+/** Titles need 110 px a cell. */
+const titleRoom = 110;
+/** The lines and gaps of the display, rules included. */
+const displayHeight = 124;
 
-// split around the double-height = so grid auto-placement places it
-const BOTTOM_LEFT = [
-	['1', '2', '3', '.'],
-	['0', '±', 'EE', 'mod'],
-];
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+const HistoryIcon = <template><IconSvg @name="clock" /></template>;
 
-export const KEYPAD: string[] = [
-	...BUTTON_ROWS.flat(),
-	...(BOTTOM_LEFT[0] ?? []),
-	'=',
-	...(BOTTOM_LEFT[1] ?? []),
-];
+const categories = [
+	['mathematical', 'Mathematical'],
+	['physical', 'Physical'],
+	['chemical', 'Chemical'],
+] as const;
 
-const OPERATORS = ['+', '−', '×', '÷', '%'];
-const DIGIT = /^[0-9.]$/;
+const constantItems: CanonCommandItem[] = categories.flatMap(([id, group]) =>
+	MATH_CONSTANTS.filter((c) => c.category === id).map((c) => ({
+		id: `${id}-${c.name}`,
+		title: c.name,
+		group,
+		keywords: [c.symbol],
+		detail: [c.symbol, written(printfG(c.value, 10)), c.unit]
+			.filter(Boolean)
+			.join(' · '),
+	})),
+);
+const constantValues = new Map(
+	MATH_CONSTANTS.map((c) => [`${c.category}-${c.name}`, c.value]),
+);
 
-export function keyVariant(btn: string): string {
-	if (btn === '=') return 'is-equals';
-	if (btn === 'C' || btn === '⌫') return 'is-clear';
-	if (OPERATORS.includes(btn)) return 'is-operator';
-	if (DIGIT.test(btn)) return 'is-digit';
-	if (btn === 'Const') return 'is-const';
-	return 'is-default';
-}
-
-// math.PI/E equal mathjs pi/e; avoids loading the library until evaluation
-export function prepareExpression(expr: string, lastAnswer: number): string {
-	return (
-		expr
-			.replace(/×/g, '*')
-			.replace(/÷/g, '/')
-			.replace(/−/g, '-')
-			.replace(/π/g, `(${Math.PI})`)
-			// protect 5e10 notation before standalone-e rule
-			.replace(/(\d\.?\d*)[eE]([+-]?\d)/g, '$1e$2')
-			// lone e is Euler's number, not an exponent
-			.replace(/(^|[^0-9])e(?!x|[0-9])/g, `$1(${Math.E})`)
-			.replace(/Ans/g, `(${lastAnswer})`)
-			.replace(/(\d+)!/g, 'factorial($1)')
-			.replace(/\|([^|]+)\|/g, 'abs($1)')
-	);
-}
-
-// scope, not string rewrite, so nested calls compose
-export function angleScope(
-	mode: AngleMode,
-): Record<string, (x: number) => number> {
-	if (mode === 'rad') return {};
-	return {
-		sin: (x) => Math.sin((x * Math.PI) / 180),
-		cos: (x) => Math.cos((x * Math.PI) / 180),
-		tan: (x) => Math.tan((x * Math.PI) / 180),
-		asin: (x) => (Math.asin(x) * 180) / Math.PI,
-		acos: (x) => (Math.acos(x) * 180) / Math.PI,
-		atan: (x) => (Math.atan(x) * 180) / Math.PI,
-	};
-}
-
-// mathjs units/complex/matrices print via String()
-export function resultText(value: unknown): string {
-	return typeof value === 'number'
-		? formatScientific(value)
-		: String(value);
-}
-
-// ~700 KB; loaded on first = and cached
-let mathjs: typeof import('mathjs') | null = null;
-
-async function loadMathjs() {
-	mathjs ??= await import('mathjs');
-	return mathjs;
-}
-
+/** The port of ScientificCalculatorViewController, on the web tool's mathjs engine. */
 export default class SciCalcTool extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
 	@tracked expression = '';
-	@tracked result: string | null = null;
-	@tracked error: string | null = null;
+	@tracked phase: Phase = { kind: 'entry' };
 	@tracked angleMode: AngleMode = 'deg';
-	@tracked history: HistoryItem[] = [];
-	@tracked historyOpen = false;
+	@tracked history: TapeEntry[] = [];
 	@tracked lastAnswer = 0;
-	@tracked copied = false;
+	/** The value the expression gave last; an unfinished one keeps it. */
+	@tracked lastPreview?: string;
+	@tracked math?: MathModule;
+	@tracked stacked = false;
+	@tracked titled = true;
+	@tracked historyOpen = false;
 	@tracked constantsOpen = false;
+	#nextId = 0;
 
-	#nextHistoryId = 0;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	// ?sciKeys=sin 30 ) + √ 2 × π = ?sciHistory ?sciConstants: the iOS -scikeys, -scihistory, -sciconstants flags
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		void loadMath().then((math) => {
+			if (this.isDestroying) return;
+			this.math = math;
+			for (const token of (query.get('sciKeys') ?? '')
+				.split(' ')
+				.filter(Boolean))
+				this.#typeToken(token);
+			this.historyOpen = query.has('sciHistory');
+			this.constantsOpen = query.has('sciConstants');
+		});
 	}
 
-	get buttons() {
-		return KEYPAD.map((label) => ({
-			key: label,
-			label,
-			variant: keyVariant(label),
-			isConst: label === 'Const',
-		}));
-	}
-
-	get display() {
-		return this.expression || '0';
-	}
-
-	get readout() {
-		return this.error ?? this.result ?? '0';
-	}
-
-	get showCopy() {
-		return this.result !== null && this.error === null;
-	}
-
-	get constantGroups() {
-		// next app verbatim headings
-		return [
-			{ key: 'mathematical', heading: 'Mathematical' },
-			{ key: 'physical', heading: 'Physical' },
-			{ key: 'chemical', heading: 'Chemical' },
-		].map((group) => ({
-			...group,
-			constants: MATH_CONSTANTS.filter(
-				(c) => c.category === group.key,
-			).map((c) => ({
-				name: c.name,
-				symbol: c.symbol,
-				value: c.value,
-				search: `${c.name} ${c.symbol}`,
-			})),
-		}));
-	}
-
-	// document, not window, so it only fires while tool is on screen
-	shortcuts = modifier((element: HTMLElement) => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.target instanceof HTMLInputElement) return;
-
-			const key = event.key;
-			if (/^[0-9.+\-*/()%^]$/.test(key)) {
-				event.preventDefault();
-				const mapped =
-					key === '*'
-						? '×'
-						: key === '/'
-							? '÷'
-							: key === '-'
-								? '−'
-								: key;
-				this.press(mapped);
-			} else if (key === 'Enter') {
-				event.preventDefault();
-				void this.calculate();
-			} else if (key === 'Backspace') {
-				event.preventDefault();
-				this.press('⌫');
-			} else if (key === 'Escape') {
-				event.preventDefault();
-				this.press('C');
-			}
-		};
-
-		element.ownerDocument.addEventListener('keydown', onKeyDown);
-		return () =>
-			element.ownerDocument.removeEventListener(
-				'keydown',
-				onKeyDown,
-			);
-	});
-
-	calculate = async () => {
-		if (!this.expression.trim()) return;
-
-		try {
-			const { evaluate } = await loadMathjs();
-			const prepared = prepareExpression(
-				this.expression,
-				this.lastAnswer,
-			);
-			const value: unknown = evaluate(
-				prepared,
-				angleScope(this.angleMode),
-			);
-			const text = resultText(value);
-
-			this.result = text;
-			this.error = null;
-			this.lastAnswer = typeof value === 'number' ? value : 0;
-			this.history = [
-				{
-					id: this.#nextHistoryId++,
-					expression: this.expression,
-					result: text,
-				},
-				...this.history.slice(0, HISTORY_LIMIT - 1),
-			];
-		} catch {
-			// next app wording
-			this.error = 'Error';
-			this.result = null;
+	#typeToken(token: string) {
+		if (keyIds.has(token) || ['=', 'DEG', 'RAD'].includes(token)) {
+			this.press(token);
+			return;
 		}
-	};
+		for (const character of token) {
+			const key = typed(character);
+			if (key) this.press(key);
+		}
+	}
 
-	press = (btn: string) => {
-		this.error = null;
+	get degrees() {
+		return this.angleMode === 'deg';
+	}
 
-		switch (btn) {
-			case 'C':
-				this.expression = '';
-				this.result = null;
-				break;
-			case '⌫':
-				this.expression = this.expression.slice(0, -1);
+	get angleItems() {
+		return [
+			{ text: 'DEG', mode: 'deg' as const },
+			{ text: 'RAD', mode: 'rad' as const },
+		].map((item) => ({
+			...item,
+			selected: item.mode === this.angleMode,
+		}));
+	}
+
+	get shown() {
+		const { phase } = this;
+		return phase.kind === 'result' ? phase.typed : this.expression;
+	}
+
+	get pieces() {
+		return pieces(this.shown);
+	}
+
+	get ghosts() {
+		return this.phase.kind === 'entry'
+			? openParens(this.expression)
+			: 0;
+	}
+
+	get dimmed() {
+		return this.phase.kind === 'result';
+	}
+
+	get readout(): Readout {
+		const { phase } = this;
+		if (phase.kind === 'result')
+			return { kind: 'result', text: this.expression };
+		if (phase.kind === 'failure')
+			return { kind: 'failure', text: phase.text };
+		if (!this.expression) return { kind: 'idle', text: '0' };
+		return this.lastPreview === undefined
+			? { kind: 'blank', text: ' ' }
+			: { kind: 'preview', text: this.lastPreview };
+	}
+
+	get copyText() {
+		const { kind: shown, text: value } = this.readout;
+		return shown === 'preview' || shown === 'result'
+			? value
+			: undefined;
+	}
+
+	/** The value the expression would give now, its open brackets closed. */
+	preview(raw: string) {
+		if (!this.math) return undefined;
+		const value = calculate(
+			this.math,
+			raw + ')'.repeat(openParens(raw)),
+			this.angleMode,
+		);
+		return typeof value === 'number' && Number.isFinite(value)
+			? formatNumber(value)
+			: undefined;
+	}
+
+	#settle() {
+		const raw = this.expression;
+		if (this.phase.kind !== 'entry') this.lastPreview = undefined;
+		else if (!raw) this.lastPreview = undefined;
+		else this.lastPreview = this.preview(raw) ?? this.lastPreview;
+	}
+
+	/** After a result, a number or a function starts a new expression and an operator carries the result on. */
+	insert(value: string, of: Kind) {
+		const base =
+			this.phase.kind === 'result' && of !== 'other'
+				? ''
+				: this.expression;
+		this.expression = join(base, value, of);
+		this.phase = { kind: 'entry' };
+	}
+
+	evaluate() {
+		const { math } = this;
+		if (this.phase.kind !== 'entry' || !this.expression) return;
+		if (!math) {
+			void loadMath().then(() => this.press('='));
+			return;
+		}
+		this.expression += ')'.repeat(openParens(this.expression));
+		const typedText = this.expression;
+		const value = calculate(math, typedText, this.angleMode);
+		if (typeof value === 'number' && !Number.isFinite(value)) {
+			const textOf = Number.isNaN(value)
+				? 'Error'
+				: value > 0
+					? '∞'
+					: '-∞';
+			this.phase = { kind: 'failure', text: textOf };
+			return;
+		}
+		if (value === undefined) {
+			this.phase = { kind: 'failure', text: 'Error' };
+			return;
+		}
+		const result =
+			typeof value === 'number' ? formatNumber(value) : value;
+		this.lastAnswer = typeof value === 'number' ? value : 0;
+		this.history = [
+			{
+				id: this.#nextId++,
+				expression: typedText,
+				result,
+				pieces: pieces(typedText),
+				written: written(result),
+			},
+			...this.history.slice(0, historyLimit - 1),
+		];
+		this.expression = result;
+		this.phase = { kind: 'result', typed: typedText };
+	}
+
+	press = (key: string) => {
+		switch (key) {
+			case 'Const':
+				this.constantsOpen = true;
+				return;
+			case 'DEG':
+			case 'RAD':
+				this.angleMode = key === 'DEG' ? 'deg' : 'rad';
 				break;
 			case '=':
-				void this.calculate();
+				this.evaluate();
 				break;
-			case '±':
-				// strip leaves ×/^ so exponential results negate wrong
-				if (this.result !== null) {
-					const num = Number.parseFloat(
-						this.result.replace(
-							/[^\d.-]/g,
-							'',
-						),
-					);
-					if (!Number.isNaN(num)) {
-						this.expression = String(-num);
-						this.result = null;
-					}
-				} else if (this.expression) {
+			case 'C':
+				this.expression = '';
+				this.phase = { kind: 'entry' };
+				break;
+			case '⌫':
+				this.expression = [...this.expression]
+					.slice(0, -1)
+					.join('');
+				this.phase = { kind: 'entry' };
+				break;
+			case '±': {
+				const toggled = toggledSign(this.expression);
+				if (toggled !== undefined)
+					this.expression = toggled;
+				else if (
+					this.expression &&
+					this.expression !== '0'
+				)
 					this.expression =
 						this.expression.startsWith('-')
 							? this.expression.slice(
 									1,
 								)
 							: `-${this.expression}`;
-				}
+				this.phase = { kind: 'entry' };
 				break;
-			case 'x²':
-				this.expression = `(${this.expression || '0'})^2`;
-				break;
-			case '√':
-				this.expression = `sqrt(${this.expression})`;
-				break;
-			case 'xʸ':
-				this.expression += '^';
-				break;
-			case 'ʸ√x':
-				this.expression += 'nthRoot(';
-				break;
-			case '10ˣ':
-				this.expression = `10^(${this.expression})`;
-				break;
-			case 'eˣ':
-				this.expression = `exp(${this.expression})`;
-				break;
-			case 'log':
-				this.expression += 'log10(';
-				break;
-			case 'ln':
-				this.expression += 'log(';
-				break;
-			case '!':
-				this.expression += '!';
-				break;
-			case '|x|':
-				this.expression = `|${this.expression}|`;
-				break;
-			case 'sin':
-			case 'cos':
-			case 'tan':
-			case 'asin':
-			case 'acos':
-			case 'atan':
-				this.expression += `${btn}(`;
-				break;
-			case 'EE':
-				this.expression += 'e';
-				break;
-			case 'mod':
-				this.expression += ' mod ';
-				break;
+			}
 			case 'Ans':
-				this.expression += 'Ans';
+				this.insert(
+					formatNumber(this.lastAnswer),
+					'factor',
+				);
 				break;
 			default:
-				// digit on a result starts a fresh expression
-				if (this.result !== null && DIGIT.test(btn)) {
-					this.expression = btn;
-					this.result = null;
-				} else {
-					this.expression += btn;
-				}
+				this.insert(text(key), kind(key));
 		}
+		this.#settle();
 	};
 
-	setAngleMode = (mode: AngleMode) => {
+	setAngle = (mode: AngleMode) => {
 		this.angleMode = mode;
+		this.#settle();
 	};
 
-	toggleHistory = () => {
-		this.historyOpen = !this.historyOpen;
+	// document, so typing works wherever focus is in the tool
+	keyboard = modifier((element: HTMLElement) => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.defaultPrevented) return;
+			if (event.metaKey || event.ctrlKey || event.altKey)
+				return;
+			const target = event.target as Element | null;
+			if (
+				target?.closest(
+					'input, textarea, select, [contenteditable], dialog, [popover]',
+				)
+			)
+				return;
+			// Enter and Space keep activating a focused control
+			if (
+				event.key === 'Enter' &&
+				target?.closest('button, a, [role="button"]')
+			)
+				return;
+			const key = typed(event.key);
+			if (!key) return;
+			event.preventDefault();
+			this.press(key);
+		};
+		const onPaste = (event: ClipboardEvent) => {
+			const target = event.target as Element | null;
+			if (target?.closest('input, textarea, dialog')) return;
+			const pasted = event.clipboardData
+				?.getData('text/plain')
+				.replace(/\s+/g, '');
+			if (!pasted) return;
+			event.preventDefault();
+			this.insert(pasted, 'other');
+			this.#settle();
+		};
+		const doc = element.ownerDocument;
+		doc.addEventListener('keydown', onKeyDown);
+		doc.addEventListener('paste', onPaste);
+		return () => {
+			doc.removeEventListener('keydown', onKeyDown);
+			doc.removeEventListener('paste', onPaste);
+		};
+	});
+
+	/** Stacked, the history leaves the page for a sheet; titles drop under 110 px a cell. */
+	layout = modifier((row: HTMLElement) => {
+		const body = row.closest('.canon-split-body');
+		const run = () => {
+			if (!body) return;
+			const stacked =
+				getComputedStyle(body)
+					.getPropertyValue(
+						'--canon-split-layout',
+					)
+					.trim() !== 'wide';
+			this.stacked = stacked;
+			if (!stacked) this.historyOpen = false;
+			this.titled =
+				row.clientWidth / (stacked ? 4 : 3) >=
+				titleRoom;
+		};
+		const size = new ResizeObserver(run);
+		size.observe(row);
+		return () => size.disconnect();
+	});
+
+	copy = () => {
+		const value = this.copyText;
+		if (value) void this.toast.copy(value);
 	};
 
-	setConstantsOpen = (open: boolean) => {
-		this.constantsOpen = open;
-	};
+	openHistory = () => (this.historyOpen = true);
+	closeHistory = () => (this.historyOpen = false);
+	closeConstants = () => (this.constantsOpen = false);
 
-	chooseConstant = (value: number) => {
-		this.expression += formatScientific(value);
-		this.constantsOpen = false;
-	};
-
-	loadFromHistory = (item: HistoryItem) => {
-		this.expression = item.expression;
-		this.result = item.result;
+	load = (entry: TapeEntry) => {
+		this.expression = entry.expression;
+		this.phase = { kind: 'entry' };
 		this.historyOpen = false;
+		this.#settle();
 	};
 
-	copyResult = async () => {
-		if (!this.result) return;
-		await navigator.clipboard.writeText(this.result);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
+	tapeMenu = (entry: TapeEntry, item: CanonMenuItem) => {
+		if (item.title === 'Copy') {
+			void this.toast.copy(entry.result);
+			return;
+		}
+		this.insert(entry.result, 'factor');
+		this.historyOpen = false;
+		this.#settle();
 	};
 
-	copy = () => void this.copyResult();
+	clearHistory = () => (this.history = []);
+
+	chooseConstant = (close: CanonDialogClose, item: CanonCommandItem) => {
+		const value = constantValues.get(item.id);
+		if (value !== undefined) {
+			this.insert(formatNumber(value), 'factor');
+			this.#settle();
+		}
+		close();
+	};
 
 	<template>
-		<div class="dt-sci" {{this.shortcuts}}>
-			<div class="dt-sci-frame">
-				<div class="dt-sci-head">
-					<button
-						type="button"
-						class="dt-sci-mode
-							{{if
-								(eq
-									this.angleMode
-									'deg'
-								)
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.setAngleMode
-								"deg"
-							)
-						}}
-					>DEG</button>
-					<button
-						type="button"
-						class="dt-sci-mode
-							{{if
-								(eq
-									this.angleMode
-									'rad'
-								)
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.setAngleMode
-								"rad"
-							)
-						}}
-					>RAD</button>
-					<button
-						type="button"
-						class="dt-sci-history-toggle"
-						aria-expanded={{if
-							this.historyOpen
-							"true"
-							"false"
-						}}
-						{{on
-							"click"
-							this.toggleHistory
-						}}
+		<CanonSplit
+			class="sci-calc"
+			@mainLeadsStacked={{true}}
+			{{this.keyboard}}
+		>
+			<:sidebar>
+				{{#unless this.stacked}}
+					<CanonRows
+						@framed={{true}}
+						class="sci-tape"
 					>
-						<Icon @name="clock" />
-						{{! next app wording }}
-						History
-						<Icon
-							@name="chevron-down"
-							class="dt-sci-chevron
-								{{if
-									this.historyOpen
-									'is-open'
-								}}"
+						<CanonHeading @text="History" />
+						<Tape
+							@entries={{this.history}}
+							@onLoad={{this.load}}
+							@onMenu={{this.tapeMenu}}
+							@onClear={{this.clearHistory}}
 						/>
-					</button>
-				</div>
-
-				<div class="dt-sci-display">
-					<div
-						class="dt-sci-expression"
-					>{{this.display}}</div>
-					<div class="dt-sci-readout">
-						<div
-							class="dt-sci-value
-								{{if
-									this.error
-									'is-error'
-								}}"
-						>{{this.readout}}</div>
-						{{#if this.showCopy}}
-							<button
-								type="button"
-								class="dt-sci-copy"
-								aria-label="Copy result"
-								{{on
-									"click"
-									this.copy
-								}}
-							>
-								<Icon
-									@name={{if
-										this.copied
-										"check"
-										"copy"
-									}}
-									class={{if
-										this.copied
-										"is-copied"
-									}}
-								/>
-							</button>
-						{{/if}}
-					</div>
-				</div>
-
-				{{#if this.historyOpen}}
-					<div class="dt-sci-history">
+					</CanonRows>
+				{{/unless}}
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					@height={{displayHeight}}
+					@pattern={{true}}
+				>
+					<Display
+						@pieces={{this.pieces}}
+						@ghosts={{this.ghosts}}
+						@dimmed={{this.dimmed}}
+						@readout={{this.readout}}
+						@degrees={{this.degrees}}
+					/>
+				</CanonCanvas>
+				<CanonRows @framed={{true}} class="sci-keys">
+					<CanonGrid
+						class="sci-modes"
+						{{this.layout}}
+					>
 						{{#each
-							this.history key="id"
+							this.angleItems
 							as |item|
 						}}
-							<button
-								type="button"
-								class="dt-sci-history-item"
-								{{on
-									"click"
-									(fn
-										this.loadFromHistory
-										item
-									)
+							<CanonButton
+								@kind="segment"
+								@text={{item.text}}
+								@selected={{item.selected}}
+								@onClick={{fn
+									this.setAngle
+									item.mode
 								}}
-							>
-								<div
-									class="dt-sci-history-expression"
-								>{{item.expression}}</div>
-								<div
-									class="dt-sci-history-result"
-								>{{item.result}}</div>
-							</button>
-						{{else}}
-							{{! next app wording }}
-							<p
-								class="dt-sci-history-empty"
-							>No history yet</p>
+							/>
 						{{/each}}
-					</div>
-				{{/if}}
-
-				<div class="dt-sci-keypad segmented">
-					{{#each
-						this.buttons key="key"
-						as |btn|
-					}}
-						{{#if btn.isConst}}
-							<Popover
-								@open={{this.constantsOpen}}
-								@onOpenChange={{this.setConstantsOpen}}
-							>
-								<PopoverTrigger
-									@asChild={{true}}
-									as |trigger|
-								>
-									{{! next app wording }}
-									<button
-										type="button"
-										class="dt-sci-key is-const"
-										{{trigger.modifiers}}
-									>Const</button>
-								</PopoverTrigger>
-								<PopoverContent
-									@align="start"
-									class="dt-sci-constants"
-								>
-									<Command
-									>
-										{{! next app wording }}
-										<CommandInput
-											@placeholder="Search constants..."
-										/>
-										<CommandList
-										>
-											{{! next app wording }}
-											<CommandEmpty
-											>No
-												constant
-												found.</CommandEmpty>
-											{{#each
-												this.constantGroups
-												key="key"
-												as |group|
-											}}
-												<CommandGroup
-													@heading={{group.heading}}
-												>
-													{{#each
-														group.constants
-														key="name"
-														as |constant|
-													}}
-														<CommandItem
-															@value={{constant.search}}
-															@onSelect={{fn
-																this.chooseConstant
-																constant.value
-															}}
-														>
-															<span
-																class="dt-sci-constant-symbol"
-															>{{constant.symbol}}</span>
-															<span
-																class="dt-sci-constant-name"
-															>{{constant.name}}</span>
-														</CommandItem>
-													{{/each}}
-												</CommandGroup>
-											{{/each}}
-										</CommandList>
-									</Command>
-								</PopoverContent>
-							</Popover>
-						{{else}}
-							<button
-								type="button"
-								class="dt-sci-key
-									{{btn.variant}}"
-								{{on
-									"click"
-									(fn
-										this.press
-										btn.key
-									)
+						{{#if this.stacked}}
+							<CanonButton
+								@kind="cell"
+								@text={{if
+									this.titled
+									"History"
+									""
 								}}
-							>{{btn.label}}</button>
+								@label="History"
+								@icon={{HistoryIcon}}
+								@onClick={{this.openHistory}}
+							/>
 						{{/if}}
-					{{/each}}
+						<CanonButton
+							@kind="cell"
+							@text={{if
+								this.titled
+								"Copy"
+								""
+							}}
+							@label="Copy"
+							@icon={{CopyIcon}}
+							@disabled={{if
+								this.copyText
+								false
+								true
+							}}
+							@onClick={{this.copy}}
+						/>
+					</CanonGrid>
+					<Keypad @onPress={{this.press}} />
+				</CanonRows>
+				<div class="sci-nameplate" aria-hidden="true">
+					<span class="sci-maker">DELPHI
+						ELECTRONICS</span>
+					<span class="sci-model">SC-1</span>
 				</div>
-			</div>
-
-			{{! next app wording }}
-			<p class="dt-sci-hint">Keyboard supported: numbers,
-				operators, Enter to calculate, Escape to clear</p>
-		</div>
+				<CanonSheet
+					@open={{this.historyOpen}}
+					@title="History"
+					@onClose={{this.closeHistory}}
+				>
+					<Tape
+						@entries={{this.history}}
+						@onLoad={{this.load}}
+						@onMenu={{this.tapeMenu}}
+						@onClear={{this.clearHistory}}
+					/>
+				</CanonSheet>
+				<CanonDialog
+					@open={{this.constantsOpen}}
+					@onClose={{this.closeConstants}}
+					aria-label="Constants"
+				>
+					<:default as |close|>
+						<CanonCommand
+							@items={{constantItems}}
+							@placeholder="Search constants..."
+							@label="Constants"
+							@empty="No constant found."
+							@onSelect={{fn
+								this.chooseConstant
+								close
+							}}
+						/>
+					</:default>
+				</CanonDialog>
+			</:main>
+		</CanonSplit>
 	</template>
 }

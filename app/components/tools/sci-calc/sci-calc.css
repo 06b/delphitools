@@ -1,0 +1,396 @@
+/* the keys take the height the pane has left, so the calculator does not scroll */
+.sci-calc .canon-page > .sci-keys {
+	flex: 1 1 auto;
+	min-block-size: calc(
+		2 * var(--canon-frame) + var(--canon-row-height) +
+			var(--canon-hairline) + 9 * 36px + 10px
+	);
+}
+
+.sci-keys > .sci-modes {
+	flex: none;
+}
+
+/* the display */
+.sci-display {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	padding: 0 var(--canon-panel-padding) 10px;
+	color: var(--canon-foreground);
+	direction: ltr;
+}
+
+.sci-display-top {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+}
+
+.sci-lamps {
+	display: flex;
+	flex: none;
+	gap: 8px;
+	color: var(--canon-primary);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	font-weight: 800;
+}
+
+.sci-lamp {
+	opacity: 0.3;
+}
+
+.sci-lamp.is-lit {
+	opacity: 1;
+}
+
+.sci-expression {
+	display: flex;
+	flex: 1 1 auto;
+	justify-content: flex-end;
+	min-inline-size: 0;
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: calc(21px * var(--sci-fit, 1));
+	font-weight: var(--canon-weight-medium);
+	line-height: 1.35;
+	white-space: pre;
+}
+
+.sci-expression-text {
+	flex: none;
+}
+
+.sci-piece--number {
+	color: var(--canon-foreground);
+}
+
+.sci-piece--function,
+.sci-piece--operation {
+	color: var(--canon-primary);
+}
+
+.sci-piece--bracket {
+	color: var(--canon-muted-foreground);
+}
+
+.sci-piece--ghost {
+	color: var(--canon-muted-foreground);
+	opacity: 0.35;
+}
+
+.is-dimmed .sci-piece {
+	color: var(--canon-muted-foreground);
+}
+
+/* vertical-align grows the line, so a clipped row keeps the exponent */
+.sci-piece.is-raised {
+	font-size: 0.62em;
+	vertical-align: 0.65em;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.sci-rule {
+	flex: none;
+	block-size: var(--canon-frame);
+	margin-block: 8px 4px;
+	background: var(--canon-primary);
+}
+
+.sci-readout {
+	display: flex;
+	justify-content: flex-end;
+	overflow: hidden;
+	color: color-mix(in srgb, var(--canon-primary) 30%, transparent);
+	font-family: var(--canon-segment-font);
+	font-size: calc(50px * var(--sci-fit, 1));
+	line-height: 1.2;
+	white-space: pre;
+	transition:
+		color 0.12s,
+		text-shadow 0.12s;
+}
+
+.sci-readout-text {
+	flex: none;
+}
+
+.sci-readout--result,
+.sci-readout--failure {
+	transition-duration: 0.32s;
+}
+
+.sci-readout--result {
+	color: var(--canon-primary);
+	text-shadow: 0 0 8px
+		color-mix(in srgb, var(--canon-primary) 55%, transparent);
+}
+
+.sci-readout--failure {
+	color: var(--canon-destructive);
+	text-shadow: 0 0 8px
+		color-mix(in srgb, var(--canon-destructive) 55%, transparent);
+}
+
+/* the segment font has no letters and no ∞ */
+.sci-readout-word {
+	font-family: var(--canon-font);
+	font-size: 0.62em;
+	font-weight: 900;
+}
+
+.sci-readout-word.is-infinite {
+	font-size: 0.9em;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.sci-gap {
+	margin-inline-end: 0.22em;
+}
+
+/* the stop glyph has no side bearing */
+.sci-stop {
+	margin-inline-end: 0.08em;
+}
+
+.sci-times {
+	font-family: var(--canon-font);
+	font-size: 0.42em;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.sci-ten {
+	font-size: 0.55em;
+}
+
+.sci-power {
+	position: relative;
+	inset-block-start: -0.81em;
+	font-size: 0.42em;
+}
+
+/* the keypad: hairlines between keys, a frame-wide seam between the blocks */
+.sci-keypad {
+	display: grid;
+	flex: 1 1 auto;
+	grid-template-rows:
+		repeat(4, minmax(0, 1fr))
+		0 repeat(5, minmax(0, 1fr));
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: var(--canon-hairline);
+	min-block-size: calc(9 * 36px + 10px);
+	background: var(--canon-border);
+	direction: ltr;
+}
+
+.sci-keypad--wide {
+	grid-template-rows: repeat(5, minmax(0, 1fr));
+	grid-template-columns:
+		repeat(4, minmax(0, 1fr))
+		0 repeat(5, minmax(0, 1fr));
+}
+
+.sci-key {
+	--sci-base: var(--canon-card);
+	--sci-ink: var(--canon-foreground);
+	--sci-size: var(--canon-text-body);
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0 4px;
+	overflow: hidden;
+	border: 0;
+	border-radius: 0;
+	background: var(--sci-base);
+	color: var(--sci-ink);
+	font-family: var(--canon-font);
+	font-size: calc(var(--sci-size) * var(--sci-scale, 1));
+	font-weight: var(--canon-weight-medium);
+	white-space: nowrap;
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.sci-key svg {
+	inline-size: calc(20px * var(--sci-scale, 1));
+	block-size: calc(20px * var(--sci-scale, 1));
+}
+
+@media (hover: hover) {
+	.sci-key:hover {
+		background: color-mix(
+			in srgb,
+			var(--sci-base),
+			var(--sci-ink) 7%
+		);
+	}
+}
+
+.sci-key:active {
+	background: color-mix(in srgb, var(--sci-base), var(--sci-ink) 16%);
+}
+
+.sci-key:focus-visible {
+	z-index: 1;
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sci-key--digit {
+	--sci-base: var(--canon-muted);
+	--sci-size: var(--canon-text-title2);
+
+	font-weight: var(--canon-weight-semibold);
+}
+
+.sci-key--digit[data-key="±"] {
+	--sci-size: var(--canon-text-title3);
+}
+
+.sci-key--operation {
+	--sci-base: var(--canon-accent-bg);
+	--sci-ink: var(--canon-primary);
+	--sci-size: var(--canon-text-title2);
+
+	font-weight: var(--canon-weight-semibold);
+}
+
+.sci-key--constant {
+	--sci-base: var(--canon-accent-bg);
+}
+
+.sci-key--clear {
+	--sci-base: color-mix(
+		in srgb,
+		var(--canon-card),
+		var(--canon-destructive) 10%
+	);
+	--sci-ink: var(--canon-destructive);
+	--sci-size: var(--canon-text-title3);
+
+	font-weight: var(--canon-weight-bold);
+}
+
+.sci-key--equals {
+	--sci-base: var(--canon-primary);
+	--sci-ink: var(--canon-primary-foreground);
+	--sci-size: 26px;
+
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* the maker's name under the keys, as moulded into a desk calculator's case */
+.sci-calc .canon-page > .sci-nameplate {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	block-size: 16px;
+	padding-inline: 2px;
+	font-family: var(--canon-font);
+	font-size: 11px;
+	font-weight: 900;
+	opacity: 0.35;
+	direction: ltr;
+}
+
+.sci-maker {
+	color: var(--canon-muted-foreground);
+	letter-spacing: 2.4px;
+}
+
+.sci-model {
+	color: var(--canon-primary);
+	letter-spacing: 1.2px;
+}
+
+/* the tape */
+.sci-tape-entry {
+	display: flex;
+	flex-direction: column;
+}
+
+.sci-tape-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: flex-end;
+	box-sizing: border-box;
+	inline-size: 100%;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+	.sci-tape-row:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.sci-tape-row:active {
+	background: var(--canon-accent-bg);
+}
+
+.sci-tape-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sci-tape-expression,
+.sci-tape-result {
+	display: flex;
+	justify-content: flex-end;
+	max-inline-size: 100%;
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	white-space: pre;
+}
+
+.sci-tape-expression {
+	font-size: 15px;
+	font-weight: var(--canon-weight-medium);
+}
+
+.sci-tape-result {
+	font-size: 17px;
+	font-weight: var(--canon-weight-bold);
+	white-space: nowrap;
+}
+
+.sci-tape > .sci-tape-entry:nth-child(2) > .sci-tape-row {
+	animation: sci-arrive 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) 0.05s
+		backwards;
+}
+
+@keyframes sci-arrive {
+	from {
+		opacity: 0;
+		transform: translateY(-14px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sci-readout {
+		transition: none;
+	}
+
+	.sci-tape > .sci-tape-entry:nth-child(2) > .sci-tape-row {
+		animation: none;
+	}
+}

@@ -1091,6 +1091,7 @@ export const toolCategories: ToolCategory[] = [
 					'Full-featured scientific calculator with history',
 				icon: 'calculator',
 				href: '/tools/sci-calc',
+				canon: true,
 			},
 			{
 				id: 'time-calc',
