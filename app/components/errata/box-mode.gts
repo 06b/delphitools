@@ -10,9 +10,6 @@ import CanonNumberField from 'delphicanon/components/canon-number-field';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import PaperMenu from 'delphitools-v2/components/errata/paper-menu';
-import Fresh, {
-	both,
-} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import ToolPanel, {
 	AnchorPicker,
 	Field,
@@ -160,14 +157,12 @@ class SizeField extends Component<{
 
 	<template>
 		<Field @label="Size">
-			<Fresh @value={{this.picked}} as |mine|>
-				<Segmented
-					@options={{this.options}}
-					@value={{this.picked}}
-					@onChange={{both mine this.pick}}
-					@label="Size"
-				/>
-			</Fresh>
+			<Segmented
+				@options={{this.options}}
+				@value={{this.picked}}
+				@onChange={{this.pick}}
+				@label="Size"
+			/>
 			{{#if this.custom}}
 				<CanonNumberField
 					class="err-size-number"
@@ -708,19 +703,11 @@ export class ImposePanel extends ReplacePanel {
 			{{/if}}
 			<Field @label="Orientation">
 				{{! fold layouts force landscape }}
-				<Fresh @value={{this.orientation}} as |mine|>
-					<Segmented
-						@options={{ORIENTATIONS}}
-						@value={{this.orientation}}
-						@onChange={{both
-							mine
-							(fn
-								this.pick
-								"orientation"
-							)
-						}}
-					/>
-				</Fresh>
+				<Segmented
+					@options={{ORIENTATIONS}}
+					@value={{this.orientation}}
+					@onChange={{fn this.pick "orientation"}}
+				/>
 			</Field>
 			{{#if this.duplexAware}}
 				<Field @label="Duplex">
