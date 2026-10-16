@@ -373,6 +373,8 @@ export const toolCategories: ToolCategory[] = [
 				produces: ['image/png'],
 				accepts: ['image/*'],
 				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'image-masker',
