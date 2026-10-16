@@ -203,6 +203,7 @@ export default class SubtitleStudioTool extends Component {
 	#burnWatcher: AbortController | null = null;
 	#subsToken = 0;
 	#audio: {
+		video: HTMLVideoElement;
 		ctx: AudioContext;
 		dest: MediaStreamAudioDestinationNode;
 		gain: GainNode;
@@ -655,9 +656,10 @@ export default class SubtitleStudioTool extends Component {
 		this.draw();
 	}
 
-	// createMediaElementSource binds permanently; build once, gain 1 = playback
+	// source binds element permanently
 	#audioGraph(video: HTMLVideoElement) {
-		if (this.#audio) return this.#audio;
+		if (this.#audio?.video === video) return this.#audio;
+		void this.#audio?.ctx.close();
 		const ctx = new AudioContext();
 		const source = ctx.createMediaElementSource(video);
 		const dest = ctx.createMediaStreamDestination();
@@ -665,7 +667,7 @@ export default class SubtitleStudioTool extends Component {
 		source.connect(dest);
 		source.connect(gain);
 		gain.connect(ctx.destination);
-		this.#audio = { ctx, dest, gain };
+		this.#audio = { video, ctx, dest, gain };
 		return this.#audio;
 	}
 

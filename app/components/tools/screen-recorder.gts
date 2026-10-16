@@ -252,6 +252,10 @@ export default class ScreenRecorder extends Component {
 				this.error = MIC_DENIED;
 			}
 		}
+		if (this.isDestroyed) {
+			this.#release();
+			return;
+		}
 
 		const video = display.getVideoTracks()[0];
 		const tracks: MediaStreamTrack[] = video ? [video] : [];
@@ -268,6 +272,10 @@ export default class ScreenRecorder extends Component {
 				this.#mix = context;
 				if (context.state === 'suspended')
 					await context.resume();
+				if (this.isDestroyed) {
+					this.#release();
+					return;
+				}
 				const destination =
 					context.createMediaStreamDestination();
 				for (const track of audio)
