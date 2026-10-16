@@ -277,6 +277,12 @@
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: var(--canon-hairline);
+	background: var(--canon-card);
+}
+
+/* cells outline each other; a short last row leaves card, not border */
+:is(.err-menu-grid, .err-sheet-grid) > .sub-menu-card {
+	outline: var(--canon-hairline) solid var(--canon-border);
 }
 
 /* the toolbox drawer and the mode panels share the bar's place */
@@ -356,6 +362,7 @@
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
 	gap: var(--canon-hairline);
+	background: var(--canon-card);
 }
 
 .err-mode {
