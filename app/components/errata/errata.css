@@ -412,8 +412,7 @@
 	display: none;
 }
 
-.err-mode-tag,
-.err-mode .sub-omni-tag {
+.err-mode-tag {
 	display: flex;
 	align-items: center;
 	color: var(--canon-muted-foreground);
