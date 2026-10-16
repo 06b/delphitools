@@ -1,1333 +1,685 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
 import { service } from '@ember/service';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
-import { colourFromUrl } from 'delphitools-v2/lib/colour-query';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonColourControls, {
+	CanonColourSolidState,
+} from 'delphicanon/components/canon-colour-controls';
+import CanonColourNotationInput from 'delphicanon/components/canon-colour-notation-input';
+import CanonColourSolid from 'delphicanon/components/canon-colour-solid';
+import CanonColourStrip from 'delphicanon/components/canon-colour-strip';
+import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonRule from 'delphicanon/components/canon-rule';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { hex, type Rgb } from 'delphicanon/lib/colour';
+import type { SolidPoint } from 'delphicanon/lib/colour-space';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
-import { contrastText } from 'delphitools-v2/lib/colour-maths';
+import { colourFromUrl } from 'delphitools-v2/lib/colour-query';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import {
-	CORNER_KEYS,
-	MIN_STOPS,
-	clamp,
-	gradientCss,
-	initialMeshPoints,
-	newId,
-	normaliseHex,
-	pigmentBlend,
-	renderGradient,
-	sortStops,
-	stopForWidestGap,
-	type ColourStop,
-	type CornerColours,
-	type CornerKey,
-	type GradientMode,
-	type GradientState,
-	type GridSize,
-	type MeshPoint,
-} from 'delphitools-v2/lib/gradient';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import {
+	kitFormat,
+	readColour,
+} from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import AngleDial from 'delphitools-v2/components/tools/gradient-genny/dial';
+import { GradientModel } from 'delphitools-v2/components/tools/gradient-genny/model';
+import {
+	clamp,
+	colourAt,
+	cornerKeys,
+	cornerTitles,
+	gradientCss,
+	launchFlags,
+	maxExport,
+	minExport,
+	modes,
+	modeTitles,
+	renderGradient,
+	rgbOf,
+	sizePresets,
+	spaces,
+	spaceTitles,
+	type CornerKey,
+	type GridSize,
+} from 'delphitools-v2/components/tools/gradient-genny/paint';
+import GradientPicture from 'delphitools-v2/components/tools/gradient-genny/picture';
+import './gradient-genny/gradient-genny.css';
 
-const PREVIEW_WIDTH = 400;
-const PREVIEW_HEIGHT = 300;
-const COPIED_MS = 1500;
+const Plus = <template><IconSvg @name="plus" /></template>;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Blend = <template><IconSvg @name="blend" /></template>;
+const Crosshair = <template><IconSvg @name="crosshair" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-const MIN_EXPORT = 100;
-const MAX_EXPORT = 8192;
+const gridTitles = ['2×2', '3×3'];
+const gridSizes: GridSize[] = [2, 3];
+const sizeLabels = sizePresets.map((preset) => preset.label);
+const closestName = (colour: Rgb) => getColourName(hex(colour));
+const readNoise = (value: number) => `${Math.round(value)} %`;
 
-const MESH_INSET_X = 12;
-const MESH_SPAN_X = 76;
-const MESH_INSET_Y = 15;
-const MESH_SPAN_Y = 70;
+/** The colour solid's state; a pick writes the selected handle's colour. */
+class PickState extends CanonColourSolidState {
+	onPick?: (colour: Rgb) => void;
 
-const DRAG_SLOP = 4;
+	setPoint(point: SolidPoint, animated: boolean) {
+		super.setPoint(point, animated);
+		this.onPick?.(this.colour);
+	}
+}
 
-const MODES: { key: GradientMode; label: string }[] = [
-	{ key: 'linear', label: 'Linear' },
-	{ key: 'corners', label: 'Corners' },
-	{ key: 'mesh', label: 'Mesh' },
-];
-
-const CORNER_POSITIONS: { key: CornerKey; x: string; y: string }[] = [
-	{ key: 'topLeft', x: '12%', y: '15%' },
-	{ key: 'topRight', x: '88%', y: '15%' },
-	{ key: 'bottomLeft', x: '12%', y: '85%' },
-	{ key: 'bottomRight', x: '88%', y: '85%' },
-];
-
-const CORNER_LABELS: Record<CornerKey, string> = {
-	topLeft: 'Top Left',
-	topRight: 'Top Right',
-	bottomLeft: 'Bottom Left',
-	bottomRight: 'Bottom Right',
-};
-
-const ANGLE_PRESETS = [0, 45, 90, 135, 180, 225, 270, 315];
-
-const SIZE_PRESETS: { label: string; w: number; h: number }[] = [
-	{ label: '512', w: 512, h: 512 },
-	{ label: '1K', w: 1024, h: 1024 },
-	{ label: '2K', w: 2048, h: 2048 },
-	{ label: '4K', w: 4096, h: 4096 },
-	{ label: 'HD', w: 1920, h: 1080 },
-	{ label: '4K HD', w: 3840, h: 2160 },
-	{ label: 'Insta', w: 1080, h: 1080 },
-	{ label: 'Story', w: 1080, h: 1920 },
-];
-
-export default class GradientGennyTool extends Component {
+/** The port of GradientGeneratorViewController. */
+export default class GradientGenny extends Component {
 	@service declare colourNotation: ColourNotationService;
 
-	@tracked mode: GradientMode = 'linear';
-	@tracked angle = 90;
-	@tracked noise = 0;
-	@tracked exportWidth = 800;
-	@tracked exportHeight = 600;
-	@tracked copied: string | null = null;
-	@tracked hoveredCorner: CornerKey | null = null;
-	@tracked hoveredPoint: string | null = null;
-	@tracked draggingPoint: string | null = null;
-	@tracked gridSize: GridSize = 2;
+	model: GradientModel;
+	state: PickState;
+	@tracked width = 800;
+	@tracked height = 600;
+	@tracked solidAspect = 1;
+	#selecting = false;
 
-	readonly #carried = colourFromUrl() ?? undefined;
-
-	@tracked corners: CornerColours = {
-		topLeft: this.#carried ?? '#3b82f6',
-		topRight: '#8b5cf6',
-		bottomLeft: '#10b981',
-		bottomRight: '#f59e0b',
-	};
-
-	stops: TrackedArray<ColourStop> = new TrackedArray([
-		{
-			id: newId(),
-			colour: this.#carried ?? '#3b82f6',
-			position: 0,
-		},
-		{ id: newId(), colour: '#8b5cf6', position: 100 },
-	]);
-
-	points: TrackedArray<MeshPoint> = new TrackedArray(
-		this.#seeded(initialMeshPoints(2)),
-	);
-
-	#seeded(points: MeshPoint[]): MeshPoint[] {
-		if (this.#carried && points[0])
-			points[0].colour = this.#carried;
-		return points;
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		const carried = colourFromUrl();
+		const model = new GradientModel({
+			carried: carried ? hex(rgbOf(carried)) : undefined,
+			mode: flags.mode,
+			space: flags.space,
+			angle:
+				flags.angle === undefined
+					? undefined
+					: Math.round(flags.angle) % 360,
+			centre: flags.centre,
+			stops: flags.stops,
+			blends: flags.blends,
+			noise: flags.noise,
+			select: flags.select,
+		});
+		if (flags.size) {
+			this.width = flags.size.width;
+			this.height = flags.size.height;
+		}
+		this.model = model;
+		const first = model.selectedColour ?? '#3B82F6';
+		// sliced row, oklch hue
+		this.state = new PickState({
+			space: 'oklch',
+			colour: rgbOf(first),
+			activeRow: 2,
+		});
+		this.state.onPick = this.picked;
 	}
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	#dragId: string | null = null;
-	#dragField: DOMRect | null = null;
-	#dragOrigin = { px: 0, py: 0, x: 0, y: 0 };
-	#dragMoved = false;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	get format() {
+		return kitFormat(this.colourNotation.notation);
 	}
 
-	get state(): GradientState {
-		return {
-			mode: this.mode,
-			angle: this.angle,
-			noise: this.noise,
-			stops: this.stops,
-			corners: this.corners,
-			points: this.points,
-		};
+	get css() {
+		return gradientCss(this.model, this.colourNotation.format);
 	}
 
-	get isLinear() {
-		return this.mode === 'linear';
+	get modeIndex() {
+		return modes.indexOf(this.model.mode);
 	}
 
-	get isCorners() {
-		return this.mode === 'corners';
+	get spaceIndex() {
+		return spaces.indexOf(this.model.space);
 	}
 
 	get isMesh() {
-		return this.mode === 'mesh';
+		return this.model.mode === 'mesh';
 	}
 
-	get modes() {
-		return MODES.map((entry) => ({
-			...entry,
-			isActive: entry.key === this.mode,
-		}));
+	get isCorners() {
+		return this.model.mode === 'corners';
 	}
 
-	get cssText() {
-		return gradientCss(this.state, this.colourNotation.format);
+	get showsSpace() {
+		return this.model.isStops;
 	}
 
-	get atMinStops() {
-		return this.stops.length <= MIN_STOPS;
+	get showsAngle() {
+		const { mode } = this.model;
+		return mode === 'linear' || mode === 'conic';
 	}
 
-	get dialStyle() {
-		return htmlSafe(
-			`transform: translate(-50%, -100%) rotate(${this.angle}deg)`,
-		);
+	get angleTitle() {
+		return this.model.mode === 'conic' ? 'Start' : 'Angle';
 	}
 
-	get anglePresets() {
-		return ANGLE_PRESETS.map((preset) => ({
-			preset,
-			label: `${preset}°`,
-			isActive: this.angle === preset,
-		}));
+	get showsCentre() {
+		const { mode } = this.model;
+		return mode === 'radial' || mode === 'conic';
 	}
 
-	get sizePresets() {
-		return SIZE_PRESETS.map((preset) => ({
-			...preset,
-			isActive:
-				this.exportWidth === preset.w &&
-				this.exportHeight === preset.h,
-		}));
+	get centreText() {
+		const { x, y } = this.model.centre;
+		return `${Math.round(x * 100)} %, ${Math.round(y * 100)} %`;
 	}
 
-	get stopRows() {
-		return this.stops.map((stop) => ({
-			...stop,
-			fillStyle: htmlSafe(`background-color: ${stop.colour}`),
-		}));
+	get centred() {
+		const { x, y } = this.model.centre;
+		return x === 0.5 && y === 0.5;
 	}
 
-	get cornerDots() {
-		return CORNER_POSITIONS.map((position) => {
-			const colour = this.corners[position.key];
-			return {
-				key: position.key,
-				colour,
-				name: getColourName(colour),
-				value: this.colourNotation.format(colour),
-				isHovered: this.hoveredCorner === position.key,
-				seatStyle: htmlSafe(
-					`left: ${position.x}; top: ${position.y}`,
+	get gridIndex() {
+		return gridSizes.indexOf(this.model.gridSize);
+	}
+
+	get colourHeading() {
+		const { mode } = this.model;
+		// web titles for corners, iOS for the rest
+		if (mode === 'corners') return 'Corner Colours';
+		return mode === 'mesh' ? 'Points' : 'Colour Stops';
+	}
+
+	get cornerIndex() {
+		return cornerKeys.indexOf(this.model.selected as CornerKey);
+	}
+
+	get selectedHex() {
+		return this.model.selectedColour ?? '#000000';
+	}
+
+	get colourText() {
+		return this.colourNotation.format(this.selectedHex);
+	}
+
+	get colour(): Rgb {
+		return this.state.colour;
+	}
+
+	get position() {
+		return this.model.selectedStop?.position ?? 0;
+	}
+
+	/** The gradient's path on the solid, or the other handles' colours. */
+	get marks(): Rgb[] {
+		const { model } = this;
+		if (model.mode === 'corners')
+			return cornerKeys
+				.filter((key) => key !== model.selected)
+				.map((key) => rgbOf(model.corners[key]));
+		if (model.mode === 'mesh')
+			return model.points
+				.filter((point) => point.id !== model.selected)
+				.map((point) => rgbOf(point.colour));
+		return Array.from({ length: 17 }, (_, i) =>
+			rgbOf(
+				colourAt(
+					model.stops,
+					(i / 16) * 100,
+					model.space,
 				),
-				faceStyle: this.#dotStyle(colour),
-				tipStyle: this.#tipStyle(colour),
-			};
-		});
-	}
-
-	get cornerRows() {
-		return CORNER_KEYS.map((key, index) => {
-			const colour = this.corners[key];
-			return {
-				key,
-				colour,
-				label: CORNER_LABELS[key],
-				name: getColourName(colour),
-				index,
-				isHovered: this.hoveredCorner === key,
-				fillStyle: htmlSafe(
-					`background-color: ${colour}`,
-				),
-			};
-		});
-	}
-
-	get meshDots() {
-		return this.points.map((point, index) => ({
-			id: point.id,
-			colour: point.colour,
-			number: index + 1,
-			name: getColourName(point.colour),
-			value: this.colourNotation.format(point.colour),
-			isHovered: this.hoveredPoint === point.id,
-			isDragging: this.draggingPoint === point.id,
-			seatStyle: htmlSafe(
-				`left: ${(MESH_INSET_X + point.x * MESH_SPAN_X).toFixed(2)}%; top: ${(MESH_INSET_Y + point.y * MESH_SPAN_Y).toFixed(2)}%`,
 			),
-			faceStyle: this.#dotStyle(point.colour),
-			tipStyle: this.#tipStyle(point.colour),
-		}));
-	}
-
-	get meshRows() {
-		return this.points.map((point, index) => ({
-			id: point.id,
-			colour: point.colour,
-			number: index + 1,
-			name: getColourName(point.colour),
-			value: this.colourNotation.format(point.colour),
-			position: `(${Math.round(point.x * 100)}%, ${Math.round(point.y * 100)}%)`,
-			isHovered: this.hoveredPoint === point.id,
-			fillStyle: htmlSafe(
-				`background-color: ${point.colour}`,
-			),
-			badgeStyle: htmlSafe(
-				`background-color: ${point.colour}; color: ${contrastText(point.colour)}`,
-			),
-		}));
-	}
-
-	#dotStyle(colour: string) {
-		return htmlSafe(
-			`background-color: ${colour}; --dt-gradient-ring: ${colour}40`,
 		);
 	}
 
-	#tipStyle(colour: string) {
-		return htmlSafe(
-			`background-color: ${colour}; color: ${contrastText(colour)}`,
+	get presetIndex() {
+		return sizePresets.findIndex(
+			(preset) =>
+				preset.width === this.width &&
+				preset.height === this.height,
 		);
 	}
 
-	paint = modifier((element: HTMLCanvasElement) => {
-		renderGradient(
-			element,
-			PREVIEW_WIDTH,
-			PREVIEW_HEIGHT,
-			this.state,
-		);
-	});
+	/** The picture takes the export's shape, within iOS's bounds. */
+	get pictureAspect() {
+		return clamp(this.width / this.height, 0.8, 1.6);
+	}
 
-	setMode = (mode: GradientMode) => {
-		this.mode = mode;
+	// selection
+
+	#sync() {
+		const colour = this.model.selectedColour;
+		if (!colour) return;
+		this.#selecting = true;
+		this.state.use(rgbOf(colour));
+		this.#selecting = false;
+	}
+
+	select = (id: string) => {
+		this.model.selected = id;
+		this.#sync();
 	};
 
-	setAngle = (event: Event) => {
-		this.angle = clamp(
-			Number((event.target as HTMLInputElement).value),
-			0,
-			360,
-		);
+	picked = (colour: Rgb) => {
+		if (this.#selecting) return;
+		this.model.setColour(hex(colour));
 	};
 
-	setAnglePreset = (angle: number) => {
-		this.angle = angle;
+	pickMode = (index: number) => {
+		this.model.setMode(modes[index]!);
+		this.#sync();
 	};
 
-	setAngleFromDial = (event: MouseEvent) => {
-		const rect = (
-			event.currentTarget as HTMLElement
-		).getBoundingClientRect();
-		const x = event.clientX - rect.left - rect.width / 2;
-		const y = event.clientY - rect.top - rect.height / 2;
-		this.angle = Math.round(
-			((Math.atan2(y, x) * 180) / Math.PI + 90 + 360) % 360,
-		);
+	pickCorner = (index: number) => this.select(cornerKeys[index]!);
+
+	// colour field
+
+	parse = (text: string) => {
+		const colour = readColour(text);
+		if (!colour) return false;
+		this.model.setColour(hex(colour));
+		this.#sync();
+		return true;
 	};
 
-	setNoise = (event: Event) => {
-		this.noise = clamp(
-			Number((event.target as HTMLInputElement).value),
-			0,
-			100,
-		);
+	// the web field answered every keystroke; the kit input waits 400 ms
+	typeLive = (event: Event) =>
+		void this.parse((event.target as HTMLInputElement).value);
+
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
 	};
 
-	setExportWidth = (event: Event) => {
-		this.exportWidth = Number(
-			(event.target as HTMLInputElement).value,
-		);
+	// gradient
+
+	pickSpace = (index: number) => (this.model.space = spaces[index]!);
+
+	setAngle = (degrees: number) =>
+		(this.model.angle = Math.round(((degrees % 360) + 360) % 360));
+
+	resetCentre = () => (this.model.centre = { x: 0.5, y: 0.5 });
+
+	pickGrid = (index: number) => {
+		this.model.setGrid(gridSizes[index]!);
+		this.#sync();
 	};
 
-	setExportHeight = (event: Event) => {
-		this.exportHeight = Number(
-			(event.target as HTMLInputElement).value,
-		);
-	};
-
-	setSizePreset = (width: number, height: number) => {
-		this.exportWidth = width;
-		this.exportHeight = height;
+	setPosition = (value: number) => {
+		this.model.setPosition(this.model.selected, value);
 	};
 
 	addStop = () => {
-		this.stops.push(stopForWidestGap(this.stops));
+		this.model.addStop();
+		this.#sync();
 	};
 
-	removeStop = (id: string) => {
-		if (this.atMinStops) return;
-		const index = this.stops.findIndex((stop) => stop.id === id);
-		if (index !== -1) this.stops.splice(index, 1);
+	addPoint = () => {
+		this.model.addPointAt({ x: 0.5, y: 0.5 });
+		this.#sync();
 	};
 
-	blendStops = () => {
-		this.stops.splice(
-			0,
-			this.stops.length,
-			...pigmentBlend(this.stops),
-		);
+	remove = () => {
+		this.model.removeSelected();
+		this.#sync();
 	};
 
-	setStopColour = (id: string, event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const index = this.stops.findIndex((stop) => stop.id === id);
-		const current = this.stops[index];
-		if (!current) return;
+	blend = () => this.model.blend();
 
-		const hex = normaliseHex(input.value);
-		if (!hex) {
-			input.value = current.colour;
-			return;
-		}
-		this.stops[index] = { ...current, colour: hex };
+	// image
+
+	pickPreset = (index: number) => {
+		const preset = sizePresets[index];
+		if (!preset) return;
+		this.width = preset.width;
+		this.height = preset.height;
 	};
 
-	setStopPosition = (id: string, event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const index = this.stops.findIndex((stop) => stop.id === id);
-		const current = this.stops[index];
-		if (!current) return;
+	setWidth = (value: number) => (this.width = value);
 
-		const value = Number(input.value);
-		if (input.value.trim() === '' || !Number.isFinite(value)) {
-			input.value = String(current.position);
-			return;
-		}
+	setHeight = (value: number) => (this.height = value);
 
-		this.stops[index] = {
-			...current,
-			position: Math.round(clamp(value, 0, 100)),
-		};
-		this.stops.splice(
-			0,
-			this.stops.length,
-			...sortStops(this.stops),
-		);
-	};
+	setNoise = (value: number) => (this.model.noise = Math.round(value));
 
-	setCorner = (key: CornerKey, event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const hex = normaliseHex(input.value);
-		if (!hex) {
-			input.value = this.corners[key];
-			return;
-		}
-		this.corners = { ...this.corners, [key]: hex };
-	};
-
-	hoverCorner = (key: CornerKey) => {
-		this.hoveredCorner = key;
-	};
-
-	clearCornerHover = () => {
-		this.hoveredCorner = null;
-	};
-
-	setGridSize = (size: GridSize) => {
-		this.gridSize = size;
-		this.points.splice(
-			0,
-			this.points.length,
-			...this.#seeded(initialMeshPoints(size)),
-		);
-	};
-
-	setPointColour = (id: string, event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const index = this.points.findIndex((point) => point.id === id);
-		const current = this.points[index];
-		if (!current) return;
-
-		const hex = normaliseHex(input.value);
-		if (!hex) {
-			input.value = current.colour;
-			return;
-		}
-		this.points[index] = { ...current, colour: hex };
-	};
-
-	hoverPoint = (id: string) => {
-		this.hoveredPoint = id;
-	};
-
-	clearPointHover = () => {
-		this.hoveredPoint = null;
-	};
-
-	startDrag = (id: string, event: PointerEvent) => {
-		const dot = event.currentTarget as HTMLElement;
-		const field = dot.closest('.dt-gradient-dots');
-		const point = this.points.find((entry) => entry.id === id);
-		if (!field || !point) return;
-
-		this.#dragField = field.getBoundingClientRect();
-		this.#dragId = id;
-		this.#dragMoved = false;
-		this.#dragOrigin = {
-			px: event.clientX,
-			py: event.clientY,
-			x: point.x,
-			y: point.y,
-		};
-		this.draggingPoint = id;
-		dot.setPointerCapture(event.pointerId);
-	};
-
-	moveDrag = (event: PointerEvent) => {
-		const rect = this.#dragField;
-		const id = this.#dragId;
-		if (!rect || !id) return;
-
-		const dx = event.clientX - this.#dragOrigin.px;
-		const dy = event.clientY - this.#dragOrigin.py;
-		if (Math.abs(dx) > DRAG_SLOP || Math.abs(dy) > DRAG_SLOP) {
-			this.#dragMoved = true;
-		}
-
-		const index = this.points.findIndex((point) => point.id === id);
-		const current = this.points[index];
-		if (!current) return;
-
-		this.points[index] = {
-			...current,
-			x: clamp(
-				this.#dragOrigin.x +
-					((dx / rect.width) * 100) / MESH_SPAN_X,
-				0,
-				1,
-			),
-			y: clamp(
-				this.#dragOrigin.y +
-					((dy / rect.height) * 100) /
-						MESH_SPAN_Y,
-				0,
-				1,
-			),
-		};
-	};
-
-	endDrag = (event: PointerEvent) => {
-		const dot = event.currentTarget as HTMLElement;
-		if (dot.hasPointerCapture(event.pointerId)) {
-			dot.releasePointerCapture(event.pointerId);
-		}
-		this.#dragId = null;
-		this.#dragField = null;
-		this.draggingPoint = null;
-	};
-
-	// suppress drag click
-	blockDragClick = (event: Event) => {
-		if (this.#dragMoved) event.preventDefault();
-	};
-
-	downloadImage = () => {
+	download = () => {
 		const canvas = document.createElement('canvas');
 		renderGradient(
 			canvas,
-			Math.round(
-				clamp(this.exportWidth, MIN_EXPORT, MAX_EXPORT),
-			),
-			Math.round(
-				clamp(
-					this.exportHeight,
-					MIN_EXPORT,
-					MAX_EXPORT,
-				),
-			),
-			this.state,
+			Math.round(clamp(this.width, minExport, maxExport)),
+			Math.round(clamp(this.height, minExport, maxExport)),
+			this.model,
 		);
-
 		canvas.toBlob((blob) => {
 			if (blob)
-				downloadBlob(blob, `gradient-${this.mode}.png`);
+				downloadBlob(
+					blob,
+					`gradient-${this.model.mode}.png`,
+				);
 		}, 'image/png');
 	};
 
-	copy = async (value: string, label: string) => {
-		await navigator.clipboard.writeText(value);
-		this.copied = label;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	};
-
-	copyCss = () => void this.copy(this.cssText, 'css');
+	// wide: flatter solid, as on iOS
+	measureSolid = modifier((element: HTMLElement) => {
+		const observer = new ResizeObserver(() => {
+			const width = element.clientWidth;
+			if (!width) return;
+			const aspect = Math.max(
+				1,
+				Math.round((width / 420) * 20) / 20,
+			);
+			if (aspect !== this.solidAspect)
+				this.solidAspect = aspect;
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	});
 
 	<template>
-		<div class="dt-gradient">
-			<div class="segmented dt-gradient-modes">
-				{{#each this.modes key="key" as |option|}}
-					<button
-						type="button"
-						class="dt-gradient-mode
-							{{if
-								option.isActive
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.setMode
-								option.key
-							)
-						}}
-					>{{option.label}}</button>
-				{{/each}}
-			</div>
-
-			<div class="dt-gradient-frame">
-				<div class="dt-gradient-preview">
-					<canvas
-						class="dt-gradient-canvas"
-						{{this.paint}}
-					></canvas>
-
-					{{#if this.isCorners}}
-						<div class="dt-gradient-dots">
-							{{#each
-								this.cornerDots
-								key="key"
-								as |dot|
-							}}
-								<span
-									class="dt-gradient-dot
-										{{if
-											dot.isHovered
-											'is-hovered'
-										}}"
-									style={{dot.seatStyle}}
-									{{on
-										"mouseenter"
-										(fn
-											this.hoverCorner
-											dot.key
-										)
-									}}
-									{{on
-										"mouseleave"
-										this.clearCornerHover
-									}}
-								>
-									<span
-										class="dt-gradient-tip"
-										style={{dot.tipStyle}}
-									>
-										<span
-											class="dt-gradient-tip-name"
-										>{{dot.name}}</span>
-										<span
-											class="dt-gradient-tip-value"
-										>{{dot.value}}</span>
-									</span>
-									<span
-										class="dt-gradient-dot-face"
-										style={{dot.faceStyle}}
-									></span>
-									<input
-										type="color"
-										value={{dot.colour}}
-										aria-label="Edit
-											{{dot.name}}"
-										{{on
-											"input"
-											(fn
-												this.setCorner
-												dot.key
-											)
-										}}
-									/>
-								</span>
-							{{/each}}
-						</div>
-
-						{{! wording carried over from the Next app }}
-						<p
-							class="dt-gradient-preview-hint"
-						>Click dots to change colours</p>
-					{{/if}}
-
-					{{#if this.isMesh}}
-						<div class="dt-gradient-dots">
-							{{! pointerdown starts a drag here rather than standing in for a click, which is what the rule guards against }}
-							{{! template-lint-disable no-pointer-down-event-binding }}
-							{{#each
-								this.meshDots
-								key="id"
-								as |dot|
-							}}
-								<span
-									class="dt-gradient-dot is-mesh
-										{{if
-											dot.isHovered
-											'is-hovered'
-										}}
-										{{if
-											dot.isDragging
-											'is-dragging'
-										}}"
-									style={{dot.seatStyle}}
-									{{on
-										"mouseenter"
-										(fn
-											this.hoverPoint
-											dot.id
-										)
-									}}
-									{{on
-										"mouseleave"
-										this.clearPointHover
-									}}
-									{{on
-										"pointerdown"
-										(fn
-											this.startDrag
-											dot.id
-										)
-									}}
-									{{on
-										"pointermove"
-										this.moveDrag
-									}}
-									{{on
-										"pointerup"
-										this.endDrag
-									}}
-									{{on
-										"pointercancel"
-										this.endDrag
-									}}
-								>
-									<span
-										class="dt-gradient-tip"
-										style={{dot.tipStyle}}
-									>
-										<span
-											class="dt-gradient-tip-name"
-										>{{dot.name}}</span>
-										<span
-											class="dt-gradient-tip-value"
-										>{{dot.value}}</span>
-									</span>
-									<span
-										class="dt-gradient-dot-face"
-										style={{dot.faceStyle}}
-									>{{dot.number}}</span>
-									<input
-										type="color"
-										value={{dot.colour}}
-										aria-label="Edit
-											{{dot.name}}"
-										{{on
-											"input"
-											(fn
-												this.setPointColour
-												dot.id
-											)
-										}}
-										{{on
-											"click"
-											this.blockDragClick
-										}}
-									/>
-								</span>
-							{{/each}}
-						</div>
-
-						{{! wording carried over from the Next app }}
-						<p
-							class="dt-gradient-preview-hint"
-						>Drag dots to reposition, click
-							to change colour</p>
-					{{/if}}
-				</div>
-
-				{{#if this.isLinear}}
-					<section class="dt-gradient-block">
-						<div
-							class="dt-gradient-block-head"
+		<CanonSplit
+			class="gradient-genny"
+			@halves={{true}}
+			@collapsesTo={{240}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.pictureAspect}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<GradientPicture
+						@model={{this.model}}
+						@width={{this.width}}
+						@height={{this.height}}
+						@onSelect={{this.select}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonSegmented
+						class="gg-modes"
+						@items={{modeTitles}}
+						@selected={{this.modeIndex}}
+						@onChange={{this.pickMode}}
+						aria-label="Type"
+					/>
+					{{#if this.showsSpace}}
+						<CanonRow
+							@title="Interpolation"
+							@form="flush"
 						>
-							<span
-								class="dt-gradient-label"
-							>Colour Stops</span>
-							<span
-								class="dt-gradient-block-actions"
-							>
-								{{! wording carried over from the Next app }}
-								<button
-									type="button"
-									class="dt-gradient-btn is-primary"
-									title="Add intermediate colours using OKLab blending for vibrant, paint-like transitions"
-									{{on
-										"click"
-										this.blendStops
-									}}
-								>
-									<Icon
-										@name="blend"
-									/>
-									Pigment
-									Blend
-								</button>
-								<button
-									type="button"
-									class="dt-gradient-btn"
-									{{on
-										"click"
-										this.addStop
-									}}
-								>
-									<Icon
-										@name="plus"
-									/>
-									Add Stop
-								</button>
-							</span>
-						</div>
-
-						<div class="dt-gradient-rows">
-							{{#each
-								this.stopRows
-								key="id"
-								as |row|
-							}}
-								<div
-									class="dt-gradient-row"
-								>
-									<span
-										class="dt-gradient-row-swatch"
-									>
-										<span
-											style={{row.fillStyle}}
-											aria-hidden="true"
-										></span>
-										<input
-											type="color"
-											value={{row.colour}}
-											aria-label="Stop colour"
-											{{on
-												"input"
-												(fn
-													this.setStopColour
-													row.id
-												)
-											}}
-										/>
-									</span>
-									<input
-										type="text"
-										class="dt-gradient-row-hex"
-										value={{row.colour}}
-										aria-label="Stop colour"
-										{{on
-											"change"
-											(fn
-												this.setStopColour
-												row.id
-											)
-										}}
-									/>
-									<span
-										class="dt-gradient-row-pos"
-									>
-										<input
-											type="number"
-											min="0"
-											max="100"
-											value={{row.position}}
-											aria-label="Stop position"
-											{{on
-												"change"
-												(fn
-													this.setStopPosition
-													row.id
-												)
-											}}
-										/>
-										<span
-										>%</span>
-									</span>
-									<button
-										type="button"
-										class="dt-gradient-row-remove"
-										aria-label="Remove stop"
-										disabled={{this.atMinStops}}
-										{{on
-											"click"
-											(fn
-												this.removeStop
-												row.id
-											)
-										}}
-									>
-										<Icon
-											@name="trash-2"
-										/>
-									</button>
-								</div>
-							{{/each}}
-						</div>
-					</section>
-
-					<section class="dt-gradient-block">
-						<div
-							class="dt-gradient-block-head"
-						>
-							<span
-								class="dt-gradient-label"
-							>Angle</span>
-							<span
-								class="dt-gradient-number"
-							>
-								<input
-									type="number"
-									min="0"
-									max="360"
-									value={{this.angle}}
-									aria-label="Angle"
-									{{on
-										"input"
-										this.setAngle
-									}}
-								/>
-								<span>deg</span>
-							</span>
-						</div>
-
-						<div class="dt-gradient-angle">
-							<button
-								type="button"
-								class="dt-gradient-dial"
-								aria-label="Set angle"
-								{{on
-									"click"
-									this.setAngleFromDial
-								}}
-							>
-								<span
-									class="dt-gradient-dial-needle"
-									style={{this.dialStyle}}
-								></span>
-								<span
-									class="dt-gradient-dial-hub"
-								></span>
-							</button>
-							<input
-								type="range"
-								class="dt-gradient-slider"
-								min="0"
-								max="360"
-								step="1"
-								value={{this.angle}}
-								aria-label="Angle"
-								{{on
-									"input"
-									this.setAngle
-								}}
+							<CanonSegmented
+								@items={{spaceTitles}}
+								@selected={{this.spaceIndex}}
+								@onChange={{this.pickSpace}}
+								aria-label="Interpolation"
 							/>
-						</div>
-
-						<div
-							class="segmented dt-gradient-presets is-angles"
+						</CanonRow>
+					{{/if}}
+					{{#if this.showsAngle}}
+						<CanonRow
+							@title={{this.angleTitle}}
+							@form="flush"
+							as |titleId|
 						>
-							{{#each
-								this.anglePresets
-								key="preset"
-								as |option|
-							}}
-								<button
-									type="button"
-									class="dt-gradient-preset
-										{{if
-											option.isActive
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setAnglePreset
-											option.preset
-										)
-									}}
-								>{{option.label}}</button>
-							{{/each}}
-						</div>
-					</section>
-				{{/if}}
-
-				{{#if this.isCorners}}
-					<section class="dt-gradient-block">
-						<span
-							class="dt-gradient-label"
-						>Corner Colours</span>
-						<div
-							class="dt-gradient-corners"
+							<div class="gg-angle">
+								<AngleDial
+									@value={{this.model.angle}}
+									@label={{this.angleTitle}}
+									@onChange={{this.setAngle}}
+								/>
+								<CanonRule
+									@vertical={{true}}
+								/>
+								<CanonDecimalField
+									@value={{this.model.angle}}
+									@max={{359}}
+									@unit="°"
+									@step={{15}}
+									@decimals={{0}}
+									@labelledBy={{titleId}}
+									@onChange={{this.setAngle}}
+								/>
+							</div>
+						</CanonRow>
+					{{/if}}
+					{{#if this.showsCentre}}
+						<CanonRow
+							@title="Centre"
+							@detail={{this.centreText}}
+							@form="flush"
 						>
-							{{#each
-								this.cornerRows
-								key="key"
-								as |row|
-							}}
-								<div
-									class="dt-gradient-corner
-										{{if
-											row.isHovered
-											'is-hovered'
-										}}"
-									{{on
-										"mouseenter"
-										(fn
-											this.hoverCorner
-											row.key
-										)
-									}}
-									{{on
-										"mouseleave"
-										this.clearCornerHover
-									}}
-								>
-									<span
-										class="dt-gradient-row-swatch"
-									>
-										<span
-											style={{row.fillStyle}}
-											aria-hidden="true"
-										></span>
-										<input
-											type="color"
-											value={{row.colour}}
-											aria-label="Edit
-												{{row.label}}"
-											{{on
-												"input"
-												(fn
-													this.setCorner
-													row.key
-												)
-											}}
-										/>
-									</span>
-									<div
-										class="dt-gradient-corner-info"
-									>
-										<div
-											class="dt-gradient-corner-head"
-										>
-											<span
-												class="dt-gradient-corner-label"
-											>{{row.label}}</span>
-											<span
-												class="dt-gradient-corner-name"
-											>{{row.name}}</span>
-										</div>
-										<input
-											type="text"
-											class="dt-gradient-row-hex"
-											value={{row.colour}}
-											aria-label="{{row.label}}
-												hex"
-											{{on
-												"change"
-												(fn
-													this.setCorner
-													row.key
-												)
-											}}
-										/>
-									</div>
-								</div>
-							{{/each}}
-						</div>
-					</section>
-				{{/if}}
-
-				{{#if this.isMesh}}
-					<section class="dt-gradient-block">
-						<span
-							class="dt-gradient-label"
-						>Grid Size</span>
-						<div
-							class="segmented dt-gradient-presets is-grid"
+							<CanonButton
+								@kind="cell"
+								@text="Reset"
+								@icon={{Crosshair}}
+								@disabled={{this.centred}}
+								@onClick={{this.resetCentre}}
+							/>
+						</CanonRow>
+					{{/if}}
+					{{#if this.isMesh}}
+						<CanonRow
+							@title="Grid"
+							@form="flush"
 						>
-							<button
-								type="button"
-								class="dt-gradient-preset
-									{{if
-										(eq
-											this.gridSize
-											2
-										)
-										'is-active'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.setGridSize
-										2
-									)
-								}}
-							>2x2</button>
-							<button
-								type="button"
-								class="dt-gradient-preset
-									{{if
-										(eq
-											this.gridSize
-											3
-										)
-										'is-active'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.setGridSize
-										3
-									)
-								}}
-							>3x3</button>
-						</div>
-					</section>
-
-					<section class="dt-gradient-block">
-						<span
-							class="dt-gradient-label"
-						>Control Points</span>
-						<div class="dt-gradient-rows">
-							{{#each
-								this.meshRows
-								key="id"
-								as |row|
-							}}
-								<div
-									class="dt-gradient-row
-										{{if
-											row.isHovered
-											'is-hovered'
-										}}"
-									{{on
-										"mouseenter"
-										(fn
-											this.hoverPoint
-											row.id
-										)
-									}}
-									{{on
-										"mouseleave"
-										this.clearPointHover
-									}}
-								>
-									<span
-										class="dt-gradient-row-badge"
-									>
-										<span
-											style={{row.badgeStyle}}
-										>{{row.number}}</span>
-									</span>
-									<span
-										class="dt-gradient-row-swatch"
-									>
-										<span
-											style={{row.fillStyle}}
-											aria-hidden="true"
-										></span>
-										<input
-											type="color"
-											value={{row.colour}}
-											aria-label="Edit
-												{{row.name}}"
-											{{on
-												"input"
-												(fn
-													this.setPointColour
-													row.id
-												)
-											}}
-										/>
-									</span>
-									<span
-										class="dt-gradient-row-info"
-									>
-										<span
-											class="dt-gradient-row-name"
-										>{{row.name}}</span>
-										<span
-											class="dt-gradient-row-value"
-										>{{row.value}}</span>
-									</span>
-									<span
-										class="dt-gradient-row-coords"
-									>{{row.position}}</span>
-								</div>
-							{{/each}}
-						</div>
-					</section>
-				{{/if}}
-
-				<section class="dt-gradient-block is-last">
-					<div class="dt-gradient-block-head">
-						<span
-							class="dt-gradient-label"
-						>Noise</span>
-						<span
-							class="dt-gradient-readout"
-						>{{this.noise}}%</span>
+							<CanonSegmented
+								@items={{gridTitles}}
+								@selected={{this.gridIndex}}
+								@onChange={{this.pickGrid}}
+								aria-label="Grid"
+							/>
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				<CanonCanvas
+					@aspect={{this.solidAspect}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+					{{this.measureSolid}}
+				>
+					<div class="gg-solid">
+						<CanonColourSolid
+							class="gg-solid-body"
+							@space={{this.state.space}}
+							@point={{this.state.point}}
+							@animated={{this.state.animated}}
+							@sliceAxis={{this.state.sliceAxis}}
+							@isOrtho={{this.state.isOrtho}}
+							@showsWhole={{this.state.showsWhole}}
+							@marks={{this.marks}}
+							@onChange={{this.state.pick}}
+							@closestName={{closestName}}
+						/>
+						<CanonColourStrip
+							@colour={{this.colour}}
+							@nameOf={{getColourName}}
+							@format={{this.format}}
+						/>
 					</div>
-					<input
-						type="range"
-						class="dt-gradient-slider"
-						min="0"
-						max="100"
-						step="1"
-						value={{this.noise}}
-						aria-label="Noise"
-						{{on "input" this.setNoise}}
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text={{this.colourHeading}}
 					/>
 					{{#if this.isCorners}}
-						{{! wording carried over from the Next app }}
-						<p class="dt-gradient-note">Adds
-							grain texture to reduce
-							banding in smooth
-							gradients</p>
-					{{else}}
-						{{! wording carried over from the Next app }}
-						<p class="dt-gradient-note">Adds
-							grain texture to reduce
-							banding. Only applies to
-							image export, not CSS.</p>
+						<CanonSegmented
+							@items={{cornerTitles}}
+							@selected={{this.cornerIndex}}
+							@columns={{2}}
+							@onChange={{this.pickCorner}}
+							aria-label="Corner"
+						/>
 					{{/if}}
-				</section>
-			</div>
-
-			<div class="dt-gradient-export">
-				<div class="dt-gradient-export-pane">
-					<div class="dt-gradient-export-body">
-						<span
-							class="dt-gradient-label"
-						>Image Export</span>
-
-						<div class="dt-gradient-size">
-							<input
-								type="number"
-								min={{MIN_EXPORT}}
-								max={{MAX_EXPORT}}
-								value={{this.exportWidth}}
-								aria-label="Export width"
-								{{on
-									"input"
-									this.setExportWidth
-								}}
-							/>
-							<span>×</span>
-							<input
-								type="number"
-								min={{MIN_EXPORT}}
-								max={{MAX_EXPORT}}
-								value={{this.exportHeight}}
-								aria-label="Export height"
-								{{on
-									"input"
-									this.setExportHeight
-								}}
-							/>
-							<span>px</span>
-						</div>
-
-						<div
-							class="segmented dt-gradient-presets is-sizes"
+					<CanonColourNotationInput
+						class="gg-colour"
+						@colour={{this.colour}}
+						@text={{this.colourText}}
+						@onColour={{this.state.use}}
+						@parse={{this.parse}}
+						@label="Colour"
+						{{on "input" this.typeLive}}
+						{{on "focusin" this.selectAll}}
+					/>
+					<CanonColourControls
+						@state={{this.state}}
+						@hidesNotation={{true}}
+					/>
+					{{#if this.model.isStops}}
+						<CanonRow
+							@title="Position"
+							@form="flush"
+							as |titleId|
 						>
-							{{#each
-								this.sizePresets
-								key="label"
-								as |preset|
-							}}
-								<button
-									type="button"
-									class="dt-gradient-preset
-										{{if
-											preset.isActive
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setSizePreset
-											preset.w
-											preset.h
-										)
-									}}
-								>{{preset.label}}</button>
-							{{/each}}
-						</div>
-
-						{{#if this.noise}}
-							{{! wording carried over from the Next app }}
-							<p
-								class="dt-gradient-note"
-							>{{this.noise}}% noise
-								will be applied
-								to the exported
-								image</p>
-						{{/if}}
-					</div>
-
-					<button
-						type="button"
-						class="dt-gradient-action is-primary"
-						{{on
-							"click"
-							this.downloadImage
-						}}
+							<CanonDecimalField
+								@value={{this.position}}
+								@max={{100}}
+								@unit="%"
+								@step={{1}}
+								@decimals={{0}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setPosition}}
+							/>
+						</CanonRow>
+						<CanonGrid @columns={{3}}>
+							<CanonButton
+								@kind="cell"
+								@text="Add Stop"
+								@icon={{Plus}}
+								@onClick={{this.addStop}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@text="Remove"
+								@icon={{Trash}}
+								@disabled={{if
+									this.model.canRemove
+									false
+									true
+								}}
+								@onClick={{this.remove}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@text="Pigment Blend"
+								@icon={{Blend}}
+								@disabled={{if
+									this.model.canBlend
+									false
+									true
+								}}
+								@onClick={{this.blend}}
+								title="Add intermediate colours using OKLab blending for vibrant, paint-like transitions"
+							/>
+						</CanonGrid>
+					{{else if this.isMesh}}
+						<CanonGrid @columns={{2}}>
+							<CanonButton
+								@kind="cell"
+								@text="Add Point"
+								@icon={{Plus}}
+								@onClick={{this.addPoint}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@text="Remove"
+								@icon={{Trash}}
+								@disabled={{if
+									this.model.canRemove
+									false
+									true
+								}}
+								@onClick={{this.remove}}
+							/>
+						</CanonGrid>
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Image" />
+					<CanonSegmented
+						@items={{sizeLabels}}
+						@selected={{this.presetIndex}}
+						@columns={{4}}
+						@onChange={{this.pickPreset}}
+						aria-label="Size"
+					/>
+					<CanonRow
+						@title="Width"
+						@form="flush"
+						as |titleId|
 					>
-						<DownloadLabel
-							@label="Download PNG"
+						<CanonNumberField
+							@value={{this.width}}
+							@min={{minExport}}
+							@max={{maxExport}}
+							@step={{100}}
+							@unit="px"
+							@labelledBy={{titleId}}
+							@onChange={{this.setWidth}}
 						/>
-					</button>
-				</div>
-
-				<div class="dt-gradient-export-pane">
-					<div class="dt-gradient-export-body">
-						<span
-							class="dt-gradient-label"
-						>CSS</span>
-						<pre
-							class="dt-gradient-css"
-						>{{this.cssText}}</pre>
-						{{#if this.isMesh}}
-							{{! wording carried over from the Next app }}
-							<p
-								class="dt-gradient-note"
-							>Mesh gradients can't be
-								perfectly
-								replicated in
-								CSS. Use image
-								export for
-								accurate
-								results.</p>
-						{{/if}}
-					</div>
-
-					<button
-						type="button"
-						class="dt-gradient-action"
-						{{on "click" this.copyCss}}
+					</CanonRow>
+					<CanonRow
+						@title="Height"
+						@form="flush"
+						as |titleId|
 					>
-						<Icon
-							@name={{if
-								(eq
-									this.copied
-									"css"
-								)
-								"check"
-								"copy"
-							}}
+						<CanonNumberField
+							@value={{this.height}}
+							@min={{minExport}}
+							@max={{maxExport}}
+							@step={{100}}
+							@unit="px"
+							@labelledBy={{titleId}}
+							@onChange={{this.setHeight}}
 						/>
-						{{if
-							(eq this.copied "css")
-							"Copied!"
-							"Copy CSS"
+					</CanonRow>
+					<CanonRow
+						@title="Noise"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.model.noise}}
+							@max={{100}}
+							@step={{1}}
+							@readout={{readNoise}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setNoise}}
+						/>
+					</CanonRow>
+					{{! wording carried over from the web tool }}
+					<CanonStatus
+						@text="Adds grain texture to reduce banding. Only applies to image export, not CSS."
+						@tone="muted"
+						@row={{true}}
+					/>
+					<CanonButton
+						class="gg-download"
+						@kind="primary"
+						@text={{passAlong
+							"Download PNG"
 						}}
-					</button>
-				</div>
-			</div>
-		</div>
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@onClick={{this.download}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonCodeBlock
+						@code={{this.css}}
+						@language="CSS"
+					/>
+					{{#if this.isMesh}}
+						<CanonStatus
+							@text="Approximate"
+							@tone="muted"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

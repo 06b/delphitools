@@ -174,6 +174,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/gradient-genny',
 				produces: ['image/png'],
 				carryColour: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'harmony-genny',

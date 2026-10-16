@@ -272,7 +272,7 @@ await page.waitForFunction(() => location.pathname === '/tools/gradient-genny', 
 });
 await flowSettled();
 state = await barState();
-const firstStop = await page.$eval('input[type="color"]', (input) => input.value);
+const firstStop = await page.$eval('.gg-colour input', (input) => input.value.toLowerCase());
 check(
 	'Next carries the colour as ?color= and the gradient leads with it',
 	state.path === '/tools/gradient-genny?color=ff0000' && firstStop === '#ff0000',
