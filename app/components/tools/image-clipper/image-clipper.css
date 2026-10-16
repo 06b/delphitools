@@ -1,0 +1,115 @@
+.clip-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.clip-area {
+	position: absolute;
+	inset: calc(var(--canon-panel-padding) / 2) var(--canon-panel-padding)
+		var(--canon-panel-padding);
+}
+
+.clip-checks,
+.clip-image,
+.clip-slot,
+.clip-hatch,
+.clip-box,
+.clip-name,
+.clip-margin,
+.clip-dimension {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.clip-checks {
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0% 25%,
+			var(--canon-card) 0% 50%
+		)
+		0 0 / 16px 16px;
+	opacity: 0.6;
+}
+
+.clip-picture--loaded .clip-checks {
+	opacity: 1;
+}
+
+.clip-image {
+	display: block;
+	max-inline-size: none;
+	user-select: none;
+}
+
+/* the prompt over the hatch drawn after the slot */
+.clip-slot > * {
+	position: relative;
+	z-index: 1;
+}
+
+.clip-hatch,
+.clip-box,
+.clip-margin,
+.clip-name {
+	pointer-events: none;
+}
+
+.clip-hatch {
+	background: repeating-linear-gradient(
+		-45deg,
+		transparent 0 4px,
+		color-mix(
+				in srgb,
+				var(--canon-muted-foreground) 50%,
+				transparent
+			)
+			4px 4.95px
+	);
+	opacity: 0.5;
+}
+
+.clip-picture--loaded .clip-hatch {
+	opacity: 1;
+}
+
+.clip-box {
+	border: 1.5px dashed var(--canon-muted-foreground);
+}
+
+.clip-picture--loaded .clip-box {
+	border: 1.5px solid var(--canon-primary);
+}
+
+.clip-margin {
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 17px;
+	text-align: center;
+	white-space: nowrap;
+	opacity: 0;
+}
+
+.clip-margin--shown {
+	opacity: 1;
+}
+
+.clip-picture--springs
+	:is(.clip-hatch, .clip-box, .clip-margin, .clip-dimension) {
+	transition-duration: 600ms;
+	transition-property:
+		clip-path, inset-inline-start, inset-block-start, inline-size,
+		block-size, opacity;
+	transition-timing-function: var(--clip-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.clip-picture--springs
+		:is(.clip-hatch, .clip-box, .clip-margin, .clip-dimension) {
+		transition: none;
+	}
+}

@@ -1,363 +1,439 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
-import { downloadUrl } from 'delphitools-v2/lib/download';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import type { Rect, Size } from 'delphicanon/lib/dimension-line';
+import { stem } from 'delphicanon/lib/files';
+import { reducedMotion, springEasing } from 'delphicanon/lib/motion';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import {
+	keptRect,
+	margins,
+	transparentSample,
+	untrimmed,
+} from 'delphitools-v2/components/tools/image-clipper/engine';
+import Picture from 'delphitools-v2/components/tools/image-clipper/picture';
+import './image-clipper/image-clipper.css';
 
-const LOAD_FAILED = 'Failed to load image.';
-const FULLY_TRANSPARENT = 'Image is fully transparent — nothing to clip.';
-const ENCODE_FAILED = 'Failed to encode clipped image.';
 const PNG_ONLY = 'Only PNG files are supported.';
+const ENCODE_FAILED = 'Failed to encode clipped image.';
 
-export interface TrimBounds {
-	top: number;
-	right: number;
-	bottom: number;
-	left: number;
-}
+// iOS: UIView spring, duration 0.6 s, bounce 0.15
+const spring = htmlSafe(`--clip-spring: ${springEasing(0.85)}`);
+const springMs = 600;
 
-interface ClipResult extends TrimBounds {
-	originalWidth: number;
-	originalHeight: number;
-	clippedWidth: number;
-	clippedHeight: number;
+const aspect = 4 / 3;
+const emptyPixels: Size = { width: 1600, height: 1200 };
+const emptyKept: Rect = { x: 340, y: 220, width: 1030, height: 700 };
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+interface Source {
 	url: string;
-	fileName: string;
+	name: string;
+	stem: string;
+	canvas: HTMLCanvasElement;
+	pixels: Size;
+	kept: Rect | null;
 }
 
-export function findTrimBounds(
-	data: Uint8ClampedArray,
-	width: number,
-	height: number,
-): TrimBounds | null {
-	let top = height;
-	let bottom = 0;
-	let left = width;
-	let right = 0;
+const full = ({ width, height }: Size): Rect => ({ x: 0, y: 0, width, height });
 
-	for (let y = 0; y < height; y++) {
-		for (let x = 0; x < width; x++) {
-			if (data[(y * width + x) * 4 + 3]! === 0) continue;
-			if (y < top) top = y;
-			if (y > bottom) bottom = y;
-			if (x < left) left = x;
-			if (x > right) right = x;
+/** The port of ImageClipperViewController, on the web tool's trim. */
+export default class ImageClipper extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+	@tracked source?: Source;
+	@tracked shownKept: Rect | null = emptyKept;
+	@tracked failure = '';
+	@tracked working = false;
+	@tracked exporting = false;
+	@tracked springs = false;
+
+	drop = new Drop('image/*', (file) => void this.load(file));
+	#input?: HTMLInputElement;
+	#loading = 0;
+	#timers: number[] = [];
+	#frame = 0;
+
+	// ?clipSample ?clipReplay: the iOS -clipSample and -clipReplay launch arguments, with a drawn image
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		if (query.has('clipSample')) {
+			void transparentSample().then((file) =>
+				this.load(file),
+			);
+			if (query.has('clipReplay'))
+				this.#timers.push(
+					window.setTimeout(() => {
+						this.clear();
+						void transparentSample().then(
+							(file) =>
+								this.load(file),
+						);
+					}, 3000),
+				);
 		}
+		registerDestructor(this, () => {
+			this.#timers.forEach((timer) =>
+				window.clearTimeout(timer),
+			);
+			cancelAnimationFrame(this.#frame);
+			if (this.source) URL.revokeObjectURL(this.source.url);
+		});
 	}
 
-	if (top > bottom || left > right) return null;
+	get pixels() {
+		return this.source?.pixels ?? emptyPixels;
+	}
 
-	return {
-		top,
-		right: width - 1 - right,
-		bottom: height - 1 - bottom,
-		left,
+	get margins() {
+		const { source } = this;
+		return source?.kept
+			? margins(source.kept, source.pixels)
+			: undefined;
+	}
+
+	get sizeText() {
+		const pixels = this.source?.pixels;
+		return pixels ? `${pixels.width} × ${pixels.height}` : '';
+	}
+
+	get tiles() {
+		const dash = '—';
+		const kept = this.source?.kept;
+		const m = this.margins;
+		const pair = ({ width, height }: Size) =>
+			`${width} × ${height} px`;
+		const px = (value?: number) =>
+			value === undefined ? dash : `${value} px`;
+		return [
+			{
+				label: 'Original',
+				value: this.source
+					? pair(this.source.pixels)
+					: dash,
+			},
+			{ label: 'Clipped', value: kept ? pair(kept) : dash },
+			{
+				label: 'Area',
+				value: m
+					? m.savedPercent > 0
+						? `−${m.savedPercent} %`
+						: '0 %'
+					: dash,
+				level: m ? m.savedPercent / 100 : undefined,
+			},
+			{ label: 'Top', value: px(m?.top) },
+			{ label: 'Right', value: px(m?.right) },
+			{ label: 'Bottom', value: px(m?.bottom) },
+			{ label: 'Left', value: px(m?.left) },
+		];
+	}
+
+	get note() {
+		const { source, margins: m } = this;
+		if (!source) return undefined;
+		if (!source.kept) return 'Fully transparent';
+		return m && untrimmed(m) ? 'No transparent edges' : undefined;
+	}
+
+	get clipDisabled() {
+		return !this.source?.kept;
+	}
+
+	get exportDisabled() {
+		return this.clipDisabled || this.exporting;
+	}
+
+	get busy() {
+		return this.working || this.exporting;
+	}
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		// the same file twice fires change again
+		input.value = '';
+		if (file) void this.load(file);
 	};
-}
 
-export default class ImageClipperTool extends Component {
-	@tracked result: ClipResult | null = null;
-	@tracked preview: string | null = null;
-	@tracked error = '';
-	@tracked processing = false;
+	// ponytail: decodes and scans at full size on the main thread, as the web tool did; a worker if large PNGs stall
+	load = async (file: File) => {
+		if (!matchesAccept(file, 'image/png,.png')) {
+			this.failure = PNG_ONLY;
+			return;
+		}
+		const run = ++this.#loading;
+		this.working = true;
+		const url = URL.createObjectURL(file);
+		const image = new Image();
+		image.src = url;
+		try {
+			await image.decode();
+		} catch {
+			URL.revokeObjectURL(url);
+			if (run !== this.#loading) return;
+			this.working = false;
+			this.failure = `Could not read ${file.name}`;
+			return;
+		}
+		if (run !== this.#loading || isDestroying(this)) {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		const pixels = {
+			width: image.naturalWidth,
+			height: image.naturalHeight,
+		};
+		const canvas = document.createElement('canvas');
+		canvas.width = pixels.width;
+		canvas.height = pixels.height;
+		const context = canvas.getContext('2d', {
+			willReadFrequently: true,
+		})!;
+		context.drawImage(image, 0, 0);
+		const kept = keptRect(
+			context.getImageData(0, 0, pixels.width, pixels.height)
+				.data,
+			pixels.width,
+			pixels.height,
+		);
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.source = {
+			url,
+			name: file.name || 'image.png',
+			stem: stem(file.name) || 'image',
+			canvas,
+			pixels,
+			kept,
+		};
+		this.working = false;
+		this.failure = '';
+		this.#show(kept, pixels);
+	};
 
-	#destroyed = false;
-
-	willDestroy() {
-		super.willDestroy();
-		this.#destroyed = true;
-		this.releasePreview();
+	// the box starts at the image edge and springs in, as iOS does
+	#show(kept: Rect | null, pixels: Size) {
+		cancelAnimationFrame(this.#frame);
+		this.springs = false;
+		if (!kept || reducedMotion()) {
+			this.shownKept = kept;
+			return;
+		}
+		this.shownKept = full(pixels);
+		this.#frame = requestAnimationFrame(() => {
+			this.#frame = requestAnimationFrame(() => {
+				this.springs = true;
+				this.shownKept = kept;
+				this.#timers.push(
+					window.setTimeout(
+						() => (this.springs = false),
+						springMs,
+					),
+				);
+			});
+		});
 	}
 
-	get noChange() {
-		const result = this.result;
-		return (
-			!!result &&
-			result.originalWidth === result.clippedWidth &&
-			result.originalHeight === result.clippedHeight
+	clear = () => {
+		this.#loading++;
+		cancelAnimationFrame(this.#frame);
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.source = undefined;
+		this.shownKept = emptyKept;
+		this.springs = false;
+		this.working = false;
+		this.failure = '';
+	};
+
+	#png(): Promise<Blob | null> {
+		const kept = this.source?.kept;
+		if (!this.source || !kept) return Promise.resolve(null);
+		const canvas = document.createElement('canvas');
+		canvas.width = kept.width;
+		canvas.height = kept.height;
+		const context = canvas.getContext('2d');
+		if (!context) return Promise.resolve(null);
+		context.drawImage(
+			this.source.canvas,
+			kept.x,
+			kept.y,
+			kept.width,
+			kept.height,
+			0,
+			0,
+			kept.width,
+			kept.height,
+		);
+		return new Promise((resolve) =>
+			canvas.toBlob(resolve, 'image/png'),
 		);
 	}
 
-	releasePreview = () => {
-		if (this.preview) URL.revokeObjectURL(this.preview);
-		this.preview = null;
+	copy = async () => {
+		const blob = await this.#png();
+		if (!blob) return;
+		try {
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob }),
+			]);
+		} catch {
+			return;
+		}
+		this.toast.show();
 	};
 
-	fail = (message: string) => {
-		this.processing = false;
-		this.error = message;
-	};
-
-	processImage = (file: File) => {
-		this.releasePreview();
-		this.result = null;
-		this.error = '';
-		this.processing = true;
-
-		const image = new Image();
-		const fileUrl = URL.createObjectURL(file);
-
-		image.onload = () => {
-			if (this.#destroyed) {
-				URL.revokeObjectURL(fileUrl);
-				return;
-			}
-
-			const width = image.naturalWidth;
-			const height = image.naturalHeight;
-
-			const canvas = document.createElement('canvas');
-			canvas.width = width;
-			canvas.height = height;
-			const ctx = canvas.getContext('2d');
-			if (!ctx) {
-				URL.revokeObjectURL(fileUrl);
-				this.fail(LOAD_FAILED);
-				return;
-			}
-			ctx.drawImage(image, 0, 0);
-
-			const bounds = findTrimBounds(
-				ctx.getImageData(0, 0, width, height).data,
-				width,
-				height,
-			);
-			if (!bounds) {
-				URL.revokeObjectURL(fileUrl);
-				this.fail(FULLY_TRANSPARENT);
-				return;
-			}
-
-			const clippedWidth = width - bounds.left - bounds.right;
-			const clippedHeight =
-				height - bounds.top - bounds.bottom;
-
-			if (
-				clippedWidth === width &&
-				clippedHeight === height
-			) {
-				this.preview = fileUrl;
-				this.result = {
-					...bounds,
-					originalWidth: width,
-					originalHeight: height,
-					clippedWidth,
-					clippedHeight,
-					url: fileUrl,
-					fileName: file.name,
-				};
-				this.processing = false;
-				return;
-			}
-
-			const out = document.createElement('canvas');
-			out.width = clippedWidth;
-			out.height = clippedHeight;
-			const outCtx = out.getContext('2d');
-			if (!outCtx) {
-				URL.revokeObjectURL(fileUrl);
-				this.fail(LOAD_FAILED);
-				return;
-			}
-			outCtx.drawImage(
-				canvas,
-				bounds.left,
-				bounds.top,
-				clippedWidth,
-				clippedHeight,
-				0,
-				0,
-				clippedWidth,
-				clippedHeight,
-			);
-
-			out.toBlob((blob) => {
-				URL.revokeObjectURL(fileUrl);
-				if (this.#destroyed) return;
-				if (!blob) {
-					this.fail(ENCODE_FAILED);
-					return;
-				}
-
-				this.preview = URL.createObjectURL(blob);
-				this.result = {
-					...bounds,
-					originalWidth: width,
-					originalHeight: height,
-					clippedWidth,
-					clippedHeight,
-					url: this.preview,
-					fileName: file.name.replace(
-						/\.png$/i,
-						'-clipped.png',
-					),
-				};
-				this.processing = false;
-			}, 'image/png');
-		};
-
-		image.onerror = () => {
-			URL.revokeObjectURL(fileUrl);
-			if (this.#destroyed) return;
-			this.fail(LOAD_FAILED);
-		};
-
-		image.src = fileUrl;
-	};
-
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.processImage(file);
-		// allows same file selection
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type === 'image/png') this.processImage(file);
-		else this.error = PNG_ONLY;
-	};
-
-	// prevent dropped-file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	reset = () => {
-		this.releasePreview();
-		this.result = null;
-		this.error = '';
-	};
-
-	download = () => {
-		const result = this.result;
-		if (!result) return;
-		downloadUrl(result.url, result.fileName);
+	export = async () => {
+		const { source } = this;
+		if (this.exportDisabled || !source) return;
+		this.exporting = true;
+		try {
+			const blob = await this.#png();
+			if (blob)
+				downloadBlob(
+					blob,
+					`${source.stem}-clipped.png`,
+				);
+			else this.failure = ENCODE_FAILED;
+		} finally {
+			this.exporting = false;
+		}
 	};
 
 	<template>
-		<div
-			class="dt-clip"
-			{{filePaste this.processImage accept="image/png"}}
+		<CanonSplit
+			class="image-clipper"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			style={{spring}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div class="dt-clip-frame">
-				{{#unless this.result}}
-					<label
-						class="dt-clip-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/png"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-clip-drop-title"
-						>Drop a PNG here or click to
-							upload</span>
-						<span
-							class="dt-clip-drop-hint"
-						>or paste from clipboard</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.processing}}
-					<p class="dt-clip-status">
-						<Icon
-							@name="scissors"
-							class="dt-clip-pulse"
-						/>
-						<span>Clipping…</span>
-					</p>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{aspect}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@url={{this.source.url}}
+						@pixels={{this.pixels}}
+						@kept={{this.shownKept}}
+						@springs={{this.springs}}
+						@over={{this.drop.over}}
+						@onChoose={{this.choose}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="clip-source"
+							@title={{this.source.name}}
+							@detail={{this.sizeText}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					</CanonRows>
 				{{/if}}
-
-				{{#if this.result}}
-					<div class="dt-clip-bar">
-						<div class="dt-clip-info">
-							<p
-								class="dt-clip-dims"
-							>{{this.result.originalWidth}}
-								×
-								{{this.result.originalHeight}}
-								→
-								{{this.result.clippedWidth}}
-								×
-								{{this.result.clippedHeight}}</p>
-							{{#if this.noChange}}
-								<p
-									class="dt-clip-note"
-								>No transparent
-									edges
-									found —
-									image is
-									already
-									minimal</p>
-							{{else}}
-								<p
-									class="dt-clip-note"
-								>Trimmed
-									{{this.result.top}}px
-									top,
-									{{this.result.right}}px
-									right,
-									{{this.result.bottom}}px
-									bottom,
-									{{this.result.left}}px
-									left</p>
-							{{/if}}
-						</div>
-						<button
-							type="button"
-							class="dt-clip-btn"
-							{{on
-								"click"
-								this.reset
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-clip-btn is-primary"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel
-								@label="Download PNG"
-							/>
-						</button>
-					</div>
-
-					{{#if this.preview}}
-						<div class="dt-clip-preview">
-							<img
-								src={{this.preview}}
-								alt="Clipped result"
-							/>
-						</div>
+				{{#if this.failure}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							class="clip-failure"
+							@text={{this.failure}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Output" />
+					<CanonTiles @items={{this.tiles}} />
+					{{#if this.note}}
+						<CanonStatus
+							class="clip-note"
+							@text={{this.note}}
+							@tone="muted"
+							@row={{true}}
+						/>
 					{{/if}}
-				{{/if}}
-			</div>
-
-			{{#if this.error}}
-				<p
-					class="dt-clip-error"
-					role="alert"
-				>{{this.error}}</p>
-			{{/if}}
-		</div>
+					<CanonGrid>
+						<CanonButton
+							class="clip-copy"
+							@text="Copy"
+							@icon={{Copy}}
+							@disabled={{this.clipDisabled}}
+							@onClick={{this.copy}}
+						/>
+						<CanonButton
+							class="clip-download"
+							@kind="primary"
+							@text={{passAlong
+								"Download PNG"
+							}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{this.exportDisabled}}
+							@onClick={{this.export}}
+						/>
+					</CanonGrid>
+					{{#if this.busy}}
+						<CanonRow
+							class="clip-busy"
+							@title="Processing…"
+						>
+							<CanonLoader />
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/png"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

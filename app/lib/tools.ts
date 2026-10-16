@@ -325,6 +325,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-clipper',
 				produces: ['image/png'],
 				accepts: ['.png'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'image-compressor',
