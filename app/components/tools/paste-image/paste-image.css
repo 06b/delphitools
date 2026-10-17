@@ -26,9 +26,12 @@
 	pointer-events: none;
 }
 
+/* the shell appends the sticker to the end slot; the credit follows its caption */
 .pi-credit {
-	margin: 0;
+	order: 1;
+	margin: 8px 0 0;
 	padding: 0 var(--canon-panel-padding);
+	text-align: center;
 	color: var(--canon-muted-foreground);
 	font-family: var(--canon-font);
 	font-size: var(--canon-text-footnote);

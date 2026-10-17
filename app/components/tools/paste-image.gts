@@ -363,13 +363,15 @@ export default class PasteImage extends Component {
 						</CanonRow>
 					{{/if}}
 				</CanonRows>
+			</:main>
+			<:end>
 				<p class="pi-credit">Contributed by
 					<a
 						href="https://github.com/himanshubalani"
 						target="_blank"
 						rel="noopener noreferrer"
 					>@himanshubalani</a></p>
-			</:main>
+			</:end>
 		</CanonSplit>
 	</template>
 }

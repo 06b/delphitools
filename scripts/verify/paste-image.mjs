@@ -51,6 +51,29 @@ check(
 );
 check('Download reads Download outside a flow', s.saveText === 'Download', s.saveText);
 
+await page.waitForSelector('.canon-split-end .dt-sticker-caption', { timeout: 5000 });
+const credit = await page.evaluate(() => {
+	const end = document.querySelector('.canon-split-end');
+	const box = (el) => el.getBoundingClientRect();
+	const caption = box(end.querySelector('.dt-sticker-caption'));
+	const p = end.querySelector('.pi-credit');
+	const line = box(p);
+	const range = document.createRange();
+	range.selectNodeContents(p);
+	const text = range.getBoundingClientRect();
+	return {
+		inEnd: !!p,
+		below: line.top >= caption.bottom,
+		centred: Math.abs(text.left + text.width / 2 - (caption.left + caption.width / 2)) < 2,
+		align: getComputedStyle(p).textAlign,
+	};
+});
+check(
+	'the credit sits under the sticker caption, centred',
+	credit.inEnd && credit.below && credit.centred && credit.align === 'center',
+	JSON.stringify(credit),
+);
+
 const makeImage = (width, height, type = 'image/png') =>
 	page.evaluate(
 		async ({ width, height, type }) => {
