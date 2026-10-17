@@ -12,7 +12,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { allTools } = await import('../app/lib/tools.ts');
 const { FX_ICONS, FX_ICON_FALLBACK } =
 	await import('../app/lib/substrata/fx-icons.ts');
-const { TOOL_ORDER } = await import('../app/lib/errata/tool.ts');
+// read, not imported: tool.ts imports app modules node cannot resolve
+const errataIcons = [
+	...readFileSync(join(root, 'app/lib/errata/tool.ts'), 'utf8').matchAll(
+		/icon: '([a-z0-9-]+)'/g,
+	),
+].map((m) => m[1]);
 
 // runtime icon names
 const EXTRA = [
@@ -58,7 +63,7 @@ const EXTRA = [
 	'star',
 	'swatch-book',
 	...Object.values(FX_ICONS),
-	...TOOL_ORDER.map((t) => t.icon),
+	...errataIcons,
 	FX_ICON_FALLBACK,
 ];
 
