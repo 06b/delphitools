@@ -527,7 +527,7 @@ export default class ColorblindSim extends Component {
 							<CanonGrid>
 								<CanonButton
 									class="cbs-download"
-									@text="Download"
+									@text="Download colourblind image"
 									@icon={{Save}}
 									@disabled={{if
 										this.result

@@ -163,11 +163,13 @@ const loaded = await page.evaluate(() => ({
 	thumbs: document.querySelectorAll('.cbs-type-swatch img').length,
 	values: document.querySelectorAll('.cbs-type-value').length,
 	download: document.querySelector('.cbs-download')?.disabled,
+	downloadText: document.querySelector('.cbs-download')?.textContent.trim(),
 }));
 check('a paste anywhere loads the image', loaded.title === 'pair.png' && loaded.detail === '200 × 100', `${loaded.title} ${loaded.detail}`);
 check('the compare is a named slider', loaded.role === 'slider' && loaded.label === 'Original, Protanopia', loaded.label);
 check('rows show thumbnails, no values', loaded.thumbs === 9 && loaded.values === 0, String(loaded.thumbs));
 check('Download is ready', loaded.download === false);
+check('the download names what it saves', loaded.downloadText === 'Download colourblind image', loaded.downloadText);
 
 // simulated pixels: protanopia turns pure red to #918e00
 const pixel = await page.evaluate(async () => {
@@ -273,5 +275,46 @@ const phone = await page.evaluate(async () => {
 check('phone: the picture is first and large', phone.full > 300, String(phone.full));
 check('phone: the picture collapses to its band', phone.band <= 250, String(phone.band));
 check('phone: no horizontal scroll', !phone.wide);
+
+
+// G4: the solid starts in RGB with the orbit hint, and drifts after 4 s idle
+await visit(page, '/tools/colorblind-sim');
+const axes = () =>
+	page.$$eval('.colorblind-sim .canon-colour-solid-axis', (labels) =>
+		labels.map((l) => l.style.translate).join(),
+	);
+const start = await page.evaluate(() => ({
+	space: document
+		.querySelector('.canon-colour-controls [role="radio"][aria-checked="true"]')
+		?.textContent.trim(),
+	hint: document.querySelector('.colorblind-sim .canon-colour-solid-hint')?.textContent.trim(),
+}));
+check('the solid starts in RGB', start.space === 'RGB', start.space);
+check('with the orbit hint', start.hint === 'Drag to orbit', start.hint);
+const still = await axes();
+await sleep(5500);
+check('and drifts after 4 s idle', still !== '' && (await axes()) !== still);
+
+// expanded, the folder tab takes the picture's colour
+const tabFill = () =>
+	page.evaluate(() => ({
+		tab: getComputedStyle(document.querySelector('.dt-tab')).backgroundColor,
+		picture: getComputedStyle(
+			document.querySelector('.colorblind-sim .canon-canvas-content'),
+		).backgroundColor,
+		sheet: getComputedStyle(document.querySelector('.dt-sheet')).backgroundColor,
+	}));
+await page.setViewport({ width: 2200, height: 1100 });
+await page.evaluate(() =>
+	localStorage.setItem('dt-canon-expanded', JSON.stringify(['colorblind-sim'])),
+);
+await visit(page, '/tools/colorblind-sim');
+let fill = await tabFill();
+check('expanded, the tab matches the picture', fill.tab === fill.picture, `${fill.tab} ${fill.picture}`);
+await page.evaluate(() => localStorage.setItem('dt-canon-expanded', '[]'));
+await visit(page, '/tools/colorblind-sim');
+fill = await tabFill();
+check('in the column, the tab matches the sheet', fill.tab === fill.sheet, `${fill.tab} ${fill.sheet}`);
+await page.setViewport({ width: 1400, height: 1000 });
 
 await finish(browser);
