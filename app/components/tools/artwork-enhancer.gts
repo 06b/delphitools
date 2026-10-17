@@ -87,7 +87,7 @@ export default class ArtworkEnhancer extends Component {
 	@tracked opacity: number;
 	@tracked noiseScale: number;
 	@tracked intelligent: boolean;
-	/** Where the detail is centred, in source pixels; none is the image centre. */
+	/** Where the detail is centred, in source pixels; none is the default spot. */
 	@tracked centre: { x: number; y: number } | null = null;
 	@tracked picture?: Pair;
 	@tracked grain?: Pair;
@@ -155,11 +155,16 @@ export default class ArtworkEnhancer extends Component {
 	}
 
 	get loupe() {
+		// a quarter across: clear of the compare grip at the centre
+		const start = {
+			x: this.imageWidth / 4,
+			y: this.imageHeight / 2,
+		};
 		return detailRect(
 			this.imageWidth,
 			this.imageHeight,
 			detail.side,
-			this.centre ?? undefined,
+			this.centre ?? start,
 		);
 	}
 

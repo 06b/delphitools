@@ -193,15 +193,28 @@ const loupe = () =>
 			grain: document.querySelector('.artwork-grain .canon-image-compare-before')?.src,
 		};
 	});
+// the loupe's hit box (at least 64 px) against the main compare grip
+const clearOfGrip = () =>
+	page.evaluate(() => {
+		const loupe = document.querySelector('.artwork-loupe').getBoundingClientRect();
+		const grip = document
+			.querySelector('.canon-split-sidebar .canon-image-compare-grip')
+			.getBoundingClientRect();
+		const half = Math.max(loupe.width + 24, 64) / 2;
+		const cx = loupe.x + loupe.width / 2;
+		const cy = loupe.y + loupe.height / 2;
+		return cx + half <= grip.left || cx - half >= grip.right || cy + half <= grip.top || cy - half >= grip.bottom;
+	});
 const centred = await loupe();
 check('the loupe is a named slider on the picture', centred.role === 'slider' && centred.label === 'Detail');
-check('the loupe starts at the centre', centred.text === '150, 100', centred.text);
+check('the loupe starts a quarter across, mid height', centred.text === '75, 100', centred.text);
+check('the default loupe is clear of the compare grip', await clearOfGrip());
 await page.focus('.artwork-loupe');
 await page.keyboard.press('ArrowRight');
 await page.keyboard.press('ArrowDown');
 await sleep(300);
 const nudged = await loupe();
-check('arrows move the loupe a quarter of its side', nudged.text === '166, 116', nudged.text);
+check('arrows move the loupe a quarter of its side', nudged.text === '91, 116', nudged.text);
 check('and redraw the detail', nudged.grain && nudged.grain !== centred.grain);
 for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowRight');
 await sleep(200);
@@ -226,6 +239,45 @@ const green = await page.evaluate(async () => {
 	return [...context.getImageData(8, 8, 1, 1).data].slice(0, 3).join();
 });
 check('the detail shows the region under the loupe', green === '128,255,128', green);
+
+// the loupe dragged onto the grip: the grip wins inside its square, the loupe outside it
+const gripBox = await page.$eval('.canon-split-sidebar .canon-image-compare-grip', (el) => {
+	const b = el.getBoundingClientRect();
+	return { x: b.x + b.width / 2, y: b.y + b.height / 2, right: b.right };
+});
+const corner = await loupe();
+await page.mouse.move(corner.x, corner.y);
+await page.mouse.down();
+await page.mouse.move(gripBox.x, gripBox.y, { steps: 8 });
+await page.mouse.up();
+await sleep(300);
+const onGrip = await loupe();
+check('the loupe can sit on the grip', Math.abs(onGrip.x - gripBox.x) < 4 && Math.abs(onGrip.y - gripBox.y) < 4, `${onGrip.x},${onGrip.y} vs ${gripBox.x},${gripBox.y}`);
+const hits = await page.evaluate(
+	(g) => ({
+		centre: !!document.elementFromPoint(g.x, g.y)?.closest('.canon-image-compare'),
+		ring: document.elementFromPoint(g.right + 6, g.y)?.classList.contains('artwork-loupe'),
+	}),
+	gripBox,
+);
+check('on top of each other the grip takes its own square', hits.centre);
+check('and the loupe takes its ring past the grip', hits.ring);
+const split = () =>
+	page.$eval('.canon-split-sidebar .canon-image-compare', (el) => Number(el.getAttribute('aria-valuenow')));
+const splitBefore = await split();
+await page.mouse.move(gripBox.x, gripBox.y);
+await page.mouse.down();
+await page.mouse.move(gripBox.x - 80, gripBox.y, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+check('a drag from the grip still moves the divider', (await split()) < splitBefore, `${splitBefore} → ${await split()}`);
+check('and leaves the loupe', (await loupe()).text === onGrip.text, (await loupe()).text);
+await page.mouse.move(gripBox.right + 6, gripBox.y);
+await page.mouse.down();
+await page.mouse.move(gripBox.right + 66, gripBox.y + 40, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+check('a drag from the loupe ring still moves the loupe', (await loupe()).text !== onGrip.text, (await loupe()).text);
 
 // scale: 4× makes 4 px blocks
 await page.evaluate(() =>
@@ -322,5 +374,10 @@ const phone = await page.evaluate(async () => {
 });
 check('phone: the picture collapses to 240 px', Math.round(phone.band) === 240 && phone.full > 240, `${phone.full} ${phone.band}`);
 check('phone: no horizontal scroll', !phone.wide);
+await page.evaluate(() => {
+	document.querySelector('.artwork-enhancer .canon-split-body').scrollTop = 0;
+});
+await sleep(300);
+check('phone: the default loupe is clear of the compare grip', await clearOfGrip());
 
 await finish(browser);

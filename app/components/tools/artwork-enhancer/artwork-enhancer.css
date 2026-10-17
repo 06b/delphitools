@@ -62,11 +62,21 @@
 	touch-action: none;
 }
 
-/* a 64 px detail on a large image is a few screen pixels: a wider grip */
+/* a 64 px detail on a large image is a few screen pixels: a wider grip,
+   larger than the 44 px compare grip so part of it stays reachable */
 .artwork-loupe::before {
 	position: absolute;
-	inset: -12px;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	inline-size: max(100% + 24px, 64px);
+	block-size: max(100% + 24px, 64px);
 	content: "";
+	translate: -50% -50%;
+}
+
+/* where the two overlap, the divider grip wins */
+.artwork-box .canon-image-compare-grip {
+	z-index: 1;
 }
 
 .artwork-loupe:active {
