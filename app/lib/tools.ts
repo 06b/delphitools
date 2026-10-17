@@ -766,6 +766,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'file-text',
 				href: '/tools/paper-sizes',
 				canon: true,
+				expands: true,
 			},
 			{
 				id: 'px-to-rem',

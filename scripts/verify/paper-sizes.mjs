@@ -220,6 +220,36 @@ check('?paperFind', s.field === 'letter' && s.series.join('|') === 'US Classic',
 check('?paperArrange', s.arrangement === 'sideBySide', s.arrangement);
 await page.evaluate(() => localStorage.removeItem('paperSizeUnit'));
 
+// full width: the picture grows beside the 600 px settings
+await page.setViewport({ width: 2200, height: 1100 });
+await visit(page, '/tools/paper-sizes?paperCompare=A4,A3');
+const panes = () =>
+	page.evaluate(() => ({
+		picture: document
+			.querySelector('.paper-sizes .canon-split-sidebar')
+			.getBoundingClientRect().width,
+		main: document
+			.querySelector('.paper-sizes .canon-split-main')
+			.getBoundingClientRect().width,
+		top: [
+			document.querySelector('.paper-sizes .canon-split-sidebar'),
+			document.querySelector('.paper-sizes .canon-split-main'),
+		].map((pane) => Math.round(pane.getBoundingClientRect().top)),
+	}));
+const column = await panes();
+check('the tool has the full-width toggle', !!(await page.$('.dt-canon-edge')));
+await page.click('.dt-canon-edge.is-start');
+await sleep(500);
+const wide = await panes();
+check(
+	'expanded, the picture grows and the settings keep 600 px',
+	wide.picture > column.picture + 300 && Math.round(wide.main) === 600,
+	`${column.picture} -> ${wide.picture}, main ${wide.main}`,
+);
+check('the panes sit side by side', wide.top[0] === wide.top[1], `${wide.top}`);
+await page.click('.dt-canon-edge.is-start');
+await sleep(400);
+
 // phone
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/paper-sizes?paperCompare=A4,A3');
