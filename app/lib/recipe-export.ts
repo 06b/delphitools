@@ -109,8 +109,8 @@ export function toText({ title, notes, ingredients, grid }: Rendered): string {
 // light palette: print output
 const PRINT_CSS = `
 @font-face {
-	font-family: "iA Writer Quattro";
-	src: url("/fonts/iAWriterQuattroV.woff2") format("woff2");
+	font-family: "Open Sans Condensed";
+	src: url("/fonts/OpenSansCondensedV.woff2") format("woff2");
 	font-weight: 400 700;
 	font-style: normal;
 }
@@ -132,7 +132,7 @@ body {
 	margin: 0;
 	background: #fff;
 	color: var(--foreground);
-	font-family: "iA Writer Quattro", ui-monospace, monospace;
+	font-family: "Open Sans Condensed", system-ui, sans-serif;
 	font-size: 10pt;
 	line-height: 1.45;
 	print-color-adjust: exact;

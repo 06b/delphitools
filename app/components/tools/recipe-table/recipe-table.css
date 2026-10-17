@@ -265,6 +265,30 @@
 	min-block-size: 240px;
 }
 
+/* the script by role; colour only, so the marks keep the textarea's metrics */
+.rt-t--step {
+	color: var(--canon-primary);
+}
+
+.rt-t--quantity {
+	color: var(--canon-math-blue);
+}
+
+.rt-t--name {
+	color: var(--canon-math-clay);
+}
+
+.rt-t--note {
+	color: var(--canon-math-green);
+}
+
+.rt-t--meta,
+.rt-t--mark,
+.rt-t--detail,
+.rt-t--discard {
+	color: var(--canon-muted-foreground);
+}
+
 .rt-problem {
 	font-family: var(--canon-mono-font);
 	overflow-wrap: anywhere;

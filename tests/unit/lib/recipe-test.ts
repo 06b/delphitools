@@ -585,8 +585,8 @@ module('Unit | lib | recipe-export', function () {
 			'the title names the saved file',
 		);
 		assert.ok(
-			doc.includes('iAWriterQuattroV.woff2'),
-			'the brand face',
+			doc.includes('OpenSansCondensedV.woff2'),
+			'the app face',
 		);
 		assert.ok(
 			doc.includes(toHtml(out)),

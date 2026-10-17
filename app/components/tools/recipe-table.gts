@@ -23,6 +23,7 @@ import type { Display } from 'delphitools-v2/lib/recipe-scale';
 import { toHtml, toPrintable, toText } from 'delphitools-v2/lib/recipe-export';
 import MarkedEditor from 'delphitools-v2/components/tools/media/marked-editor';
 import Picture from 'delphitools-v2/components/tools/recipe-table/picture';
+import { syntaxLines } from 'delphitools-v2/components/tools/recipe-table/syntax';
 import './recipe-table/recipe-table.css';
 
 const SAMPLE = `title: Aglio e olio
@@ -122,9 +123,9 @@ export default class RecipeTableTool extends Component {
 		const flagged = new Set(
 			this.recipe.problems.map((p) => p.line),
 		);
-		return this.text.split('\n').map((text, index) => ({
+		return syntaxLines(this.text).map((runs, index) => ({
 			// keeps empty line height
-			text: text || ' ',
+			runs: runs.length ? runs : [{ text: ' ', kind: null }],
 			lit: flagged.has(index + 1),
 		}));
 	}
@@ -358,9 +359,16 @@ export default class RecipeTableTool extends Component {
 						@label="Recipe"
 						@onInput={{this.setText}}
 					>
-						<:line
-							as |line|
-						>{{line.text}}</:line>
+						<:line as |line|>
+							{{~#each
+								line.runs
+								as |run|
+							~}}
+								<span
+									class="rt-t--{{run.kind}}"
+								>{{run.text}}</span>
+							{{~/each~}}
+						</:line>
 					</MarkedEditor>
 					{{#each
 						this.recipe.problems

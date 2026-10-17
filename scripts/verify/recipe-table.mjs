@@ -120,6 +120,36 @@ check(
 	first.ingredients.join(' | '),
 );
 
+const syntax = await page.evaluate(() => {
+	const marks = document.querySelector('.rt-editor .media-marked-marks');
+	const source = document.querySelector('.rt-editor .media-marked-source');
+	const lines = [...marks.querySelectorAll('.media-marked-text')].map(
+		(el) => el.textContent,
+	);
+	const colour = (selector) => {
+		const el = marks.querySelector(selector);
+		return el ? getComputedStyle(el).color : null;
+	};
+	return {
+		same: lines.map((l) => l.trimEnd()).join('\n') === source.value.split('\n').map((l) => l.trimEnd()).join('\n'),
+		step: marks.querySelector('.rt-t--step')?.textContent,
+		quantity: marks.querySelector('.rt-t--quantity')?.textContent,
+		name: marks.querySelector('.rt-t--name')?.textContent,
+		stepColour: colour('.rt-t--step'),
+		plainColour: colour('.rt-t--ingredient'),
+		quantityColour: colour('.rt-t--quantity'),
+	};
+});
+check('syntax: the marks spell the script', syntax.same);
+check('syntax: steps, quantities and names are runs', syntax.step === 'fry ' && syntax.quantity === ' 2 Tbsp' && syntax.name === ' sauce', `${syntax.step}|${syntax.quantity}|${syntax.name}`);
+check(
+	'syntax: steps and quantities take their own colours',
+	syntax.stepColour !== syntax.plainColour &&
+		syntax.quantityColour !== syntax.plainColour &&
+		syntax.stepColour !== syntax.quantityColour,
+	`${syntax.stepColour} ${syntax.quantityColour} ${syntax.plainColour}`,
+);
+
 const type = async (text) => {
 	await page.click('.media-marked-source');
 	await page.evaluate(() => {
@@ -399,9 +429,10 @@ check(
 	doc.slice(0, 30),
 );
 check(
-	'it carries the brand face',
-	doc.includes('iAWriterQuattroV.woff2'),
+	'it carries the app face',
+	doc.includes('OpenSansCondensedV.woff2'),
 );
+check('and no iA Writer Quattro', !doc.includes('Quattro'));
 check(
 	'it names the saved file after the recipe',
 	doc.includes('<title>Aglio e olio</title>'),
@@ -432,7 +463,7 @@ check(
 		if (!frame) return false;
 		await frame.contentWindow.document.fonts.ready;
 		return frame.contentWindow.document.fonts.check(
-			'10pt "iA Writer Quattro"',
+			'10pt "Open Sans Condensed"',
 		);
 	}),
 );
