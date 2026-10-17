@@ -227,6 +227,21 @@ check(
 	(await page.$eval('.cbs-source .canon-row-title', (el) => el.textContent.trim())) === 'dropped.png',
 );
 
+await page.evaluate(() => {
+	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#f00"/></svg>';
+	const data = new DataTransfer();
+	data.items.add(new File([svg], 'shape.svg', { type: 'image/svg+xml' }));
+	document
+		.querySelector('.canon-split-main')
+		.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
+});
+await page.waitForFunction(() => document.querySelector('.cbs-source .canon-row-title')?.textContent.trim() === 'shape.svg', { timeout: 5000 }).catch(() => {});
+const svgLoaded = await page.evaluate(() => [
+	document.querySelector('.cbs-source .canon-row-title').textContent.trim(),
+	document.querySelector('.cbs-source .canon-row-detail').textContent.trim(),
+]);
+check('a dropped SVG loads', svgLoaded.join(' ') === 'shape.svg 120 × 60', svgLoaded.join(' '));
+
 await page.evaluate(() =>
 	[...document.querySelectorAll('.cbs-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
 );

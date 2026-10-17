@@ -33,6 +33,7 @@ import {
 	simulateHex,
 	type SimulationType,
 } from 'delphitools-v2/lib/colour-vision';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadUrl } from 'delphitools-v2/lib/download';
 import { downloadIcon } from 'delphitools-v2/lib/flow-hooks';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
@@ -290,9 +291,7 @@ export default class ColorblindSim extends Component {
 		const run = ++this.#loading;
 		let bitmap: ImageBitmap;
 		try {
-			bitmap = await createImageBitmap(file, {
-				imageOrientation: 'from-image',
-			});
+			bitmap = await decodeImage(file);
 		} catch {
 			return;
 		}

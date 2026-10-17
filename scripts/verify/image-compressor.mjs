@@ -333,6 +333,23 @@ await sleep(400);
 check('a drop on the picture loads the image', (await sourceName()) === 'dropped.png');
 await settled();
 
+await page.evaluate(() => {
+	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#f00"/></svg>';
+	const data = new DataTransfer();
+	data.items.add(new File([svg], 'shape.svg', { type: 'image/svg+xml' }));
+	document.querySelector('.canon-image-compare').dispatchEvent(
+		new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
+	);
+});
+await sleep(400);
+await settled();
+check(
+	'a dropped SVG compresses',
+	(await sourceName()) === 'shape.svg' &&
+		!(await page.$eval('.ic-download', (el) => el.disabled)),
+	await sourceName(),
+);
+
 // a file that is not an image shows the failure over the empty picture
 await page.evaluate(() => {
 	const data = new DataTransfer();

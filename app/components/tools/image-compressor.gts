@@ -16,6 +16,7 @@ import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
@@ -72,16 +73,6 @@ function launchFlags() {
 		quality: clamp('compressQuality', 1, 100, 75),
 		effort: clamp('compressEffort', 1, 6, 2),
 	};
-}
-
-async function decode(file: File): Promise<ImageBitmap> {
-	try {
-		return await createImageBitmap(file, {
-			imageOrientation: 'from-image',
-		});
-	} catch {
-		return createImageBitmap(file);
-	}
 }
 
 function pixelsOf(bitmap: ImageBitmap, background: string | null) {
@@ -198,7 +189,7 @@ export default class ImageCompressor extends Component {
 		this.decoding = true;
 		let bitmap: ImageBitmap;
 		try {
-			bitmap = await decode(file);
+			bitmap = await decodeImage(file);
 		} catch {
 			if (this.source !== source) return;
 			this.decoding = false;

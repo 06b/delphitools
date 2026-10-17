@@ -17,6 +17,7 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import { stem } from 'delphicanon/lib/files';
 import { springEasing } from 'delphicanon/lib/motion';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
@@ -172,7 +173,7 @@ export default class ImageDeskewer extends Component {
 		const run = ++this.#loading;
 		let source: Source;
 		try {
-			const bitmap = await createImageBitmap(file);
+			const bitmap = await decodeImage(file);
 			const canvas = document.createElement('canvas');
 			canvas.width = bitmap.width;
 			canvas.height = bitmap.height;

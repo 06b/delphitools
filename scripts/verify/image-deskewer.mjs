@@ -400,6 +400,17 @@ check('a dropped non-image is ignored', (await state()).title === 'tall');
 await send('drop', 'dropped.png', 'image/png', 80, 40);
 await sleep(400);
 check('a drop anywhere replaces the source', (await state()).title === 'dropped');
+await page.evaluate(() => {
+	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#f00"/></svg>';
+	const data = new DataTransfer();
+	data.items.add(new File([svg], 'shape.svg', { type: 'image/svg+xml' }));
+	document.querySelector('.canon-split-main').dispatchEvent(
+		new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
+	);
+});
+await sleep(400);
+s = await state();
+check('a dropped SVG loads', s.title === 'shape' && s.detail === '120 × 60', `${s.title} ${s.detail}`);
 await page.click('.deskew-clear');
 await sleep(200);
 check(

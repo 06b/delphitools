@@ -209,6 +209,16 @@ await page.evaluate(async () => {
 });
 await sleep(800);
 check('a drop anywhere replaces the source', (await state()).detail === '30 × 20');
+await page.evaluate(() => {
+	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#f00"/></svg>';
+	const data = new DataTransfer();
+	data.items.add(new File([svg], 'shape.svg', { type: 'image/svg+xml' }));
+	document.querySelector('.canon-split-main').dispatchEvent(
+		new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
+	);
+});
+await sleep(800);
+check('a dropped SVG loads', (await state()).detail === '120 × 60', (await state()).detail);
 
 // launch flags
 await visit(page, '/tools/palette-extractor?extractSample&extractCount=8&extractStrategy=1');

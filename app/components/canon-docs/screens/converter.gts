@@ -11,6 +11,7 @@ import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
@@ -50,7 +51,7 @@ function sample(): Promise<Blob> {
 }
 
 async function convert(file: Blob, type: string, quality: number) {
-	const bitmap = await createImageBitmap(file);
+	const bitmap = await decodeImage(file);
 	const canvas = document.createElement('canvas');
 	canvas.width = bitmap.width;
 	canvas.height = bitmap.height;

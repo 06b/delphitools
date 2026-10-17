@@ -24,6 +24,7 @@ import { parseHex, takesBlackInk } from 'delphicanon/lib/colour';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import Slot from 'delphitools-v2/components/tools/media/slot';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
@@ -85,16 +86,6 @@ function launchFlags(search: string) {
 				: 5,
 		strategy: STRATEGIES[strategy] ? strategy : 0,
 	};
-}
-
-async function decode(file: Blob): Promise<ImageBitmap> {
-	try {
-		return await createImageBitmap(file, {
-			imageOrientation: 'from-image',
-		});
-	} catch {
-		return createImageBitmap(file);
-	}
 }
 
 const pngOf = (canvas: HTMLCanvasElement) =>
@@ -309,7 +300,7 @@ export default class PaletteExtractor extends Component {
 		const run = ++this.#loading;
 		let bitmap: ImageBitmap;
 		try {
-			bitmap = await decode(file);
+			bitmap = await decodeImage(file);
 		} catch {
 			return;
 		}

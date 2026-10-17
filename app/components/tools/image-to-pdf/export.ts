@@ -4,6 +4,7 @@ import {
 	layout,
 	type Options,
 } from 'delphitools-v2/components/tools/image-to-pdf/layout';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 
 export interface Source {
 	file: File;
@@ -26,7 +27,7 @@ function encode(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
 
 // pdf-lib: jpeg, png only
 async function redrawn(file: File, type: string): Promise<ArrayBuffer> {
-	const bitmap = await createImageBitmap(file);
+	const bitmap = await decodeImage(file);
 	const canvas = document.createElement('canvas');
 	canvas.width = bitmap.width;
 	canvas.height = bitmap.height;
