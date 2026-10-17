@@ -1,7 +1,7 @@
-/* SubtitleStudioStrips: filmstrip 40 over a cue lane 20 */
+/* SubtitleStudioStrips: filmstrip 40 over the cue lane, which takes the rest of the shared band */
 .ss-strips {
 	display: grid;
-	grid-template-rows: 40px 20px;
+	grid-template-rows: 40px minmax(0, 1fr);
 	block-size: 100%;
 }
 
@@ -26,6 +26,11 @@
 	position: relative;
 	inline-size: min(100cqw, 100cqh * var(--ss-aspect));
 	block-size: min(100cqh, 100cqw / var(--ss-aspect));
+}
+
+.ss-blank {
+	display: block;
+	background: var(--canon-muted);
 }
 
 .ss-canvas {

@@ -28,7 +28,7 @@ const state = () =>
 			document.querySelector(sel)?.textContent.replace(/\s+/g, ' ').trim() ?? null;
 		const canvas = document.querySelector('.ss-canvas');
 		return {
-			videoDrop: !!document.querySelector('.canon-split-main .ss-video-drop'),
+			videoDrop: !!document.querySelector('.canon-split-main .ss-source .ss-video-slot.media-slot--row'),
 			subsDrop: !!document.querySelector('.canon-split-main .ss-subs-drop'),
 			preview: !!canvas,
 			canvas: canvas ? `${canvas.width}x${canvas.height}` : null,
@@ -45,6 +45,9 @@ const state = () =>
 				c.classList.contains('cue-timeline-cue--active'),
 			),
 			footer: !!document.querySelector('.canon-split-footer .ss-transport'),
+			transportOff: [...document.querySelectorAll('.ss-transport .canon-button')].every((b) => b.disabled),
+			blankPicture: !!document.querySelector('.canon-split-main .ss-preview .ss-blank'),
+			band: Math.round(document.querySelector('.canon-split-banner .canon-canvas').getBoundingClientRect().height),
 			burn: document.querySelector('.media-job-run')?.disabled ?? null,
 			handle: document.querySelector('.ss-handle')?.getAttribute('style') ?? null,
 		};
@@ -95,10 +98,74 @@ check(
 	),
 );
 let s = await state();
+// media/strips bandHeight: readoutBandHeight(96)
+const BAND = 138;
 check(
-	'empty: both drop zones in the main pane, no preview, no footer',
-	s.videoDrop && s.subsDrop && !s.preview && !s.footer && s.burn === null,
+	'empty: the Source slot row and the subtitles drop zone, a blank picture, no canvas',
+	s.videoDrop && s.subsDrop && s.blankPicture && !s.preview,
 	JSON.stringify(s),
+);
+check(
+	'empty: the transport is there, off, and Burn is off',
+	s.footer && s.transportOff && s.burn === true,
+	JSON.stringify(s),
+);
+check('empty: the band is bandHeight tall', s.band === BAND, `${s.band}`);
+const blank = await page.evaluate(() => {
+	const picture = document.querySelector('.ss-preview .ss-blank').getBoundingClientRect();
+	const headings = (sel) => [...document.querySelectorAll(`${sel} .canon-heading`)].map((h) => h.textContent.trim());
+	return {
+		frames: document.querySelectorAll('.ss-strips .media-strips--blank .media-frame--blank').length,
+		lane: !!document.querySelector('.ss-strips .ss-lane .cue-timeline-lane'),
+		laneCues: document.querySelectorAll('.ss-lane .cue-timeline-cue').length,
+		aspect: Math.round((picture.width / picture.height) * 100) / 100,
+		text: document.querySelector('.ss-preview').textContent.trim(),
+		sidebar: headings('.canon-split-sidebar'),
+		source: headings('.ss-source'),
+		cues: headings('.ss-cues'),
+		cueBlank: !!document.querySelector('.ss-cues .ss-cues-blank'),
+		settingsOn: [...document.querySelectorAll('.ss-font [role="radio"], .ss-text [role="radio"], .ss-weight [role="radio"]')].every(
+			(b) => !b.disabled,
+		),
+		format: document.querySelectorAll('.ss-format [role="radio"]:not(:disabled)').length,
+		slider: !!document.querySelector('.ss-size [role="slider"]'),
+	};
+});
+check(
+	'empty: the loaded layout in blank: frame cells, an empty cue lane, a 16:9 picture, an empty cue list',
+	blank.frames > 0 &&
+		blank.lane &&
+		blank.laneCues === 0 &&
+		Math.abs(blank.aspect - 16 / 9) < 0.02 &&
+		blank.text === '' &&
+		blank.source.join() === 'Source,Subtitles' &&
+		blank.cues.join() === 'Subtitles' &&
+		blank.cueBlank,
+	JSON.stringify(blank),
+);
+check(
+	'empty: the look and the format are there and enabled',
+	blank.sidebar.join() === 'Font,Style,Position,Format' && blank.settingsOn && blank.format > 0 && blank.slider,
+	JSON.stringify(blank),
+);
+await press('.ss-text', 'Box');
+await sleep(50);
+check('empty: a look picked before a file sticks', (await selected('.ss-text')) === 'Box');
+await press('.ss-text', 'Outline');
+const chosen = await page.evaluate(async () => {
+	const input = document.querySelector('.ss-source input[type="file"]');
+	let clicked = false;
+	input.addEventListener('click', (e) => {
+		clicked = true;
+		e.preventDefault();
+	}, { once: true });
+	document.querySelector('.ss-video-slot').click();
+	return { clicked, multiple: input.multiple, accept: input.accept };
+});
+check(
+	'empty: the Source slot opens a picker for the video and its subtitles',
+	chosen.clicked && chosen.multiple && /srt/.test(chosen.accept) && /video/.test(chosen.accept),
+	JSON.stringify(chosen),
 );
 
 const made = await makeClip(page, { ms: 2000, name: 'sweep.webm' });
@@ -129,6 +196,7 @@ check(
 		s.footer,
 	JSON.stringify(s),
 );
+check('loaded: the band is bandHeight tall', s.band === BAND, `${s.band}`);
 check(
 	'the cue list and the preview are in the main pane',
 	await page.evaluate(
@@ -395,7 +463,11 @@ check('Clear on the subtitles row keeps the video and empties the list', s.subsD
 await page.$$eval('.ss-video .canon-button', (els) => els[0].click());
 await sleep(100);
 s = await state();
-check('Clear on the video row returns to the empty state', s.videoDrop && !s.preview && !s.footer);
+check(
+	'Clear on the video row returns to the empty state',
+	s.videoDrop && !s.preview && s.blankPicture && s.footer && s.transportOff && s.band === BAND,
+	JSON.stringify(s),
+);
 
 // a bad subtitle file warns
 await pasteFile('broken.srt', 'not subtitles', '');

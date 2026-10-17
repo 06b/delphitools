@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
 import { eq, or } from 'ember-truth-helpers';
 import { modifier } from 'ember-modifier';
@@ -12,9 +13,8 @@ import CanonDropZone from 'delphicanon/components/canon-drop-zone';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import type { CanonLamp } from 'delphicanon/components/canon-lamps';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
@@ -30,7 +30,10 @@ import CueTimeline, {
 import Job from 'delphitools-v2/components/tools/media/job';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import {
 	release,
 	thumbnails,
@@ -91,11 +94,10 @@ const ANY = `${VIDEO},${SUBS}`;
 const SUBS_RE = /\.(srt|vtt)$/i;
 
 const CAPTURE_FPS = 30;
-/** iOS SubtitleStudioStrips: filmstrip 40 over a cue lane 20 */
-const bandHeight = readoutBandHeight(60);
 // iOS: height over width at most 1.25, at most 420 pt tall
 const tallest = 1.25;
 const tallestPreview = 420;
+const BLANK_BOARD = htmlSafe(`--ss-aspect: ${16 / 9}`);
 /** Opacity of the next cue between cues (iOS ghost). */
 const GHOST = 0.45;
 const LAMPS: CanonLamp[] = ['play', 'pause'];
@@ -116,7 +118,6 @@ const HIDDEN_ERROR =
 // probed once; static per browser
 const FORMATS = supportedFormats();
 
-const Film = <template><IconSvg @name="film" /></template>;
 const Captions = <template><IconSvg @name="captions" /></template>;
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Flame = <template><IconSvg @name="flame" /></template>;
@@ -197,6 +198,7 @@ export default class SubtitleStudioTool extends Component {
 	@tracked formatId = '';
 
 	canvas: HTMLCanvasElement | null = null;
+	picker: HTMLInputElement | null = null;
 
 	#token = 0;
 	#burnId = 0;
@@ -467,6 +469,21 @@ export default class SubtitleStudioTool extends Component {
 	};
 
 	readFiles = (files: File[]) => files.forEach(this.readAny);
+
+	keepPicker = modifier((element: HTMLInputElement) => {
+		this.picker = element;
+	});
+
+	// the video and its subtitles in one pick, as the drop zone took them
+	choose = () => this.picker?.click();
+
+	picked = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const files = [...(input.files ?? [])];
+		// the same file twice fires change again
+		input.value = '';
+		this.readFiles(files);
+	};
 
 	allowDrop = (event: DragEvent) => {
 		if (event.dataTransfer?.types.includes('Files'))
@@ -934,7 +951,6 @@ export default class SubtitleStudioTool extends Component {
 			class="subtitle-studio"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{off this.loaded}}
 			{{filePaste this.readAny accept=ANY}}
 			{{on "dragover" this.allowDrop}}
 			{{on "drop" this.dropAnywhere}}
@@ -958,6 +974,9 @@ export default class SubtitleStudioTool extends Component {
 								@duration={{this.intake.duration}}
 								@playhead={{this.playback.playhead}}
 								@onScrub={{this.scrub}}
+								@blank={{off
+									this.loaded
+								}}
 							/>
 							<CueTimeline
 								class="ss-lane"
@@ -978,153 +997,138 @@ export default class SubtitleStudioTool extends Component {
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				{{#if this.loaded}}
-					<CanonRows
-						class="ss-look"
-						@framed={{true}}
+				<CanonRows class="ss-look" @framed={{true}}>
+					<CanonHeading @text="Font" />
+					<CanonSegmented
+						class="ss-font"
+						aria-label="Font"
+						@items={{FONT_LABELS}}
+						@columns={{4}}
+						@selected={{this.fontIndex}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickFont}}
+					/>
+					<CanonSegmented
+						class="ss-weight"
+						aria-label="Weight"
+						@items={{WEIGHTS}}
+						@selected={{this.weightIndex}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickWeight}}
+					/>
+					<CanonRow
+						class="ss-size"
+						@title="Size"
+						@form="flush"
+						as |titleId|
 					>
-						<CanonHeading @text="Font" />
-						<CanonSegmented
-							class="ss-font"
-							aria-label="Font"
-							@items={{FONT_LABELS}}
-							@columns={{4}}
-							@selected={{this.fontIndex}}
-							@disabled={{this.burning}}
-							@onChange={{this.pickFont}}
+						<CanonSlider
+							@value={{this.style.size}}
+							@min={{SIZE_MIN}}
+							@max={{SIZE_MAX}}
+							@step={{0.01}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setSize}}
 						/>
-						<CanonSegmented
-							class="ss-weight"
-							aria-label="Weight"
-							@items={{WEIGHTS}}
-							@selected={{this.weightIndex}}
-							@disabled={{this.burning}}
-							@onChange={{this.pickWeight}}
+					</CanonRow>
+					<CanonRow
+						class="ss-width"
+						@title="Width"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.style.width}}
+							@min={{WIDTH_MIN}}
+							@max={{WIDTH_MAX}}
+							@step={{0.05}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setWidth}}
 						/>
-						<CanonRow
-							class="ss-size"
-							@title="Size"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonSlider
-								@value={{this.style.size}}
-								@min={{SIZE_MIN}}
-								@max={{SIZE_MAX}}
-								@step={{0.01}}
-								@labelledBy={{titleId}}
-								@onChange={{this.setSize}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="ss-width"
-							@title="Width"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonSlider
-								@value={{this.style.width}}
-								@min={{WIDTH_MIN}}
-								@max={{WIDTH_MAX}}
-								@step={{0.05}}
-								@labelledBy={{titleId}}
-								@onChange={{this.setWidth}}
-							/>
-						</CanonRow>
-						<CanonHeading @text="Style" />
-						<CanonSegmented
-							class="ss-text"
-							aria-label="Style"
-							@items={{TEXT_LABELS}}
-							@columns={{4}}
-							@selected={{this.textIndex}}
-							@disabled={{this.burning}}
-							@onChange={{this.pickText}}
-						/>
+					</CanonRow>
+					<CanonHeading @text="Style" />
+					<CanonSegmented
+						class="ss-text"
+						aria-label="Style"
+						@items={{TEXT_LABELS}}
+						@columns={{4}}
+						@selected={{this.textIndex}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickText}}
+					/>
+					<CanonColourWell
+						class="ss-colour"
+						@label="Text"
+						@colour={{this.colour}}
+						@onChange={{this.setColour}}
+					/>
+					{{#unless this.isPlain}}
 						<CanonColourWell
-							class="ss-colour"
-							@label="Text"
-							@colour={{this.colour}}
-							@onChange={{this.setColour}}
+							class="ss-backing"
+							@label="Backing"
+							@colour={{this.backing}}
+							@onChange={{this.setBacking}}
 						/>
-						{{#unless this.isPlain}}
-							<CanonColourWell
-								class="ss-backing"
-								@label="Backing"
-								@colour={{this.backing}}
-								@onChange={{this.setBacking}}
+					{{/unless}}
+					<CanonHeading @text="Position" />
+					<CanonGrid class="ss-place">
+						{{#each PLACES as |item index|}}
+							<CanonButton
+								@kind="cell"
+								@text={{item.text}}
+								@icon={{item.icon}}
+								@disabled={{or
+									this.burning
+									(eq
+										this.cues.length
+										0
+									)
+								}}
+								@onClick={{fn
+									this.place
+									index
+								}}
 							/>
-						{{/unless}}
-						<CanonHeading
-							@text="Position"
-						/>
-						<CanonGrid class="ss-place">
-							{{#each
-								PLACES
-								as |item index|
-							}}
-								<CanonButton
-									@kind="cell"
-									@text={{item.text}}
-									@icon={{item.icon}}
-									@disabled={{or
-										this.burning
-										(eq
-											this.cues.length
-											0
-										)
-									}}
-									@onClick={{fn
-										this.place
-										index
-									}}
-								/>
-							{{/each}}
-						</CanonGrid>
-					</CanonRows>
-					<CanonRows
-						class="ss-export"
-						@framed={{true}}
-					>
-						<CanonHeading @text="Format" />
-						<CanonSegmented
-							class="ss-format"
-							aria-label="Format"
-							@items={{this.formatLabels}}
-							@columns={{2}}
-							@selected={{this.formatIndex}}
-							@disabledIndices={{this.unsupported}}
-							@disabled={{this.burning}}
-							@onChange={{this.pickFormat}}
-						/>
-						<Job
-							@title="Burn"
-							@icon={{Flame}}
-							@failure={{this.failure}}
-							@disabled={{off
-								this.ready
-							}}
-							@busy={{this.burning}}
-							@progress={{this.progress}}
-							@failed={{this.failed}}
-							@result={{this.resultRow}}
-							@onRun={{this.burn}}
-							@onCancel={{this.cancel}}
-							@onSave={{this.save}}
-						/>
-					</CanonRows>
-				{{/if}}
+						{{/each}}
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows class="ss-export" @framed={{true}}>
+					<CanonHeading @text="Format" />
+					<CanonSegmented
+						class="ss-format"
+						aria-label="Format"
+						@items={{this.formatLabels}}
+						@columns={{2}}
+						@selected={{this.formatIndex}}
+						@disabledIndices={{this.unsupported}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickFormat}}
+					/>
+					<Job
+						@title="Burn"
+						@icon={{Flame}}
+						@failure={{this.failure}}
+						@disabled={{off this.ready}}
+						@busy={{this.burning}}
+						@progress={{this.progress}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.burn}}
+						@onCancel={{this.cancel}}
+						@onSave={{this.save}}
+					/>
+				</CanonRows>
 				<Sections @sections={{this.info}} />
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					<CanonCanvas
-						class="ss-preview"
-						@aspect={{this.previewAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-						@background="#000"
-					>
+				<CanonCanvas
+					class="ss-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if this.loaded "#000"}}
+				>
+					{{#if this.loaded}}
 						<Picture
 							@aspect={{this.aspect}}
 							@box={{this.box}}
@@ -1169,11 +1173,20 @@ export default class SubtitleStudioTool extends Component {
 								{{this.registerCanvas}}
 							></canvas>
 						</Picture>
-					</CanonCanvas>
-				{{/if}}
+					{{else}}
+						<div
+							class="ss-board"
+							style={{BLANK_BOARD}}
+						>
+							<span
+								class="ss-picture ss-blank"
+							></span>
+						</div>
+					{{/if}}
+				</CanonCanvas>
 				<CanonRows class="ss-source" @framed={{true}}>
+					<CanonHeading @text="Source" />
 					{{#if this.loaded}}
-						<CanonHeading @text="Source" />
 						<CanonRow
 							class="ss-video"
 							@title={{this.intake.fileName}}
@@ -1189,15 +1202,25 @@ export default class SubtitleStudioTool extends Component {
 							/>
 						</CanonRow>
 					{{else}}
-						<CanonDropZone
-							class="ss-video-drop"
+						<Slot
+							class="ss-video-slot"
 							@prompt="Choose video file"
-							@icon={{Film}}
-							@accept={{ANY}}
-							@multiple={{true}}
-							@paste={{false}}
-							@onFiles={{this.readFiles}}
-							{{on "paste" keepPaste}}
+							@icon="film"
+							@row={{true}}
+							@onChoose={{this.choose}}
+						/>
+						{{! the slot is its label }}
+						{{! template-lint-disable require-input-label }}
+						<input
+							type="file"
+							accept={{ANY}}
+							multiple
+							hidden
+							{{this.keepPicker}}
+							{{on
+								"change"
+								this.picked
+							}}
 						/>
 						{{#if this.intake.error}}
 							<CanonStatus
@@ -1273,6 +1296,19 @@ export default class SubtitleStudioTool extends Component {
 								}}
 							/>
 						{{/each}}
+					</CanonRows>
+				{{else}}
+					<CanonRows
+						class="ss-cues"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Subtitles"
+						/>
+						<CanonEmptyRow
+							class="ss-cues-blank"
+							@text=""
+						/>
 					</CanonRows>
 				{{/if}}
 			</:main>
