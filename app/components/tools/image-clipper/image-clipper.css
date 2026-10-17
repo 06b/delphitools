@@ -113,3 +113,8 @@
 		transition: none;
 	}
 }
+
+/* one tool to hand the image to: a full-width cell */
+.media-open.clip-elsewhere .dt-atlas-open {
+	grid-template-columns: 1fr;
+}

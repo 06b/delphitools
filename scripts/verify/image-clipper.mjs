@@ -50,6 +50,8 @@ const state = () =>
 				`${t.querySelector('.canon-tiles-label').textContent.trim()}=${t.querySelector('.canon-tiles-value').textContent.trim()}`,
 		),
 		note: document.querySelector('.clip-note')?.textContent.trim(),
+		nothing: document.querySelector('.clip-nothing.canon-status--warn')?.textContent.trim(),
+		remover: [...document.querySelectorAll('.clip-elsewhere a')].map((a) => `${a.textContent.trim()}>${a.getAttribute('href')}`),
 		failure: document.querySelector('.clip-failure')?.textContent.trim(),
 		copy: document.querySelector('.clip-copy').disabled,
 		download: document.querySelector('.clip-download').disabled,
@@ -250,12 +252,18 @@ check(
 	`${s.title} ${s.detail}`,
 );
 check(
-	'nothing to trim: the iOS note, 0 %',
-	s.note === 'No transparent edges' &&
+	'nothing to trim: the warning, 0 %',
+	s.nothing === 'Nothing was clipped. Is this a transparent PNG?' &&
+		!s.note &&
 		s.tiles[2] === 'Area=0 %' &&
 		s.margins.length === 0 &&
 		!s.download,
-	`${s.note} ${s.tiles[2]}`,
+	`${s.nothing} ${s.tiles[2]}`,
+);
+check(
+	'and one link, to the Background Remover',
+	s.remover.join() === 'Background Remover>/tools/background-remover',
+	s.remover.join(),
 );
 
 // drop anywhere: fully transparent, a JPEG, a text file
@@ -412,5 +420,21 @@ check(
 );
 check(`390 x ${height}: no horizontal scroll`, !phone.wide);
 }
+
+// the link hands the image to the Background Remover
+await page.setViewport({ width: 1400, height: 1000 });
+await visit(page, '/tools/image-clipper');
+await paste(await make(300, 200, [0, 0, 300, 200]), 'opaque.png');
+await page.waitForSelector('.clip-elsewhere a', { timeout: 5000 });
+await page.click('.clip-elsewhere a');
+await page.waitForFunction(() => location.pathname === '/tools/background-remover', { timeout: 10000 });
+const handed = await page
+	.waitForFunction(
+		() => document.querySelector('.bg-source .canon-row-title')?.textContent.trim(),
+		{ timeout: 10000 },
+	)
+	.then((h) => h.jsonValue())
+	.catch(() => null);
+check('the Background Remover opens with the image', handed === 'opaque.png', String(handed));
 
 await finish(browser);

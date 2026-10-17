@@ -32,9 +32,14 @@ import {
 	untrimmed,
 } from 'delphitools-v2/components/tools/image-clipper/engine';
 import Picture from 'delphitools-v2/components/tools/image-clipper/picture';
+import AtlasOpenIn from 'delphitools-v2/components/atlas-open-in';
+import { getToolById } from 'delphitools-v2/lib/tools';
+import './media/open-in.css';
 import './image-clipper/image-clipper.css';
 
 const PNG_ONLY = 'Only PNG files are supported.';
+const NOTHING_CLIPPED = 'Nothing was clipped. Is this a transparent PNG?';
+const remover = [getToolById('background-remover')!];
 const ENCODE_FAILED = 'Failed to encode clipped image.';
 
 // iOS: UIView spring, duration 0.6 s, bounce 0.15
@@ -50,6 +55,7 @@ const Copy = <template><IconSvg @name="copy" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
 interface Source {
+	file: File;
 	url: string;
 	name: string;
 	stem: string;
@@ -153,10 +159,22 @@ export default class ImageClipper extends Component {
 	}
 
 	get note() {
-		const { source, margins: m } = this;
+		const { source } = this;
 		if (!source) return undefined;
-		if (!source.kept) return 'Fully transparent';
-		return m && untrimmed(m) ? 'No transparent edges' : undefined;
+		return source.kept ? undefined : 'Fully transparent';
+	}
+
+	get nothingClipped() {
+		const m = this.margins;
+		return !!m && untrimmed(m);
+	}
+
+	get nothingClippedText() {
+		return NOTHING_CLIPPED;
+	}
+
+	get remover() {
+		return remover;
 	}
 
 	get clipDisabled() {
@@ -228,6 +246,7 @@ export default class ImageClipper extends Component {
 		);
 		if (this.source) URL.revokeObjectURL(this.source.url);
 		this.source = {
+			file,
 			url,
 			name: file.name || 'image.png',
 			stem: stem(file.name) || 'image',
@@ -394,6 +413,22 @@ export default class ImageClipper extends Component {
 							@tone="muted"
 							@row={{true}}
 						/>
+					{{/if}}
+					{{#if this.nothingClipped}}
+						<CanonStatus
+							class="clip-nothing"
+							@text={{this.nothingClippedText}}
+							@tone="warn"
+							@row={{true}}
+						/>
+						<div
+							class="media-open clip-elsewhere"
+						>
+							<AtlasOpenIn
+								@file={{this.source.file}}
+								@tools={{this.remover}}
+							/>
+						</div>
 					{{/if}}
 					<CanonGrid>
 						<CanonButton
