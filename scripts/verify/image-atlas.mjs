@@ -191,7 +191,7 @@ check(
 const empty = await page.evaluate(() => {
 	const banner = document.querySelector('.image-atlas .canon-split-banner .canon-canvas');
 	return {
-		slot: document.querySelector('.ia-slot.media-slot--dashed')?.textContent.trim(),
+		slot: document.querySelector('.ia-slot.media-slot--dashed .media-slot-prompt')?.textContent.trim(),
 		lines: document.querySelectorAll('.ia-dimension.canon-dimension-line--blank').length,
 		zone: [...document.querySelectorAll('.ia-drop button')].map((b) => b.textContent.trim()),
 		copy: document.querySelector('.ia-copy')?.disabled,

@@ -40,8 +40,8 @@ const state = () =>
 				.find((cell) => cell.getAttribute('aria-checked') === 'true')
 				?.textContent.trim();
 		return {
-			slot: text('.conv-slot'),
-			slotTag: document.querySelector('.conv-slot')?.tagName,
+			slot: text('.conv-slot .media-slot-prompt'),
+			slotTag: document.querySelector('.conv-slot .media-slot-upload')?.tagName,
 			drop: !!document.querySelector('.conv-drop'),
 			files: [...document.querySelectorAll('.conv-file')].map(
 				(row) =>

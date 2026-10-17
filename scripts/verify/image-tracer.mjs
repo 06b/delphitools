@@ -50,8 +50,8 @@ const state = () =>
 	page.evaluate(() => {
 		const q = (s) => document.querySelector(s);
 		return {
-			slot: q('.trace-slot')?.innerText.trim(),
-			slotTag: q('.trace-slot')?.tagName,
+			slot: q('.trace-slot .media-slot-prompt')?.innerText.trim(),
+			slotTag: q('.trace-slot .media-slot-upload')?.tagName,
 			drop: !!q('.trace-drop'),
 			dropCells: [...document.querySelectorAll('.trace-drop .canon-button')]
 				.map((b) => b.textContent.trim())

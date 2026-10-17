@@ -54,9 +54,9 @@ const pixel = (fx, fy) =>
 const state = () =>
 	page.evaluate(() => ({
 		slot: document
-			.querySelector('.canon-split-sidebar .masker-slot')
+			.querySelector('.canon-split-sidebar .masker-slot .media-slot-prompt')
 			?.innerText.trim(),
-		slotTag: document.querySelector('.masker-slot')?.tagName,
+		slotTag: document.querySelector('.masker-slot .media-slot-upload')?.tagName,
 		source: document
 			.querySelector('.masker-source .canon-row-title')
 			?.textContent.trim(),

@@ -3,9 +3,15 @@ import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { clipboardImages } from 'delphitools-v2/lib/clipboard-images';
+import { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import './slot.css';
 
 const Folder = <template><IconSvg @name="folder-open" /></template>;
+const Upload = <template><IconSvg @name="upload" /></template>;
+const Paste = <template><IconSvg @name="clipboard-paste" /></template>;
+
+const IMAGE_EXTENSION = /^\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|tiff?)$/i;
 
 export interface SlotSignature {
 	Args: {
@@ -27,15 +33,25 @@ export interface SlotSignature {
 		/** Opens the tool's own file input instead of the slot's. */
 		onChoose?: () => void;
 	};
-	Element: HTMLButtonElement;
+	Element: HTMLElement;
 }
 
-/** The empty picture: a button that opens the file picker and shows the drop. */
+/**
+ * The empty picture: a drop target with Upload and Paste. A click anywhere
+ * opens the file picker. Paste reads clipboard images when `accept` takes
+ * images; with `onChoose` and no file callback it fires a document paste,
+ * which the tool's own paste handler loads.
+ */
 export default class Slot extends Component<SlotSignature> {
 	#input?: HTMLInputElement;
+	#root?: HTMLElement;
 
 	keep = modifier((input: HTMLInputElement) => {
 		this.#input = input;
+	});
+
+	root = modifier((element: HTMLElement) => {
+		this.#root = element;
 	});
 
 	choose = () =>
@@ -60,9 +76,35 @@ export default class Slot extends Component<SlotSignature> {
 		);
 	}
 
+	/** The clipboard API reads images only. */
+	get pastes() {
+		const { accept } = this.args;
+		return (
+			!accept ||
+			accept.split(',').some((part) => {
+				const p = part.trim();
+				return (
+					p.startsWith('image/') ||
+					IMAGE_EXTENSION.test(p)
+				);
+			})
+		);
+	}
+
+	paste = async () => {
+		const { accept, onFile, onFiles } = this.args;
+		const files = (await clipboardImages()).filter(
+			(file) => !accept || matchesAccept(file, accept),
+		);
+		if (!files.length) return;
+		if (onFiles) onFiles(files);
+		else if (onFile) onFile(files[0]!);
+		else this.#root?.dispatchEvent(pasteEvent(files));
+	};
+
 	<template>
 		{{#if @row}}
-			<div class="media-slot-bar">
+			<div class="media-slot-bar" {{this.root}}>
 				<button
 					type="button"
 					class="media-slot media-slot--row
@@ -85,24 +127,58 @@ export default class Slot extends Component<SlotSignature> {
 					@icon={{Folder}}
 					@onClick={{this.choose}}
 				/>
+				{{#if this.pastes}}
+					<CanonButton
+						class="media-slot-paste"
+						@kind="cell"
+						@text="Paste"
+						@icon={{Paste}}
+						@onClick={{this.paste}}
+					/>
+				{{/if}}
 			</div>
 		{{else}}
-			<button
-				type="button"
+			<div
 				class="media-slot
 					{{if @dashed 'media-slot--dashed'}}
 					{{if @fills 'media-slot--fills'}}
 					{{if @over 'media-slot--over'}}"
-				{{on "click" this.choose}}
+				{{this.root}}
 				...attributes
 			>
+				{{! the pointer's whole-slot target; Upload is the keyboard's }}
+				<button
+					type="button"
+					class="media-slot-target"
+					tabindex="-1"
+					aria-hidden="true"
+					{{on "click" this.choose}}
+				></button>
 				<span class="media-slot-icon"><IconSvg
 						@name={{@icon}}
 					/></span>
 				<span
 					class="media-slot-prompt"
 				>{{@prompt}}</span>
-			</button>
+				<span class="media-slot-actions">
+					<CanonButton
+						class="media-slot-upload"
+						@kind="cell"
+						@text="Upload"
+						@icon={{Upload}}
+						@onClick={{this.choose}}
+					/>
+					{{#if this.pastes}}
+						<CanonButton
+							class="media-slot-paste"
+							@kind="cell"
+							@text="Paste"
+							@icon={{Paste}}
+							@onClick={{this.paste}}
+						/>
+					{{/if}}
+				</span>
+			</div>
 		{{/if}}
 		{{#if this.ownInput}}
 			{{! the slot is its label }}
@@ -117,4 +193,14 @@ export default class Slot extends Component<SlotSignature> {
 			/>
 		{{/if}}
 	</template>
+}
+
+function pasteEvent(files: File[]): ClipboardEvent {
+	const data = new DataTransfer();
+	for (const file of files) data.items.add(file);
+	return new ClipboardEvent('paste', {
+		clipboardData: data,
+		bubbles: true,
+		cancelable: true,
+	});
 }

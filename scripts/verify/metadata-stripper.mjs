@@ -125,7 +125,7 @@ check(
 	'empty: the banner is the drop slot, the main pane says what to do, Download off',
 	await page.evaluate(
 		() =>
-			document.querySelector('.ms-slot')?.textContent.trim() === 'Drop an image here' &&
+			document.querySelector('.ms-slot .media-slot-prompt')?.textContent.trim() === 'Drop an image here' &&
 			document.querySelector('.metadata-stripper .canon-empty-row')?.textContent.trim() ===
 				'Add an image to see its metadata' &&
 			document.querySelector('.ms-download').disabled,

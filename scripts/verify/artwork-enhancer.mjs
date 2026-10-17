@@ -31,10 +31,10 @@ check(
 );
 const empty = await page.evaluate(() => ({
 	slot: document
-		.querySelector('.canon-split-sidebar .artwork-slot')
+		.querySelector('.canon-split-sidebar .artwork-slot .media-slot-prompt')
 		?.textContent.trim()
 		.replace(/\s+/g, ' '),
-	tag: document.querySelector('.artwork-slot')?.tagName,
+	tag: document.querySelector('.artwork-slot .media-slot-upload')?.tagName,
 	settings: !!document.querySelector('.artwork-opacity .canon-slider'),
 	regenerate: document.querySelector('.artwork-regenerate')?.disabled,
 	download: document.querySelector('.artwork-download')?.disabled,

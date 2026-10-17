@@ -16,9 +16,36 @@
 	cursor: pointer;
 }
 
-.media-slot:focus-visible {
-	outline: var(--canon-frame) solid var(--canon-primary);
-	outline-offset: calc(-1 * var(--canon-frame));
+/* zero specificity: a tool's own position wins */
+:where(.media-slot:not(.media-slot--row)) {
+	position: relative;
+	box-sizing: border-box;
+}
+
+/* beats a tool's `.x-slot > *` */
+.media-slot > .media-slot-target {
+	position: absolute;
+	inset: 0;
+	z-index: auto;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.media-slot > :is(.media-slot-icon, .media-slot-prompt) {
+	pointer-events: none;
+}
+
+.media-slot > .media-slot-actions {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-block-start: 4px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-border);
 }
 
 .media-slot--dashed {
@@ -29,12 +56,6 @@
 			transparent
 		);
 	background: none;
-}
-
-.media-slot--dashed:focus-visible {
-	border-style: solid;
-	border-color: var(--canon-primary);
-	outline: none;
 }
 
 .media-slot--dashed .media-slot-icon svg {
@@ -54,7 +75,7 @@
 	background: var(--canon-muted);
 }
 
-.media-slot-files {
+.media-slot-bar > .canon-button {
 	flex: none;
 }
 

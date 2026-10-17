@@ -70,7 +70,7 @@ check(
 );
 const slot = await page.evaluate(() => {
 	const el = document.querySelector('.matte-slot');
-	return { tag: el?.tagName, text: el?.textContent.trim() };
+	return { tag: el?.querySelector('.media-slot-upload')?.tagName, text: el?.querySelector('.media-slot-prompt')?.textContent.trim() };
 });
 check(
 	'empty: the photo slot is the drop target, a button',

@@ -25,7 +25,7 @@ const state = () =>
 	page.evaluate(() => {
 		const text = (sel) => document.querySelector(sel)?.textContent.trim();
 		return {
-			slot: text('.stitch-slot'),
+			slot: text('.stitch-slot .media-slot-prompt'),
 			base: text('.stitch-base .canon-row-title'),
 			baseDetail: text('.stitch-base .canon-row-detail'),
 			tiles: [...document.querySelectorAll('button.stitch-tile')].map(

@@ -21,8 +21,8 @@ const state = () =>
 	page.evaluate(() => {
 		const crop = document.querySelector('.media-crop-rect');
 		return {
-			slot: document.querySelector('.canon-split-sidebar .pi-slot')?.innerText.trim(),
-			slotTag: document.querySelector('.pi-slot')?.tagName,
+			slot: document.querySelector('.canon-split-sidebar .pi-slot .media-slot-prompt')?.innerText.trim(),
+			slotTag: document.querySelector('.pi-slot .media-slot-upload')?.tagName,
 			title: document.querySelector('.pi-file .canon-row-title')?.textContent.trim(),
 			detail: document.querySelector('.pi-file .canon-row-detail')?.textContent.trim(),
 			tiles: [...document.querySelectorAll('.canon-tiles-value')].map((t) => t.textContent.trim()),

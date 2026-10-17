@@ -39,9 +39,9 @@ check(
 );
 const empty = await page.evaluate(() => ({
 	slot: document
-		.querySelector('.canon-split-sidebar .deskew-slot')
+		.querySelector('.canon-split-sidebar .deskew-slot .media-slot-prompt')
 		?.innerText.trim(),
-	tag: document.querySelector('.deskew-slot')?.tagName,
+	tag: document.querySelector('.deskew-slot .media-slot-upload')?.tagName,
 	source: !!document.querySelector('.deskew-source'),
 	result: !!document.querySelector('.deskew-result'),
 	handles: document.querySelectorAll('.deskew-handle').length,

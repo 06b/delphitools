@@ -67,8 +67,8 @@ check(
 const slot = await page.evaluate(() => {
 	const el = document.querySelector('.scroll-slot');
 	return {
-		tag: el?.tagName,
-		text: el?.textContent.trim(),
+		tag: el?.querySelector('.media-slot-upload')?.tagName,
+		text: el?.querySelector('.media-slot-prompt')?.textContent.trim(),
 		dashed: el && getComputedStyle(el).borderTopStyle,
 	};
 });

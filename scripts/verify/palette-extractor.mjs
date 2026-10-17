@@ -55,8 +55,8 @@ check(
 	),
 );
 const empty = await page.evaluate(() => ({
-	slot: document.querySelector('.canon-split-sidebar .pe-slot')?.textContent.replace(/\s+/g, ' ').trim(),
-	tag: document.querySelector('.pe-slot')?.tagName,
+	slot: document.querySelector('.canon-split-sidebar .pe-slot .media-slot-prompt')?.textContent.replace(/\s+/g, ' ').trim(),
+	tag: document.querySelector('.pe-slot .media-slot-upload')?.tagName,
 	drop: !!document.querySelector('.canon-split-main .canon-drop-zone'),
 	controls: !!document.querySelector('.pe-controls'),
 }));

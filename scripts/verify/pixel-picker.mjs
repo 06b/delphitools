@@ -20,8 +20,8 @@ check(
 	),
 );
 const empty = await page.evaluate(() => ({
-	slot: document.querySelector('.pp-slot')?.textContent.replace(/\s+/g, ' ').trim(),
-	tag: document.querySelector('.pp-slot')?.tagName,
+	slot: document.querySelector('.pp-slot .media-slot-prompt')?.textContent.replace(/\s+/g, ' ').trim(),
+	tag: document.querySelector('.pp-slot .media-slot-upload')?.tagName,
 	drop: !!document.querySelector('.pp-drop'),
 	pick: document.querySelector('.pp-pick-button')?.checkVisibility(),
 }));

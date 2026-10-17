@@ -23,9 +23,9 @@ check(
 );
 const empty = await page.evaluate(() => ({
 	slot: document
-		.querySelector('.canon-split-sidebar .cutout-slot')
+		.querySelector('.canon-split-sidebar .cutout-slot .media-slot-prompt')
 		?.textContent.trim(),
-	tag: document.querySelector('.cutout-slot')?.tagName,
+	tag: document.querySelector('.cutout-slot .media-slot-upload')?.tagName,
 	source: !!document.querySelector('.bg-source'),
 	run: !!document.querySelector('.bg-run'),
 	note: document

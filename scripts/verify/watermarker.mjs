@@ -26,9 +26,9 @@ check(
 );
 const empty = await page.evaluate(() => ({
 	slot: document
-		.querySelector('.canon-split-sidebar .wm-slot')
+		.querySelector('.canon-split-sidebar .wm-slot .media-slot-prompt')
 		?.textContent.trim(),
-	tag: document.querySelector('.wm-slot')?.tagName,
+	tag: document.querySelector('.wm-slot .media-slot-upload')?.tagName,
 	source: !!document.querySelector('.wm-source'),
 	download: document.querySelector('.wm-download')?.disabled,
 }));

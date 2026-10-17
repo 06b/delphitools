@@ -28,9 +28,9 @@ check(
 );
 const empty = await page.evaluate(() => ({
 	slot: document
-		.querySelector('.canon-split-sidebar .social-slot')
+		.querySelector('.canon-split-sidebar .social-slot .media-slot-prompt')
 		?.innerText.trim(),
-	tag: document.querySelector('.social-slot')?.tagName,
+	tag: document.querySelector('.social-slot .media-slot-upload')?.tagName,
 	source: !!document.querySelector('.social-source'),
 	platforms: [
 		...document.querySelectorAll('.social-platforms .canon-button'),

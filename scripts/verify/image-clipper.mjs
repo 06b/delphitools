@@ -37,8 +37,8 @@ check(
 
 const state = () =>
 	page.evaluate(() => ({
-		slot: document.querySelector('.clip-slot')?.innerText.trim(),
-		slotTag: document.querySelector('.clip-slot')?.tagName,
+		slot: document.querySelector('.clip-slot .media-slot-prompt')?.innerText.trim(),
+		slotTag: document.querySelector('.clip-slot .media-slot-upload')?.tagName,
 		title: document
 			.querySelector('.clip-source .canon-row-title')
 			?.textContent.trim(),

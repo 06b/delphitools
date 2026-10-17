@@ -119,8 +119,8 @@ await page.evaluate(() =>
 );
 await sleep(300);
 const empty = await page.evaluate(() => ({
-	slot: document.querySelector('.cbs-slot')?.textContent.replace(/\s+/g, ' ').trim(),
-	tag: document.querySelector('.cbs-slot')?.tagName,
+	slot: document.querySelector('.cbs-slot .media-slot-prompt')?.textContent.replace(/\s+/g, ' ').trim(),
+	tag: document.querySelector('.cbs-slot .media-slot-upload')?.tagName,
 	drop: !!document.querySelector('.cbs-drop'),
 	comparison: !!document.querySelector('.cbs-compare'),
 	sliders: !!document.querySelector('.canon-colour-controls'),

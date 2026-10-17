@@ -78,7 +78,7 @@ check(
 	'empty: the page strip is the drop slot with the web wording, Compress off',
 	await page.evaluate(
 		() =>
-			document.querySelector('.pc-slot')?.textContent.trim() === 'Drop PDF here' &&
+			document.querySelector('.pc-slot .media-slot-prompt')?.textContent.trim() === 'Drop PDF here' &&
 			document.querySelector('.media-job-run')?.disabled === true,
 	),
 );

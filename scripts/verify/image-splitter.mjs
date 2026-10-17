@@ -23,9 +23,9 @@ check(
 const state = () =>
 	page.evaluate(() => ({
 		slot: document
-			.querySelector('.canon-split-sidebar .split-slot')
+			.querySelector('.canon-split-sidebar .split-slot .media-slot-prompt')
 			?.innerText.trim(),
-		slotTag: document.querySelector('.split-slot')?.tagName,
+		slotTag: document.querySelector('.split-slot .media-slot-upload')?.tagName,
 		source: !!document.querySelector('.split-source'),
 		title: document
 			.querySelector('.split-source .canon-row-title')
