@@ -1,5 +1,6 @@
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import { aspect } from 'delphitools-v2/components/tools/placeholder-genny/placeholder';
+import type { SourceSpace } from 'delphitools-v2/components/tools/image-atlas/icc';
 
 export interface Row {
 	label: string;
@@ -626,17 +627,29 @@ export interface Scan {
 	histogram: [number[], number[], number[]];
 	/** Share of pixels not fully opaque. */
 	transparent: number;
+	/** Share of the visible, not black pixels whose colour sRGB cannot show; null when the profile cannot be read. */
+	outside: number | null;
 }
 
-/** Histograms and transparency of RGBA bytes. */
-export function scanPixels(data: ArrayLike<number>): Scan {
+/** The file's own RGBA bytes, the same size as the scanned ones, and their space. */
+export interface Source {
+	pixels: ArrayLike<number>;
+	space: SourceSpace;
+}
+
+/** Histograms, transparency and the share outside sRGB of RGBA bytes; without `source` the bytes are sRGB, none outside. */
+export function scanPixels(data: ArrayLike<number>, source?: Source): Scan {
 	const histogram: Scan['histogram'] = [
 		new Array<number>(256).fill(0),
 		new Array<number>(256).fill(0),
 		new Array<number>(256).fill(0),
 	];
 	let clear = 0;
+	let coloured = 0;
+	let outside = 0;
 	const pixels = Math.floor(data.length / 4);
+	const [red, green, blue] = source?.space.curves ?? [];
+	const m = source?.space.matrix ?? [];
 	for (let i = 0; i < pixels * 4; i += 4) {
 		const alpha = data[i + 3]!;
 		if (alpha < 255) clear++;
@@ -644,8 +657,25 @@ export function scanPixels(data: ArrayLike<number>): Scan {
 		histogram[0][data[i]!]!++;
 		histogram[1][data[i + 1]!]!++;
 		histogram[2][data[i + 2]!]!++;
+		// iOS ImageColourScan.plotChromaticity: alpha above 0.004, brightest above 0.002, a channel below -1 % of it
+		const own = source?.pixels;
+		if (!own || own[i + 3]! < 2) continue;
+		const r = red![own[i]!]!;
+		const g = green![own[i + 1]!]!;
+		const b = blue![own[i + 2]!]!;
+		const sr = m[0]! * r + m[1]! * g + m[2]! * b;
+		const sg = m[3]! * r + m[4]! * g + m[5]! * b;
+		const sb = m[6]! * r + m[7]! * g + m[8]! * b;
+		const brightest = Math.max(sr, sg, sb);
+		if (brightest <= 0.002) continue;
+		coloured++;
+		if (Math.min(sr, sg, sb) < -0.01 * brightest) outside++;
 	}
-	return { histogram, transparent: pixels ? clear / pixels : 0 };
+	return {
+		histogram,
+		transparent: pixels ? clear / pixels : 0,
+		outside: coloured ? outside / coloured : 0,
+	};
 }
 
 /** Tallest bin, end bins aside, as they hold clipping (iOS ImageColourScopes.peak). */
@@ -672,12 +702,21 @@ export function reportText(
 	fileName: string,
 	fileSize: number,
 	dims: Dimensions | null,
+	colour: Row[] = [],
 ): string {
 	if (!exif && !gps) return '';
 	const lines: string[] = [];
 	lines.push(`File: ${fileName} (${formatBytes(fileSize)})`);
 	if (dims) lines.push(`Dimensions: ${dims.w} × ${dims.h}`);
 	lines.push('');
+	// iOS reportText: a section heading, a line per known row
+	const known = colour.filter((row) => row.value !== DASH);
+	if (known.length)
+		lines.push(
+			'COLOUR',
+			...known.map((row) => `${row.label}: ${row.value}`),
+			'',
+		);
 	if (!exif || Object.keys(exif).length === 0) {
 		lines.push('No EXIF/XMP/IPTC metadata found.');
 	} else {

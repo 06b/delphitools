@@ -65,13 +65,16 @@ function area([a, b, c]: [number, number][]) {
 	);
 }
 
-/** Area of the profile's primaries triangle over sRGB's on the xy diagram (iOS gamutOverSRGB); null without matrix columns. */
-export function gamutOverSRGB(icc: ExifData): number | null {
-	const columns = [
+const matrixColumns = (icc: ExifData) =>
+	[
 		icc['RedMatrixColumn'],
 		icc['GreenMatrixColumn'],
 		icc['BlueMatrixColumn'],
 	].map(xyz);
+
+/** Area of the profile's primaries triangle over sRGB's on the xy diagram (iOS gamutOverSRGB); null without matrix columns. */
+export function gamutOverSRGB(icc: ExifData): number | null {
+	const columns = matrixColumns(icc);
 	if (columns.some((c) => !c)) return null;
 	const points = columns.map((column) => {
 		const [x, y, z] = D50_TO_D65.map(
@@ -86,10 +89,93 @@ export function gamutOverSRGB(icc: ExifData): number | null {
 	return area(points) / area(SRGB);
 }
 
+// ICC.1:2010 10.6 curveType and 10.18 parametricCurveType, as a 256-entry table of 8-bit codes
+function curve(raw: unknown): Float64Array | null {
+	if (!(raw instanceof Uint8Array) || raw.length < 12) return null;
+	const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+	const type = String.fromCharCode(...raw.subarray(0, 4));
+	let at: (x: number) => number;
+	if (type === 'curv') {
+		const count = view.getUint32(8);
+		if (raw.length < 12 + count * 2) return null;
+		const entry = (i: number) => view.getUint16(12 + i * 2) / 65535;
+		if (count === 0) at = (x) => x;
+		else if (count === 1) {
+			const gamma = view.getUint16(12) / 256;
+			at = (x) => x ** gamma;
+		} else
+			at = (x) => {
+				const spot = x * (count - 1);
+				const low = Math.floor(spot);
+				const high = Math.min(count - 1, low + 1);
+				return (
+					entry(low) +
+					(entry(high) - entry(low)) *
+						(spot - low)
+				);
+			};
+	} else if (type === 'para') {
+		const kind = view.getUint16(8);
+		const needs = [1, 3, 4, 5, 7][kind];
+		if (needs === undefined || raw.length < 12 + needs * 4)
+			return null;
+		const [g = 1, a = 1, b = 0, c = 0, d = 0, e = 0, f = 0] =
+			Array.from(
+				{ length: needs },
+				(_, i) => view.getInt32(12 + i * 4) / 65536,
+			);
+		const power = (x: number) => Math.max(0, a * x + b) ** g;
+		at = [
+			(x: number) => x ** g,
+			(x: number) => (x >= -b / a ? power(x) : 0),
+			(x: number) => (x >= -b / a ? power(x) + c : c),
+			(x: number) => (x >= d ? power(x) : c * x),
+			(x: number) => (x >= d ? power(x) + e : c * x + f),
+		][kind]!;
+	} else return null;
+	return Float64Array.from({ length: 256 }, (_, i) => at(i / 255));
+}
+
+// lindbloom: XYZ D50 to linear sRGB, bradford-adapted
+const XYZ_D50_TO_SRGB = [
+	[3.1338561, -1.6168667, -0.4906146],
+	[-0.9787684, 1.9161415, 0.033454],
+	[0.0719453, -0.2289914, 1.4052427],
+];
+
+export interface SourceSpace {
+	/** Per channel, 8-bit code to linear light. */
+	curves: [Float64Array, Float64Array, Float64Array];
+	/** Row-major, linear profile RGB to linear sRGB. */
+	matrix: number[];
+}
+
+/** A matrix/TRC RGB profile's conversion to linear sRGB; null for other profiles (LUT, CMYK, grey). */
+export function sourceSpace(icc: ExifData): SourceSpace | null {
+	const columns = matrixColumns(icc);
+	const curves = [icc['RedTRC'], icc['GreenTRC'], icc['BlueTRC']].map(
+		curve,
+	);
+	if (columns.some((c) => !c) || curves.some((c) => !c)) return null;
+	const matrix = XYZ_D50_TO_SRGB.flatMap((row) =>
+		[0, 1, 2].map(
+			(col) =>
+				row[0]! * columns[col]![0] +
+				row[1]! * columns[col]![1] +
+				row[2]! * columns[col]![2],
+		),
+	);
+	return {
+		curves: curves as SourceSpace['curves'],
+		matrix,
+	};
+}
+
 // exifr inflates png iccp only in node (png.mjs findIcc)
-export async function pngIcc(file: Blob): Promise<ExifData | null> {
-	const bytes = new Uint8Array(await file.arrayBuffer());
-	const view = new DataView(bytes.buffer);
+export async function pngIcc(
+	bytes: Uint8Array<ArrayBuffer>,
+): Promise<ExifData | null> {
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
 	const name = (at: number) =>
 		String.fromCharCode(...bytes.subarray(at, at + 4));
 	for (let at = 8; at + 8 <= bytes.length;) {

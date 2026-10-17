@@ -241,13 +241,13 @@ check(
 );
 const blankColour = await tiles('.ia-colour');
 check(
-	'empty: Colour Profile, Gamut and Transparent read dashes',
+	'empty: the seven iOS colour readings read dashes',
 	JSON.stringify(blankColour) ===
-		JSON.stringify([
-			['Colour Profile', '—'],
-			['Gamut', '—'],
-			['Transparent', '—'],
-		]),
+		JSON.stringify(
+			['Colour Model', 'Colour Profile', 'Bit Depth', 'Alpha', 'Gamut', 'Outside sRGB', 'Transparent'].map(
+				(label) => [label, '—'],
+			),
+		),
 	JSON.stringify(blankColour),
 );
 
@@ -315,6 +315,12 @@ const colour = Object.fromEntries(await tiles('.ia-colour'));
 check('Transparent reads 0 %', colour.Transparent === '0 %', colour.Transparent);
 // chrome's jpeg encoder embeds its own sRGB profile
 check('the canvas JPEG reads an sRGB gamut', colour.Gamut === '1.00 × sRGB', JSON.stringify(colour));
+check(
+	'JPEG SOF: RGB, 8 bits, no alpha',
+	colour['Colour Model'] === 'RGB' && colour['Bit Depth'] === '8 bits' && colour.Alpha === 'No',
+	JSON.stringify(colour),
+);
+check('an sRGB JPEG: 0 % outside sRGB', colour['Outside sRGB'] === '0 %', colour['Outside sRGB']);
 
 const location = await page.evaluate(() => ({
 	gps: document.querySelector('.ia-gps')?.textContent.replace(/\s+/g, ' ').trim(),
@@ -343,6 +349,22 @@ await page.click('.ia-copy');
 await sleep(200);
 const report = await page.evaluate(() => window.__copied ?? '');
 check('Copy report copies the report', report.startsWith('File: photo.jpg') && report.includes('GPS: 51.500000, 0.126667'), report.slice(0, 80));
+const colourBlock = report.match(/\nCOLOUR\n([\s\S]*?)\n\n/)?.[1].split('\n') ?? [];
+check(
+	'the report carries the colour lines in iOS order',
+	JSON.stringify(colourBlock.map((line) => line.split(':')[0])) ===
+		JSON.stringify(['Colour Model', 'Colour Profile', 'Bit Depth', 'Alpha', 'Gamut', 'Outside sRGB', 'Transparent']),
+	colourBlock.join(' | '),
+);
+check(
+	'the report colour values match the tiles',
+	colourBlock.includes('Colour Model: RGB') &&
+		colourBlock.includes('Bit Depth: 8 bits') &&
+		colourBlock.includes('Alpha: No') &&
+		colourBlock.includes('Gamut: 1.00 × sRGB') &&
+		colourBlock.includes('Outside sRGB: 0 %'),
+	colourBlock.join(' | '),
+);
 check(
 	'copy confirms through the toast',
 	await page.evaluate(() => !!document.querySelector('.canon-toast')?.textContent.includes('Copied')),
@@ -409,6 +431,14 @@ check(
 	untagged['Colour Profile'] === '—' && untagged.Gamut === '1.00 × sRGB',
 	JSON.stringify(untagged),
 );
+check(
+	'PNG IHDR: RGB, 8 bits, alpha, 0 % outside sRGB',
+	untagged['Colour Model'] === 'RGB' &&
+		untagged['Bit Depth'] === '8 bits' &&
+		untagged.Alpha === 'Yes' &&
+		untagged['Outside sRGB'] === '0 %',
+	JSON.stringify(untagged),
+);
 check('a paste anywhere loads the image', pasted.title === 'clear.png', pasted.title);
 check('a transparent image sits on checks', pasted.checks);
 check('Transparent reads half', pasted.transparent === '50 %', pasted.transparent);
@@ -420,13 +450,14 @@ const open = await page.$$eval('.ia-open:not([inert]) .dt-atlas-open [data-tool]
 );
 check('open-in lists image tools, not itself', open.includes('metadata-stripper') && !open.includes('image-atlas'));
 
-// [kind, system profile, expected name, expected gamut]
+// [kind, system profile, expected name, expected gamut, outside sRGB range in %]
+// the fixture's sRGB-encoded #3a6 half lies outside sRGB once read as P3 or Adobe RGB, the #e33 half inside
 const profiled = [
-	['jpeg', 'Display P3.icc', 'Display P3', '1.36 × sRGB'],
-	['png', 'AdobeRGB1998.icc', 'Adobe RGB (1998)', '1.35 × sRGB'],
-	['png', 'Generic Gray Profile.icc', 'Generic Gray Profile', '—'],
+	['jpeg', 'Display P3.icc', 'Display P3', '1.36 × sRGB', [45, 55]],
+	['png', 'AdobeRGB1998.icc', 'Adobe RGB (1998)', '1.35 × sRGB', [45, 55]],
+	['png', 'Generic Gray Profile.icc', 'Generic Gray Profile', '—', [0, 0]],
 ];
-for (const [kind, file, name, gamut] of profiled) {
+for (const [kind, file, name, gamut, [low, high]] of profiled) {
 	const profile = profileBytes(file);
 	if (!profile) {
 		console.log(` skip  ${PROFILES}/${file} absent, no ${kind} ICC check`);
@@ -440,6 +471,19 @@ for (const [kind, file, name, gamut] of profiled) {
 	const shown = read['Colour Profile'] ?? lines.find((l) => l.startsWith('Colour Profile'))?.slice(15);
 	check(`${kind} ${file}: Colour Profile reads ${name}`, shown === name, JSON.stringify({ read, lines }));
 	check(`${kind} ${file}: Gamut reads ${gamut}`, read.Gamut === gamut, read.Gamut);
+	const outside = parseFloat(read['Outside sRGB']);
+	check(
+		`${kind} ${file}: Outside sRGB reads ${low}-${high} %`,
+		/ %$/.test(read['Outside sRGB']) && outside >= low && outside <= high,
+		read['Outside sRGB'],
+	);
+	check(
+		`${kind} ${file}: model, bit depth and alpha from the header`,
+		read['Colour Model'] === 'RGB' &&
+			read['Bit Depth'] === '8 bits' &&
+			read.Alpha === (kind === 'png' ? 'Yes' : 'No'),
+		JSON.stringify(read),
+	);
 	const other = await page.$('.ia-other button');
 	if (other && (await page.$eval('.ia-other button', (b) => b.getAttribute('aria-expanded'))) !== 'true')
 		await other.click();

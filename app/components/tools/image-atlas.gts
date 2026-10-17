@@ -42,8 +42,13 @@ import {
 	gamutOverSRGB,
 	pngIcc,
 	profileName,
+	sourceSpace,
 	splitIcc,
 } from 'delphitools-v2/components/tools/image-atlas/icc';
+import {
+	pixelFormat,
+	type PixelFormat,
+} from 'delphitools-v2/components/tools/image-atlas/header';
 import {
 	atlasSections,
 	bannerHeight,
@@ -91,7 +96,23 @@ const MapPin = <template><IconSvg @name="map-pin" /></template>;
 // the document paste (filePaste) would load a drop-zone paste a second time
 const keepPaste = (event: Event) => event.stopPropagation();
 
-function scanOf(image: HTMLImageElement) {
+// the decoder's own values, before the browser converts them to sRGB
+async function ownPixels(file: File, width: number, height: number) {
+	const bitmap = await createImageBitmap(file, {
+		colorSpaceConversion: 'none',
+		resizeWidth: width,
+		resizeHeight: height,
+	});
+	const canvas = document.createElement('canvas');
+	canvas.width = width;
+	canvas.height = height;
+	const context = canvas.getContext('2d', { willReadFrequently: true })!;
+	context.drawImage(bitmap, 0, 0, width, height);
+	bitmap.close();
+	return context.getImageData(0, 0, width, height).data;
+}
+
+async function scanOf(image: HTMLImageElement, file: File, icc: ExifData) {
 	const scale = Math.min(
 		1,
 		SCAN_EDGE / Math.max(image.naturalWidth, image.naturalHeight),
@@ -102,9 +123,22 @@ function scanOf(image: HTMLImageElement) {
 	const context = canvas.getContext('2d', { willReadFrequently: true });
 	if (!context) return null;
 	context.drawImage(image, 0, 0, canvas.width, canvas.height);
+	const space = sourceSpace(icc);
+	const pixels = space
+		? await ownPixels(file, canvas.width, canvas.height).catch(
+				(err: unknown) => {
+					console.warn('raw decode failed', err);
+					return null;
+				},
+			)
+		: null;
 	const scan = scanPixels(
 		context.getImageData(0, 0, canvas.width, canvas.height).data,
+		pixels && space ? { pixels, space } : undefined,
 	);
+	// untagged and grey files are inside sRGB; a LUT or CMYK profile has no matrix to convert with
+	if (!pixels && Object.keys(icc).length && !('GrayTRC' in icc))
+		scan.outside = null;
 	const palette = rankClusters(
 		clusterPixels(pixelsFromCanvas(downsample(canvas)), PALETTE),
 		'dominant',
@@ -155,6 +189,7 @@ export default class ImageAtlas extends Component {
 	@tracked dims: Dimensions | null = null;
 	@tracked exif: ExifData | null = null;
 	@tracked icc: ExifData | null = null;
+	@tracked format: PixelFormat | null = null;
 	@tracked gps: GpsPoint | null = null;
 	@tracked scan: Scan | null = null;
 	@tracked palette: Rgb[] = [];
@@ -164,6 +199,8 @@ export default class ImageAtlas extends Component {
 	@tracked bannerWidth = 390;
 
 	#token = 0;
+	// the scan converts with the profile, so it waits for the read
+	#read: Promise<void> = Promise.resolve();
 	#input?: HTMLInputElement;
 	#otherFlag = false;
 
@@ -246,17 +283,31 @@ export default class ImageAtlas extends Component {
 	}
 
 	get colourTiles() {
-		const { scan, icc } = this;
+		const { scan, icc, format } = this;
 		// untagged pixels are sRGB to the browser
 		const gamut = icc
 			? Object.keys(icc).length
 				? gamutOverSRGB(icc)
 				: 1
 			: null;
+		const outside = scan?.outside ?? null;
 		return [
+			{ label: 'Colour Model', value: format?.model ?? '—' },
 			{
 				label: 'Colour Profile',
 				value: (icc && profileName(icc)) ?? '—',
+			},
+			{
+				label: 'Bit Depth',
+				value: format ? `${format.depth} bits` : '—',
+			},
+			{
+				label: 'Alpha',
+				value: format
+					? format.alpha
+						? 'Yes'
+						: 'No'
+					: '—',
 			},
 			{
 				label: 'Gamut',
@@ -264,6 +315,14 @@ export default class ImageAtlas extends Component {
 					gamut === null
 						? '—'
 						: `${gamut.toFixed(2)} × sRGB`,
+			},
+			{
+				label: 'Outside sRGB',
+				value:
+					outside === null
+						? '—'
+						: percent(outside),
+				level: outside ?? undefined,
 			},
 			{
 				label: 'Transparent',
@@ -334,7 +393,7 @@ export default class ImageAtlas extends Component {
 		this.url = null;
 	}
 
-	load = (file: File) => void this.#load(file);
+	load = (file: File) => void (this.#read = this.#load(file));
 
 	async #load(file: File) {
 		if (!matchesAccept(file, ACCEPT)) {
@@ -347,6 +406,7 @@ export default class ImageAtlas extends Component {
 		this.dims = null;
 		this.exif = null;
 		this.icc = null;
+		this.format = null;
 		this.gps = null;
 		this.scan = null;
 		this.palette = [];
@@ -400,18 +460,20 @@ export default class ImageAtlas extends Component {
 				}
 			}
 			const { exif, icc } = splitIcc(data ?? {});
+			const bytes = new Uint8Array(await file.arrayBuffer());
 			if (
 				file.type === 'image/png' &&
 				!('ProfileDescription' in icc)
 			)
 				Object.assign(
 					icc,
-					await pngIcc(file).catch(() => null),
+					await pngIcc(bytes).catch(() => null),
 				);
 			if (token !== this.#token) return;
 
 			this.exif = exif;
 			this.icc = icc;
+			this.format = pixelFormat(bytes);
 			this.gps = gps;
 		} catch (err) {
 			if (token !== this.#token) return;
@@ -427,16 +489,21 @@ export default class ImageAtlas extends Component {
 		const image = event.target as HTMLImageElement;
 		if (!image.naturalWidth) return;
 		this.dims = { w: image.naturalWidth, h: image.naturalHeight };
-		const token = this.#token;
-		// a frame first, so the picture shows before the scan
-		requestAnimationFrame(() => {
-			if (token !== this.#token || this.isDestroying) return;
-			const read = scanOf(image);
-			if (!read) return;
-			this.scan = read.scan;
-			this.palette = read.palette;
-		});
+		void this.#scan(image);
 	};
+
+	async #scan(image: HTMLImageElement) {
+		const token = this.#token;
+		const { file } = this;
+		await this.#read;
+		// a frame first, so the picture shows before the scan
+		await new Promise(requestAnimationFrame);
+		if (token !== this.#token || this.isDestroying || !file) return;
+		const read = await scanOf(image, file, this.icc ?? {});
+		if (!read || token !== this.#token || this.isDestroying) return;
+		this.scan = read.scan;
+		this.palette = read.palette;
+	}
 
 	imageFailed = () => {
 		this.error = READ_ERROR;
@@ -451,6 +518,7 @@ export default class ImageAtlas extends Component {
 				this.file.name,
 				this.file.size,
 				this.dims,
+				this.colourTiles,
 			),
 		);
 	};
@@ -464,6 +532,7 @@ export default class ImageAtlas extends Component {
 		this.dims = null;
 		this.exif = null;
 		this.icc = null;
+		this.format = null;
 		this.gps = null;
 		this.scan = null;
 		this.palette = [];
