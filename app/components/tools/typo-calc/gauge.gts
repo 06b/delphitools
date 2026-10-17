@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { reducedMotion } from 'delphicanon/lib/motion';
-import { settleEased } from 'delphitools-v2/components/tools/px-to-rem/rem';
 import {
 	UNITS,
 	formatValue,
@@ -18,7 +17,7 @@ const rowHeight = 22;
 const labelWidth = 36;
 const padding = 16;
 const top = 12;
-const settleMs = 600;
+const settleMs = 200;
 
 /** The gauge's height, as TypoGauge.height. */
 export const gaugeHeight = rowHeight * scales.length + padding + 12;
@@ -48,9 +47,67 @@ function measure(text: string, font: string): number {
  */
 export default class Gauge extends Component<GaugeSignature> {
 	@tracked width = 0;
-	/** The pose mid-settle; undefined at rest. */
-	@tracked animated?: Pose;
+	/** Bumped each frame of a settle. */
+	@tracked tick = 0;
 	mono = 'monospace';
+
+	// the settle in flight, untracked so a frame does not restart it
+	#from?: Pose;
+	#to?: Pose;
+	#started = 0;
+	#frame = 0;
+
+	#at(now: number): Pose {
+		const to = this.#to!;
+		const from = this.#from;
+		const progress = Math.min(1, (now - this.#started) / settleMs);
+		if (!from || progress >= 1) return to;
+		// ease-out cubic, no overshoot
+		const eased = 1 - (1 - progress) ** 3;
+		// zoom eases in log space
+		const shownSpan = from.span * (to.span / from.span) ** eased;
+		// the cursor's place on the gauge eases, so a zoom never carries it past the target
+		const fromAt = from.px / from.span;
+		const toAt = to.px / to.span;
+		return {
+			px: shownSpan * (fromAt + (toAt - fromAt) * eased),
+			span: shownSpan,
+		};
+	}
+
+	#step = () => {
+		this.tick++;
+		if (performance.now() - this.#started < settleMs)
+			this.#frame = requestAnimationFrame(this.#step);
+	};
+
+	#retarget(to: Pose, now: number) {
+		this.#from =
+			this.#to && !reducedMotion()
+				? this.#at(now)
+				: undefined;
+		this.#to = to;
+		this.#started = now;
+		cancelAnimationFrame(this.#frame);
+		if (this.#from) this.#frame = requestAnimationFrame(this.#step);
+	}
+
+	// retargets during render: the first frame of a change is drawn from the old pose, never the new one
+	get shown(): Pose {
+		void this.tick;
+		const now = performance.now();
+		const to = {
+			px: Math.max(0, this.args.px),
+			span: span(this.args.px),
+		};
+		if (to.px !== this.#to?.px) this.#retarget(to, now);
+		return this.#at(now);
+	}
+
+	willDestroy() {
+		super.willDestroy();
+		cancelAnimationFrame(this.#frame);
+	}
 
 	get input(): Unit {
 		const { unit } = this.args;
@@ -70,10 +127,7 @@ export default class Gauge extends Component<GaugeSignature> {
 
 	get frame() {
 		const { width } = this;
-		const shown = this.animated ?? {
-			px: Math.max(0, this.args.px),
-			span: span(this.args.px),
-		};
+		const { shown } = this;
 		const zero = padding + labelWidth + 8;
 		const length = width - padding - zero;
 		if (length <= 0 || !(shown.span > 0)) return undefined;
@@ -188,69 +242,8 @@ export default class Gauge extends Component<GaugeSignature> {
 		return () => observer.disconnect();
 	});
 
-	// the pose drawn at the last change, untracked
-	#target?: Pose;
-
-	settle = modifier((_: HTMLElement, [px]: [number]) => {
-		const target = { px: Math.max(0, px), span: span(px) };
-		const from = this.animated ?? this.#target;
-		this.#target = target;
-		let frame = 0;
-		if (!from || reducedMotion()) {
-			if (this.animated)
-				frame = requestAnimationFrame(
-					() => (this.animated = undefined),
-				);
-			return () => cancelAnimationFrame(frame);
-		}
-		const started = performance.now();
-		const step = (now: number) => {
-			const progress = Math.min(
-				1,
-				(now - started) / settleMs,
-			);
-			const eased = settleEased(progress);
-			this.animated =
-				progress < 1
-					? {
-							px: Math.max(
-								0,
-								from.px +
-									(target.px -
-										from.px) *
-										eased,
-							),
-							// zoom eases in log space
-							span: Math.exp(
-								Math.log(
-									from.span,
-								) +
-									(Math.log(
-										target.span,
-									) -
-										Math.log(
-											from.span,
-										)) *
-										Math.min(
-											1,
-											eased,
-										),
-							),
-						}
-					: undefined;
-			if (progress < 1) frame = requestAnimationFrame(step);
-		};
-		frame = requestAnimationFrame(step);
-		return () => cancelAnimationFrame(frame);
-	});
-
 	<template>
-		<div
-			class="typo-gauge"
-			{{this.track}}
-			{{this.settle @px}}
-			...attributes
-		>
+		<div class="typo-gauge" {{this.track}} ...attributes>
 			<svg
 				class="typo-gauge-svg"
 				viewBox={{this.viewBox}}

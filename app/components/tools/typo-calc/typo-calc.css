@@ -99,6 +99,18 @@
 	background: var(--canon-accent-bg);
 }
 
+/* the kit press springs a wide row past its box */
+.typo-row:active {
+	opacity: 0.6;
+	transition: opacity 80ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.typo-row:active {
+		transition: none;
+	}
+}
+
 @media (hover: hover) {
 	.typo-row:hover {
 		background: var(--canon-accent-bg);

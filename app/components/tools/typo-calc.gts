@@ -14,7 +14,6 @@ import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTiles from 'delphicanon/components/canon-tiles';
-import press from 'delphicanon/modifiers/canon-press';
 import { clamp, parseDecimal } from 'delphicanon/lib/number';
 import Gauge, {
 	gaugeHeight,
@@ -255,7 +254,6 @@ export default class TypoCalcTool extends Component {
 								row.input
 								"true"
 							}}
-							{{press}}
 							{{on
 								"click"
 								(fn
