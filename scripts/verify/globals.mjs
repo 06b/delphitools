@@ -78,4 +78,49 @@ const [chooser] = await Promise.all([
 check('a click on the slot prompt opens the file picker', !!chooser);
 if (chooser) await chooser.cancel();
 
+// G2: a wheel over a picture that does not scroll moves the page
+const scrolled = () =>
+	page.evaluate(() =>
+		[
+			...document.querySelectorAll(
+				'.dt-canon-tool .canon-split-body, .dt-canon-tool .canon-split-pane',
+			),
+		].reduce((sum, el) => sum + el.scrollTop, 0),
+	);
+const wheelAt = async (selector) => {
+	const at = await page.$eval(selector, (el) => {
+		const r = el.getBoundingClientRect();
+		return { x: r.left + Math.min(12, r.width / 2), y: r.top + r.height / 2 };
+	});
+	await page.mouse.move(at.x, at.y);
+	await page.mouse.wheel({ deltaY: 200 });
+	await sleep(300);
+};
+for (const [w, h] of [
+	[1400, 1000],
+	[390, 844],
+]) {
+	await page.setViewport({ width: w, height: h });
+	for (const [id, picture] of [
+		['contrast-checker', '.canon-split-banner .canon-canvas'],
+		['palette-genny', '.canon-split-sidebar > .canon-canvas'],
+		['palette-collection', '.canon-split-sidebar > .canon-canvas'],
+	]) {
+		await visit(page, `/tools/${id}`);
+		await wheelAt(picture);
+		const top = await scrolled();
+		check(`${id} ${w}: a wheel over the picture scrolls the page`, top > 0, `${top}`);
+	}
+	await visit(page, '/tools/palette-collection');
+	const before = await page.$eval('.canon-detent-wheel', (el) => el.getAttribute('aria-valuenow') ?? el.textContent);
+	await wheelAt('.canon-detent-wheel');
+	await sleep(600);
+	check(
+		`palette-collection ${w}: the spinner keeps its wheel`,
+		(await scrolled()) === 0 &&
+			(await page.$eval('.canon-detent-wheel', (el) => el.getAttribute('aria-valuenow') ?? el.textContent)) !== before,
+	);
+}
+await page.setViewport({ width: 1400, height: 1000 });
+
 await finish(browser);

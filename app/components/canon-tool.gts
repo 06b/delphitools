@@ -29,6 +29,60 @@ function stored(): Set<string> {
 	}
 }
 
+const PICTURE =
+	'.canon-split-banner, .canon-split--halves > .canon-split-body > .canon-split-sidebar > .canon-canvas:only-child';
+
+function scrolls(el: Element, dy: number): boolean {
+	if (!/auto|scroll/.test(getComputedStyle(el).overflowY)) return false;
+	return dy > 0
+		? el.scrollTop + el.clientHeight < el.scrollHeight - 1
+		: el.scrollTop > 0;
+}
+
+/**
+ * A wheel over a split's picture scrolls the split's page. The browser does
+ * not: a banner beside the panes, or one floating while it collapses, is
+ * outside the scroller's containing-block chain. A picture element that
+ * scrolls, or a handler that called preventDefault, keeps its wheel.
+ */
+const wheelToPage = modifier((slot: HTMLElement) => {
+	const wheel = (event: WheelEvent) => {
+		// ctrl: a trackpad pinch
+		if (event.defaultPrevented || event.ctrlKey) return;
+		if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+		const target = event.target as Element;
+		const picture = target.closest(PICTURE);
+		if (!picture || !slot.contains(picture)) return;
+		const dy =
+			event.deltaY *
+			(event.deltaMode === 1
+				? 16
+				: event.deltaMode === 2
+					? slot.clientHeight
+					: 1);
+		for (
+			let el: Element | null = target;
+			el;
+			el = el.parentElement
+		) {
+			if (scrolls(el, dy)) return;
+			if (el === picture) break;
+		}
+		const split = picture.closest('.canon-split');
+		const page = [
+			split?.querySelector(':scope > .canon-split-body'),
+			split?.querySelector(
+				':scope > .canon-split-body > .canon-split-main',
+			),
+		].find((el): el is Element => !!el && scrolls(el, dy));
+		if (!page) return;
+		event.preventDefault();
+		page.scrollBy({ top: dy });
+	};
+	slot.addEventListener('wheel', wheel, { passive: false });
+	return () => slot.removeEventListener('wheel', wheel);
+});
+
 interface CanonToolSignature {
 	Args: { tool: Tool; component: ComponentLike<object> | undefined };
 }
@@ -74,6 +128,7 @@ export default class CanonTool extends Component<CanonToolSignature> {
 				{{if @tool.expands 'is-expandable'}}
 				{{if this.expanded 'is-expanded'}}"
 			{{this.findStickerSlot @component}}
+			{{wheelToPage}}
 		>
 			{{#if @component}}
 				<@component />
