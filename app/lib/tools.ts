@@ -985,6 +985,7 @@ export const toolCategories: ToolCategory[] = [
 					'Quick reference for Tailwind classes',
 				icon: 'book-open',
 				href: '/tools/tailwind-cheatsheet',
+				canon: true,
 			},
 			{
 				id: 'uuid-genny',

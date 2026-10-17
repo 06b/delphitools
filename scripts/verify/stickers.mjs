@@ -2,31 +2,6 @@ import { BASE, check, finish, launch, sleep, visit } from "./harness.mjs";
 
 const { browser, page } = await launch();
 
-await visit(page, "/tools/tailwind-cheatsheet");
-await page.evaluate(() => {
-	const el = document.querySelector(".dt-tool-sticker");
-	if (el) el.scrollIntoView({ block: "center" });
-});
-// lazy load: wait decode then loaded flag drops is-hidden
-await page.waitForFunction(
-	() => {
-		const img = document.querySelector(".dt-tool-sticker .dt-sticker-img");
-		return img && img.naturalWidth > 0;
-	},
-	{ timeout: 10000 },
-);
-await sleep(300);
-const hasQrBtn = await page.evaluate(
-	() => !!document.querySelector(".dt-tool-sticker .dt-sticker-btn"),
-);
-const qrVisible = await page.evaluate(
-	() =>
-		!document.querySelector(
-			".dt-tool-sticker .dt-sticker-lift.is-hidden",
-		),
-);
-check("tailwind-cheatsheet per-tool sticker renders and loads", hasQrBtn && qrVisible);
-
 await visit(page, "/tools/subtitle-converter");
 await page.evaluate(() => {
 	const el = document.querySelector(".dt-tool-sticker");

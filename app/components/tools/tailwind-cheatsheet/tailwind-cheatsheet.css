@@ -1,0 +1,364 @@
+/* the split's own width decides rows or cards (iOS TailwindClassBrowser.gridFrom) */
+.canon-split.tailwind-cheatsheet {
+	container-name: tw;
+}
+
+/* ink for the drawings (iOS TailwindSpecimen.Painter) */
+.tw-specimen {
+	--tw-lit: var(--canon-primary);
+
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: visible;
+	font-family: var(--canon-font);
+}
+
+/* the banner: TailwindStage */
+.tw-stage {
+	--tw-area-h: calc(100cqh - var(--canon-panel-padding) * 1.5);
+	--tw-area-w: calc(100cqi - var(--canon-panel-padding) * 2);
+	--tw-spec-w: min(var(--tw-area-h) * 88 / 60, var(--tw-area-w) * 0.42);
+
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	box-sizing: border-box;
+	block-size: 100%;
+	padding: calc(var(--canon-panel-padding) * 0.75)
+		var(--canon-panel-padding);
+	overflow: hidden;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	container-type: size;
+}
+
+.tw-stage-specimen {
+	flex: none;
+	box-sizing: border-box;
+	inline-size: var(--tw-spec-w);
+	block-size: min(var(--tw-area-h), var(--tw-spec-w) * 60 / 88 + 12px);
+	padding: 6px;
+	background: var(--canon-background);
+}
+
+.tw-stage-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 3px;
+	min-inline-size: 0;
+	max-block-size: 100%;
+	overflow: hidden;
+	container-type: inline-size;
+}
+
+.tw-stage-text > p {
+	margin: 0;
+}
+
+.tw-stage-caption {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	text-transform: uppercase;
+}
+
+/* shrinks to fit down to 0.6 (iOS minimumScaleFactor); Iosevka is 0.5 em a glyph */
+.tw-stage-text > .tw-stage-name {
+	margin-block-end: 3px;
+	overflow: hidden;
+	color: var(--canon-primary);
+	font-family: var(--canon-mono-font);
+	font-size: clamp(15.6px, 100cqi / var(--tw-chars) / 0.52, 26px);
+	font-weight: var(--canon-weight-bold);
+	line-height: 1.2;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.tw-stage-css {
+	display: -webkit-box;
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-callout);
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+}
+
+.tw-stage-example {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.tw-stage-siblings {
+	display: none;
+}
+
+@container (min-width: 792px) {
+	.tw-stage-text {
+		flex: none;
+		inline-size: min(
+			(var(--tw-area-w) - var(--tw-spec-w) - 20px) * 0.45,
+			360px
+		);
+	}
+
+	.tw-stage-siblings {
+		display: block;
+		flex: 1;
+		align-self: stretch;
+		min-inline-size: 0;
+	}
+}
+
+.tw-stage-sibling-grid {
+	display: grid;
+	justify-content: end;
+}
+
+.tw-stage-sibling {
+	box-sizing: border-box;
+	padding: 2px;
+	background: var(--canon-background);
+}
+
+.tw-stage-sibling > .tw-specimen {
+	opacity: 0.55;
+}
+
+.tw-stage-sibling--lit {
+	outline: 1.5px solid var(--canon-primary);
+	outline-offset: -1.5px;
+}
+
+.tw-stage-sibling--lit > .tw-specimen {
+	opacity: 1;
+}
+
+/* the browser: search row and every class in one framed block */
+.canon-split-sidebar > .tw-browser {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	padding: var(--canon-frame);
+	background: var(--canon-border);
+}
+
+@container tw (min-width: 600px) {
+	.canon-split-sidebar > .tw-browser {
+		inline-size: calc(100% - var(--canon-panel-padding) * 2);
+	}
+}
+
+.tw-search {
+	display: flex;
+	align-items: center;
+	min-block-size: var(--canon-primary-height);
+	padding-inline-start: var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.tw-search-icon {
+	display: flex;
+	color: var(--canon-muted-foreground);
+}
+
+.tw-search-icon svg {
+	inline-size: 20px;
+	block-size: 20px;
+}
+
+.canon-text-cell.tw-search-field {
+	flex: 1;
+	inline-size: auto;
+	min-block-size: var(--canon-primary-height);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-big-number);
+}
+
+.tw-search-field::placeholder {
+	font-size: var(--canon-text-title2);
+}
+
+.tw-search-field::-webkit-search-cancel-button {
+	display: none;
+}
+
+.canon-button.tw-search-clear {
+	align-self: stretch;
+	inline-size: var(--canon-primary-height);
+}
+
+/* rows below 600 px, cards from there */
+.tw-items {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+}
+
+.tw-item {
+	position: relative;
+	display: flex;
+	gap: var(--canon-hairline);
+}
+
+.tw-item-body {
+	display: flex;
+	flex: 1;
+	gap: 12px;
+	align-items: center;
+	box-sizing: border-box;
+	min-inline-size: 0;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 6px 12px 6px 10px;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	appearance: none;
+}
+
+.tw-item-body--lit {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	.tw-item-body:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.tw-item-body:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.tw-thumb {
+	position: relative;
+	flex: none;
+	inline-size: 66px;
+	block-size: 45px;
+	background: var(--canon-background);
+}
+
+.tw-thumb > .tw-specimen {
+	position: absolute;
+	inset: 0;
+}
+
+.tw-item-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+	container-type: inline-size;
+}
+
+/* shrinks to fit down to 0.7 (iOS minimumScaleFactor) */
+.tw-item-name {
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: clamp(10.5px, 100cqi / var(--tw-chars) / 0.52, 15px);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.25;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.tw-item-css {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.tw-item-example {
+	color: var(--canon-primary);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.canon-button.tw-item-copy {
+	flex: none;
+	inline-size: calc(var(--canon-control-height) + 8px);
+}
+
+@container tw (min-width: 600px) {
+	/* a hairline lattice; a short last row ends on the page colour */
+	.tw-items {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+		background: var(--canon-background);
+	}
+
+	.tw-item {
+		display: block;
+		box-shadow: 0 0 0 var(--canon-hairline) var(--canon-border);
+		container: tw-card / inline-size;
+	}
+
+	.tw-item-body {
+		flex-direction: column;
+		gap: 0;
+		align-items: stretch;
+		inline-size: 100%;
+		block-size: 100%;
+		padding: 0;
+	}
+
+	.tw-thumb {
+		inline-size: 100%;
+		block-size: auto;
+		border-block-end: var(--canon-hairline) solid
+			var(--canon-border);
+		aspect-ratio: 2;
+	}
+
+	.tw-item-body--lit .tw-thumb {
+		background: var(--canon-accent-bg);
+	}
+
+	.tw-item-text {
+		padding: 12px;
+		padding-inline-end: calc(
+			var(--canon-control-height) + var(--canon-hairline) +
+				12px
+		);
+	}
+
+	.tw-item-css {
+		display: -webkit-box;
+		min-block-size: 2.6em;
+		overflow: hidden;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
+
+	.tw-item-example {
+		display: none;
+	}
+
+	.canon-button.tw-item-copy {
+		position: absolute;
+		inset-block: calc(50cqi + var(--canon-hairline)) 0;
+		inset-inline-end: 0;
+		inline-size: var(--canon-control-height);
+		min-block-size: 0;
+		border-inline-start: var(--canon-hairline) solid
+			var(--canon-border);
+	}
+}
