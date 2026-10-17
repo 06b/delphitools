@@ -844,6 +844,7 @@ export const toolCategories: ToolCategory[] = [
 					'Rotate or crop pages or entire documents',
 				icon: 'crop',
 				href: '/tools/pdf-rotate-crop',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},

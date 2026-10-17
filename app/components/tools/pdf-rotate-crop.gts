@@ -1,1070 +1,941 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq, not } from 'ember-truth-helpers';
-import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Fresh, {
+	both,
+} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
+import { formatBytes } from 'delphitools-v2/lib/image-compress';
+import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
+import { findPaperSize, paperSizeGroups } from 'delphitools-v2/lib/paper-sizes';
 import { normaliseRotation } from 'delphitools-v2/lib/pdf-pages';
 import {
-	boxFromPoints,
 	cropFromInsets,
 	cropToPaper,
-	dragRect,
-	insetsFromBox,
+	displaySize,
+	insetsOf,
 	intersectBox,
+	toDisplay,
+	toPage,
 	type CropBox,
+	type Insets,
+	type Size,
 } from 'delphitools-v2/lib/pdf-crop';
-import { loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
-import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
-import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
-import type { PDFDocumentProxy, PageViewport } from 'pdfjs-dist';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import {
+	open,
+	thumbnails,
+} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import { integral } from 'delphitools-v2/components/tools/paste-image/crop';
+import Picture from 'delphitools-v2/components/tools/pdf-rotate-crop/picture';
+import {
+	geometry,
+	picture,
+	samplePdf,
+	type Edit,
+	type Geometry,
+} from 'delphitools-v2/components/tools/pdf-rotate-crop/pages';
+import './media/media.css';
+import './pdf-rotate-crop/pdf-rotate-crop.css';
 
 const ACCEPT = '.pdf,application/pdf';
+const A4_ASPECT = 210 / 297;
+const DASH = '—';
+type Edge = keyof Insets;
+const EDGES: { edge: Edge; title: string }[] = [
+	{ edge: 'left', title: 'Left' },
+	{ edge: 'top', title: 'Top' },
+	{ edge: 'right', title: 'Right' },
+	{ edge: 'bottom', title: 'Bottom' },
+];
 
-const THUMB_WIDTH = 96;
-const PREVIEW_MAX_W = 720;
-const PREVIEW_MAX_H = 980;
-const MIN_DRAG_PX = 4;
+// errata PaperMenu's list; that menu takes no disabled
+const PAPERS = paperSizeGroups
+	.filter((group) => group.id !== 'common')
+	.flatMap((group) => group.sizes);
+const PAPER_TITLES = PAPERS.map(
+	(size) =>
+		`${size.label} (${Math.round(size.widthMm)} × ${Math.round(size.heightMm)})`,
+);
 
-interface PageState {
-	/** 90° steps atop page's own */
-	rotation: number;
-	/** user-space pts; null = whole */
-	crop: CropBox | null;
-	thumb: string;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Left = <template><IconSvg @name="rotate-ccw" /></template>;
+const Right = <template><IconSvg @name="rotate-cw" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Cross = <template><IconSvg @name="x" /></template>;
+const Back = <template><IconSvg @name="chevron-left" /></template>;
+const Forward = <template><IconSvg @name="chevron-right" /></template>;
+const Crop = <template><IconSvg @name="crop" /></template>;
+
+// ?rcSample ?rcRotate=<page index> ?rcCrop=<inset points> ?rcPaper=<paper id> ?rcNudge=yes: the iOS launch arguments
+const query = () => new URLSearchParams(window.location.search);
+
+const sameSize = (a: Size, b: Size) =>
+	Math.abs(a.width - b.width) < 0.5 &&
+	Math.abs(a.height - b.height) < 0.5;
+
+const sameRect = (a: CropBox, b: CropBox) => {
+	const p = integral(a);
+	const q = integral(b);
+	return (
+		p.x === q.x &&
+		p.y === q.y &&
+		p.width === q.width &&
+		p.height === q.height
+	);
+};
+
+interface Exported {
+	blob: Blob;
+	name: string;
 }
 
-interface Preview {
-	url: string;
-	width: number;
-	height: number;
-}
+/** The port of PDFRotateCropViewController, on pdf.js pictures and a pdf-lib write. */
+export default class PdfRotateCrop extends Component {
+	drop = new Drop(ACCEPT, (file) => this.load(file));
 
-export default class PdfRotateCropTool extends Component {
-	@tracked fileName: string | null = null;
-	@tracked pages: PageState[] = [];
-	@tracked current = 0;
-	@tracked preview: Preview | null = null;
-	@tracked pending: CropBox | null = null;
-	@tracked error: string | null = null;
+	@tracked file: File | null = null;
+	@tracked unreadable = false;
+	@tracked geometry: Geometry[] = [];
+	@tracked edits: Edit[] = [];
+	@tracked page = 0;
+	/** Paper id per page; an edit clears it. */
+	@tracked papers: Record<number, string> = {};
+	@tracked thumbs: string[] = [];
+	@tracked picture: {
+		url: string;
+		page: number;
+		rotation: number;
+	} | null = null;
+	/** The crop under a drag, display points. */
+	@tracked live: CropBox | null = null;
+	/** Bumped when the margins are refused, so the fields show the crop again. */
+	@tracked refused = 0;
 	@tracked busy = false;
-	@tracked loading = false;
+	@tracked failed = false;
+	@tracked exported: Exported | null = null;
 
-	/** crop margins, mm */
-	@tracked insetLeft = '0';
-	@tracked insetTop = '0';
-	@tracked insetRight = '0';
-	@tracked insetBottom = '0';
-	/** paper size id; '' = none */
-	@tracked paperId = '';
-	/** points, at preview rotation */
-	@tracked pagePointW = 0;
-	@tracked pagePointH = 0;
-
-	/** pdf-lib re-parses per export */
 	#bytes: ArrayBuffer | null = null;
-	#js: PDFDocumentProxy | null = null;
-	#viewport: PageViewport | null = null;
-	/** drag start, preview px */
-	#dragStart: { x: number; y: number } | null = null;
-	/** latest-wins preview renders */
-	#renderToken = 0;
+	#pdf?: PDFDocumentProxy;
+	// a new file
+	#token = 0;
+	// a new picture
+	#run = 0;
 
-	get loaded() {
-		return this.pages.length > 0;
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		if (query().has('rcSample'))
+			void samplePdf().then((file) => this.load(file));
 	}
 
-	get countLabel() {
-		return `${this.pages.length} page${this.pages.length === 1 ? '' : 's'}`;
+	willDestroy() {
+		super.willDestroy();
+		this.#token++;
+		this.#close();
+	}
+
+	get loaded() {
+		return this.edits.length > 0;
+	}
+
+	get detail() {
+		const { file } = this;
+		if (!file) return '';
+		if (this.unreadable) return `Could not read ${file.name}`;
+		const n = this.edits.length;
+		if (!n) return ' ';
+		return `${n === 1 ? '1 page' : `${n} pages`} · ${formatBytes(file.size)}`;
 	}
 
 	get baseName() {
-		return this.fileName?.replace(/\.pdf$/i, '') || 'document';
-	}
-
-	get currentPage(): PageState | undefined {
-		return this.pages[this.current];
-	}
-
-	get previewStyle() {
-		if (!this.preview) return null;
-		return htmlSafe(
-			`width: ${this.preview.width}px; height: ${this.preview.height}px`,
-		);
-	}
-
-	get pendingStyle() {
-		if (!this.pending) return null;
-		return htmlSafe(
-			`left: ${this.pending.x}px; top: ${this.pending.y}px; ` +
-				`width: ${this.pending.width}px; height: ${this.pending.height}px`,
-		);
-	}
-
-	get existingCropStyle() {
-		const crop = this.currentPage?.crop;
-		const viewport = this.#viewport;
-		if (!crop || !viewport || !this.preview) return null;
-		const [x1, y1] = viewport.convertToViewportPoint(
-			crop.x,
-			crop.y,
-		) as [number, number];
-		const [x2, y2] = viewport.convertToViewportPoint(
-			crop.x + crop.width,
-			crop.y + crop.height,
-		) as [number, number];
-		const rect = dragRect(
-			x1,
-			y1,
-			x2,
-			y2,
-			this.preview.width,
-			this.preview.height,
-		);
-		return htmlSafe(
-			`left: ${rect.x}px; top: ${rect.y}px; ` +
-				`width: ${rect.width}px; height: ${rect.height}px`,
-		);
-	}
-
-	get canApplyCrop() {
 		return (
-			!this.busy &&
-			this.pending !== null &&
-			this.pending.width >= MIN_DRAG_PX &&
-			this.pending.height >= MIN_DRAG_PX
+			(this.file?.name ?? '').replace(/\.pdf$/i, '') ||
+			'document'
 		);
 	}
 
-	get canClearCrop() {
-		return (
-			!this.busy &&
-			(this.pending !== null || !!this.currentPage?.crop)
+	totalRotation(index: number) {
+		return normaliseRotation(
+			this.geometry[index]!.rotation +
+				this.edits[index]!.rotation,
 		);
 	}
 
-	get canApplyPaper() {
-		return !this.busy && !!findPaperSize(this.paperId);
+	displaySize(index: number): Size {
+		return displaySize(
+			this.geometry[index]!.box,
+			this.totalRotation(index),
+		);
 	}
 
-	/** rounded to 0.1mm */
-	#ptToMmStr(pt: number) {
-		return String(Math.round((pt / MM_TO_POINTS) * 10) / 10);
+	/** Display space, the whole page when uncropped. */
+	cropRect(index: number): CropBox {
+		const size = this.displaySize(index);
+		const whole = { x: 0, y: 0, ...size };
+		const crop = this.edits[index]!.crop;
+		if (!crop) return whole;
+		// paper crops may overflow
+		const shown = toDisplay(
+			crop,
+			this.geometry[index]!.box,
+			this.totalRotation(index),
+		);
+		return intersectBox(shown, whole) ?? whole;
 	}
 
-	#syncInsets() {
-		const crop = this.currentPage?.crop;
-		if (crop && this.pagePointW > 0 && this.pagePointH > 0) {
-			const ins = insetsFromBox(
-				crop,
-				this.pagePointW,
-				this.pagePointH,
-			);
-			this.insetLeft = this.#ptToMmStr(ins.left);
-			this.insetTop = this.#ptToMmStr(ins.top);
-			this.insetRight = this.#ptToMmStr(ins.right);
-			this.insetBottom = this.#ptToMmStr(ins.bottom);
-		} else {
-			this.insetLeft = '0';
-			this.insetTop = '0';
-			this.insetRight = '0';
-			this.insetBottom = '0';
+	get size(): Size | undefined {
+		return this.loaded ? this.displaySize(this.page) : undefined;
+	}
+
+	get crop(): CropBox {
+		if (this.live) return this.live;
+		if (this.loaded) return this.cropRect(this.page);
+		return { x: 0, y: 0, width: 595.28, height: 841.89 };
+	}
+
+	get aspect() {
+		const { size } = this;
+		return size
+			? Math.max(0.2, size.width / Math.max(size.height, 1))
+			: A4_ASPECT;
+	}
+
+	get pictureUrl() {
+		const shown = this.picture;
+		return shown &&
+			shown.page === this.page &&
+			shown.rotation === this.edits[this.page]?.rotation
+			? shown.url || undefined
+			: undefined;
+	}
+
+	get pages(): CanonPage[] {
+		return this.edits.map((edit, index) => {
+			const full = this.displaySize(index);
+			const rect = this.cropRect(index);
+			return {
+				size: {
+					width: rect.width,
+					height: rect.height,
+				},
+				// pdf points, bottom-left origin
+				placement: {
+					x: -rect.x,
+					y: rect.y + rect.height - full.height,
+					width: full.width,
+					height: full.height,
+				},
+				picture: this.thumbs[index] || undefined,
+				name: edit.crop ? 'Cropped' : undefined,
+				turn: edit.rotation,
+			};
+		});
+	}
+
+	get margins() {
+		const insets = this.loaded
+			? insetsOf(this.crop, this.displaySize(this.page))
+			: undefined;
+		const size = this.size;
+		const max = size
+			? Math.max(size.width, size.height) / MM_TO_POINTS
+			: 0;
+		return EDGES.map(({ edge, title }) => ({
+			edge,
+			title,
+			value: insets ? insets[edge] / MM_TO_POINTS : 0,
+			max,
+		}));
+	}
+
+	get paperIndex(): number | undefined {
+		const id = this.papers[this.page];
+		const index = PAPERS.findIndex((size) => size.id === id);
+		return index < 0 ? undefined : index;
+	}
+
+	pickPaperIndex = (index: number) => {
+		const size = PAPERS[index];
+		if (size) this.pickPaper(size.id);
+	};
+
+	get pagerText() {
+		return this.loaded
+			? `${this.page + 1} / ${this.edits.length}`
+			: DASH;
+	}
+
+	get atFirst() {
+		return !this.loaded || this.page === 0;
+	}
+
+	get atLast() {
+		return !this.loaded || this.page >= this.edits.length - 1;
+	}
+
+	get noFile() {
+		return !this.loaded;
+	}
+
+	get uncropped() {
+		return !this.edits[this.page]?.crop;
+	}
+
+	get resultRow() {
+		const { exported } = this;
+		return exported
+			? {
+					name: exported.name,
+					detail: formatBytes(exported.blob.size),
+				}
+			: null;
+	}
+
+	// an edit drops the export
+	#changed() {
+		this.exported = null;
+		this.failed = false;
+		this.#renderPicture();
+	}
+
+	setCrop(rect: CropBox | null, index = this.page, keepsPaper = false) {
+		if (!this.edits[index]) return;
+		if (!keepsPaper) this.#paper(index, undefined);
+		const size = this.displaySize(index);
+		const whole = { x: 0, y: 0, ...size };
+		const crop =
+			rect &&
+			rect.width >= 4 &&
+			rect.height >= 4 &&
+			!sameRect(rect, whole)
+				? toPage(
+						rect,
+						this.geometry[index]!.box,
+						this.totalRotation(index),
+					)
+				: null;
+		this.#edit(index, { ...this.edits[index], crop });
+		this.#changed();
+	}
+
+	#edit(index: number, edit: Edit) {
+		const edits = [...this.edits];
+		edits[index] = edit;
+		this.edits = edits;
+	}
+
+	#paper(index: number, id: string | undefined) {
+		if (this.papers[index] === id) return;
+		const papers = { ...this.papers };
+		if (id) papers[index] = id;
+		else delete papers[index];
+		this.papers = papers;
+	}
+
+	rotate = (delta: number, all: boolean) => {
+		this.edits = this.edits.map((edit, index) =>
+			all || index === this.page
+				? {
+						...edit,
+						rotation: normaliseRotation(
+							edit.rotation + delta,
+						),
+					}
+				: edit,
+		);
+		this.#changed();
+	};
+
+	dragged = (rect: CropBox) => {
+		this.live = rect;
+	};
+
+	settled = () => {
+		const rect = this.live;
+		if (!rect) return;
+		this.live = null;
+		const before = this.cropRect(this.page);
+		this.setCrop(
+			rect,
+			this.page,
+			sameSize(rect, {
+				width: before.width,
+				height: before.height,
+			}),
+		);
+	};
+
+	setMargin = (edge: Edge, value: number) => {
+		if (!this.loaded) return;
+		const size = this.displaySize(this.page);
+		const insets = insetsOf(this.cropRect(this.page), size);
+		insets[edge] = value * MM_TO_POINTS;
+		const rect = cropFromInsets(size, insets);
+		if (!rect) {
+			this.refused++;
+			return;
 		}
+		this.setCrop(rect);
+	};
+
+	/** Paper turns for landscape. */
+	#paperCrop(index: number, id: string) {
+		const paper = findPaperSize(id);
+		if (!paper) return undefined;
+		const size = this.displaySize(index);
+		const width = paper.widthMm * MM_TO_POINTS;
+		const height = paper.heightMm * MM_TO_POINTS;
+		const turned = size.width > size.height && width < height;
+		const target = cropToPaper(
+			size,
+			turned
+				? { width: height, height: width }
+				: { width, height },
+		);
+		return intersectBox(target, { x: 0, y: 0, ...size });
 	}
 
-	setInset = (
-		edge: 'Left' | 'Top' | 'Right' | 'Bottom',
-		event: Event,
-	) => {
-		const value = (event.target as HTMLInputElement).value;
-		this[`inset${edge}`] = value;
+	pickPaper = (id: string) => {
+		if (!this.loaded) return;
+		const rect = this.#paperCrop(this.page, id);
+		if (rect === undefined) return;
+		this.setCrop(rect, this.page, true);
+		this.#paper(this.page, id);
 	};
 
-	setPaper = (id: string) => {
-		this.paperId = id;
+	/** The same fraction on every page; a picked paper crops every page to that paper. */
+	cropAll = () => {
+		if (!this.loaded) return;
+		const { page } = this;
+		const size = this.displaySize(page);
+		const rect = this.cropRect(page);
+		const paper = this.papers[page];
+		const edits = [...this.edits];
+		const papers = { ...this.papers };
+		edits.forEach((edit, index) => {
+			if (index === page) return;
+			const target = this.displaySize(index);
+			const whole = { x: 0, y: 0, ...target };
+			const scaled = paper
+				? (this.#paperCrop(index, paper) ?? whole)
+				: {
+						x:
+							(rect.x / size.width) *
+							target.width,
+						y:
+							(rect.y / size.height) *
+							target.height,
+						width:
+							(rect.width /
+								size.width) *
+							target.width,
+						height:
+							(rect.height /
+								size.height) *
+							target.height,
+					};
+			if (paper) papers[index] = paper;
+			else delete papers[index];
+			edits[index] = {
+				...edit,
+				crop: sameRect(scaled, whole)
+					? null
+					: toPage(
+							scaled,
+							this.geometry[index]!
+								.box,
+							this.totalRotation(
+								index,
+							),
+						),
+			};
+		});
+		this.edits = edits;
+		this.papers = papers;
+		this.#changed();
 	};
 
-	pageLabel = (index: number) => `p. ${index + 1}`;
+	clearCrop = () => this.setCrop(null);
 
-	rotationClass = (page: PageState) =>
-		page.rotation ? `is-rot-${page.rotation}` : '';
-
-	readFile = (file: File) => void this.#load(file);
-
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) void this.#load(file);
-		// allow re-picking same file
-		input.value = '';
+	select = (index: number) => {
+		if (!this.edits[index] || index === this.page) return;
+		this.live = null;
+		this.page = index;
+		this.#renderPicture();
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = [...(event.dataTransfer?.files ?? [])].find(
-			(f) =>
-				f.type === 'application/pdf' ||
-				/\.pdf$/i.test(f.name),
-		);
-		if (file) void this.#load(file);
-	};
+	step = (delta: number) => this.select(this.page + delta);
 
-	// default drop navigates
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
+	load = (file: File) => {
+		if (
+			file.type !== 'application/pdf' &&
+			!/\.pdf$/i.test(file.name)
+		)
+			return;
+		void this.#load(file);
 	};
 
 	async #load(file: File) {
-		this.loading = true;
-		this.error = null;
+		this.clear();
+		const token = this.#token;
+		this.file = file;
 		try {
 			const bytes = await file.arrayBuffer();
-			const js: PDFDocumentProxy = await loadPdfDocument(
-				// pdf.js detaches input buffer
-				bytes.slice(0),
-			);
-
-			const pages: PageState[] = [];
-			for (let n = 1; n <= js.numPages; n++) {
-				const page = await js.getPage(n);
-				const base = page.getViewport({ scale: 1 });
-				const viewport = page.getViewport({
-					scale: THUMB_WIDTH / base.width,
-				});
-				const canvas = document.createElement('canvas');
-				canvas.width = Math.ceil(viewport.width);
-				canvas.height = Math.ceil(viewport.height);
-				await page.render({ canvas, viewport }).promise;
-				pages.push({
-					rotation: 0,
-					crop: null,
-					thumb: canvas.toDataURL('image/png'),
-				});
-			}
-			if (this.isDestroyed) return;
-
+			if (token !== this.#token) return;
+			const pdf = await open(bytes);
+			if (token !== this.#token) return void pdf.destroy();
+			const found = await geometry(pdf);
+			if (token !== this.#token) return void pdf.destroy();
 			this.#bytes = bytes;
-			this.#js = js;
-			this.fileName = file.name;
-			this.pages = pages;
-			this.current = 0;
-			this.pending = null;
-			await this.#renderPreview();
+			this.#pdf = pdf;
+			this.geometry = found;
+			this.edits = found.map(() => ({
+				rotation: 0,
+				crop: null,
+			}));
+			this.#launch();
+			this.#changed();
+			await thumbnails(
+				pdf,
+				() => token === this.#token,
+				(index, url) => {
+					const thumbs = [...this.thumbs];
+					thumbs[index] = url;
+					this.thumbs = thumbs;
+				},
+			);
 		} catch {
-			if (!this.isDestroyed) this.error = 'Unreadable PDF';
-		} finally {
-			if (!this.isDestroyed) this.loading = false;
+			if (token === this.#token) this.unreadable = true;
 		}
 	}
 
-	clearAll = () => {
-		this.fileName = null;
-		this.pages = [];
-		this.preview = null;
-		this.pending = null;
-		this.error = null;
-		this.#bytes = null;
-		this.#js = null;
-		this.#viewport = null;
-		this.paperId = '';
-		this.pagePointW = 0;
-		this.pagePointH = 0;
-		this.#syncInsets();
-	};
-
-	async #renderPreview() {
-		const js = this.#js;
-		const page = this.currentPage;
-		if (!js || !page) return;
-		const token = ++this.#renderToken;
-		try {
-			const jsPage = await js.getPage(this.current + 1);
-			const rotation = normaliseRotation(
-				jsPage.rotate + page.rotation,
+	// the iOS DEBUG launch arguments
+	#launch() {
+		const flags = query();
+		const turn = Number(flags.get('rcRotate') ?? NaN);
+		if (this.edits[turn])
+			this.#edit(turn, { ...this.edits[turn], rotation: 90 });
+		const inset = Number(flags.get('rcCrop') ?? NaN);
+		if (inset >= 0) {
+			const size = this.displaySize(0);
+			this.setCrop(
+				{
+					x: inset,
+					y: inset * 1.4,
+					width: size.width - inset * 2,
+					height: size.height - inset * 2.8,
+				},
+				0,
 			);
-			const base = jsPage.getViewport({ scale: 1, rotation });
-			const scale = Math.min(
-				PREVIEW_MAX_W / base.width,
-				PREVIEW_MAX_H / base.height,
-			);
-			const viewport = jsPage.getViewport({
-				scale,
-				rotation,
-			});
-			const canvas = document.createElement('canvas');
-			canvas.width = Math.ceil(viewport.width);
-			canvas.height = Math.ceil(viewport.height);
-			await jsPage.render({ canvas, viewport }).promise;
-			if (this.isDestroyed || token !== this.#renderToken)
-				return;
-			this.#viewport = viewport;
-			this.pagePointW = base.width;
-			this.pagePointH = base.height;
-			this.preview = {
-				url: canvas.toDataURL('image/png'),
-				width: viewport.width,
-				height: viewport.height,
-			};
-			// stale viewport px
-			this.pending = null;
-			this.#syncInsets();
-		} catch {
-			if (!this.isDestroyed && token === this.#renderToken) {
-				this.preview = null;
-			}
+		}
+		const paper = flags.get('rcPaper');
+		if (paper && findPaperSize(paper)) {
+			this.pickPaper(paper);
+			if (flags.get('rcNudge') === 'yes')
+				this.setMargin(
+					'left',
+					this.margins[0]!.value + 1,
+				);
 		}
 	}
 
-	selectPage = (index: number) => {
-		if (this.busy || index === this.current) return;
-		this.current = index;
-		void this.#renderPreview();
-	};
-
-	#rotate(delta: number, page: PageState): PageState {
-		return {
-			...page,
-			rotation: normaliseRotation(page.rotation + delta),
-		};
-	}
-
-	rotatePage = (delta: number) => {
-		this.pages = this.pages.map((page, index) =>
-			index === this.current
-				? this.#rotate(delta, page)
-				: page,
-		);
-		void this.#renderPreview();
-	};
-
-	rotateAll = (delta: number) => {
-		this.pages = this.pages.map((page) =>
-			this.#rotate(delta, page),
-		);
-		void this.#renderPreview();
-	};
-
-	#eventPoint(event: PointerEvent) {
-		const bounds = (
-			event.currentTarget as HTMLElement
-		).getBoundingClientRect();
-		return {
-			x: event.clientX - bounds.left,
-			y: event.clientY - bounds.top,
-		};
-	}
-
-	cropStart = (event: PointerEvent) => {
-		if (!this.preview) return;
-		(event.currentTarget as HTMLElement).setPointerCapture(
-			event.pointerId,
-		);
-		this.#dragStart = this.#eventPoint(event);
-		this.pending = null;
-	};
-
-	cropMove = (event: PointerEvent) => {
-		if (!this.#dragStart || !this.preview) return;
-		const point = this.#eventPoint(event);
-		this.pending = dragRect(
-			this.#dragStart.x,
-			this.#dragStart.y,
-			point.x,
-			point.y,
-			this.preview.width,
-			this.preview.height,
-		);
-	};
-
-	cropEnd = () => {
+	#renderPicture() {
+		const pdf = this.#pdf;
+		const { page } = this;
+		const edit = this.edits[page];
+		if (!pdf || !edit) return;
+		const shown = this.picture;
 		if (
-			this.pending &&
-			(this.pending.width < MIN_DRAG_PX ||
-				this.pending.height < MIN_DRAG_PX)
-		) {
-			this.pending = null;
-		}
-		this.#dragStart = null;
-	};
-
-	/** preview fractions: same visible region per page */
-	applyCrop = async (scope: 'page' | 'all') => {
-		const pending = this.pending;
-		const viewport = this.#viewport;
-		const js = this.#js;
-		if (!pending || !viewport || !js || !this.preview) return;
-
-		const fx = pending.x / this.preview.width;
-		const fy = pending.y / this.preview.height;
-		const fw = pending.width / this.preview.width;
-		const fh = pending.height / this.preview.height;
-
-		const targets =
-			scope === 'page'
-				? [this.current]
-				: this.pages.map((_, index) => index);
-		const pages = [...this.pages];
-		for (const index of targets) {
-			const jsPage = await js.getPage(index + 1);
-			const rotation = normaliseRotation(
-				jsPage.rotate + pages[index]!.rotation,
-			);
-			const vp = jsPage.getViewport({ scale: 1, rotation });
-			const [ax, ay] = vp.convertToPdfPoint(
-				fx * vp.width,
-				fy * vp.height,
-			) as [number, number];
-			const [bx, by] = vp.convertToPdfPoint(
-				(fx + fw) * vp.width,
-				(fy + fh) * vp.height,
-			) as [number, number];
-			pages[index] = {
-				...pages[index]!,
-				crop: boxFromPoints(ax, ay, bx, by),
-			};
-		}
-		if (this.isDestroyed) return;
-		this.pages = pages;
-		this.pending = null;
-		this.#syncInsets();
-	};
-
-	/** uniform mm per page */
-	applyManualCrop = async (scope: 'page' | 'all') => {
-		const js = this.#js;
-		if (this.busy || !js) return;
-		const left = (parseFloat(this.insetLeft) || 0) * MM_TO_POINTS;
-		const top = (parseFloat(this.insetTop) || 0) * MM_TO_POINTS;
-		const right = (parseFloat(this.insetRight) || 0) * MM_TO_POINTS;
-		const bottom =
-			(parseFloat(this.insetBottom) || 0) * MM_TO_POINTS;
-
-		const targets =
-			scope === 'page'
-				? [this.current]
-				: this.pages.map((_, index) => index);
-		const pages = [...this.pages];
-		for (const index of targets) {
-			const jsPage = await js.getPage(index + 1);
-			const rotation = normaliseRotation(
-				jsPage.rotate + pages[index]!.rotation,
-			);
-			const vp = jsPage.getViewport({ scale: 1, rotation });
-			const box = cropFromInsets(
-				vp.width,
-				vp.height,
-				left,
-				top,
-				right,
-				bottom,
-			);
-			if (box) pages[index] = { ...pages[index]!, crop: box };
-		}
-		if (this.isDestroyed) return;
-		this.pages = pages;
-		this.pending = null;
-		this.#syncInsets();
-	};
-
-	/** portrait rotated for landscape */
-	applyPaper = async (scope: 'page' | 'all') => {
-		const js = this.#js;
-		const size = findPaperSize(this.paperId);
-		if (this.busy || !js || !size) return;
-		const paperW = size.widthMm * MM_TO_POINTS;
-		const paperH = size.heightMm * MM_TO_POINTS;
-
-		const targets =
-			scope === 'page'
-				? [this.current]
-				: this.pages.map((_, index) => index);
-		const pages = [...this.pages];
-		for (const index of targets) {
-			const jsPage = await js.getPage(index + 1);
-			const rotation = normaliseRotation(
-				jsPage.rotate + pages[index]!.rotation,
-			);
-			const vp = jsPage.getViewport({ scale: 1, rotation });
-			const landscape = vp.width > vp.height;
-			const pw =
-				landscape && paperW < paperH ? paperH : paperW;
-			const ph =
-				landscape && paperW < paperH ? paperW : paperH;
-			pages[index] = {
-				...pages[index]!,
-				crop: cropToPaper(vp.width, vp.height, pw, ph),
-			};
-		}
-		if (this.isDestroyed) return;
-		this.pages = pages;
-		this.pending = null;
-		this.#syncInsets();
-	};
-
-	clearCrop = () => {
-		this.pending = null;
-		const page = this.currentPage;
-		if (!page?.crop) return;
-		this.pages = this.pages.map((entry, index) =>
-			index === this.current
-				? { ...entry, crop: null }
-				: entry,
+			shown &&
+			shown.page === page &&
+			shown.rotation === edit.rotation
+		)
+			return;
+		const run = ++this.#run;
+		const rotation = edit.rotation;
+		void picture(pdf, page, this.totalRotation(page)).then(
+			(url) => {
+				if (run !== this.#run || this.isDestroyed) {
+					if (url) URL.revokeObjectURL(url);
+					return;
+				}
+				if (this.picture?.url)
+					URL.revokeObjectURL(this.picture.url);
+				this.picture = { url, page, rotation };
+			},
 		);
-		this.#syncInsets();
-	};
+	}
 
-	download = async () => {
-		if (this.busy || !this.#bytes) return;
+	export = () => void this.#export();
+
+	async #export() {
+		const bytes = this.#bytes;
+		if (!bytes || this.busy) return;
+		const edits = this.edits;
+		const token = this.#token;
 		this.busy = true;
-		this.error = null;
+		this.failed = false;
 		try {
 			const { PDFDocument, degrees } =
 				await import('pdf-lib');
-			const doc = await PDFDocument.load(this.#bytes, {
+			const doc = await PDFDocument.load(bytes, {
 				ignoreEncryption: true,
 			});
 			doc.getPages().forEach((page, index) => {
-				const state = this.pages[index]!;
-				if (state.rotation) {
+				const edit = edits[index];
+				if (!edit) return;
+				if (edit.rotation)
 					page.setRotation(
 						degrees(
 							normaliseRotation(
 								page.getRotation()
 									.angle +
-									state.rotation,
+									edit.rotation,
 							),
 						),
 					);
-				}
-				if (state.crop) {
-					// never exceed current cropbox
-					const box = intersectBox(
-						state.crop,
+				const box =
+					edit.crop &&
+					intersectBox(
+						edit.crop,
 						page.getCropBox(),
 					);
-					if (box) {
-						page.setCropBox(
-							box.x,
-							box.y,
-							box.width,
-							box.height,
-						);
-					}
-				}
+				if (box)
+					page.setCropBox(
+						box.x,
+						box.y,
+						box.width,
+						box.height,
+					);
 			});
-			// BlobPart rejects ArrayBufferLike view
-			downloadBlob(
-				new Blob([new Uint8Array(await doc.save())], {
+			const saved = await doc.save();
+			if (token !== this.#token || edits !== this.edits)
+				return;
+			this.exported = {
+				// BlobPart rejects ArrayBufferLike view
+				blob: new Blob([new Uint8Array(saved)], {
 					type: 'application/pdf',
 				}),
-				`${this.baseName}-rotate-crop.pdf`,
-			);
+				name: `${this.baseName}-rotate-crop.pdf`,
+			};
 		} catch {
-			this.error = 'Save failed';
+			if (token === this.#token) this.failed = true;
 		} finally {
-			this.busy = false;
+			if (token === this.#token) this.busy = false;
 		}
+	}
+
+	save = () => {
+		if (this.exported)
+			downloadBlob(this.exported.blob, this.exported.name);
 	};
 
+	clear = () => {
+		this.#token++;
+		this.#run++;
+		this.#close();
+		this.file = null;
+		this.unreadable = false;
+		this.#bytes = null;
+		this.geometry = [];
+		this.edits = [];
+		this.page = 0;
+		this.papers = {};
+		this.live = null;
+		this.busy = false;
+		this.failed = false;
+		this.exported = null;
+	};
+
+	#close() {
+		for (const url of this.thumbs)
+			if (url) URL.revokeObjectURL(url);
+		if (this.picture?.url) URL.revokeObjectURL(this.picture.url);
+		this.thumbs = [];
+		this.picture = null;
+		void this.#pdf?.destroy();
+		this.#pdf = undefined;
+	}
+
 	<template>
-		<div class="dt-prc" {{filePaste this.readFile accept=ACCEPT}}>
-			<div
-				class="dt-prc-frame"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.allowDrop}}
-			>
-				{{#unless this.loaded}}
-					<label class="dt-prc-drop">
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
+		<CanonSplit
+			class="pdf-rotate-crop"
+			@mainLeadsStacked={{true}}
+			{{filePaste this.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.loaded}}
+						<CanonPageStrip
+							@pages={{this.pages}}
+							@selected={{this.page}}
+							@onSelect={{this.select}}
+						/>
+					{{else}}
+						<div
+							class="prc-blank-strip"
+							aria-hidden="true"
+						>
+							<span
+								class="prc-blank-strip-page"
+							></span>
+						</div>
+					{{/if}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.file}}
+						<CanonRow
+							class="prc-source
+								{{if
+									this.unreadable
+									'prc-source--failed'
+								}}"
+							@title={{this.file.name}}
+							@detail={{this.detail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					{{else}}
+						<Slot
+							class="prc-slot"
+							@prompt="Drop PDF here"
+							@icon="file-text"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.load}}
+						/>
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}} class="prc-rotate">
+					<CanonHeading @text="Rotate" />
+					<CanonRow
+						class="prc-rotate-page"
+						@title="This page"
+						@form="flush"
+					>
+						<CanonGrid>
+							<CanonButton
+								@kind="cell"
+								@icon={{Left}}
+								@label="Rotate left"
+								@disabled={{this.noFile}}
+								@onClick={{fn
+									this.rotate
+									-90
+									false
+								}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@icon={{Right}}
+								@label="Rotate right"
+								@disabled={{this.noFile}}
+								@onClick={{fn
+									this.rotate
+									90
+									false
+								}}
+							/>
+						</CanonGrid>
+					</CanonRow>
+					<CanonRow
+						class="prc-rotate-all"
+						@title="All pages"
+						@form="flush"
+					>
+						<CanonGrid>
+							<CanonButton
+								@kind="cell"
+								@icon={{Left}}
+								@label="Rotate left"
+								@disabled={{this.noFile}}
+								@onClick={{fn
+									this.rotate
+									-90
+									true
+								}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@icon={{Right}}
+								@label="Rotate right"
+								@disabled={{this.noFile}}
+								@onClick={{fn
+									this.rotate
+									90
+									true
+								}}
+							/>
+						</CanonGrid>
+					</CanonRow>
+				</CanonRows>
+				<CanonRows @framed={{true}} class="prc-margins">
+					<CanonHeading
+						@text="Crop margins (mm)"
+					/>
+					<Fresh @value={{this.refused}}>
+						{{#each
+							this.margins
+							as |margin|
+						}}
+							<CanonRow
+								class="prc-margin prc-margin--{{margin.edge}}"
+								@title={{margin.title}}
+								@form="flush"
+								as |titleId|
+							>
+								<CanonDecimalField
+									@value={{margin.value}}
+									@max={{margin.max}}
+									@unit="mm"
+									@step={{1}}
+									@decimals={{1}}
+									@labelledBy={{titleId}}
+									@disabled={{this.noFile}}
+									@onChange={{fn
+										this.setMargin
+										margin.edge
+									}}
+								/>
+							</CanonRow>
+						{{/each}}
+					</Fresh>
+					<CanonRow
+						class="prc-paper"
+						@title="Crop to size"
+						@form="flush"
+						as |titleId|
+					>
+						<Fresh
+							@value={{this.paperIndex}}
+							as |mine|
+						>
+							<CanonMenuCell
+								class="prc-paper-menu"
+								@items={{PAPER_TITLES}}
+								@selected={{this.paperIndex}}
+								@placeholder="None"
+								@labelledBy={{titleId}}
+								@disabled={{this.noFile}}
+								@onChange={{both
+									mine
+									this.pickPaperIndex
+								}}
+							/>
+						</Fresh>
+					</CanonRow>
+					<CanonGrid class="prc-crop-actions">
+						<CanonButton
+							class="prc-crop-all"
+							@text="All pages"
+							@icon={{Copy}}
+							@disabled={{this.noFile}}
+							@onClick={{this.cropAll}}
+						/>
+						<CanonButton
+							class="prc-crop-clear"
+							@text="Clear"
+							@icon={{Cross}}
+							@disabled={{this.uncropped}}
+							@onClick={{this.clearCrop}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<Job
+						@title="Export PDF"
+						@icon={{Crop}}
+						@failure="Save failed"
+						@disabled={{this.noFile}}
+						@busy={{this.busy}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.export}}
+						@onSave={{this.save}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					class="prc-canvas"
+					@aspect={{this.aspect}}
+					@maxHeight={{640}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					<Picture
+						@url={{this.pictureUrl}}
+						@size={{this.size}}
+						@crop={{this.crop}}
+						@onCrop={{this.dragged}}
+						@onSettle={{this.settled}}
+					/>
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonGrid class="prc-pager">
+						<CanonButton
+							class="prc-pager-back"
+							@icon={{Back}}
+							@label="Previous page"
+							@disabled={{this.atFirst}}
+							@onClick={{fn
+								this.step
+								-1
 							}}
 						/>
-						<Icon @name="upload" />
-						<span class="dt-prc-drop-title">
-							{{~#if this.loading~}}
-								Reading…
-							{{~else~}}
-								Drop PDF here
-							{{~/if~}}
-						</span>
 						<span
-							class="dt-prc-drop-hint"
-						>click or paste</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.loaded}}
-					<div class="dt-prc-bar">
-						<div class="dt-prc-info">
-							<span
-								class="dt-prc-count"
-							>{{this.fileName}}</span>
-							<span
-								class="dt-prc-pages"
-							>{{this.countLabel}}</span>
-						</div>
-						<button
-							type="button"
-							class="dt-prc-btn"
-							{{on
-								"click"
-								this.clearAll
+							class="prc-pager-text"
+							role="status"
+						>{{this.pagerText}}</span>
+						<CanonButton
+							class="prc-pager-forward"
+							@icon={{Forward}}
+							@label="Next page"
+							@disabled={{this.atLast}}
+							@onClick={{fn
+								this.step
+								1
 							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-prc-btn is-primary"
-							disabled={{this.busy}}
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel
-								@label="Download PDF"
-							/>
-						</button>
-					</div>
-
-					<div class="dt-prc-settings">
-						<div class="dt-prc-field">
-							<span>Rotate page</span>
-							<div
-								class="segmented dt-prc-rotate"
-							>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									title="Rotate left"
-									{{on
-										"click"
-										(fn
-											this.rotatePage
-											-90
-										)
-									}}
-								>
-									<Icon
-										@name="rotate-ccw"
-									/>
-								</button>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									title="Rotate right"
-									{{on
-										"click"
-										(fn
-											this.rotatePage
-											90
-										)
-									}}
-								>
-									<Icon
-										@name="rotate-cw"
-									/>
-								</button>
-							</div>
-						</div>
-
-						<div class="dt-prc-field">
-							<span>Rotate all</span>
-							<div
-								class="segmented dt-prc-rotate"
-							>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									title="Rotate left"
-									{{on
-										"click"
-										(fn
-											this.rotateAll
-											-90
-										)
-									}}
-								>
-									<Icon
-										@name="rotate-ccw"
-									/>
-								</button>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									title="Rotate right"
-									{{on
-										"click"
-										(fn
-											this.rotateAll
-											90
-										)
-									}}
-								>
-									<Icon
-										@name="rotate-cw"
-									/>
-								</button>
-							</div>
-						</div>
-
-						<div class="dt-prc-field">
-							<span>Crop (drag)</span>
-							<div
-								class="segmented dt-prc-cropmode"
-							>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{not
-										this.canApplyCrop
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyCrop
-											"page"
-										)
-									}}
-								>This page</button>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{not
-										this.canApplyCrop
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyCrop
-											"all"
-										)
-									}}
-								>All pages</button>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{not
-										this.canClearCrop
-									}}
-									{{on
-										"click"
-										this.clearCrop
-									}}
-								>Clear</button>
-							</div>
-						</div>
-					</div>
-
-					<div
-						class="dt-prc-settings dt-prc-settings-2"
-					>
-						<div
-							class="dt-prc-field dt-prc-margins"
-						>
-							<span>Crop margins (mm)</span>
-							<div
-								class="dt-prc-insets"
-							>
-								<label
-									class="dt-prc-inset"
-								>
-									<span
-									>L</span>
-									<input
-										type="number"
-										step="0.1"
-										min="0"
-										inputmode="decimal"
-										value={{this.insetLeft}}
-										{{on
-											"input"
-											(fn
-												this.setInset
-												"Left"
-											)
-										}}
-									/>
-								</label>
-								<label
-									class="dt-prc-inset"
-								>
-									<span
-									>T</span>
-									<input
-										type="number"
-										step="0.1"
-										min="0"
-										inputmode="decimal"
-										value={{this.insetTop}}
-										{{on
-											"input"
-											(fn
-												this.setInset
-												"Top"
-											)
-										}}
-									/>
-								</label>
-								<label
-									class="dt-prc-inset"
-								>
-									<span
-									>R</span>
-									<input
-										type="number"
-										step="0.1"
-										min="0"
-										inputmode="decimal"
-										value={{this.insetRight}}
-										{{on
-											"input"
-											(fn
-												this.setInset
-												"Right"
-											)
-										}}
-									/>
-								</label>
-								<label
-									class="dt-prc-inset"
-								>
-									<span
-									>B</span>
-									<input
-										type="number"
-										step="0.1"
-										min="0"
-										inputmode="decimal"
-										value={{this.insetBottom}}
-										{{on
-											"input"
-											(fn
-												this.setInset
-												"Bottom"
-											)
-										}}
-									/>
-								</label>
-							</div>
-							<div
-								class="segmented dt-prc-applyscope"
-							>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{this.busy}}
-									{{on
-										"click"
-										(fn
-											this.applyManualCrop
-											"page"
-										)
-									}}
-								>This page</button>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{this.busy}}
-									{{on
-										"click"
-										(fn
-											this.applyManualCrop
-											"all"
-										)
-									}}
-								>All pages</button>
-							</div>
-						</div>
-
-						<div class="dt-prc-field">
-							<span>Crop to size</span>
-							<PaperSizeCombobox
-								@value={{this.paperId}}
-								@onValueChange={{this.setPaper}}
-								@showCustom={{false}}
-								@triggerClass="dt-prc-paper"
-							/>
-							<div
-								class="segmented dt-prc-applyscope"
-							>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{not
-										this.canApplyPaper
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyPaper
-											"page"
-										)
-									}}
-								>This page</button>
-								<button
-									type="button"
-									class="dt-prc-opt"
-									disabled={{not
-										this.canApplyPaper
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyPaper
-											"all"
-										)
-									}}
-								>All pages</button>
-							</div>
-						</div>
-					</div>
-
-					{{#if this.error}}
-						<p
-							class="dt-prc-error"
-						>{{this.error}}</p>
-					{{/if}}
-
-					<div class="dt-prc-stage">
-						{{#if this.preview}}
-							<div
-								class="dt-prc-preview"
-								style={{this.previewStyle}}
-							>
-								<img
-									src={{this.preview.url}}
-									alt="Page preview"
-									draggable="false"
-								/>
-								{{! keyboard path: thumbnail strip }}
-								{{! template-lint-disable no-pointer-down-event-binding }}
-								<div
-									class="dt-prc-crop-layer"
-									title="Drag to crop"
-									{{on
-										"pointerdown"
-										this.cropStart
-									}}
-									{{on
-										"pointermove"
-										this.cropMove
-									}}
-									{{on
-										"pointerup"
-										this.cropEnd
-									}}
-								>
-									{{#if
-										this.existingCropStyle
-									}}
-										<div
-											class="dt-prc-cropbox"
-											style={{this.existingCropStyle}}
-										></div>
-									{{/if}}
-									{{#if
-										this.pendingStyle
-									}}
-										<div
-											class="dt-prc-pending"
-											style={{this.pendingStyle}}
-										></div>
-									{{/if}}
-								</div>
-							</div>
-						{{/if}}
-					</div>
-
-					<ol class="dt-prc-strip">
-						{{#each
-							this.pages key="@index"
-							as |page index|
-						}}
-							<li>
-								<button
-									type="button"
-									class="dt-prc-cell
-										{{if
-											(eq
-												index
-												this.current
-											)
-											'is-active'
-										}}"
-									title={{this.pageLabel
-										index
-									}}
-									{{on
-										"click"
-										(fn
-											this.selectPage
-											index
-										)
-									}}
-								>
-									{{#if
-										page.thumb
-									}}
-										<img
-											class="dt-prc-thumb
-												{{this.rotationClass
-													page
-												}}"
-											src={{page.thumb}}
-											alt={{this.pageLabel
-												index
-											}}
-											draggable="false"
-										/>
-									{{else}}
-										<span
-											class="dt-prc-thumb-fallback"
-										>
-											<Icon
-												@name="file-stack"
-											/>
-										</span>
-									{{/if}}
-									<span
-										class="dt-prc-cell-foot"
-									>
-										<span
-											class="dt-prc-badge"
-										>{{this.pageLabel
-												index
-											}}</span>
-										{{#if
-											page.crop
-										}}
-											<span
-												class="dt-prc-cropdot"
-												title="Cropped"
-											>
-												<Icon
-													@name="crop"
-												/>
-											</span>
-										{{/if}}
-									</span>
-								</button>
-							</li>
-						{{/each}}
-					</ol>
-				{{/if}}
-			</div>
-		</div>
+						/>
+					</CanonGrid>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

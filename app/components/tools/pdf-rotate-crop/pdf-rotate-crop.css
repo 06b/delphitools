@@ -1,0 +1,115 @@
+/* CanonPageStrip geometry: insets 14 16 8, caption 34 */
+.prc-blank-strip {
+	box-sizing: border-box;
+	block-size: 100%;
+	padding: 14px var(--canon-panel-padding) 8px;
+}
+
+.prc-blank-strip-page {
+	display: block;
+	box-sizing: border-box;
+	block-size: calc(100% - 34px);
+	aspect-ratio: 210 / 297;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.prc-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+}
+
+.prc-image,
+.prc-sheet,
+.prc-shade,
+.prc-crop,
+.prc-corner,
+.prc-blank {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.prc-image {
+	display: block;
+	max-inline-size: none;
+	user-select: none;
+	pointer-events: none;
+}
+
+.prc-blank {
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.prc-loader {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+}
+
+.prc-sheet {
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.prc-shade {
+	box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%);
+}
+
+.prc-crop {
+	border: var(--canon-frame) solid var(--canon-primary);
+	outline: none;
+	cursor: move;
+}
+
+.prc-crop:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-foreground);
+	outline-offset: var(--canon-frame);
+}
+
+.prc-corner {
+	inline-size: 14px;
+	block-size: 14px;
+	background: var(--canon-primary);
+}
+
+.prc-corner--nw {
+	inset-block-start: -8px;
+	inset-inline-start: -8px;
+	cursor: nwse-resize;
+}
+
+.prc-corner--ne {
+	inset-block-start: -8px;
+	inset-inline-end: -8px;
+	cursor: nesw-resize;
+}
+
+.prc-corner--sw {
+	inset-block-end: -8px;
+	inset-inline-start: -8px;
+	cursor: nesw-resize;
+}
+
+.prc-corner--se {
+	inset-block-end: -8px;
+	inset-inline-end: -8px;
+	cursor: nwse-resize;
+}
+
+.prc-source--failed .canon-row-detail {
+	color: var(--canon-destructive);
+}
+
+.prc-pager-text {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+}
