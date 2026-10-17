@@ -1,69 +1,76 @@
-// unmount rides animationend; app.scss keyframes
+// image-tracer's option hints: the kit CanonTooltip, a manual popover in the top layer
 
 import { launch, visit, check, sleep, finish } from './harness.mjs';
 
-const TRIGGER = '.dt-trace-info';
+const TRIGGER = '.trace-colours .trace-info';
 
 const { browser, page } = await launch({
 	viewport: { width: 1400, height: 900 },
 });
 await visit(page, '/tools/image-tracer');
-// the option tips show once an image is in
-const file = await page.$('input[type=file]');
-await file.uploadFile('public/stickers/marker.png');
 await page.waitForSelector(TRIGGER, { timeout: 10000 });
 
-const count = () =>
-	page.$$eval('.dt-tooltip', (els) => els.length).catch(() => 0);
+const shown = () =>
+	page.evaluate(() => {
+		const tip = [...document.querySelectorAll('.canon-tooltip')].find(
+			(el) => el.matches(':popover-open'),
+		);
+		if (!tip) return null;
+		const rect = tip.getBoundingClientRect();
+		return {
+			id: tip.id,
+			text: tip.textContent.trim(),
+			x: Math.round(rect.x),
+			bottom: Math.round(rect.bottom),
+			width: Math.round(rect.width),
+			background: getComputedStyle(tip).backgroundColor,
+		};
+	});
 
-check('no tooltip before a hover', (await count()) === 0);
+check('no tooltip before a hover', (await shown()) === null);
 
 await page.hover(TRIGGER);
-await sleep(600);
-
-const shown = await page.evaluate(() => {
-	const tip = document.querySelector('.dt-tooltip');
-	if (!tip) return null;
-	const rect = tip.getBoundingClientRect();
-	return {
-		text: tip.textContent.trim(),
-		side: tip.dataset.side,
-		x: Math.round(rect.x),
-		width: Math.round(rect.width),
-		inBody: tip.parentElement === document.body,
-		background: getComputedStyle(tip).backgroundColor,
-	};
-});
-check('a hover shows one', shown, JSON.stringify(shown));
-const name = await page.$eval(TRIGGER, (el) => el.getAttribute('aria-label'));
-check('naming its trigger', shown?.text.startsWith(name), shown?.text);
-check('placed on the requested side', shown?.side === 'top', shown?.side);
-check('portalled to the body', shown?.inBody);
+await sleep(400);
+const tip = await shown();
+check('a hover shows one', tip, JSON.stringify(tip));
+const trigger = await page.$eval(TRIGGER, (el) => ({
+	describedBy: el.getAttribute('aria-describedby'),
+	top: Math.round(el.getBoundingClientRect().top),
+}));
+check('describing its trigger', tip?.id === trigger.describedBy, trigger.describedBy);
+check(
+	'with the web hint',
+	tip?.text.startsWith('Number of colours used to quantise'),
+	tip?.text,
+);
+check('placed above the trigger', tip && tip.bottom <= trigger.top, `${tip?.bottom} ${trigger.top}`);
 check(
 	'positioned on screen',
-	shown && shown.x > 0 && shown.width > 0,
-	`x=${shown?.x} w=${shown?.width}`,
+	tip && tip.x > 0 && tip.width > 0,
+	`x=${tip?.x} w=${tip?.width}`,
 );
 check(
 	'and painted, not transparent',
-	shown?.background !== 'rgba(0, 0, 0, 0)',
-	shown?.background,
+	tip?.background !== 'rgba(0, 0, 0, 0)',
+	tip?.background,
 );
 
 await page.mouse.move(5, 895);
-await sleep(900);
-check(
-	'moving away unmounts it rather than hiding it',
-	(await count()) === 0,
-	'without the exit keyframes this stays at 1 forever',
+await sleep(400);
+check('moving away hides it', (await shown()) === null);
+
+await page.focus('.trace-preset select');
+await page.keyboard.press('Tab');
+await sleep(300);
+const focused = await page.evaluate(
+	(sel) => document.activeElement === document.querySelector(sel),
+	TRIGGER,
 );
+check('the hint cell takes keyboard focus', focused);
+check('keyboard focus opens it too', (await shown()) !== null);
 
-await page.evaluate((sel) => document.querySelector(sel).focus(), TRIGGER);
-await sleep(500);
-check('keyboard focus opens it too', (await count()) === 1, `${await count()}`);
-
-await page.evaluate(() => document.activeElement.blur());
-await sleep(900);
-check('and blur closes it', (await count()) === 0);
+await page.keyboard.press('Escape');
+await sleep(300);
+check('and Escape closes it', (await shown()) === null);
 
 await finish(browser);

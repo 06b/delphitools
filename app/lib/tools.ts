@@ -428,6 +428,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-tracer',
 				produces: ['image/svg+xml'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'metadata-stripper',

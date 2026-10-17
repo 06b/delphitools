@@ -1,0 +1,82 @@
+/* the picture: the compare over the palette strip */
+.trace-picture {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.trace-area {
+	position: relative;
+	display: grid;
+	flex: 1;
+	place-items: center;
+	min-block-size: 0;
+	padding: var(--canon-panel-padding);
+	container-type: size;
+}
+
+/* the source's own shape, so the divider and tags stay on the picture */
+.trace-box {
+	position: relative;
+	inline-size: min(100cqi, 100cqb * var(--trace-aspect));
+	aspect-ratio: var(--trace-aspect);
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.trace-compare {
+	position: absolute;
+	inset: 0;
+}
+
+.trace-slot {
+	--media-slot-inset: var(--canon-panel-padding);
+}
+
+.trace-busy {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	padding: 10px;
+	background: var(--canon-card);
+	color: var(--canon-primary);
+	translate: -50% -50%;
+}
+
+.trace-busy--corner {
+	inset-block: auto 12px;
+	inset-inline: auto 12px;
+	translate: none;
+}
+
+.trace-strip {
+	flex: none;
+}
+
+/* the hint cell keeps its width beside a growing slider */
+.image-tracer .trace-row > .canon-row-control {
+	gap: var(--canon-hairline);
+	min-inline-size: min-content;
+	background: var(--canon-border);
+}
+
+.image-tracer .trace-row .trace-info {
+	flex: none;
+}
+
+/* the title keeps its width; a control with no room wraps below it */
+.image-tracer .trace-row > .canon-row-label {
+	flex-shrink: 0;
+}
+
+/* one height loaded or not; the outline is a copy of the SVG, so Copy below copies the SVG itself */
+.image-tracer .trace-code .canon-code-block-code {
+	box-sizing: border-box;
+	block-size: 240px;
+}
+
+.image-tracer .trace-code .canon-code-block-bar {
+	display: none;
+}
