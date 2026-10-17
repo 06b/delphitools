@@ -111,8 +111,21 @@ check(
 	s.ratio,
 );
 
+const flipIcon = () =>
+	page.$eval('.contrast-flip svg', (svg) => {
+		const style = getComputedStyle(svg);
+		return { rotate: style.rotate, duration: style.transitionDuration };
+	});
 await page.click('.contrast-flip');
-await sleep(700);
+await sleep(80);
+const turning = await flipIcon();
+await sleep(620);
+const turned = await flipIcon();
+check(
+	'the flip icon spins a half turn',
+	turned.rotate === '180deg' && turning.rotate !== '180deg' && turned.duration === '0.4s',
+	`${turning.rotate} -> ${turned.rotate}, ${turned.duration}`,
+);
 const flipped = await state();
 check(
 	'Flip swaps the colours',
@@ -187,5 +200,17 @@ check(
 );
 check('no horizontal scroll', !phone.wide);
 await page.setViewport({ width: 1400, height: 1000 });
+
+await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+await visit(page, '/tools/contrast-checker');
+await page.click('.contrast-flip');
+await sleep(30);
+const still = await flipIcon();
+check(
+	'reduced motion: the flip icon turns at once',
+	still.rotate === '180deg' && still.duration === '0s',
+	`${still.rotate} ${still.duration}`,
+);
+await page.emulateMediaFeatures([]);
 
 await finish(browser);

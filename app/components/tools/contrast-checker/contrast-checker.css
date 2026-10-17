@@ -164,6 +164,11 @@
 	grid-row: 1;
 }
 
+.contrast-flip svg {
+	rotate: calc(var(--contrast-flips, 0) * 180deg);
+	transition: rotate 400ms var(--contrast-well-spring);
+}
+
 .contrast-well--on {
 	background: var(--canon-accent-bg);
 }
@@ -488,6 +493,7 @@
 	.contrast-suggestion-preview,
 	.contrast-scale .canon-bar-fill,
 	.contrast-wells-indicator,
+	.contrast-flip svg,
 	.contrast-lamp-dot,
 	.contrast-lamp-threshold {
 		transition: none;

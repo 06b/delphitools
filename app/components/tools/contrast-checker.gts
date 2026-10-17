@@ -115,6 +115,8 @@ export default class ContrastChecker extends Component {
 	@tracked editsBackground: boolean;
 	/** The well the solid does not edit. */
 	@tracked fixed: Rgb;
+	/** Half turns of the flip icon, one per press. */
+	@tracked flips = 0;
 	#lastPick = 0;
 
 	constructor(owner: Owner, args: object) {
@@ -262,7 +264,14 @@ export default class ContrastChecker extends Component {
 		this.#trade();
 	};
 
-	flip = () => this.#trade();
+	get flipTurn() {
+		return htmlSafe(`--contrast-flips: ${this.flips}`);
+	}
+
+	flip = () => {
+		this.flips += 1;
+		this.#trade();
+	};
 
 	/** A colour for one well, whichever the solid edits. */
 	put(background: boolean, colour: Rgb) {
@@ -439,6 +448,7 @@ export default class ContrastChecker extends Component {
 						{{/each}}
 						<CanonButton
 							class="contrast-flip"
+							style={{this.flipTurn}}
 							@kind="cell"
 							@icon={{Flip}}
 							@label="Flip"
