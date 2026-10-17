@@ -1,5 +1,5 @@
 // the canon waveform-genny: slot, picture as the export, sizes, detail, colours, PNG and SVG
-// SHOTS=<dir> also saves wg-<width>-<theme>.png at 390, 1400 and 2200
+// SHOTS=<dir> also saves wg-<width>-<theme>.png and wg-empty-<width>-<theme>.png at 390, 1400 and 2200
 import {
 	launch,
 	visit,
@@ -122,24 +122,106 @@ check(
 	),
 );
 check('the tool can expand', !!(await page.$('.dt-canon-tool.is-expandable')));
+const hexField = async (well, value) => {
+	const field = await page.$(`${well} input[type="text"]`);
+	await field.focus();
+	await field.evaluate((el) => el.select());
+	await page.keyboard.type(value);
+	await page.keyboard.press('Enter');
+	await sleep(150);
+};
+let audio, image;
+const bannerHeight = () =>
+	page.$eval('.waveform-genny .canon-canvas', (el) => el.getBoundingClientRect().height);
+const blankTiles = (values) => Object.values(values).every((v) => v === '—');
+
 check(
-	'empty: the picture is the drop slot with the web wording, no settings yet',
+	'empty: the Source row is the drop slot with the web wording',
+	await page.evaluate(() => {
+		const slot = document.querySelector('.canon-split-sidebar .wg-slot');
+		const heading = slot?.parentElement.querySelector('.canon-heading');
+		return (
+			slot?.tagName === 'BUTTON' &&
+			slot.classList.contains('media-slot--row') &&
+			slot.textContent.trim() === 'Drop an audio file here or click to upload' &&
+			heading?.textContent.trim() === 'Source'
+		);
+	}),
+);
+let p = await picture();
+check(
+	'empty: the picture is the image frame at the export size, background with a flat wave line',
+	p.role === 'img' &&
+		p.width === 1500 &&
+		p.height === 500 &&
+		p.corner === '250,245,230' &&
+		p.middle === '46,125,50' &&
+		Math.abs(p.shown - 3) < 0.02 &&
+		p.inside &&
+		p.fills,
+	`${p.width} × ${p.height} ${p.corner} / ${p.middle}`,
+);
+check(
+	'empty: the line is flat, background above and below it',
+	await page.evaluate(() => {
+		const canvas = document.querySelector('.wg-image');
+		const context = canvas.getContext('2d');
+		const at = (y) => [...context.getImageData(canvas.width / 3, y, 1, 1).data.slice(0, 3)].join();
+		return at(canvas.height / 2 - 10) === '250,245,230' && at(canvas.height / 2 + 10) === '250,245,230';
+	}),
+);
+check(
+	'empty: Size, Detail, Colours and Format are there and enabled, Download is off',
 	await page.evaluate(
 		() =>
-			document.querySelector('.wg-slot')?.textContent.trim() === 'Drop an audio file here or click to upload' &&
-			document.querySelector('.wg-slot')?.tagName === 'BUTTON' &&
-			!document.querySelector('.wg-sizes'),
+			['.wg-sizes', '.wg-details', '.wg-formats'].every((group) =>
+				[...document.querySelectorAll(`${group} [role="radio"]`)].every((b) => !b.disabled),
+			) &&
+			!!document.querySelector('.wg-wave input[type="text"]:not(:disabled)') &&
+			!!document.querySelector('.wg-background input[type="text"]:not(:disabled)') &&
+			document.querySelector('.wg-download')?.disabled === true,
 	),
 );
-if (shots)
-	for (const dark of [false, true]) {
-		await theme(dark);
-		await page.screenshot({ path: `${shots}/wg-empty-1400-${dark ? 'dark' : 'light'}.png` });
-	}
-await theme(false);
+audio = await tiles('.wg-audio');
+check(
+	'empty: Audio tiles keep their labels, every value a dash, the peak bar empty',
+	Object.keys(audio).join() === 'Duration,Sample rate,Channels,Peak' &&
+		blankTiles(audio) &&
+		(await page.$$('.wg-audio .canon-tiles-level')).length === 1,
+	JSON.stringify(audio),
+);
+image = await tiles('.wg-image-tiles');
+check(
+	'empty: Image tiles follow the settings',
+	image.Width === '1500 px' && image.Height === '500 px' && image.Columns === '750' && image.Pixels === '0.75 MP',
+	JSON.stringify(image),
+);
+await radio('.wg-sizes', 'Full HD');
+await sleep(150);
+p = await picture();
+image = await tiles('.wg-image-tiles');
+check(
+	'empty: a size previews before a file',
+	p.width === 1920 && p.height === 1080 && Math.abs(p.shown - 16 / 9) < 0.02 && p.inside && image.Width === '1920 px',
+	`${p.width} × ${p.height} ${p.shown.toFixed(3)}`,
+);
+await hexField('.wg-wave', 'cc2244');
+await hexField('.wg-background', '101820');
+p = await picture();
+check('empty: colours preview before a file', p.middle === '204,34,68' && p.corner === '16,24,32', `${p.middle} / ${p.corner}`);
 
+await visit(page, '/tools/waveform-genny');
+const emptyBanner = await bannerHeight();
+const sizesTop = () => page.$eval('.wg-sizes', (el) => el.getBoundingClientRect().top);
+const emptySizes = await sizesTop();
 await dropTone();
-let p = await picture();
+check('the banner keeps its height when the file loads', Math.abs((await bannerHeight()) - emptyBanner) < 0.5, `${emptyBanner}`);
+check(
+	'the Source row keeps its height: Size does not move',
+	Math.abs((await sizesTop()) - emptySizes) < 0.5,
+	`${emptySizes} → ${await sizesTop()}`,
+);
+p = await picture();
 check('the picture is the export canvas, a named image', p.role === 'img' && p.label === 'Waveform', p.label);
 check('drawn at the SoundCloud size by default', p.width === 1500 && p.height === 500, `${p.width} × ${p.height}`);
 check('in the web default colours', p.corner === '250,245,230' && p.middle === '46,125,50', `${p.corner} / ${p.middle}`);
@@ -149,14 +231,14 @@ check(
 	(await page.$eval('.wg-source .canon-row-title', (el) => el.textContent.trim())) === 'tone.wav' &&
 		(await page.$eval('.wg-source .canon-row-detail', (el) => el.textContent.trim())).match(/^2\.00 s · \d+ Hz · 1 ch$/),
 );
-let audio = await tiles('.wg-audio');
+audio = await tiles('.wg-audio');
 check(
 	'audio tiles: duration, rate, channels, peak',
 	audio.Duration === '2.00 s' && /^\d+ Hz$/.test(audio['Sample rate']) && audio.Channels === '1' && /^-6\.\d dBFS$/.test(audio.Peak),
 	JSON.stringify(audio),
 );
 check('the peak tile carries a level bar', (await page.$$('.wg-audio .canon-tiles-level')).length === 1);
-let image = await tiles('.wg-image-tiles');
+image = await tiles('.wg-image-tiles');
 check(
 	'image tiles: width, height, columns at 2 px, pixels',
 	image.Width === '1500 px' && image.Height === '500 px' && image.Columns === '750' && image.Pixels === '0.75 MP',
@@ -202,14 +284,6 @@ image = await tiles('.wg-image-tiles');
 check('Detail 8 px draws 188 columns', image.Columns === '188', image.Columns);
 await radio('.wg-details', '2 px');
 
-const hexField = async (well, value) => {
-	const field = await page.$(`${well} input[type="text"]`);
-	await field.focus();
-	await field.evaluate((el) => el.select());
-	await page.keyboard.type(value);
-	await page.keyboard.press('Enter');
-	await sleep(150);
-};
 await hexField('.wg-wave', 'cc2244');
 await hexField('.wg-background', '101820');
 p = await picture();
@@ -288,7 +362,10 @@ await page.evaluate(() =>
 	[...document.querySelectorAll('.wg-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
 );
 await sleep(200);
-check('Clear returns to the slot', !!(await page.$('.wg-slot')) && !(await page.$('.wg-readings')));
+check(
+	'Clear returns to the slot and the dashed tiles',
+	!!(await page.$('.wg-slot')) && blankTiles(await tiles('.wg-audio')),
+);
 
 // iOS launch arguments as query flags
 await visit(page, '/tools/waveform-genny?wgSize=2&wgDetail=3&wgFormat=1');
@@ -309,7 +386,16 @@ const sizes = [
 for (const [width, height] of sizes) {
 	await page.setViewport({ width, height });
 	await visit(page, '/tools/waveform-genny');
+	const empty = await bannerHeight();
+	if (shots)
+		for (const dark of [false, true]) {
+			await theme(dark);
+			await sleep(150);
+			await page.screenshot({ path: `${shots}/wg-empty-${width}-${dark ? 'dark' : 'light'}.png` });
+		}
+	await theme(false);
 	await dropTone();
+	check(`${width}: the banner is as tall empty as loaded`, Math.abs((await bannerHeight()) - empty) < 0.5, `${empty}`);
 	check(
 		`${width}: nothing scrolls sideways, the document stays put`,
 		await page.evaluate(

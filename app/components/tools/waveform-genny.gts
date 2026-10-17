@@ -56,6 +56,13 @@ const FORMATS = ['PNG', 'SVG'];
 const CUSTOM_MIN = 100;
 const CUSTOM_MAX = 4000;
 
+const BLANK_AUDIO = [
+	{ label: 'Duration', value: '—' },
+	{ label: 'Sample rate', value: '—' },
+	{ label: 'Channels', value: '—' },
+	{ label: 'Peak', value: '—', level: 0 },
+];
+
 // iOS AVInfoProbe.levelFloor
 const levelFloor = -60;
 
@@ -160,7 +167,7 @@ export default class WaveformGenny extends Component {
 
 	get audioTiles() {
 		const buffer = this.intake.buffer;
-		if (!buffer) return [];
+		if (!buffer) return BLANK_AUDIO;
 		const peak = this.peak;
 		return [
 			{
@@ -227,8 +234,13 @@ export default class WaveformGenny extends Component {
 		if (!context) return;
 		context.fillStyle = this.backgroundHex;
 		context.fillRect(0, 0, width, height);
-		if (!peaks) return;
 		context.fillStyle = this.waveHex;
+		if (!peaks) {
+			// a 1 px line vanishes once the image is scaled into the band
+			const line = Math.max(1, Math.round(height / 100));
+			context.fillRect(0, (height - line) / 2, width, line);
+			return;
+		}
 		for (const bar of bars(peaks, width, height))
 			context.fillRect(bar.x, bar.y, bar.width, bar.height);
 	});
@@ -278,34 +290,23 @@ export default class WaveformGenny extends Component {
 					@aspect={{this.ratio}}
 					@background="var(--canon-muted)"
 				>
-					{{#if this.loaded}}
-						<div
-							class="wg-picture"
-							style={{this.ratioStyle}}
-						>
-							<canvas
-								class="wg-image"
-								role="img"
-								aria-label="Waveform"
-								{{this.paint}}
-							></canvas>
-						</div>
-					{{else}}
-						<Slot
-							class="wg-slot"
-							@prompt={{DROP_PROMPT}}
-							@icon="audio-waveform"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					{{/if}}
+					<div
+						class="wg-picture"
+						style={{this.ratioStyle}}
+					>
+						<canvas
+							class="wg-image"
+							role="img"
+							aria-label="Waveform"
+							{{this.paint}}
+						></canvas>
+					</div>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="wg-source
 								{{if
@@ -323,113 +324,117 @@ export default class WaveformGenny extends Component {
 								@onClick={{this.intake.clear}}
 							/>
 						</CanonRow>
-						<CanonHeading @text="Size" />
-						<CanonSegmented
-							class="wg-sizes"
-							@items={{sizeLabels}}
-							@selected={{this.size}}
-							@columns={{3}}
-							@onChange={{this.pickSize}}
-						/>
-						{{#if this.isCustom}}
-							<CanonRow
-								class="wg-width"
-								@title="Width"
-								@form="flush"
-								as |titleId|
-							>
-								<CanonNumberField
-									@value={{this.customWidth}}
-									@min={{CUSTOM_MIN}}
-									@max={{CUSTOM_MAX}}
-									@step={{10}}
-									@unit="px"
-									@labelledBy={{titleId}}
-									@onChange={{this.setCustomWidth}}
-								/>
-							</CanonRow>
-							<CanonRow
-								class="wg-height"
-								@title="Height"
-								@form="flush"
-								as |titleId|
-							>
-								<CanonNumberField
-									@value={{this.customHeight}}
-									@min={{CUSTOM_MIN}}
-									@max={{CUSTOM_MAX}}
-									@step={{10}}
-									@unit="px"
-									@labelledBy={{titleId}}
-									@onChange={{this.setCustomHeight}}
-								/>
-							</CanonRow>
-						{{/if}}
-						<CanonHeading @text="Detail" />
-						<CanonSegmented
-							class="wg-details"
-							@items={{detailLabels}}
-							@selected={{this.detail}}
-							@onChange={{this.pickDetail}}
-						/>
-						<CanonHeading @text="Colours" />
-						<CanonColourWell
-							class="wg-wave"
-							@label="Wave"
-							@colour={{this.wave}}
-							@onChange={{this.setWave}}
-						/>
-						<CanonColourWell
-							class="wg-background"
-							@label="Background"
-							@colour={{this.background}}
-							@onChange={{this.setBackground}}
-						/>
-						<CanonHeading @text="Format" />
-						<CanonSegmented
-							class="wg-formats"
-							@items={{FORMATS}}
-							@selected={{this.format}}
-							@onChange={{this.pickFormat}}
-						/>
-						<CanonButton
-							class="wg-download"
-							@kind="primary"
-							@text={{this.exportLabel}}
-							@icon={{Save}}
-							@iconStyle="oversized"
-							@disabled={{this.undecoded}}
-							@onClick={{this.download}}
-						/>
-					</CanonRows>
-				{{else if this.intake.error}}
-					<CanonRows @framed={{true}}>
-						<CanonStatus
-							@text={{this.intake.error}}
-							@tone="warn"
+					{{else}}
+						<Slot
+							class="wg-slot"
+							@prompt={{DROP_PROMPT}}
+							@icon="audio-waveform"
 							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
 						/>
-					</CanonRows>
-				{{/if}}
+						{{#if this.intake.error}}
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+					<CanonHeading @text="Size" />
+					<CanonSegmented
+						class="wg-sizes"
+						@items={{sizeLabels}}
+						@selected={{this.size}}
+						@columns={{3}}
+						@onChange={{this.pickSize}}
+					/>
+					{{#if this.isCustom}}
+						<CanonRow
+							class="wg-width"
+							@title="Width"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.customWidth}}
+								@min={{CUSTOM_MIN}}
+								@max={{CUSTOM_MAX}}
+								@step={{10}}
+								@unit="px"
+								@labelledBy={{titleId}}
+								@onChange={{this.setCustomWidth}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="wg-height"
+							@title="Height"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.customHeight}}
+								@min={{CUSTOM_MIN}}
+								@max={{CUSTOM_MAX}}
+								@step={{10}}
+								@unit="px"
+								@labelledBy={{titleId}}
+								@onChange={{this.setCustomHeight}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonHeading @text="Detail" />
+					<CanonSegmented
+						class="wg-details"
+						@items={{detailLabels}}
+						@selected={{this.detail}}
+						@onChange={{this.pickDetail}}
+					/>
+					<CanonHeading @text="Colours" />
+					<CanonColourWell
+						class="wg-wave"
+						@label="Wave"
+						@colour={{this.wave}}
+						@onChange={{this.setWave}}
+					/>
+					<CanonColourWell
+						class="wg-background"
+						@label="Background"
+						@colour={{this.background}}
+						@onChange={{this.setBackground}}
+					/>
+					<CanonHeading @text="Format" />
+					<CanonSegmented
+						class="wg-formats"
+						@items={{FORMATS}}
+						@selected={{this.format}}
+						@onChange={{this.pickFormat}}
+					/>
+					<CanonButton
+						class="wg-download"
+						@kind="primary"
+						@text={{this.exportLabel}}
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{this.undecoded}}
+						@onClick={{this.download}}
+					/>
+				</CanonRows>
 			</:sidebar>
 			<:main>
-				{{#if this.intake.buffer}}
-					<CanonRows
-						class="wg-readings"
-						@framed={{true}}
-					>
-						<CanonHeading @text="Audio" />
-						<CanonTiles
-							class="wg-audio"
-							@items={{this.audioTiles}}
-						/>
-						<CanonHeading @text="Image" />
-						<CanonTiles
-							class="wg-image-tiles"
-							@items={{this.imageTiles}}
-						/>
-					</CanonRows>
-				{{/if}}
+				<CanonRows class="wg-readings" @framed={{true}}>
+					<CanonHeading @text="Audio" />
+					<CanonTiles
+						class="wg-audio"
+						@items={{this.audioTiles}}
+					/>
+					<CanonHeading @text="Image" />
+					<CanonTiles
+						class="wg-image-tiles"
+						@items={{this.imageTiles}}
+					/>
+				</CanonRows>
 			</:main>
 		</CanonSplit>
 	</template>

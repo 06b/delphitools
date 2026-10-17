@@ -18,3 +18,8 @@
 .wg-source--failed .canon-row-detail {
 	color: var(--canon-destructive);
 }
+
+/* the loaded Source row is a secondary row; the shared row slot is primary */
+.waveform-genny .wg-slot.media-slot--row {
+	min-block-size: var(--canon-secondary-height);
+}
