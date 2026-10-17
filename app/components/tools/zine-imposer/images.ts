@@ -1,7 +1,7 @@
 import type { PDFDocument } from 'pdf-lib';
 import type { PageRect } from 'delphicanon/components/canon-page-strip';
 import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
-import { loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
+import { loadPdfDocument, renderPage } from 'delphitools-v2/lib/pdfjs';
 import type { ZineFoldLayout } from 'delphitools-v2/lib/zine-folds';
 
 export type FitMode = 'fit' | 'fill';
@@ -76,17 +76,9 @@ async function pdfPages(file: File, max: number): Promise<ZineImage[]> {
 	const out: ZineImage[] = [];
 	try {
 		for (let n = 1; n <= Math.min(pdf.numPages, max); n++) {
-			const page = await pdf.getPage(n);
-			const unit = page.getViewport({ scale: 1 });
-			const scale = Math.min(
-				PDF_DPI / 72,
-				PDF_EDGE / Math.max(unit.width, unit.height),
-			);
-			const viewport = page.getViewport({ scale });
-			const canvas = document.createElement('canvas');
-			canvas.width = Math.ceil(viewport.width);
-			canvas.height = Math.ceil(viewport.height);
-			await page.render({ canvas, viewport }).promise;
+			const canvas = await renderPage(pdf, n - 1, PDF_EDGE, {
+				maxScale: PDF_DPI / 72,
+			});
 			// png pages: tens MB
 			const blob = await canvasBlob(canvas, 'image/jpeg');
 			canvas.width = 0;

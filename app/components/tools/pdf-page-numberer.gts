@@ -39,10 +39,11 @@ import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
+	pageUrl,
 	sizes,
 	thumbnails,
 	type PageSize,
-} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+} from 'delphitools-v2/lib/pdfjs';
 import {
 	ANCHOR_ICONS,
 	ANCHOR_NAMES,
@@ -98,22 +99,6 @@ interface Stamped {
 	blob: Blob;
 	name: string;
 	size: number;
-}
-
-async function render(pdf: PDFDocumentProxy, index: number) {
-	const page = await pdf.getPage(index + 1);
-	const base = page.getViewport({ scale: 1 });
-	const viewport = page.getViewport({
-		scale: previewEdge / Math.max(base.width, base.height),
-	});
-	const canvas = document.createElement('canvas');
-	canvas.width = Math.ceil(viewport.width);
-	canvas.height = Math.ceil(viewport.height);
-	await page.render({ canvas, viewport }).promise;
-	const blob = await new Promise<Blob | null>((resolve) =>
-		canvas.toBlob(resolve, 'image/png'),
-	);
-	return blob ? URL.createObjectURL(blob) : '';
 }
 
 // ios -ppnSample, drawn
@@ -373,7 +358,7 @@ export default class PdfPageNumberer extends Component {
 		const pdf = this.#pdf;
 		if (!pdf) return;
 		const shown = ++this.#shown;
-		const url = await render(pdf, this.page).catch(() => '');
+		const url = await pageUrl(pdf, this.page, previewEdge);
 		if (shown !== this.#shown) {
 			if (url) URL.revokeObjectURL(url);
 			return;

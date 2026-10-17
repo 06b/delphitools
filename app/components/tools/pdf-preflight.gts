@@ -31,11 +31,7 @@ import {
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import {
-	comparison,
-	sizes,
-	thumbnails,
-} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import { comparison, sizes, thumbnails } from 'delphitools-v2/lib/pdfjs';
 import {
 	boxMarks,
 	samplePdf,

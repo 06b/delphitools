@@ -43,10 +43,7 @@ import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import {
-	open,
-	thumbnails,
-} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import { open, thumbnails } from 'delphitools-v2/lib/pdfjs';
 import { integral } from 'delphitools-v2/components/tools/paste-image/crop';
 import Picture from 'delphitools-v2/components/tools/pdf-rotate-crop/picture';
 import {

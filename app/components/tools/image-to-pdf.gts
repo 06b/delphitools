@@ -39,7 +39,7 @@ import {
 	sizes,
 	thumbnails,
 	type PageSize,
-} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+} from 'delphitools-v2/lib/pdfjs';
 import {
 	blankPage,
 	layout,

@@ -44,10 +44,7 @@ import { formatBytes } from 'delphitools-v2/lib/pdf-compress';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import {
-	open,
-	sizes,
-} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import { open, sizes, thumbEdge } from 'delphitools-v2/lib/pdfjs';
 import PaperMenu from 'delphitools-v2/components/tools/imposer/paper';
 import SheetPicture from 'delphitools-v2/components/tools/imposer/picture';
 import SignatureBlock, {
@@ -57,7 +54,6 @@ import {
 	render,
 	samplePdf,
 	sharpEdge,
-	thumbEdge,
 } from 'delphitools-v2/components/tools/imposer/pages';
 import {
 	millimetres,

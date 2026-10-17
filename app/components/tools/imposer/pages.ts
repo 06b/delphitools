@@ -1,8 +1,7 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { Picture } from 'delphitools-v2/components/tools/imposer/sheet';
+import { renderPage } from 'delphitools-v2/lib/pdfjs';
 
-/** Long edge of a page picture for the strip, px. */
-export const thumbEdge = 160;
 /** Long edge of a page picture on the big sheet, px (iOS maxEdge 1000). */
 export const sharpEdge = 1000;
 
@@ -13,15 +12,7 @@ export async function render(
 	edge: number,
 ): Promise<Picture | null> {
 	try {
-		const page = await pdf.getPage(index + 1);
-		const base = page.getViewport({ scale: 1 });
-		const viewport = page.getViewport({
-			scale: edge / Math.max(base.width, base.height),
-		});
-		const canvas = document.createElement('canvas');
-		canvas.width = Math.ceil(viewport.width);
-		canvas.height = Math.ceil(viewport.height);
-		await page.render({ canvas, viewport }).promise;
+		const canvas = await renderPage(pdf, index, edge);
 		return {
 			image: canvas,
 			width: canvas.width,

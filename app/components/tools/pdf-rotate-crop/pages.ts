@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { CropBox } from 'delphitools-v2/lib/pdf-crop';
+import { pageUrl } from 'delphitools-v2/lib/pdfjs';
 
 export interface Geometry {
 	/** The crop box as pdf.js reads it (`view`), page space. */
@@ -42,30 +43,11 @@ export async function geometry(pdf: PDFDocumentProxy): Promise<Geometry[]> {
 }
 
 /** One page drawn at `rotation` (the total, degrees); empty when it cannot be drawn. */
-export async function picture(
+export const picture = (
 	pdf: PDFDocumentProxy,
 	index: number,
 	rotation: number,
-): Promise<string> {
-	try {
-		const page = await pdf.getPage(index + 1);
-		const base = page.getViewport({ scale: 1, rotation });
-		const viewport = page.getViewport({
-			scale: pictureEdge / Math.max(base.width, base.height),
-			rotation,
-		});
-		const canvas = document.createElement('canvas');
-		canvas.width = Math.ceil(viewport.width);
-		canvas.height = Math.ceil(viewport.height);
-		await page.render({ canvas, viewport }).promise;
-		const blob = await new Promise<Blob | null>((resolve) =>
-			canvas.toBlob(resolve, 'image/png'),
-		);
-		return blob ? URL.createObjectURL(blob) : '';
-	} catch {
-		return '';
-	}
-}
+) => pageUrl(pdf, index, pictureEdge, rotation);
 
 /** The iOS -rcSample document: three A4 pages, the second landscape. */
 export async function samplePdf(): Promise<File> {

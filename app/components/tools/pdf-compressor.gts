@@ -29,12 +29,7 @@ import {
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import {
-	comparison,
-	open,
-	sizes,
-	thumbnails,
-} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import { comparison, open, sizes, thumbnails } from 'delphitools-v2/lib/pdfjs';
 import './media/media.css';
 
 const ACCEPT = '.pdf,application/pdf';
