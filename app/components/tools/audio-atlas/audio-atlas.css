@@ -177,11 +177,6 @@
 	display: none;
 }
 
-/* the Source slot as tall as the file row it stands for */
-.aa-slot.media-slot--row {
-	min-block-size: var(--canon-secondary-height);
-}
-
 /* before a file: the sheet's waveform as a flat line */
 .aa-sheet--blank {
 	cursor: default;
