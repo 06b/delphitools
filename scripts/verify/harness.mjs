@@ -1,5 +1,8 @@
 // needs npm start first
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import puppeteer from 'puppeteer-core';
 
 export const CHROME =
@@ -37,6 +40,12 @@ export async function launch({
 		protocolTimeout: 0,
 		...(userDataDir ? { userDataDir } : {}),
 		args,
+	});
+	// downloads go to a temp dir, not ~/Downloads; a harness may set its own
+	const cdp = await browser.target().createCDPSession();
+	await cdp.send('Browser.setDownloadBehavior', {
+		behavior: 'allow',
+		downloadPath: mkdtempSync(join(tmpdir(), 'dt-verify-')),
 	});
 	const page = await browser.newPage();
 	await page.setViewport(viewport);
