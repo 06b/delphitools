@@ -121,6 +121,51 @@ for (const [w, h] of [
 			(await page.$eval('.canon-detent-wheel', (el) => el.getAttribute('aria-valuenow') ?? el.textContent)) !== before,
 	);
 }
+// G6: side by side at desktop widths, also when the 1200 px column is portrait
+const layout = () =>
+	page.evaluate(() =>
+		getComputedStyle(
+			document.querySelector('.dt-canon-tool .canon-split > .canon-split-body'),
+		)
+			.getPropertyValue('--canon-split-layout')
+			.trim(),
+	);
+for (const [w, h] of [
+	[1280, 720],
+	[1440, 820],
+	[1512, 860],
+	[1920, 1000],
+	[2560, 1440],
+]) {
+	await page.setViewport({ width: w, height: h });
+	for (const id of ['image-atlas', 'matte-genny', 'colour-converter', 'scroll-genny']) {
+		await visit(page, `/tools/${id}`);
+		const l = await layout();
+		check(`${id} ${w}x${h}: side by side`, l === 'wide', l);
+	}
+}
+for (const [w, h] of [
+	[390, 844],
+	[820, 1180],
+]) {
+	await page.setViewport({ width: w, height: h });
+	await visit(page, '/tools/matte-genny');
+	check(`matte-genny ${w}x${h}: stacked`, (await layout()) === 'stacked');
+}
+
+// expanded: the start chevron sits in a gutter, clear of the column
+await page.setViewport({ width: 2200, height: 1100 });
+await visit(page, '/tools/font-explorer');
+await page.evaluate(() =>
+	localStorage.setItem('dt-canon-expanded', JSON.stringify(['font-explorer'])),
+);
+await visit(page, '/tools/font-explorer');
+const edge = await page.evaluate(() => ({
+	chevron: document.querySelector('.dt-canon-edge.is-start').getBoundingClientRect().right,
+	column: document.querySelector('.dt-canon-tool > .canon-split').getBoundingClientRect().left,
+}));
+await page.evaluate(() => localStorage.removeItem('dt-canon-expanded'));
+check('expanded: the chevron is left of the column', edge.chevron <= edge.column, JSON.stringify(edge));
 await page.setViewport({ width: 1400, height: 1000 });
 
 await finish(browser);

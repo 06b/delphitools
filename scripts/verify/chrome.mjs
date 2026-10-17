@@ -221,11 +221,11 @@ check('a canon tool stops at 1200 px', column === 1200, `${column}`);
 await page.click('.dt-canon-edge.is-start');
 await sleep(400);
 const [wide, settings] = await panes();
-check('expanding gives the picture the room', wide > 1900, `${wide}`);
+check('expanding gives the picture the room, less the chevron gutters', wide > 1800, `${wide}`);
 check('and keeps the settings at 600 px', settings === 600, `${settings}`);
 await page.reload({ waitUntil: 'networkidle2' });
 await sleep(600);
-check('and survives a reload', (await panes())[0] > 1900);
+check('and survives a reload', (await panes())[0] > 1800);
 await visit(page, '/tools/regex-tester');
 check('only expands tools get the chevrons', !(await page.$('.dt-canon-edge.is-start')));
 
