@@ -7,9 +7,7 @@ import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import type { CanonLamp } from 'delphicanon/components/canon-lamps';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSlider from 'delphicanon/components/canon-slider';
@@ -29,7 +27,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Marks from 'delphitools-v2/components/tools/media/marks';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import {
 	release,
 	thumbnails,
@@ -51,11 +51,9 @@ const GRAB_ERROR = "Couldn't save that frame.";
 const SHEET_ERROR = "Couldn't build the contact sheet.";
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 
-// iOS FrameExtractorViewController: strip 56, preview at most 340 tall
-const bandHeight = readoutBandHeight(56);
+// iOS FrameExtractorViewController: preview at most 340 tall
 const tallest = 1.25;
 const tallestPreview = 340;
-const emptyAspect = 16 / 9;
 const lamps: CanonLamp[] = ['play', 'pause'];
 const sheetMin = 2;
 const sheetMax = 48;
@@ -380,7 +378,6 @@ export default class FrameExtractor extends Component {
 			@sidebarWidth={{480}}
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -405,6 +402,11 @@ export default class FrameExtractor extends Component {
 								@duration={{this.duration}}
 								@playhead={{this.playback.playhead}}
 								@onScrub={{this.playback.scrub}}
+								@blank={{if
+									this.loaded
+									false
+									true
+								}}
 							/>
 							<Marks
 								@lit={{this.litMarks}}
@@ -416,85 +418,79 @@ export default class FrameExtractor extends Component {
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				{{#if this.loaded}}
-					<CanonRows
-						class="fx-stills-rows"
-						@framed={{true}}
+				<CanonRows
+					class="fx-stills-rows"
+					@framed={{true}}
+				>
+					<CanonHeading
+						@text={{this.stillsHeading}}
+					/>
+					{{#if this.stills.length}}
+						<Stills
+							@stills={{this.stills}}
+							@aspect={{this.aspect}}
+							@onSave={{this.saveStill}}
+							@onRemove={{this.removeStill}}
+						/>
+						<CanonButton
+							class="fx-save-all"
+							@text={{passAlong
+								"Download all"
+							}}
+							@icon={{Save}}
+							@onClick={{this.saveAll}}
+						/>
+					{{else}}
+						<CanonEmptyRow @text="None" />
+					{{/if}}
+				</CanonRows>
+				<CanonRows
+					class="fx-sheet-rows"
+					@framed={{true}}
+				>
+					<CanonHeading @text="Contact sheet" />
+					<CanonRow
+						class="fx-sheet-count"
+						@title="Frames"
+						@form="flush"
+						as |titleId|
 					>
-						<CanonHeading
-							@text={{this.stillsHeading}}
+						<CanonSlider
+							@value={{this.sheetCount}}
+							@min={{sheetMin}}
+							@max={{sheetMax}}
+							@step={{1}}
+							@readout={{whole}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setSheetCount}}
 						/>
-						{{#if this.stills.length}}
-							<Stills
-								@stills={{this.stills}}
-								@aspect={{this.aspect}}
-								@onSave={{this.saveStill}}
-								@onRemove={{this.removeStill}}
-							/>
-							<CanonButton
-								class="fx-save-all"
-								@text={{passAlong
-									"Download all"
-								}}
-								@icon={{Save}}
-								@onClick={{this.saveAll}}
-							/>
-						{{else}}
-							<CanonEmptyRow
-								@text="None"
-							/>
-						{{/if}}
-					</CanonRows>
-					<CanonRows
-						class="fx-sheet-rows"
-						@framed={{true}}
-					>
-						<CanonHeading
-							@text="Contact sheet"
+					</CanonRow>
+					<Job
+						@title="Contact sheet"
+						@icon={{Sheet}}
+						@failure={{SHEET_ERROR}}
+						@disabled={{this.sheetDisabled}}
+						@busy={{this.sheetBusy}}
+						@progress={{this.sheetProgress}}
+						@failed={{this.sheetFailed}}
+						@result={{this.sheetRow}}
+						@onRun={{this.buildSheet}}
+						@onCancel={{this.cancelSheet}}
+						@onSave={{this.saveSheet}}
+					/>
+					{{#if this.sheet}}
+						<img
+							class="fx-sheet"
+							src={{this.sheet.url}}
+							alt="Contact sheet"
 						/>
-						<CanonRow
-							class="fx-sheet-count"
-							@title="Frames"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonSlider
-								@value={{this.sheetCount}}
-								@min={{sheetMin}}
-								@max={{sheetMax}}
-								@step={{1}}
-								@readout={{whole}}
-								@labelledBy={{titleId}}
-								@onChange={{this.setSheetCount}}
-							/>
-						</CanonRow>
-						<Job
-							@title="Contact sheet"
-							@icon={{Sheet}}
-							@failure={{SHEET_ERROR}}
-							@disabled={{this.sheetDisabled}}
-							@busy={{this.sheetBusy}}
-							@progress={{this.sheetProgress}}
-							@failed={{this.sheetFailed}}
-							@result={{this.sheetRow}}
-							@onRun={{this.buildSheet}}
-							@onCancel={{this.cancelSheet}}
-							@onSave={{this.saveSheet}}
-						/>
-						{{#if this.sheet}}
-							<img
-								class="fx-sheet"
-								src={{this.sheet.url}}
-								alt="Contact sheet"
-							/>
-						{{/if}}
-					</CanonRows>
-				{{/if}}
+					{{/if}}
+				</CanonRows>
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="fx-source"
 							@title={{this.intake.fileName}}
@@ -512,14 +508,33 @@ export default class FrameExtractor extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-					</CanonRows>
-					<CanonCanvas
-						class="fx-preview"
-						@aspect={{this.previewAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-						@background="#000"
-					>
+					{{else}}
+						<Slot
+							class="fx-slot"
+							@prompt="Choose video file"
+							@icon="film"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.warning}}
+							<CanonStatus
+								@text={{this.warning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+				<CanonCanvas
+					class="fx-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if this.loaded "#000"}}
+				>
+					{{#if this.loaded}}
 						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
@@ -539,52 +554,36 @@ export default class FrameExtractor extends Component {
 								this.intake.failed
 							}}
 						></video>
-					</CanonCanvas>
-					<CanonRows @framed={{true}}>
-						<CanonButton
-							class="fx-grab"
-							@kind="primary"
-							@text="Grab frame"
-							@icon={{Camera}}
-							@iconStyle="oversized"
-							@disabled={{this.grabDisabled}}
-							@onClick={{this.grab}}
-						/>
-						{{#if this.grabFailed}}
-							<CanonStatus
-								@text={{GRAB_ERROR}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						{{/if}}
-					</CanonRows>
-				{{else}}
-					{{! iOS: the drop zone where the preview goes }}
-					<CanonCanvas
-						class="fx-drop"
-						@aspect={{emptyAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-					>
-						<Slot
-							class="fx-slot"
-							@prompt="Choose video file"
-							@icon="film"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					</CanonCanvas>
-					{{#if this.warning}}
-						<CanonRows @framed={{true}}>
-							<CanonStatus
-								@text={{this.warning}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						</CanonRows>
+					{{else}}
+						{{! the box the video takes, as object-fit: contain }}
+						<svg
+							class="fx-blank"
+							viewBox="0 0 16 9"
+							aria-hidden="true"
+						><rect
+								width="16"
+								height="9"
+							/></svg>
 					{{/if}}
-				{{/if}}
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonButton
+						class="fx-grab"
+						@kind="primary"
+						@text="Grab frame"
+						@icon={{Camera}}
+						@iconStyle="oversized"
+						@disabled={{this.grabDisabled}}
+						@onClick={{this.grab}}
+					/>
+					{{#if this.grabFailed}}
+						<CanonStatus
+							@text={{GRAB_ERROR}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
 			</:main>
 			<:footer>
 				<CanonGrid class="fx-transport">

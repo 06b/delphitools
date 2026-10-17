@@ -1,4 +1,4 @@
-// the canon frame-extractor: slot, band with marks, grab, stills menu, zip, contact sheet, transport
+// the canon frame-extractor: blank layout, band with marks, grab, stills menu, zip, contact sheet, transport
 import {
 	launch,
 	visit,
@@ -64,14 +64,87 @@ check(
 			document.querySelector('.frame-extractor').getBoundingClientRect().height,
 	),
 );
+// media/strips bandHeight, the band of every A/V tool
+const bandHeight = 138;
+const band = () =>
+	page.evaluate(() =>
+		Math.round(
+			document.querySelector('.canon-readout-band').closest('.canon-canvas').getBoundingClientRect()
+				.height,
+		),
+	);
+check('empty: the band is the shared A/V height', (await band()) === bandHeight, String(await band()));
 check(
-	'empty: the preview spot is the slot with the iOS wording; no stills, sheet or footer',
-	(await text('.fx-slot')) === 'Choose video file' &&
-		!(await page.$('.fx-stills-rows')) &&
-		!(await page.$('.fx-sheet-rows')) &&
-		!(await page.$('.fx-transport')),
+	'empty: the Source row is the slot, a button with the iOS wording',
+	await page.evaluate(() => {
+		const slot = document.querySelector('.fx-slot');
+		const rows = slot?.closest('.canon-rows');
+		return (
+			slot?.tagName === 'BUTTON' &&
+			slot.textContent.trim() === 'Choose video file' &&
+			slot.classList.contains('media-slot--row') &&
+			rows?.querySelector('.canon-heading')?.textContent.trim() === 'Source'
+		);
+	}),
 );
-check('the slot is a named button', (await page.$eval('.fx-slot', (b) => b.tagName)) === 'BUTTON');
+check(
+	'empty: blank strips and no marks',
+	(await count('.media-strips--blank .media-frame--blank')) > 0 &&
+		(await count('.media-frame:not(.media-frame--blank)')) === 0 &&
+		(await count('.media-mark')) === 0,
+);
+check(
+	'empty: the frames block reads 0 frames, None',
+	(await text('.fx-stills-rows .canon-heading')) === '0 frames' &&
+		(await text('.fx-stills-rows .canon-empty-row')) === 'None',
+);
+check(
+	'empty: the Frames slider is on, Contact sheet is off',
+	await page.evaluate(
+		() =>
+			document.querySelector('.fx-sheet-count [role="slider"]')?.getAttribute('aria-disabled') !==
+				'true' && document.querySelector('.fx-sheet-rows .media-job-run')?.disabled === true,
+	),
+);
+check(
+	'empty: a blank 16:9 picture, no video, muted fill',
+	await page.evaluate(() => {
+		const box = document.querySelector('.fx-preview');
+		const picture = box.querySelector('.fx-blank rect');
+		if (!picture) return false;
+		const { width, height } = picture.getBoundingClientRect();
+		const probe = document.createElement('div');
+		probe.style.background = 'var(--canon-muted)';
+		box.append(probe);
+		const muted = getComputedStyle(probe).backgroundColor;
+		probe.remove();
+		return (
+			!box.querySelector('video') &&
+			box.textContent.trim() === '' &&
+			Math.abs(width / height - 16 / 9) < 0.02 &&
+			getComputedStyle(picture).fill === muted
+		);
+	}),
+);
+check(
+	'empty: Grab frame and the step transport are there, off',
+	await page.evaluate(
+		() =>
+			document.querySelector('.fx-grab')?.disabled === true &&
+			document.querySelectorAll('.fx-transport button').length === 5 &&
+			[...document.querySelectorAll('.fx-transport button')].every((b) => b.disabled),
+	),
+);
+await page.focus('.fx-sheet-count [role="slider"]');
+await page.keyboard.press('ArrowRight');
+await sleep(100);
+check(
+	'empty: the Frames slider moves before a file, no marks on the blank strip',
+	(await page.$eval('.fx-sheet-count [role="slider"]', (s) => s.getAttribute('aria-valuenow'))) ===
+		'13' && (await count('.media-mark')) === 0,
+);
+await page.keyboard.press('ArrowLeft');
+await sleep(100);
 
 await captureObjectUrl(page);
 await makeClip(page, { ms: 2500, name: 'clip.webm' });
@@ -83,6 +156,7 @@ await sleep(300);
 
 const detail = await text('.fx-source .canon-row-detail');
 check('the source row: size, rate, length', /^320 × 180 · .*fps · 00:00:0\d\.\d{3}$/.test(detail), detail);
+check('loaded: the band keeps the shared A/V height', (await band()) === bandHeight, String(await band()));
 check(
 	'the preview has no native controls; the band shows frames',
 	await page.evaluate(
@@ -232,8 +306,11 @@ await page.evaluate(() =>
 );
 await sleep(200);
 check(
-	'Clear returns to the slot and drops the stills',
-	!!(await page.$('.fx-slot')) && !(await page.$('.fx-still')) && !(await page.$('.media-mark')),
+	'Clear returns to the slot and the blank strip, and drops the stills',
+	!!(await page.$('.fx-slot')) &&
+		!!(await page.$('.media-strips--blank')) &&
+		!(await page.$('.fx-still')) &&
+		!(await page.$('.media-mark')),
 );
 
 // paste anywhere loads; the query flags grab, step and build
