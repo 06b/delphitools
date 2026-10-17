@@ -212,4 +212,24 @@ await sleep(300);
 const typed = await page.$eval('.hg-input input', (el) => el.value);
 check('a click selects the value, so typing replaces it', typed === '#4cb86a', typed);
 
+// the plane paints at CSS size x device pixel ratio, again on resize and ratio change
+const backing = () =>
+	page.$eval('.hg-wheel-plane', (c) => ({
+		width: c.width,
+		height: c.height,
+		css: c.clientWidth,
+		ratio: devicePixelRatio,
+	}));
+const sharp = (b) => b.width === Math.round(b.css * b.ratio) && b.height === b.width;
+await page.setViewport({ width: 1400, height: 1000, deviceScaleFactor: 2 });
+await visit(page, '/tools/harmony-genny');
+await sleep(300);
+const plane = await backing();
+check('DPR 2: backing = CSS size x 2', plane.ratio === 2 && sharp(plane), JSON.stringify(plane));
+await page.setViewport({ width: 900, height: 700, deviceScaleFactor: 2 });
+await sleep(400);
+const smaller = await backing();
+check('a resize repaints at the new size', smaller.css !== plane.css && sharp(smaller), JSON.stringify(smaller));
+// ponytail: emulated DPR changes dispatch no matchMedia change event in headless Chrome, so the ratio listener is untested here
+
 await finish(browser);

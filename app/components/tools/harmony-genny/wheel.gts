@@ -30,8 +30,6 @@ interface WheelSignature {
 const planeShare = 0.86;
 const ringFrom = planeShare + 0.012;
 const notch = 15;
-const renderSize = 360;
-const bins = 720;
 const baseBead = 0.08;
 const partnerBead = baseBead * 0.82;
 const ladderSpacing = 0.2;
@@ -55,13 +53,20 @@ function ladder(base: number, rung: number) {
 }
 
 /** The disc: the plane at `lightness` inside sRGB, transparent outside it, and a hue ring round it. */
-function paintPlane(canvas: HTMLCanvasElement, space: WheelSpace, l: number) {
-	const size = renderSize;
+function paintPlane(
+	canvas: HTMLCanvasElement,
+	space: WheelSpace,
+	l: number,
+	size: number,
+) {
 	canvas.width = size;
 	canvas.height = size;
 	const context = canvas.getContext('2d');
 	if (!context) return;
 	const image = context.createImageData(size, size);
+	const data = image.data;
+	// one bin per pixel
+	const bins = Math.max(720, Math.ceil(Math.PI * size));
 	const most = Array.from({ length: bins }, (_, i) =>
 		maxRadius(space, l, (i * 360) / bins),
 	);
@@ -107,10 +112,10 @@ function paintPlane(canvas: HTMLCanvasElement, space: WheelSpace, l: number) {
 				alpha = Math.min(1, (1 - r) * half);
 			} else continue;
 			const at = (y * size + x) * 4;
-			image.data[at] = rgb[0]!;
-			image.data[at + 1] = rgb[1]!;
-			image.data[at + 2] = rgb[2]!;
-			image.data[at + 3] = Math.round(alpha * 255);
+			data[at] = rgb[0]!;
+			data[at + 1] = rgb[1]!;
+			data[at + 2] = rgb[2]!;
+			data[at + 3] = Math.round(alpha * 255);
 		}
 	}
 	context.putImageData(image, 0, 0);
@@ -196,10 +201,51 @@ export default class Wheel extends Component<WheelSignature> {
 			canvas: HTMLCanvasElement,
 			[space, l]: [WheelSpace, number],
 		) => {
-			const frame = requestAnimationFrame(() =>
-				paintPlane(canvas, space, l),
-			);
-			return () => cancelAnimationFrame(frame);
+			let frame = 0;
+			let sharpen = 0;
+			const paintAt = (scale: number) => {
+				const size = Math.round(
+					canvas.clientWidth * scale,
+				);
+				if (size) paintPlane(canvas, space, l, size);
+			};
+			// ponytail: a full-ratio paint takes 70-120 ms at DPR 2, so changes paint at CSS size and sharpen once they stop
+			const draw = () => {
+				cancelAnimationFrame(frame);
+				clearTimeout(sharpen);
+				frame = requestAnimationFrame(() => {
+					paintAt(1);
+					if (window.devicePixelRatio !== 1)
+						sharpen = window.setTimeout(
+							() =>
+								paintAt(
+									window.devicePixelRatio,
+								),
+							150,
+						);
+				});
+			};
+			let ratio: MediaQueryList | undefined;
+			const watchRatio = () => {
+				ratio?.removeEventListener('change', onRatio);
+				ratio = window.matchMedia(
+					`(resolution: ${window.devicePixelRatio}dppx)`,
+				);
+				ratio.addEventListener('change', onRatio);
+			};
+			const onRatio = () => {
+				watchRatio();
+				draw();
+			};
+			watchRatio();
+			const observer = new ResizeObserver(draw);
+			observer.observe(canvas);
+			return () => {
+				cancelAnimationFrame(frame);
+				clearTimeout(sharpen);
+				observer.disconnect();
+				ratio?.removeEventListener('change', onRatio);
+			};
 		},
 	);
 
