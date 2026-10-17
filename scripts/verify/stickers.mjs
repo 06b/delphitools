@@ -27,33 +27,6 @@ const qrVisible = await page.evaluate(
 );
 check("tailwind-cheatsheet per-tool sticker renders and loads", hasQrBtn && qrVisible);
 
-// no lousy art: image 404 removes whole sticker block (a tool with no art, not canon)
-await visit(page, "/tools/recipe-table");
-await page.evaluate(() => {
-	const el = document.querySelector(".dt-tool-sticker");
-	if (el) el.scrollIntoView({ block: "center" });
-});
-await sleep(600);
-const bare = await page.evaluate(() => {
-	const box = document.querySelector(".dt-tool-sticker");
-	return {
-		noBtn: !document.querySelector(
-			".dt-tool-sticker .dt-sticker-btn",
-		),
-		noCaption: !document.querySelector(
-			".dt-tool-sticker .dt-sticker-caption",
-		),
-		collapsed: box
-			? getComputedStyle(box).display === "none"
-			: true,
-	};
-});
-check(
-	"recipe-table per-tool sticker degrades to nothing",
-	bare.noBtn && bare.noCaption,
-);
-check("recipe-table sticker block collapses", bare.collapsed);
-
 await visit(page, "/tools/subtitle-converter");
 await page.evaluate(() => {
 	const el = document.querySelector(".dt-tool-sticker");

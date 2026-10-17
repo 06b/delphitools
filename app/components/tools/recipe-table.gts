@@ -1,15 +1,29 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { and, eq, not } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonStepper from 'delphicanon/components/canon-stepper';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { parse } from 'delphitools-v2/lib/recipe-parse';
 import { EXAMPLES } from 'delphitools-v2/lib/recipe-examples';
 import { render, type Cell } from 'delphitools-v2/lib/recipe-layout';
 import type { Display } from 'delphitools-v2/lib/recipe-scale';
 import { toHtml, toPrintable, toText } from 'delphitools-v2/lib/recipe-export';
+import Editor from 'delphitools-v2/components/tools/recipe-table/editor';
+import Picture from 'delphitools-v2/components/tools/recipe-table/picture';
+import './recipe-table/recipe-table.css';
 
 const SAMPLE = `title: Aglio e olio
 serves: 2
@@ -38,13 +52,16 @@ serve
 - parsley: 1 handful / chop
 - olive oil: 1 Tbsp`;
 
+// the tool's description in tools.ts
+const PLACEHOLDER = 'Write a recipe as a Cooking for Engineers table';
 const STORAGE_KEY = 'dt-recipe-text';
 const DISPLAYS: Display[] = ['written', 'metric', 'imperial'];
-const DISPLAY_LABEL: Record<Display, string> = {
-	written: 'Written',
-	metric: 'Metric',
-	imperial: 'Imperial',
-};
+const DISPLAY_LABELS = ['Written', 'Metric', 'Imperial'];
+
+const NewIcon = <template><IconSvg @name="file-plus" /></template>;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+const AlertIcon = <template><IconSvg @name="triangle-alert" /></template>;
+const PrintIcon = <template><IconSvg @name="printer" /></template>;
 
 function load(): string {
 	try {
@@ -58,31 +75,37 @@ function save(text: string) {
 	try {
 		localStorage.setItem(STORAGE_KEY, text);
 	} catch {
-		/* private mode */
+		// private mode: the recipe lasts this visit only
 	}
 }
 
-const area = (cell: Cell) =>
-	htmlSafe(
-		`grid-area: ${cell.row + 1} / ${cell.col + 1} / span ${cell.rows} / span ${cell.cols}`,
-	);
-const columns = (cols: number) =>
-	htmlSafe(
-		`grid-template-columns: max-content repeat(${Math.max(0, cols - 1)}, minmax(6.5rem, 1fr))`,
-	);
-const displayLabel = (display: Display) => DISPLAY_LABEL[display];
-
 export default class RecipeTableTool extends Component {
-	@tracked text = load();
+	@service('canon-toast') declare toast: CanonToastService;
+
+	@tracked text: string;
 	@tracked amountRaw: string | null = null;
 	@tracked display: Display = 'written';
-	@tracked done = new Set<string>();
-	@tracked copyState: 'idle' | 'done' | 'failed' = 'idle';
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	@tracked done: ReadonlySet<string> = new Set();
+	@tracked copyFailed = false;
+	@tracked pictureHeight?: number;
+	#failedTimer?: ReturnType<typeof setTimeout>;
+
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?rtSample=<example id> ?rtText= ?rtUnits=metric|imperial ?rtScale=4
+		const query = new URLSearchParams(window.location.search);
+		const sample = EXAMPLES.find(
+			(e) => e.id === query.get('rtSample'),
+		);
+		this.text = query.get('rtText') ?? sample?.text ?? load();
+		const units = DISPLAYS.indexOf(query.get('rtUnits') as Display);
+		if (units > 0) this.display = DISPLAYS[units]!;
+		this.amountRaw = query.get('rtScale');
+	}
 
 	willDestroy() {
 		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+		clearTimeout(this.#failedTimer);
 	}
 
 	@cached
@@ -105,6 +128,10 @@ export default class RecipeTableTool extends Component {
 		return this.amountRaw ?? String(this.baseline ?? 1);
 	}
 
+	get scaleTitle() {
+		return this.baseline ? 'Scale to' : 'Multiply by';
+	}
+
 	get factor() {
 		const { serves } = this.recipe;
 		return serves ? this.amount / serves : this.amount;
@@ -118,20 +145,30 @@ export default class RecipeTableTool extends Component {
 		});
 	}
 
-	get grid() {
-		return this.rendered.grid;
+	get blank() {
+		const { title, ingredients, grid, notes } = this.rendered;
+		return (
+			!title &&
+			!ingredients.length &&
+			!grid.rows &&
+			!notes.length
+		);
 	}
 
-	get problems() {
-		return this.recipe.problems;
+	get displayIndex() {
+		return DISPLAYS.indexOf(this.display);
 	}
 
-	get displays() {
-		return DISPLAYS;
+	get displayLabels() {
+		return DISPLAY_LABELS;
 	}
 
 	get examples() {
 		return EXAMPLES;
+	}
+
+	get placeholder() {
+		return PLACEHOLDER;
 	}
 
 	// skip confirm for samples
@@ -144,24 +181,20 @@ export default class RecipeTableTool extends Component {
 		);
 	}
 
-	get copyIcon() {
-		if (this.copyState === 'done') return 'check';
-		return this.copyState === 'failed' ? 'triangle-alert' : 'copy';
+	get copyText() {
+		return this.copyFailed ? 'Copy failed' : 'Copy HTML';
 	}
 
-	get copyLabel() {
-		if (this.copyState === 'done') return 'Copied';
-		return this.copyState === 'failed'
-			? 'Copy failed'
-			: 'Copy HTML';
+	get copyIcon() {
+		return this.copyFailed ? AlertIcon : CopyIcon;
 	}
 
 	// no cell identity; positional
 	isDone = (cell: Cell) => this.done.has(`${cell.row}:${cell.col}`);
 
-	setText = (event: Event) => {
-		this.text = (event.target as HTMLTextAreaElement).value;
-		save(this.text);
+	setText = (text: string) => {
+		this.text = text;
+		save(text);
 	};
 
 	setAmount = (event: Event) => {
@@ -173,8 +206,15 @@ export default class RecipeTableTool extends Component {
 		this.amountRaw = String(Math.max(min, this.amount + delta));
 	};
 
-	setDisplay = (display: Display) => {
-		this.display = display;
+	stepKey = (event: KeyboardEvent) => {
+		const delta = { ArrowUp: 1, ArrowDown: -1 }[event.key];
+		if (!delta) return;
+		event.preventDefault();
+		this.step(delta);
+	};
+
+	setDisplay = (index: number) => {
+		this.display = DISPLAYS[index] ?? 'written';
 	};
 
 	toggleDone = (cell: Cell) => {
@@ -189,15 +229,13 @@ export default class RecipeTableTool extends Component {
 		const chosen = EXAMPLES.find((e) => e.id === id);
 		if (!chosen) return;
 		if (!this.untouched && !confirm('Discard recipe?')) return;
-		this.text = chosen.text;
-		save(this.text);
+		this.setText(chosen.text);
 		this.done = new Set();
 	};
 
 	reset = () => {
 		if (!confirm('Discard recipe?')) return;
-		this.text = '';
-		save(this.text);
+		this.setText('');
 		this.done = new Set();
 	};
 
@@ -225,19 +263,22 @@ export default class RecipeTableTool extends Component {
 				ok = false;
 			}
 		}
-		this.copyState = ok ? 'done' : 'failed';
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copyState = 'idle'),
-			2000,
-		);
+		if (this.isDestroying) return;
+		clearTimeout(this.#failedTimer);
+		this.copyFailed = !ok;
+		if (ok) this.toast.show(out.title || undefined);
+		else
+			this.#failedTimer = setTimeout(
+				() => (this.copyFailed = false),
+				2000,
+			);
 	};
 
 	// prints exported html directly
 	savePdf = () => {
 		const frame = document.createElement('iframe');
 		frame.setAttribute('aria-hidden', 'true');
-		frame.className = 'dt-rt-print';
+		frame.className = 'rt-print';
 		frame.srcdoc = toPrintable(this.rendered);
 		frame.addEventListener('load', () => {
 			const view = frame.contentWindow;
@@ -258,423 +299,180 @@ export default class RecipeTableTool extends Component {
 		document.body.append(frame);
 	};
 
-	<template>
-		<div class="dt-rt">
-			<div class="dt-rt-bar">
-				<div class="dt-rt-scale">
-					<span
-						class="dt-rt-scale-label"
-						id="dt-rt-scale-label"
-					>{{if
-							this.baseline
-							"Scale to"
-							"Multiply by"
-						}}</span>
-					<button
-						type="button"
-						class="dt-rt-step"
-						aria-label="Less"
-						{{on "click" (fn this.step -1)}}
-					>
-						<Icon @name="minus" />
-					</button>
-					<input
-						type="number"
-						class="dt-rt-amount"
-						aria-labelledby="dt-rt-scale-label"
-						min="0.25"
-						step="any"
-						value={{this.amountText}}
-						{{on "input" this.setAmount}}
-					/>
-					<button
-						type="button"
-						class="dt-rt-step"
-						aria-label="More"
-						{{on "click" (fn this.step 1)}}
-					>
-						<Icon @name="plus" />
-					</button>
-				</div>
+	measured = (height: number) => {
+		// 2 px rules above and below the picture
+		if (height + 4 !== this.pictureHeight)
+			this.pictureHeight = height + 4;
+	};
 
-				<div
-					class="segmented dt-rt-units"
-					role="group"
-					aria-label="Units"
-				>
-					{{#each this.displays as |display|}}
+	<template>
+		<CanonSplit
+			class="recipe-table"
+			@halves={{true}}
+			@collapsesTo={{150}}
+		>
+			<:sidebar>
+				<CanonCanvas @height={{this.pictureHeight}}>
+					<Picture
+						@rendered={{this.rendered}}
+						@blank={{this.blank}}
+						@isDone={{this.isDone}}
+						@onToggle={{this.toggleDone}}
+						@onHeight={{this.measured}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<div class="rt-editor-head">
+						<CanonHeading @text="Recipe" />
+						<CanonButton
+							data-action="new"
+							@kind="cell"
+							@text="New"
+							@icon={{NewIcon}}
+							@onClick={{this.reset}}
+						/>
+					</div>
+					<Editor
+						@text={{this.text}}
+						@problems={{this.recipe.problems}}
+						@placeholder={{this.placeholder}}
+						@onInput={{this.setText}}
+					/>
+					{{#each
+						this.recipe.problems
+						as |problem|
+					}}
+						<CanonStatus
+							class="rt-problem"
+							@text="line {{problem.line}}: {{problem.message}}"
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						@title={{this.scaleTitle}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonStepper
+							class="rt-scale"
+							@onStep={{this.step}}
+						>
+							<input
+								class="canon-stepper-field rt-amount"
+								type="text"
+								inputmode="decimal"
+								autocomplete="off"
+								spellcheck="false"
+								enterkeyhint="done"
+								aria-labelledby={{titleId}}
+								value={{this.amountText}}
+								{{on
+									"input"
+									this.setAmount
+								}}
+								{{on
+									"keydown"
+									this.stepKey
+								}}
+							/>
+						</CanonStepper>
+					</CanonRow>
+					<CanonHeading @text="Units" />
+					<CanonSegmented
+						class="rt-units"
+						aria-label="Units"
+						@items={{this.displayLabels}}
+						@selected={{this.displayIndex}}
+						@onChange={{this.setDisplay}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonGrid>
+						<CanonButton
+							data-action="copy"
+							class={{if
+								this.copyFailed
+								"rt-failed"
+							}}
+							@text={{this.copyText}}
+							@icon={{this.copyIcon}}
+							@disabled={{this.blank}}
+							@onClick={{this.copyHtml}}
+						/>
+						<CanonButton
+							data-action="pdf"
+							@text="Save as PDF"
+							@icon={{PrintIcon}}
+							@iconStyle="oversized"
+							@kind="primary"
+							@disabled={{this.blank}}
+							@onClick={{this.savePdf}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Examples" />
+					{{#each
+						this.examples key="id"
+						as |example|
+					}}
 						<button
 							type="button"
-							class="dt-rt-unit
-								{{if
-									(eq
-										this.display
-										display
-									)
-									'is-active'
-								}}"
-							aria-pressed={{if
-								(eq
-									this.display
-									display
-								)
-								"true"
-								"false"
-							}}
+							class="rt-example"
+							data-action="example"
+							data-example={{example.id}}
 							{{on
 								"click"
 								(fn
-									this.setDisplay
-									display
+									this.loadExample
+									example.id
 								)
 							}}
-						>{{displayLabel
-								display
-							}}</button>
+						>
+							<span
+								class="rt-example-name"
+							>{{example.name}}</span>
+							<span
+								class="rt-example-category"
+							>{{example.category}}</span>
+						</button>
 					{{/each}}
-				</div>
-
-				<span class="dt-rt-spacer"></span>
-
-				<button
-					type="button"
-					class="dt-rt-btn"
-					data-action="new"
-					{{on "click" this.reset}}
-				>
-					<Icon @name="file-plus" />
-					<span>New</span>
-				</button>
-				<button
-					type="button"
-					class="dt-rt-btn
-						{{if
-							(eq
-								this.copyState
-								'failed'
-							)
-							'is-failed'
-						}}"
-					data-action="copy"
-					{{on "click" this.copyHtml}}
-				>
-					<Icon @name={{this.copyIcon}} />
-					<span>{{this.copyLabel}}</span>
-				</button>
-				<button
-					type="button"
-					class="dt-rt-btn is-primary"
-					data-action="pdf"
-					{{on "click" this.savePdf}}
-				>
-					<Icon @name="printer" />
-					<span>Save as PDF</span>
-				</button>
-			</div>
-
-			<div class="dt-rt-body">
-				<div class="dt-rt-source">
-					<textarea
-						class="dt-rt-text"
-						aria-label="Recipe"
-						spellcheck="false"
-						value={{this.text}}
-						{{on "input" this.setText}}
-					></textarea>
-					{{#if this.problems.length}}
-						<ul
-							class="dt-rt-problems"
-							role="status"
-						>
-							{{#each
-								this.problems
-								as |problem|
-							}}
-								<li>line
-									{{problem.line}}:
-									{{problem.message}}</li>
-							{{/each}}
-						</ul>
-					{{/if}}
-				</div>
-
-				<div class="dt-rt-table">
-					{{#if this.rendered.title}}
-						<h2
-							class="dt-rt-title"
-						>{{this.rendered.title}}</h2>
-					{{/if}}
-					{{#if this.rendered.ingredients.length}}
-						<ul class="dt-rt-shopping">
-							{{#each
-								this.rendered.ingredients
-								as |item|
-							}}
-								<li>
-									<span
-										class="dt-rt-item"
-									>{{item.name}}</span>
-									{{#if
-										item.amount
-									}}
-										<span
-											class="dt-rt-amount-of"
-										>{{item.amount}}</span>
-									{{/if}}
-								</li>
-							{{/each}}
-						</ul>
-					{{/if}}
-					{{#if
-						(and
-							(not this.grid.rows)
-							this.rendered.banners.length
-						)
-					}}
-						<ol class="dt-rt-notes">
-							{{#each
-								this.rendered.banners
-								as |note|
-							}}
-								<li
-								>{{note}}</li>
-							{{/each}}
-						</ol>
-					{{/if}}
-					{{#if this.rendered.notes.length}}
-						<ol class="dt-rt-notes">
-							{{#each
-								this.rendered.notes
-								as |note|
-							}}
-								<li
-								>{{note}}</li>
-							{{/each}}
-						</ol>
-					{{/if}}
-					{{#if this.grid.rows}}
-						<div
-							class="dt-rt-grid"
-							style={{columns
-								this.grid.cols
-							}}
-						>
-							{{#each
-								this.grid.cells
-								as |cell|
-							}}
-								{{#if
-									(eq
-										cell.kind
-										"step"
-									)
-								}}
-									<button
-										type="button"
-										class="dt-rt-cell is-step
-											{{if
-												(eq
-													cell.row
-													0
-												)
-												'is-top'
-											}}
-											{{if
-												(eq
-													cell.col
-													0
-												)
-												'is-left'
-											}}
-											{{if
-												cell.vertical
-												'is-vertical'
-											}}
-											{{if
-												(this.isDone
-													cell
-												)
-												'is-done'
-											}}"
-										style={{area
-											cell
-										}}
-										aria-pressed={{if
-											(this.isDone
-												cell
-											)
-											"true"
-											"false"
-										}}
-										{{on
-											"click"
-											(fn
-												this.toggleDone
-												cell
-											)
-										}}
-									>
-										<span
-											class="dt-rt-label"
-										>{{cell.text}}</span>
-										{{#each
-											cell.detail
-											as |line|
-										}}
-											<span
-												class="dt-rt-detail"
-											>{{line}}</span>
-										{{/each}}
-										{{#each
-											cell.discard
-											as |line|
-										}}
-											<span
-												class="dt-rt-discard"
-											><span
-													aria-hidden="true"
-												>✕
-												</span><span
-													class="dt-sr-only"
-												>discard
-												</span>{{line}}</span>
-										{{/each}}
-										{{#if
-											cell.name
-										}}
-											<span
-												class="dt-rt-name"
-											>{{cell.name}}</span>
-										{{/if}}
-									</button>
-								{{else}}
-									<div
-										class="dt-rt-cell is-{{cell.kind}}
-											{{if
-												(eq
-													cell.row
-													0
-												)
-												'is-top'
-											}}
-											{{if
-												(eq
-													cell.col
-													0
-												)
-												'is-left'
-											}}"
-										style={{area
-											cell
-										}}
-									>
-										{{#if
-											(eq
-												cell.kind
-												"ref"
-											)
-										}}
-											<span
-												class="dt-rt-label"
-											><span
-													aria-hidden="true"
-												>↩
-												</span><span
-													class="dt-sr-only"
-												>from
-												</span>{{cell.text}}</span>
-										{{else if
-											cell.text
-										}}
-											<span
-												class="dt-rt-label"
-											>{{cell.text}}</span>
-										{{/if}}
-										{{#each
-											cell.detail
-											as |line|
-										}}
-											<span
-												class="dt-rt-detail"
-											>{{line}}</span>
-										{{/each}}
-									</div>
-								{{/if}}
-							{{/each}}
-
-							{{! badges above all cells }}
-							{{#each
-								this.grid.cells
-								as |cell|
-							}}
-								{{#if
-									cell.marks.length
-								}}
-									<span
-										class="dt-rt-marks"
-										aria-hidden="true"
-										style={{area
-											cell
-										}}
-									>
-										{{#each
-											cell.marks
-											as |mark|
-										}}
-											<span
-												class="dt-rt-mark"
-											>{{mark}}</span>
-										{{/each}}
-									</span>
-								{{/if}}
-							{{/each}}
-						</div>
-					{{/if}}
-				</div>
-			</div>
-
-		</div>
-
-		<div class="dt-rt-about">
-			<p>The Recipe Table experiment lets you write out
-				recipes for cooking (or other things) and
-				outputs them in a nice to read
-				Cooking-For-Engineers style action table. The
-				format is a plain text domain-specific-language
-				called ClaraScript, named after my grandmother.</p>
-			<p>You can download the ClaraScript reference as a PDF
-				by
-				<a
-					href="/clarascript-reference.pdf"
-					download
-				>clicking here</a>. Thank you to Michael Chu for
-				inventing Cooking For Engineers and
-				based.cooking for some of the sample recipes.</p>
-		</div>
-
-		<div class="dt-rt-gallery-head">
-			<span>Examples</span>
-		</div>
-		<div class="dt-rt-gallery">
-			{{#each this.examples as |example|}}
-				<button
-					type="button"
-					class="dt-rt-card"
-					data-action="example"
-					data-example={{example.id}}
-					{{on
-						"click"
-						(fn this.loadExample example.id)
-					}}
-				>
-					<span
-						class="dt-rt-card-name"
-					>{{example.name}}</span>
-					<span
-						class="dt-rt-card-category"
-					>{{example.category}}</span>
-				</button>
-			{{/each}}
-		</div>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<div class="rt-about">
+						<p>The Recipe Table experiment
+							lets you write out
+							recipes for cooking (or
+							other things) and
+							outputs them in a nice
+							to read
+							Cooking-For-Engineers
+							style action table. The
+							format is a plain text
+							domain-specific-language
+							called ClaraScript,
+							named after my
+							grandmother.</p>
+						<p>You can download the
+							ClaraScript reference as
+							a PDF by
+							<a
+								href="/clarascript-reference.pdf"
+								download
+							>clicking here</a>.
+							Thank you to Michael Chu
+							for inventing Cooking
+							For Engineers and
+							based.cooking for some
+							of the sample recipes.</p>
+					</div>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

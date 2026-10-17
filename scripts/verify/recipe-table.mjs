@@ -10,13 +10,38 @@ await page.evaluateOnNewDocument(() =>
 	localStorage.removeItem('dt-recipe-text'),
 );
 await visit(page, '/tools/recipe-table');
-await page.waitForSelector('.dt-rt-grid');
+await page.waitForSelector('.rt-grid');
 await sleep(200);
+
+const shell = await page.evaluate(() => {
+	const slot = document.querySelector('.dt-canon-tool');
+	const split = slot?.querySelector('.canon-split');
+	const a = slot?.getBoundingClientRect();
+	const b = split?.getBoundingClientRect();
+	return {
+		fills:
+			!!a &&
+			!!b &&
+			Math.abs(a.height - b.height) < 2 &&
+			b.width > 0,
+		docScroll:
+			document.scrollingElement.scrollHeight >
+			window.innerHeight,
+		picture: document
+			.querySelector('.canon-split-sidebar .rt-picture')
+			?.getAttribute('aria-label'),
+		editor: !!document.querySelector('.canon-split-main .rt-source'),
+	};
+});
+check('the split fills the slot', shell.fills);
+check('the document does not scroll', !shell.docScroll);
+check('the table is the named picture', shell.picture === 'Recipe Table', shell.picture);
+check('the editor is in the settings pane', shell.editor);
 
 const read = () =>
 	page.evaluate(() => {
 		const cell = (r, c) =>
-			[...document.querySelectorAll('.dt-rt-cell')].find(
+			[...document.querySelectorAll('.rt-cell')].find(
 				(el) =>
 					el.style.gridArea.startsWith(
 						`${r + 1} / ${c + 1} /`,
@@ -24,29 +49,29 @@ const read = () =>
 			);
 		// banners offset tree rows
 		const off = document.querySelectorAll(
-			'.dt-rt-cell.is-banner',
+			'.rt-cell.is-banner',
 		).length;
 		const label = (r, c) =>
-			cell(off + r, c)?.querySelector('.dt-rt-label')
+			cell(off + r, c)?.querySelector('.rt-label')
 				?.textContent ?? null;
 		return {
-			title: document.querySelector('.dt-rt-title')
+			title: document.querySelector('.rt-title')
 				?.textContent,
 			notes: [
-				...document.querySelectorAll('.dt-rt-notes li'),
+				...document.querySelectorAll('.rt-notes li'),
 			].map((li) => li.textContent),
 			banners: [
-				...document.querySelectorAll('.dt-rt-cell.is-banner'),
+				...document.querySelectorAll('.rt-cell.is-banner'),
 			].map((el) => el.textContent.trim()),
-			steps: document.querySelectorAll('.dt-rt-cell.is-step')
+			steps: document.querySelectorAll('.rt-cell.is-step')
 				.length,
-			refs: document.querySelectorAll('.dt-rt-cell.is-ref')
+			refs: document.querySelectorAll('.rt-cell.is-ref')
 				.length,
 			problems: [
-				...document.querySelectorAll('.dt-rt-problems li'),
+				...document.querySelectorAll('.rt-problem'),
 			].map((li) => li.textContent.trim()),
 			ingredients: [
-				...document.querySelectorAll('.dt-rt-shopping li'),
+				...document.querySelectorAll('.rt-shopping li'),
 			].map((li) => li.textContent.trim().replace(/\s+/g, ' ')),
 			spaghetti: label(0, 0),
 			boil: label(0, 1),
@@ -96,14 +121,14 @@ check(
 );
 
 const type = async (text) => {
-	await page.click('.dt-rt-text');
+	await page.click('.rt-source');
 	await page.evaluate(() => {
-		const el = document.querySelector('.dt-rt-text');
+		const el = document.querySelector('.rt-source');
 		el.focus();
 		el.setSelectionRange(0, el.value.length);
 	});
 	await page.keyboard.press('Backspace');
-	await page.type('.dt-rt-text', text);
+	await page.type('.rt-source', text);
 	await sleep(250);
 };
 
@@ -113,7 +138,7 @@ check('a one-step recipe renders', simple.steps === 1, String(simple.steps));
 check(
 	'the caret survives typing',
 	await page.evaluate(
-		() => document.activeElement === document.querySelector('.dt-rt-text'),
+		() => document.activeElement === document.querySelector('.rt-source'),
 	),
 );
 
@@ -126,6 +151,14 @@ check(
 );
 
 await type('bake\n@ dough');
+check(
+	'the line a problem names is tinted in the editor',
+	await page.evaluate(
+		() =>
+			document.querySelector('.rt-line--problem .rt-gutter')
+				?.textContent === '2',
+	),
+);
 const unknown = await read();
 check(
 	'an unknown name is reported',
@@ -134,13 +167,19 @@ check(
 );
 
 await type('serves: 2\n\nboil | 9 min\n- spaghetti: 200 g');
+await page.focus('.rt-amount');
+await page.keyboard.press('ArrowUp');
+await page.keyboard.press('ArrowDown');
+check(
+	'the scale field steps with the arrow keys',
+	(await page.$eval('.rt-amount', (el) => el.value)) === '2',
+	await page.$eval('.rt-amount', (el) => el.value),
+);
 const source = await page.evaluate(
-	() => document.querySelector('.dt-rt-text').value,
+	() => document.querySelector('.rt-source').value,
 );
 await page.evaluate(() =>
-	[...document.querySelectorAll('.dt-rt-step')]
-		.find((b) => b.getAttribute('aria-label') === 'More')
-		.click(),
+	document.querySelector('.rt-scale .canon-stepper-plus').click(),
 );
 await sleep(250);
 const scaled = await read();
@@ -157,12 +196,12 @@ check(
 check(
 	'and leaves the source alone',
 	(await page.evaluate(
-		() => document.querySelector('.dt-rt-text').value,
+		() => document.querySelector('.rt-source').value,
 	)) === source,
 );
 
 await page.evaluate(() =>
-	[...document.querySelectorAll('.dt-rt-unit')]
+	[...document.querySelectorAll('.rt-units [role="radio"]')]
 		.find((b) => b.textContent.trim() === 'Imperial')
 		.click(),
 );
@@ -175,12 +214,12 @@ check(
 check(
 	'and still leave the source alone',
 	(await page.evaluate(
-		() => document.querySelector('.dt-rt-text').value,
+		() => document.querySelector('.rt-source').value,
 	)) === source,
 );
 
 await page.evaluate(() =>
-	document.querySelector('.dt-rt-cell.is-step').click(),
+	document.querySelector('.rt-cell.is-step').click(),
 );
 await sleep(150);
 check(
@@ -188,7 +227,7 @@ check(
 	await page.evaluate(
 		() =>
 			document
-				.querySelector('.dt-rt-cell.is-step')
+				.querySelector('.rt-cell.is-step')
 				.getAttribute('aria-pressed') === 'true',
 	),
 );
@@ -215,16 +254,16 @@ serve
 // badges keyed by area
 const marks = await page.evaluate(() => {
 	const byArea = new Map(
-		[...document.querySelectorAll('.dt-rt-marks')].map((m) => [
+		[...document.querySelectorAll('.rt-marks')].map((m) => [
 			m.style.gridArea,
-			[...m.querySelectorAll('.dt-rt-mark')].map(
+			[...m.querySelectorAll('.rt-mark')].map(
 				(x) => x.textContent,
 			),
 		]),
 	);
-	return [...document.querySelectorAll('.dt-rt-cell.is-step')].map(
+	return [...document.querySelectorAll('.rt-cell.is-step')].map(
 		(el) => ({
-			label: el.querySelector('.dt-rt-label')?.textContent,
+			label: el.querySelector('.rt-label')?.textContent,
 			marks: byArea.get(el.style.gridArea) ?? [],
 		}),
 	);
@@ -248,20 +287,20 @@ check(
 	'the preamble note banners and the later one is numbered',
 	await page.evaluate(
 		() =>
-			document.querySelectorAll('.dt-rt-cell.is-banner')
+			document.querySelectorAll('.rt-cell.is-banner')
 				.length === 1 &&
-			document.querySelectorAll('.dt-rt-notes li').length ===
+			document.querySelectorAll('.rt-notes li').length ===
 				1 &&
-			document.querySelectorAll('.dt-rt-mark').length === 1,
+			document.querySelectorAll('.rt-mark').length === 1,
 	),
 );
 check(
 	'a badge straddles a vertical line of the table',
 	await page.evaluate(() => {
-		const badge = document.querySelector('.dt-rt-mark');
+		const badge = document.querySelector('.rt-mark');
 		const b = badge.getBoundingClientRect();
 		const mid = b.left + b.width / 2;
-		return [...document.querySelectorAll('.dt-rt-cell.is-step')].some(
+		return [...document.querySelectorAll('.rt-cell.is-step')].some(
 			(c) => Math.abs(c.getBoundingClientRect().left - mid) < 2,
 		);
 	}),
@@ -271,10 +310,10 @@ check(
 	'and nothing paints over it',
 	await page.evaluate(() => {
 		document
-			.querySelectorAll('.dt-rt-marks')
+			.querySelectorAll('.rt-marks')
 			.forEach((m) => (m.style.pointerEvents = 'auto'));
 		const covered = [
-			...document.querySelectorAll('.dt-rt-mark'),
+			...document.querySelectorAll('.rt-mark'),
 		].filter((m) => {
 			const b = m.getBoundingClientRect();
 			return [
@@ -288,7 +327,7 @@ check(
 			});
 		});
 		document
-			.querySelectorAll('.dt-rt-marks')
+			.querySelectorAll('.rt-marks')
 			.forEach((m) => (m.style.pointerEvents = ''));
 		return covered.length === 0;
 	}),
@@ -297,8 +336,8 @@ check(
 	'badges sit outside the cells, in a layer of their own',
 	await page.evaluate(
 		() =>
-			[...document.querySelectorAll('.dt-rt-mark')].every(
-				(m) => !m.closest('.dt-rt-cell'),
+			[...document.querySelectorAll('.rt-mark')].every(
+				(m) => !m.closest('.rt-cell'),
 			),
 	),
 );
@@ -307,14 +346,14 @@ check(
 	await page.evaluate(
 		() =>
 			document.querySelectorAll(
-				'.dt-rt-cell:not(.is-step) .dt-rt-mark',
+				'.rt-cell:not(.is-step) .rt-mark',
 			).length === 0,
 	),
 );
 
 const ref = await page.evaluate(async () => {
 	const link = document.querySelector(
-		'.dt-rt-about a[href$=".pdf"]',
+		'.rt-about a[href$=".pdf"]',
 	);
 	if (!link) return { found: false };
 	const res = await fetch(link.getAttribute('href'));
@@ -380,7 +419,7 @@ check(
 check(
 	'the carrier frame is offscreen',
 	await page.evaluate(() => {
-		const frame = document.querySelector('.dt-rt-print');
+		const frame = document.querySelector('.rt-print');
 		if (!frame) return true;
 		const box = frame.getBoundingClientRect();
 		return box.width === 0 && box.height === 0;
@@ -389,7 +428,7 @@ check(
 check(
 	'the font resolves inside the print document',
 	await page.evaluate(async () => {
-		const frame = document.querySelector('.dt-rt-print');
+		const frame = document.querySelector('.rt-print');
 		if (!frame) return false;
 		await frame.contentWindow.document.fonts.ready;
 		return frame.contentWindow.document.fonts.check(
@@ -415,6 +454,9 @@ const copyWith = async (impl) => {
 		label: document
 			.querySelector('[data-action="copy"]')
 			.textContent.trim(),
+		toast:
+			document.querySelector('.canon-toast-live')?.textContent ??
+			'',
 		html: window.__html ?? null,
 	}));
 };
@@ -423,7 +465,11 @@ const good = await copyWith(`{
 	async write(items) { window.__html = await (await items[0].getType('text/html')).text(); },
 	async writeText(t) { window.__html = t; },
 }`);
-check('copy reports success', good.label === 'Copied', good.label);
+check(
+	'copy confirms through the toast',
+	good.toast.includes('Copied'),
+	good.toast,
+);
 check(
 	'and hands over a table',
 	(good.html ?? '').startsWith('<table'),
@@ -454,11 +500,11 @@ fold
 - flour: 100 g`,
 );
 const banners = await page.evaluate(() => {
-	const cells = [...document.querySelectorAll('.dt-rt-cell.is-banner')];
+	const cells = [...document.querySelectorAll('.rt-cell.is-banner')];
 	const cols = getComputedStyle(
-		document.querySelector('.dt-rt-grid'),
+		document.querySelector('.rt-grid'),
 	).gridTemplateColumns.split(' ').length;
-	const grid = document.querySelector('.dt-rt-grid');
+	const grid = document.querySelector('.rt-grid');
 	return {
 		texts: cells.map((c) => c.textContent.trim()),
 		spans: cells.map((c) => c.style.gridArea),
@@ -468,13 +514,15 @@ const banners = await page.evaluate(() => {
 		),
 		widths: cells.map(
 			(c) =>
-				Math.round(c.getBoundingClientRect().width) ===
-				Math.round(grid.scrollWidth),
+				Math.abs(
+					c.getBoundingClientRect().width -
+						grid.scrollWidth,
+				) < 1,
 		),
 		listed: [
-			...document.querySelectorAll('.dt-rt-notes li'),
+			...document.querySelectorAll('.rt-notes li'),
 		].map((li) => li.textContent.trim()),
-		marks: [...document.querySelectorAll('.dt-rt-mark')].map(
+		marks: [...document.querySelectorAll('.rt-mark')].map(
 			(m) => m.textContent,
 		),
 	};
@@ -520,15 +568,15 @@ rest | 10 min | off the heat
 serve | into warmed bowls`,
 );
 const lattice = await page.evaluate(() => {
-	const pane = document.querySelector('.dt-rt-table');
+	const pane = document.querySelector('.rt-picture');
 	pane.scrollLeft = pane.scrollWidth;
-	const cells = [...document.querySelectorAll('.dt-rt-cell')];
+	const cells = [...document.querySelectorAll('.rt-cell')];
 	const px = (el, side) =>
 		parseFloat(getComputedStyle(el)[`border${side}Width`]);
 	return {
 		overflows: pane.scrollWidth > pane.clientWidth,
 		clipped:
-			document.querySelector('.dt-rt-grid').getBoundingClientRect()
+			document.querySelector('.rt-grid').getBoundingClientRect()
 				.width < pane.scrollWidth,
 		allRight: cells.every((c) => px(c, 'Right') >= 1),
 		allBottom: cells.every((c) => px(c, 'Bottom') >= 1),
@@ -556,7 +604,7 @@ check('and no interior cell doubles a line', lattice.noStrayTop);
 check('nor doubles a left one', lattice.noStrayLeft);
 
 const discard = await page.evaluate(() => {
-	const el = document.querySelector('.dt-rt-discard');
+	const el = document.querySelector('.rt-discard');
 	if (!el) return null;
 	const cs = getComputedStyle(el);
 	return {
@@ -584,15 +632,15 @@ const picked = await page.evaluate(async () => {
 		await new Promise((r) => setTimeout(r, 120));
 		out.push({
 			id,
-			title: document.querySelector('.dt-rt-title')?.textContent,
-			steps: document.querySelectorAll('.dt-rt-cell.is-step')
+			title: document.querySelector('.rt-title')?.textContent,
+			steps: document.querySelectorAll('.rt-cell.is-step')
 				.length,
-			problems: document.querySelectorAll('.dt-rt-problems li')
+			problems: document.querySelectorAll('.rt-problem')
 				.length,
-			listed: document.querySelectorAll('.dt-rt-shopping li')
+			listed: document.querySelectorAll('.rt-shopping li')
 				.length,
 			category: document.querySelector(
-				`[data-example="${id}"] .dt-rt-card-category`,
+				`[data-example="${id}"] .rt-example-category`,
 			)?.textContent,
 		});
 	}
@@ -631,5 +679,24 @@ check(
 		)
 	).startsWith('title: Tzatziki'),
 );
+
+await visit(page, '/tools/recipe-table?rtText=');
+const blank = await page.evaluate(() => ({
+	placeholder: document
+		.querySelector('.rt-source')
+		?.matches(':placeholder-shown'),
+	dashed:
+		getComputedStyle(document.querySelector('.rt-source'))
+			.borderTopStyle === 'dashed',
+	picture: !!document.querySelector('.rt-picture .rt-empty'),
+	exports: [
+		...document.querySelectorAll(
+			'[data-action="copy"], [data-action="pdf"]',
+		),
+	].every((b) => b.disabled),
+}));
+check('empty, the editor is the dashed placeholder box', blank.placeholder && blank.dashed);
+check('and the picture is a blank frame', blank.picture);
+check('and export waits for a recipe', blank.exports);
 
 await finish(browser);
