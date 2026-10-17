@@ -58,6 +58,15 @@ module('Unit | Tool | time-calc', function () {
 		assert.strictEqual(ms?.date.getTime(), INSTANT.getTime());
 	});
 
+	test('four digits are a year', function (assert) {
+		const year = read('2024', 'UTC');
+		assert.strictEqual(
+			year?.date.toISOString(),
+			'2024-01-01T00:00:00.000Z',
+		);
+		assert.strictEqual(read('20240')?.format, 'unix');
+	});
+
 	test('a day past the month end is refused', function (assert) {
 		assert.strictEqual(read('2023-02-29'), null);
 		assert.strictEqual(read('2023-04-31'), null);

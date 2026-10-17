@@ -134,7 +134,12 @@ export default class TimeCalc extends Component {
 	@tracked now = new Date();
 	@tracked fromZone = localZone;
 	@tracked toZone = 'UTC';
-	@tracked zones = ['America/New_York', 'Europe/London', 'Asia/Tokyo'];
+	@tracked zones = [
+		'UTC',
+		'America/New_York',
+		'Europe/London',
+		'Asia/Tokyo',
+	];
 	@tracked amount = 1;
 	@tracked unit: Unit = 'weeks';
 	@tracked subtracts = false;

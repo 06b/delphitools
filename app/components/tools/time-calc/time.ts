@@ -105,12 +105,20 @@ function valid(reading: Reading): Reading | null {
 }
 
 /**
- * A typed timestamp or date. Numbers are Unix seconds, or milliseconds from
- * twelve digits up; a date with no zone is a wall-clock time in `zone`.
+ * A typed timestamp or date. Four digits are a year; other numbers are Unix
+ * seconds, or milliseconds from twelve digits up; a date with no zone is a
+ * wall-clock time in `zone`.
  */
 export function read(text: string, zone = localZone): Reading | null {
 	const typed = text.trim().replace(/−/g, '-');
 	if (!typed) return null;
+	// four digits alone are a year, as the old human field read them
+	if (/^\d{4}$/.test(typed))
+		return valid({
+			date: wallInZone(zone, Number(typed), 0, 1, 0, 0, 0, 0),
+			format: 'human',
+			floating: true,
+		});
 	const number = typed.replace(',', '.');
 	if (numeric.test(number)) {
 		const value = Number(number);

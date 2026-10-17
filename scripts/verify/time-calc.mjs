@@ -229,7 +229,7 @@ check('the wall clock reads in From', s.unit === 'Date & Time · Berlin', s.unit
 check('From and To lines', /\b0?9:00:00/.test(line(s.lines, 'Berlin')) && /17:00:00|5:00:00\sPM/.test(line(s.lines, 'Tokyo')), JSON.stringify(s.lines));
 check('the figure is the offset', s.figure === '+8h', s.figure);
 check('the zones are drawn', s.drawing > 3000 && s.label === 'Offset +8h', s.label);
-check('the web zones are listed', ['New York', 'London', 'Tokyo'].every((c) => Object.keys(s.lines).some((k) => k.startsWith(c))), Object.keys(s.lines).join('|'));
+check('the web zones are listed', ['UTC', 'New York', 'London', 'Tokyo'].every((c) => Object.keys(s.lines).some((k) => k.startsWith(c))), Object.keys(s.lines).join('|'));
 await press('Swap');
 await sleep(60);
 s = await state();
