@@ -17,6 +17,7 @@ import {
 } from 'delphitools-v2/components/tools/decoder/bits';
 import {
 	caption,
+	marks,
 	morseWords,
 	pairs,
 	railPattern,
@@ -202,5 +203,47 @@ module('Unit | Tool | decoder', function () {
 			'4',
 			'b',
 		]);
+	});
+
+	test('marks: the typed text toned as the cipher reads it', function (assert) {
+		const tones = (
+			cipher: Parameters<typeof marks>[0],
+			input: string,
+			encode = false,
+		) =>
+			marks(cipher, encode, params, input)
+				.map((run) =>
+					run.tone[0]!.repeat(
+						Array.from(run.text).length,
+					),
+				)
+				.join('');
+		assert.strictEqual(tones('caesar', 'Ab, c'), 'iimmi');
+		assert.strictEqual(
+			tones('morse', '.... .. / .-'),
+			'iiiimllmmmii',
+		);
+		assert.strictEqual(tones('a1z26', '8-5 12'), 'imlmii');
+		assert.strictEqual(tones('bacon', 'AABBB aab'), 'iiiiimmmm');
+		assert.strictEqual(tones('bacon', 'H!', true), 'im');
+		assert.strictEqual(tones('hex', '0x48 6Z9'), 'mmiimlmm');
+		assert.strictEqual(tones('base64', 'SGk=x'), 'iiimm');
+		assert.strictEqual(
+			tones('binary', '0100 1000 2'),
+			'iiiimiiiimm',
+		);
+		assert.strictEqual(
+			tones('rail-fence', 'WEAREDISCO'),
+			'iiilllllii',
+		);
+		assert.strictEqual(
+			tones('rail-fence', 'WEAREDISCO', true),
+			'ililililil',
+		);
+		assert.strictEqual(
+			marks('caesar', false, params, '').length,
+			0,
+			'nothing typed, no runs',
+		);
 	});
 });

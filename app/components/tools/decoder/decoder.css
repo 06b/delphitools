@@ -1,14 +1,26 @@
-/* the banner: caption and score over one of three pictures */
+/* the banner: caption and score, the typed text, one of three pictures */
 .dec-picture {
 	position: absolute;
 	inset: 0;
+	display: flex;
+	flex-direction: column;
 	margin: 0;
 	container-type: inline-size;
 }
 
+/* headHeight in picture.gts */
+.dec-head {
+	display: flex;
+	flex: none;
+	gap: 12px;
+	align-items: center;
+	block-size: 44px;
+	padding-inline-start: var(--canon-panel-padding);
+}
+
 .dec-caption {
-	position: absolute;
-	inset: 10px 76px auto var(--canon-panel-padding);
+	flex: 1 1 auto;
+	min-inline-size: 0;
 	overflow: hidden;
 	color: var(--canon-foreground);
 	font-family: var(--canon-font);
@@ -25,8 +37,7 @@
 }
 
 .dec-score {
-	position: absolute;
-	inset: 4px var(--canon-panel-padding) auto auto;
+	flex: none;
 	opacity: 0;
 	transition: opacity 0.2s;
 }
@@ -35,10 +46,85 @@
 	opacity: 1;
 }
 
-/* the caption's room above the pictures */
+.dec-tools {
+	display: flex;
+	flex: none;
+	gap: var(--canon-hairline);
+	align-self: stretch;
+}
+
+/* the text takes what the band has left, and scrolls in it */
+.dec-scroll {
+	flex: 1 1 0;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+.dec-text {
+	display: grid;
+	box-sizing: border-box;
+	padding: 2px var(--canon-panel-padding) 6px;
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 17px;
+	line-height: 24px;
+}
+
+/* both in one cell, set alike, so the caret sits on the tones */
+.dec-marks,
+.dec-input {
+	grid-area: 1 / 1;
+	min-inline-size: 0;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+.dec-tone--lit {
+	color: var(--canon-primary);
+}
+
+.dec-tone--muted {
+	color: var(--canon-muted-foreground);
+}
+
+.dec-input {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: transparent;
+	caret-color: var(--canon-foreground);
+	font: inherit;
+	line-height: inherit;
+	resize: none;
+	outline: none;
+}
+
+.dec-input::placeholder {
+	color: var(--canon-muted-foreground);
+}
+
+/* empty: the dashed box, the place to type or paste; with .dec-text's padding the 88 px in decoder.gts */
+.dec-input:placeholder-shown {
+	min-block-size: 80px;
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.dec-input:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+/* stageHeight in picture.gts; it gives way only once the text has none left */
 .dec-stage {
-	position: absolute;
-	inset: 24px 0 0;
+	position: relative;
+	flex: 0 1 148px;
+	min-block-size: 0;
 }
 
 .dec-layer {
@@ -287,31 +373,6 @@
 
 .dec-fence-glyph--muted {
 	fill: var(--canon-muted-foreground);
-}
-
-/* the input: the main pane's editor, growing with the text */
-.decoder .canon-text-area.dec-input {
-	field-sizing: content;
-	min-block-size: 180px;
-	max-block-size: 480px;
-	block-size: auto;
-	background: var(--canon-card);
-	font-family: var(--canon-mono-font);
-	font-size: var(--canon-text-callout);
-	overflow-wrap: anywhere;
-}
-
-/* empty: the dashed box, the place to paste */
-.decoder .canon-text-area.dec-input:placeholder-shown {
-	outline: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	outline-offset: -12px;
-	padding: 24px;
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
-}
-
-.decoder .canon-text-area.dec-input:focus-visible:placeholder-shown {
-	outline: var(--canon-hairline) solid var(--canon-primary);
 }
 
 .dec-key {

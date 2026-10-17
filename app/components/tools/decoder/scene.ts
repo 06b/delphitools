@@ -6,9 +6,15 @@ import {
 	CIPHER_OPTIONS,
 	MORSE,
 	MORSE_REVERSE,
+	runManual,
 	type CipherId,
 	type ManualParams,
 } from 'delphitools-v2/components/tools/decoder/engine';
+import {
+	charsPerGroup,
+	codeOf,
+	valueOf,
+} from 'delphitools-v2/components/tools/decoder/bits';
 
 export const cipherLabel = (cipher: CipherId) =>
 	CIPHER_OPTIONS.find((option) => option.value === cipher)?.label ?? '';
@@ -313,4 +319,152 @@ export function pictureOf(cipher: CipherId): Picture {
 	)
 		return 'bits';
 	return 'pairs';
+}
+
+/** ink and lit alternate between the symbols the cipher reads; muted is skipped or left as is. */
+export type Tone = 'ink' | 'lit' | 'muted';
+
+export interface Run {
+	text: string;
+	tone: Tone;
+}
+
+const alternate = (group: number | undefined): Tone =>
+	group === undefined ? 'muted' : group % 2 ? 'lit' : 'ink';
+
+/** Each run of characters between `apart` is one symbol. */
+function symbols(characters: string[], apart: RegExp): Tone[] {
+	let group = -1;
+	let inside = false;
+	return characters.map((character) => {
+		if (apart.test(character)) {
+			inside = false;
+			return 'muted';
+		}
+		if (!inside) group += 1;
+		inside = true;
+		return alternate(group);
+	});
+}
+
+// as encoded() and decoding() read: one tone per group of characters
+function bitTones(characters: string[], cipher: CipherId): Tone[] {
+	const code = codeOf(cipher);
+	const per = charsPerGroup(code);
+	const solid = characters
+		.map((character, index) => ({ character, index }))
+		.filter(({ character }) => !/\s/.test(character));
+	const prefix =
+		cipher === 'hex' &&
+		/^0x$/i.test(
+			solid
+				.slice(0, 2)
+				.map((s) => s.character)
+				.join(''),
+		)
+			? new Set(solid.slice(0, 2).map((s) => s.index))
+			: new Set<number>();
+	let read = 0;
+	let stopped = false;
+	return characters.map((character, index) => {
+		if (/\s/.test(character) || prefix.has(index)) return 'muted';
+		if (cipher === 'binary' && !/[01]/.test(character))
+			return 'muted';
+		stopped ||= valueOf(code, character) === undefined;
+		if (stopped) return 'muted';
+		read += 1;
+		return alternate(Math.floor((read - 1) / per));
+	});
+}
+
+function tonesOf(
+	cipher: CipherId,
+	encode: boolean,
+	params: ManualParams,
+	characters: string[],
+): Tone[] {
+	const known = (test: (upper: string) => boolean) =>
+		characters.map((c): Tone =>
+			test(c.toUpperCase()) ? 'ink' : 'muted',
+		);
+	switch (cipher) {
+		case 'rail-fence': {
+			const rails = railPattern(
+				characters.length,
+				params.rails,
+			);
+			// the cipher text is the rails one after another
+			return (
+				encode ? rails : rails.sort((a, b) => a - b)
+			).map(alternate);
+		}
+		case 'morse':
+			return encode
+				? known((upper) => MORSE[upper] !== undefined)
+				: symbols(characters, /[\s/]/);
+		case 'a1z26':
+			return encode
+				? known(isLetter)
+				: symbols(characters, /[\s/,-]/);
+		case 'bacon': {
+			if (encode) return known((upper) => !!BACON[upper]);
+			const total = characters.filter((c) =>
+				/[ab]/i.test(c),
+			).length;
+			const whole = total - (total % 5);
+			let read = 0;
+			return characters.map((character) => {
+				if (!/[ab]/i.test(character) || read >= whole)
+					return 'muted';
+				read += 1;
+				return alternate(Math.floor((read - 1) / 5));
+			});
+		}
+		case 'base64':
+		case 'base32':
+		case 'hex':
+		case 'binary':
+			return encode
+				? characters.map(() => 'ink')
+				: bitTones(characters, cipher);
+		default: {
+			let output: string[] = [];
+			try {
+				output = Array.from(
+					runManual(
+						characters.join(''),
+						cipher,
+						encode,
+						params,
+					),
+				);
+			} catch {
+				// no reading, nothing to compare
+			}
+			if (output.length !== characters.length)
+				return characters.map(() => 'ink');
+			return characters.map((c, i) =>
+				c === output[i] ? 'muted' : 'ink',
+			);
+		}
+	}
+}
+
+/** The typed text in runs of one tone, as the picture's cipher reads it. */
+export function marks(
+	cipher: CipherId,
+	encode: boolean,
+	params: ManualParams,
+	input: string,
+): Run[] {
+	const characters = Array.from(input);
+	const tones = tonesOf(cipher, encode, params, characters);
+	const runs: Run[] = [];
+	characters.forEach((character, index) => {
+		const tone = tones[index] ?? 'ink';
+		const last = runs[runs.length - 1];
+		if (last?.tone === tone) last.text += character;
+		else runs.push({ text: character, tone });
+	});
+	return runs;
 }

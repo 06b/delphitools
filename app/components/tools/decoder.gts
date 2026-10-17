@@ -15,7 +15,6 @@ import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
-import CanonTextArea from 'delphicanon/components/canon-text-area';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
@@ -30,7 +29,10 @@ import {
 	type CipherId,
 	type ManualParams,
 } from 'delphitools-v2/components/tools/decoder/engine';
-import Picture from 'delphitools-v2/components/tools/decoder/picture';
+import Picture, {
+	headHeight,
+	stageHeight,
+} from 'delphitools-v2/components/tools/decoder/picture';
 import { caption } from 'delphitools-v2/components/tools/decoder/scene';
 import Result from 'delphitools-v2/components/tools/text-tool/result';
 import './decoder/decoder.css';
@@ -46,8 +48,10 @@ const directions = ['Decode', 'Encode'];
 const cipherIds = CIPHER_OPTIONS.map((option) => option.value);
 const cipherLabels = CIPHER_OPTIONS.map((option) => option.label);
 const coprimes = AFFINE_COPRIMES.map(String);
-const bandHeight = 176;
-const collapsedHeight = 116;
+// collapsed: the head over one 88 px row of the drawing
+const collapsedHeight = headHeight + 88 + 4;
+// the empty band: head, the dashed box, drawing, rules
+const emptyHeight = headHeight + 88 + stageHeight + 4;
 
 const reference = [
 	{
@@ -114,8 +118,6 @@ const reference = [
 	},
 ];
 
-const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
-const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
 const OpenIcon = <template><IconSvg @name="chevron-down" /></template>;
 const CloseIcon = <template><IconSvg @name="chevron-up" /></template>;
 
@@ -140,6 +142,8 @@ export default class Decoder extends Component {
 	@tracked affineB = 8;
 	@tracked rails = 3;
 	@tracked referenceOpen = false;
+	@tracked pictureHeight = emptyHeight;
+	@tracked typing = false;
 
 	// ?cipherText= ?cipherSample=0-5 ?cipherManual=1 ?cipherId= ?cipherEncode=1
 	// ?cipherShift= ?cipherKey= ?cipherRails= ?cipherReference=1: the iOS launch arguments
@@ -189,12 +193,9 @@ export default class Decoder extends Component {
 		return reference;
 	}
 
-	get bandHeight() {
-		return bandHeight;
-	}
-
-	get collapsedHeight() {
-		return collapsedHeight;
+	// while typing the band keeps its full height: CanonSplit never shrinks below collapsesTo
+	get collapsesTo() {
+		return this.typing ? Number.MAX_SAFE_INTEGER : collapsedHeight;
 	}
 
 	get cipherIndex() {
@@ -293,14 +294,13 @@ export default class Decoder extends Component {
 
 	setInput = (text: string) => (this.input = text);
 
-	paste = async () => {
-		const text = await navigator.clipboard
-			.readText()
-			.catch(() => '');
-		if (text && !this.isDestroying) this.input = text;
-	};
+	setTyping = (typing: boolean) => (this.typing = typing);
 
-	clear = () => (this.input = '');
+	measured = (height: number) => {
+		// CanonCanvas takes both rules off @height
+		if (height + 4 !== this.pictureHeight)
+			this.pictureHeight = height + 4;
+	};
 
 	pickMode = (index: number) => (this.manual = index === 1);
 
@@ -342,13 +342,14 @@ export default class Decoder extends Component {
 	};
 
 	<template>
-		<CanonSplit
-			class="decoder"
-			@collapsesTo={{this.collapsedHeight}}
-		>
+		<CanonSplit class="decoder" @collapsesTo={{this.collapsesTo}}>
 			<:banner>
-				<CanonCanvas @height={{this.bandHeight}}>
+				<CanonCanvas @height={{this.pictureHeight}}>
 					<Picture
+						@text={{this.input}}
+						@onInput={{this.setInput}}
+						@onHeight={{this.measured}}
+						@onFocus={{this.setTyping}}
 						@cipher={{this.scene.cipher}}
 						@encode={{this.scene.encode}}
 						@params={{this.scene.params}}
@@ -469,33 +470,6 @@ export default class Decoder extends Component {
 				</CanonRows>
 			</:sidebar>
 			<:main>
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Input" />
-					<CanonTextArea
-						class="dec-input"
-						aria-label="Input"
-						@value={{this.input}}
-						@placeholder="Paste cipher text or plaintext here…"
-						@onChange={{this.setInput}}
-					/>
-					<CanonGrid>
-						<CanonButton
-							@text="Paste"
-							@icon={{PasteIcon}}
-							@onClick={{this.paste}}
-						/>
-						<CanonButton
-							@text="Clear"
-							@icon={{ClearIcon}}
-							@disabled={{if
-								this.input
-								false
-								true
-							}}
-							@onClick={{this.clear}}
-						/>
-					</CanonGrid>
-				</CanonRows>
 				{{#if this.manual}}
 					<Result
 						class="dec-output"

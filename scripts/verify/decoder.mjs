@@ -79,25 +79,59 @@ check(
 );
 const editor = await page.evaluate(() => {
 	const area = document.querySelector('.decoder .dec-input');
+	const banner = document.querySelector('.decoder .canon-split-banner');
 	const main = document.querySelector('.decoder .canon-split-main');
 	const style = getComputedStyle(area);
 	return {
-		inMain: main.contains(area),
+		inBanner: banner.contains(area),
+		mainFields: main.querySelectorAll('textarea').length,
 		named: area.getAttribute('aria-label'),
 		placeholder: area.placeholder,
-		dashed: style.outlineStyle,
+		dashed: style.borderTopStyle,
 		height: area.getBoundingClientRect().height,
 	};
 });
 check(
-	'the ciphertext is typed in the main pane, the dashed box when empty',
-	editor.inMain &&
+	'the ciphertext is typed into the picture, none in the main pane, the dashed box when empty',
+	editor.inBanner &&
+		editor.mainFields === 0 &&
 		editor.named === 'Input' &&
 		editor.placeholder === 'Paste cipher text or plaintext here…' &&
 		editor.dashed === 'dashed' &&
-		editor.height >= 180,
+		editor.height >= 60,
 	JSON.stringify(editor),
 );
+
+// the band's own height, the editor's scroller and the tones under the editor
+const picture = () =>
+	page.evaluate(() => {
+		const q = (s) => document.querySelector(`.decoder ${s}`);
+		const area = q('.dec-input');
+		const marks = q('.dec-marks');
+		const scroll = q('.dec-scroll');
+		const a = getComputedStyle(area);
+		const m = getComputedStyle(marks);
+		const ra = area.getBoundingClientRect();
+		const rm = marks.getBoundingClientRect();
+		return {
+			band: q('.canon-split-banner .canon-canvas').getBoundingClientRect().height,
+			split: q('.canon-split-body').clientHeight,
+			scrolls: scroll.scrollHeight - scroll.clientHeight,
+			scrollTop: scroll.scrollTop,
+			marks: marks.textContent.replace(/​/g, ''),
+			value: area.value,
+			sameBox: Math.abs(ra.top - rm.top) < 0.5 && Math.abs(ra.left - rm.left) < 0.5 && Math.abs(ra.width - rm.width) < 0.5,
+			sameType:
+				a.fontFamily === m.fontFamily &&
+				a.fontSize === m.fontSize &&
+				a.lineHeight === m.lineHeight &&
+				a.whiteSpace === 'pre-wrap' &&
+				m.whiteSpace === 'pre-wrap',
+			transparent: a.color === 'rgba(0, 0, 0, 0)',
+			tones: [...marks.querySelectorAll('span')].map((s) => [s.className.replace('dec-tone--', ''), s.textContent]),
+		};
+	});
+const emptyBand = (await picture()).band;
 
 // a sample
 await press('Caesar');
@@ -113,6 +147,54 @@ check(
 check('the picture captions the hero with its score', s.caption === s.candidates[0].name && /^\d+%$/.test(s.score.replace(/\s/g, '')), `${s.caption} ${s.score}`);
 check('the picture pairs the symbols', s.pairs > 20, String(s.pairs));
 check('the ranking note under the candidates', /ranked by English-likeness/.test(await page.$eval('.decoder .dec-note', (el) => el.textContent)));
+let p = await picture();
+check(
+	'the typed text is the picture\'s top line: the tones under a transparent textarea, same box, same type',
+	p.marks === p.value && p.sameBox && p.sameType && p.transparent,
+	JSON.stringify({ ...p, tones: undefined }),
+);
+check('the band fits the text, nothing to scroll', p.scrolls <= 0 && p.band < emptyBand, `${p.band} ${emptyBand} ${p.scrolls}`);
+check(
+	'Caesar tones: letters read, spaces left as they are',
+	p.tones.every(([tone, text]) => (tone === 'muted') === /^\s+$/.test(text)),
+	JSON.stringify(p.tones.slice(0, 4)),
+);
+
+// the band grows with the text up to a cap, then the text scrolls inside
+const oneLine = p.band;
+await setInput('AOL XBPJR IYVDU MVE QBTWZ VCLY AOL SHGF KVN.\n'.repeat(4));
+p = await picture();
+check('the band grows with the text', p.band > oneLine && p.scrolls <= 0, `${oneLine} -> ${p.band}`);
+await setInput('AOL XBPJR IYVDU MVE QBTWZ VCLY AOL SHGF KVN.\n'.repeat(60));
+p = await picture();
+check(
+	'long text: the band stops at its cap and the text scrolls inside',
+	p.band <= p.split * 0.46 && p.scrolls > 0 && p.marks === p.value,
+	`${p.band} of ${p.split}, scrolls ${p.scrolls}`,
+);
+await page.focus('.decoder .dec-input');
+await page.$eval('.decoder .dec-scroll', (el) => (el.scrollTop = 120));
+await page.evaluate(() => {
+	const el = document.querySelector('.decoder .dec-input');
+	Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, `X${el.value}`);
+	el.setSelectionRange(1, 1);
+	el.dispatchEvent(new Event('input', { bubbles: true }));
+});
+await sleep(150);
+check('typing does not move the editor\'s scroll', (await picture()).scrollTop === 120, String((await picture()).scrollTop));
+await page.$eval('.decoder .dec-input', (el) => el.blur());
+
+// Paste and Clear sit in the picture's corner
+await page.evaluate(() => navigator.clipboard.writeText('Uryyb jbeyq'));
+await press('Paste');
+check(
+	'Paste in the picture fills the editor',
+	(await page.$eval('.decoder .dec-input', (el) => el.value)) === 'Uryyb jbeyq' &&
+		(await page.$eval('.decoder .canon-split-banner', (el) => !!el.querySelector('[aria-label="Paste"]'))),
+);
+await press('Clear');
+check('Clear in the picture empties it', (await page.$eval('.decoder .dec-input', (el) => el.value)) === '');
+await press('Caesar');
 
 // live typing
 await setInput('');
@@ -185,6 +267,12 @@ await pick('Rail fence');
 await setInput('WEAREDISCOVERED');
 s = await snapshot();
 check('Rail fence draws the plain text along the rails', s.fence === 'WEAREDISCOVERED' && s.output === 'WECRERDSOEEAIVD', `${s.fence} ${s.output}`);
+const toneOf = (tones) => tones.map(([tone, text]) => tone[0].repeat([...text].length)).join('');
+check('Rail fence tones: the odd rail lit in the typed text', toneOf((await picture()).tones) === 'ililililililili', toneOf((await picture()).tones));
+await press('Decode');
+await setInput('WECRERDSOEEAIVD');
+check('Rail fence decode tones: the cipher text is the rails in turn', toneOf((await picture()).tones) === 'iiiillllllliiii', toneOf((await picture()).tones));
+await press('Encode');
 
 await pick('Affine');
 check(
@@ -200,6 +288,7 @@ await setInput('.... ..');
 await sleep(400);
 s = await snapshot();
 check('Morse decodes, marks over letters', s.output === 'HI' && s.pairs === 2, `${s.output} ${s.pairs}`);
+check('Morse tones: one tone per code, the gap muted', toneOf((await picture()).tones) === 'iiiimll', toneOf((await picture()).tones));
 
 // back to auto
 await press('Auto-decode');
@@ -233,5 +322,25 @@ const phone = await page.evaluate(() => ({
 }));
 check('phone: no horizontal scroll, the page does not scroll', phone.overflow <= 0 && phone.pageScroll <= 0, JSON.stringify(phone));
 check('phone: the Base64 sample regroups bits', phone.strip > 0);
+check(
+	'phone: Base64 tones by group of four',
+	toneOf((await picture()).tones) === `${'iiiillll'.repeat(4)}iiii`,
+	toneOf((await picture()).tones),
+);
+
+// phone: the picture collapses as the page scrolls, unless the editor has focus
+await visit(page, `/tools/decoder?cipherReference=1&cipherText=${encodeURIComponent('AOL XBPJR IYVDU MVE QBTWZ VCLY AOL SHGF KVN. '.repeat(3))}`);
+const full = (await picture()).band;
+await page.$eval('.decoder .canon-split-body', (el) => (el.scrollTop = 500));
+await sleep(200);
+const collapsed = (await picture()).band;
+check('phone: scrolled, the picture collapses to the head and drawing', collapsed < full && collapsed <= 140, `${full} -> ${collapsed}`);
+await page.$eval('.decoder .dec-input', (el) => el.focus());
+await sleep(200);
+const focused = (await picture()).band;
+check('phone: focused, the picture keeps its full height', Math.abs(focused - full) < 2, `${full} vs ${focused}`);
+await page.$eval('.decoder .dec-input', (el) => el.blur());
+await sleep(200);
+check('phone: blurred, it collapses again', (await picture()).band <= 140, String((await picture()).band));
 
 await finish(browser);

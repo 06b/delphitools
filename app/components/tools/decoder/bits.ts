@@ -37,7 +37,8 @@ export const codes: Record<'base64' | 'base32' | 'hex' | 'binary', Code> = {
 export const codeOf = (cipher: CipherId) =>
 	codes[cipher as keyof typeof codes] ?? codes.base64;
 
-const charsPerGroup = (code: Code) => (code.bytesPerGroup * 8) / code.bits;
+export const charsPerGroup = (code: Code) =>
+	(code.bytesPerGroup * 8) / code.bits;
 
 export const slotsOfGroup = (code: Code) => code.bytesPerGroup * 8;
 
