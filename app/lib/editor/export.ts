@@ -5,7 +5,7 @@ import { schema } from './schema';
 import { serializeDoc } from './markdown';
 import { injectPrintStyles, printHtmlInIframe } from '../pandoc/print-pdf';
 
-function docToBodyHtml(doc: PMNode): string {
+export function docToBodyHtml(doc: PMNode): string {
 	const fragment = DOMSerializer.fromSchema(schema).serializeFragment(
 		doc.content,
 	);
@@ -14,7 +14,7 @@ function docToBodyHtml(doc: PMNode): string {
 	return div.innerHTML;
 }
 
-function standaloneHtml(bodyHtml: string): string {
+export function standaloneHtml(bodyHtml: string): string {
 	return `<!doctype html><html><head><meta charset="utf-8"><title>Document</title></head><body>${bodyHtml}</body></html>`;
 }
 

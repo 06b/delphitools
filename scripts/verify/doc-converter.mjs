@@ -1,6 +1,6 @@
-// the canon doc-converter: editor, files, ledger, format picks, Pandoc runs
-// usage: npm start, then node scripts/verify/doc-converter.mjs
-//   SKIP_ENGINE=1 skips the conversions (they fetch the ~16 MB engine)
+// the canon doc-converter: editor, files, format picks, local and Pandoc runs
+// usage: bun run start, then node scripts/verify/doc-converter.mjs
+//   SKIP_ENGINE=1 skips the Pandoc conversions (they fetch the ~16 MB engine)
 
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,22 +43,11 @@ const type = (text) =>
 const disabled = (sel) => page.$eval(sel, (el) => el.disabled);
 const text = (sel) =>
 	page.evaluate((s) => document.querySelector(s)?.textContent.replace(/\s+/g, ' ').trim() ?? null, sel);
-const ledger = () =>
-	page.evaluate(() => ({
-		label: document.querySelector('.dc-ledger').getAttribute('aria-label'),
-		rows: [...document.querySelectorAll('.dc-ledger-row:not(.dc-ledger-row--ghost)')].map((row) => ({
-			mark: row.querySelector('.dc-ledger-mark').textContent.trim(),
-			source: row.querySelector('.dc-ledger-source').textContent.trim(),
-			target: row.querySelector('.dc-ledger-target').textContent.trim(),
-			count: row.querySelector('.dc-ledger-count').textContent.trim(),
-		})),
-		ghosts: document.querySelectorAll('.dc-ledger-row--ghost').length,
-		fits: (() => {
-			const canvas = document.querySelector('.doc-converter .canon-canvas-content');
-			const figure = document.querySelector('.dc-ledger');
-			return figure.scrollHeight <= canvas.getBoundingClientRect().height + 1;
-		})(),
-	}));
+const PANDOC = /pandoc\.wasm|pandoc\.worker/;
+const pandocRequests = [];
+page.on('request', (req) => {
+	if (PANDOC.test(req.url())) pandocRequests.push(req.url());
+});
 const dropFile = (content, name, type = '') =>
 	page.evaluate(
 		(c, n, t) => {
@@ -116,46 +105,44 @@ const blankOut = await tiles('.dc-output');
 check('empty: output tiles are dashes', Object.values(blankOut).every((v) => v === DASH) && Object.keys(blankOut).join() === 'Name,Format,Size,Lines', JSON.stringify(blankOut));
 check('empty: Convert, Download and Clear are disabled', (await disabled('.dc-convert')) && (await disabled('.dc-save')) && (await disabled('.dc-clear')));
 check('empty: settings are enabled', !(await page.$$eval('.dc-settings button', (els) => els.some((el) => el.disabled && !el.classList.contains('dc-swap')))));
-let state = await ledger();
-check('empty: the ledger shows three ghost rows', state.ghosts === 3 && state.rows.length === 0 && state.fits, JSON.stringify(state));
+check('no banner above the panes', !(await page.$('.doc-converter .canon-split-banner')));
 check('empty: the source cell reads Auto-detect', (await text('.dc-format-pick')) === 'Auto-detect');
 check('empty: swap is disabled with auto-detect', await disabled('.dc-swap'));
 
 // typed markdown
 await type(MD);
 await settle();
-state = await ledger();
-check(
-	'ledger: rows from the typed markdown',
-	state.rows.map((r) => r.mark).join(' ') === 'H \u00B6 \u2022 B \u2197' && state.rows[0].count === '\u00D72',
-	JSON.stringify(state.rows.map((r) => `${r.mark}${r.count}`)),
-);
-check('ledger: html samples', state.rows[0].target === '<h1>Notes</h1>' && state.rows[3].target === '<p><strong>bold</strong></p>', state.rows[3]?.target);
-check('ledger: the band fits its rows', state.fits);
-check('ledger: named for assistive tech', state.label.startsWith('Markdown \u2192 HTML, H 2'), state.label);
 const typedIn = await tiles('.dc-input');
 check('input tiles: format and words', typedIn.Format === 'Markdown' && typedIn.Words === '13' && typedIn.Name === DASH, JSON.stringify(typedIn));
 check('typed: Convert is enabled and named for the target', !(await disabled('.dc-convert')) && (await text('.dc-convert')) === 'Convert to HTML');
 check('typed: the source cell names the detection', (await text('.dc-format-pick')) === 'Auto-detect · Markdown');
 
-// html source
+// markdown and html convert in the browser, no engine
+await page.click('.dc-convert');
+await converted(5000);
+let out = await tiles('.dc-output');
+check('local: Markdown to HTML completes', out.Name === 'document.html' && out.Format === 'HTML' && Number(out.Lines) > 10, JSON.stringify(out));
+check('local: the code block shows a standalone page', /^<!doctype html>[\s\S]*<h1>Notes<\/h1>/.test((await page.$eval('.dc-code', (el) => el.textContent)).trim()));
+await page.click('.dc-save');
+let file = await download(/^document\.html$/);
+check('local: Download saves document.html', !!file?.text.includes('<strong>bold</strong>'));
+await pickFormat('Target format', 'github');
+await page.click('.dc-convert');
+await converted(5000);
+check('local: Markdown to GitHub Markdown completes', (await tiles('.dc-output')).Name === 'document.md' && ((await text('.dc-code')) ?? '').startsWith('# Notes'));
 await type('<h1>T</h1><p>a <em>b</em></p><hr>');
-await settle();
-state = await ledger();
-check('ledger: rows from html source', state.rows.map((r) => r.mark).join(' ') === 'H \u00B6 \u2014 I' && state.rows[0].source === '<h1>T</h1>', JSON.stringify(state.rows));
+await pickFormat('Target format', 'commonmark');
+await page.click('.dc-convert');
+await converted(5000);
+const cm = await page.$eval('.dc-code', (el) => el.textContent.trim());
+check('local: HTML to CommonMark completes', cm.startsWith('# T\n\na *b*\n\n---'), JSON.stringify(cm));
+check('local: no Pandoc request', pandocRequests.length === 0, pandocRequests.join(' '));
 
 // target pick, searchable
 await type(MD);
 await pickFormat('Target format', 'latex');
 check('format pick: search and Enter picks LaTeX', (await text('.dc-convert')) === 'Convert to LaTeX');
-state = await ledger();
-check('ledger: latex samples', state.rows[0].target === '\\section{Notes}', state.rows[0]?.target);
-await pickFormat('Target format', 'plain');
-state = await ledger();
-check('ledger: plain drops bold, shown as lost', await page.$$eval('.dc-ledger-row--lost .dc-ledger-mark', (els) => els.map((e) => e.textContent.trim()).join(' ')) === 'H B \u2197');
 await pickFormat('Target format', 'word');
-state = await ledger();
-check('ledger: word-processor targets show styled runs', await page.$eval('.dc-ledger-row .dc-ledger-target', (el) => el.classList.contains('dc-sample--rich')));
 check('standalone is off for file targets', await page.$eval('.dc-standalone [role="switch"], .dc-standalone button', (el) => el.disabled || el.getAttribute('aria-disabled') === 'true'));
 
 // swap needs an explicit source
@@ -212,34 +199,60 @@ check('scratchpad: loads its text', (await page.$eval('.dc-editor', (el) => el.v
 await visit(page, `/tools/doc-converter?docText=${encodeURIComponent('# A\\n\\nb')}&docTo=latex`);
 check('flags: ?docText and ?docTo', (await page.$eval('.dc-editor', (el) => el.value)) === '# A\n\nb' && (await text('.dc-convert')) === 'Convert to LaTeX');
 
+// a worker that fails to load ends in an error, not an endless download
+{
+	const broken = await page.browserContext().newPage();
+	await broken.setRequestInterception(true);
+	broken.on('request', (req) => {
+		const url = req.url();
+		if (url.includes('pandoc.wasm')) req.respond({ status: 200, contentType: 'application/wasm', headers: { 'access-control-allow-origin': '*' }, body: Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]) });
+		else req.continue();
+	});
+	// page interception misses worker scripts, so the worker itself throws on load
+	await broken.evaluateOnNewDocument(() => {
+		const Real = window.Worker;
+		window.Worker = class extends Real {
+			constructor(url, options) {
+				super(URL.createObjectURL(new Blob(['throw new Error("broken worker")'], { type: 'text/javascript' })), options);
+			}
+		};
+	});
+	await broken.goto(`${BASE}/tools/doc-converter?docText=${encodeURIComponent('# A')}&docTo=docx&docRun=1`, { waitUntil: 'networkidle2' });
+	const failed = await broken
+		.waitForFunction(() => document.querySelector('.dc-error') && !document.querySelector('.dc-convert').disabled, { timeout: 15000 })
+		.then(() => true, () => false);
+	const shown = await broken.evaluate(() => document.querySelector('.dc-error')?.textContent ?? '');
+	const retry = await broken.evaluate(() => document.querySelector('.dc-convert').textContent.trim());
+	check('engine: a worker load failure shows an error and offers Retry', failed && shown.includes('broken worker') && retry === 'Retry', `${shown} / ${retry}`);
+	await broken.close();
+}
+
 if (!process.env.SKIP_ENGINE) {
-	await visit(page, `/tools/doc-converter?docText=${encodeURIComponent(MD.replaceAll('\n', '\\n'))}&docRun=1`);
-	await converted();
-	const out = await tiles('.dc-output');
-	check('convert: html output tiles', out.Name === 'document.html' && out.Format === 'HTML' && Number(out.Lines) > 10, JSON.stringify(out));
-	check('convert: the code block shows the output', ((await text('.dc-code')) ?? '').includes('<h1 id="notes">Notes</h1>'));
+	await visit(page, `/tools/doc-converter?docText=${encodeURIComponent(MD.replaceAll('\n', '\\n'))}&docTo=docx`);
+	const started = Date.now();
+	await page.click('.dc-convert');
+	await converted(120000);
+	await page.waitForSelector('.dc-preview', { timeout: 60000 });
+	const docx = await tiles('.dc-output');
+	check('pandoc: Markdown to Word loads the engine and completes', pandocRequests.some((u) => u.includes('pandoc.wasm')) && docx.Name === 'document.docx' && docx.Size !== DASH && !docx.Lines, `${JSON.stringify(docx)} in ${Date.now() - started} ms`);
+	check('pandoc: the preview runs no scripts', (await page.$eval('.dc-preview', (el) => el.getAttribute('sandbox'))) === '');
 	await page.click('.dc-save');
-	const file = await download(/^document\.html$/);
-	check('convert: Download saves document.html', !!file?.text.includes('<strong>bold</strong>'));
+	check('pandoc: Download saves document.docx', !!(await download(/^document\.docx$/)));
 	await type(MD + '\n\nmore');
 	await settle();
 	check('an edit clears the result', (await tiles('.dc-output')).Name === DASH);
 
-	await pickFormat('Target format', 'word');
+	await page.click('.dc-toc [role="switch"], .dc-toc button');
+	await pickFormat('Target format', 'html');
 	await page.click('.dc-convert');
 	await converted();
-	await page.waitForSelector('.dc-preview', { timeout: 60000 });
-	const docx = await tiles('.dc-output');
-	check('convert: Word output with a page preview', docx.Name === 'document.docx' && docx.Size !== DASH && !docx.Lines, JSON.stringify(docx));
-	check('convert: the preview runs no scripts', (await page.$eval('.dc-preview', (el) => el.getAttribute('sandbox'))) === '');
+	check('pandoc: a table of contents goes through Pandoc', ((await text('.dc-code')) ?? '').includes('id="TOC"'));
 
 	await visit(page, `/tools/doc-converter?docText=${encodeURIComponent('# A\\n\\nb')}&docFrom=latex&docTo=markdown`);
 	await type('\\section{Intro}\n\nSome \\textbf{bold}.');
 	await page.click('.dc-convert');
 	await converted();
-	await page.waitForFunction(() => document.querySelectorAll('.dc-ledger-row:not(.dc-ledger-row--ghost)').length > 0, { timeout: 30000 });
-	state = await ledger();
-	check('ledger: a LaTeX source fills from Pandoc after converting', state.rows.map((r) => r.mark).join(' ') === 'H \u00B6 B' && state.rows[0].source === '\\section{Intro}', JSON.stringify(state.rows));
+	check('pandoc: LaTeX to Markdown completes', ((await text('.dc-code')) ?? '').includes('**bold**'));
 }
 
 for (const width of [390, 1400, 2200]) {

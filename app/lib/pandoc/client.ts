@@ -26,6 +26,16 @@ export function getEngineState(): EngineState {
 	return engineState;
 }
 
+// a module worker that fails to load sends no message, only this event
+function workerError(event: Event): Error {
+	event.preventDefault();
+	const message = event instanceof ErrorEvent ? event.message : '';
+	// ∑CG: error shown under Convert when the Pandoc worker script fails to load or crashes
+	//   spec: one or two sentences, at most 120 chars, says the converter engine could not start and that reloading the page may help
+	//   sample: "The Pandoc engine could not start. Reload the page and try again."
+	return new Error(message || '∑CG');
+}
+
 function ensureWorker(): Worker {
 	if (worker) return worker;
 	const w = new Worker(new URL('./pandoc.worker.ts', import.meta.url), {
@@ -45,6 +55,13 @@ function ensureWorker(): Worker {
 		pending.delete(msg.id);
 		if (msg.ok) entry.resolve(msg.data);
 		else entry.reject(new Error(msg.error));
+	});
+	w.addEventListener('error', (event) => {
+		const error = workerError(event);
+		w.terminate();
+		if (worker === w) worker = null;
+		for (const entry of pending.values()) entry.reject(error);
+		pending.clear();
 	});
 	worker = w;
 	return w;
@@ -121,26 +138,32 @@ export function loadEngine(
 			const buffer = await fetchWasm(onProgress);
 			const w = ensureWorker();
 			await new Promise<void>((resolve, reject) => {
+				const done = () => {
+					w.removeEventListener(
+						'message',
+						onMessage,
+					);
+					w.removeEventListener('error', onError);
+				};
+				const onError = (event: Event) => {
+					done();
+					reject(workerError(event));
+				};
 				const onMessage = (event: MessageEvent) => {
 					const msg = event.data as {
 						type?: string;
 						error?: string;
 					};
 					if (msg?.type === 'ready') {
-						w.removeEventListener(
-							'message',
-							onMessage,
-						);
+						done();
 						resolve();
 					} else if (msg?.type === 'init-error') {
-						w.removeEventListener(
-							'message',
-							onMessage,
-						);
+						done();
 						reject(new Error(msg.error));
 					}
 				};
 				w.addEventListener('message', onMessage);
+				w.addEventListener('error', onError);
 				w.postMessage({ type: 'init', wasm: buffer }, [
 					buffer,
 				]);

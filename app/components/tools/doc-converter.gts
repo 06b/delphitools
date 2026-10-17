@@ -1,11 +1,10 @@
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
 import CanonBar from 'delphicanon/components/canon-bar';
 import CanonButton from 'delphicanon/components/canon-button';
-import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonCodeBlock from 'delphicanon/components/canon-code-block';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
@@ -17,17 +16,11 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import {
-	ledgerRows,
-	parseLocally,
-	parsePandocJson,
-	readsLocally,
-	type Block,
-} from 'delphitools-v2/components/tools/doc-converter/blocks';
 import FormatPick from 'delphitools-v2/components/tools/doc-converter/format-pick';
-import Ledger, {
-	ledgerHeight,
-} from 'delphitools-v2/components/tools/doc-converter/ledger';
+import {
+	convertLocally,
+	convertsLocally,
+} from 'delphitools-v2/components/tools/doc-converter/local';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
@@ -61,6 +54,10 @@ const PANDOC_URL = `https://github.com/jgm/pandoc/tree/${PANDOC_VERSION}`;
 const dash = '—';
 // the print styles leave the page edge to the printer
 const PREVIEW_CSS = '<style>body { padding: 24px 28px; }</style>';
+// ∑CG: footer note in the last settings panel, read right before the "Pandoc 3.9" link and its licence
+//   spec: at most 220 chars, plain and factual, says nothing leaves the browser and the Pandoc engine downloads only for conversions that need it; ends so the Pandoc link reads on from it
+//   sample: "Conversion runs entirely in your browser — your documents are never uploaded. On first use the ~16 MB Pandoc engine is fetched from a CDN and cached for the rest of your visit. Powered by"
+const ABOUT = '∑CG';
 /** iOS CanonCodeBlock(maxHeight: 360) */
 const CODE_HEIGHT = 360;
 
@@ -103,7 +100,7 @@ const editable = (target: EventTarget | null) =>
 	target instanceof HTMLElement &&
 	(target.isContentEditable || target.matches('input, textarea, select'));
 
-/** The port of DocConverterViewController on Pandoc: every web format, the ledger banner, the output as its preview. */
+/** The port of DocConverterViewController: Markdown and HTML convert in the browser, every other web format on Pandoc. */
 export default class DocConverterTool extends Component {
 	@tracked text = '';
 	/** a document Pandoc reads as a file (Word, ODT, EPUB), shown in place of the editor */
@@ -126,9 +123,6 @@ export default class DocConverterTool extends Component {
 	@tracked preview: string | null = null;
 	@tracked warnings: string[] = [];
 	@tracked error: string | null = null;
-	/** the source as Pandoc read it, for sources the ledger cannot read itself */
-	@tracked astBlocks: Block[] | null = null;
-	@tracked columns = 1;
 
 	#picker?: HTMLInputElement;
 	#run = 0;
@@ -217,6 +211,8 @@ export default class DocConverterTool extends Component {
 			return this.loading
 				? 'Downloading engine…'
 				: 'Converting…';
+		// a failed engine load clears on any change
+		if (this.engineState === 'error' && this.error) return 'Retry';
 		return `Convert to ${this.toFormat.label}`;
 	}
 
@@ -253,25 +249,6 @@ export default class DocConverterTool extends Component {
 
 	get standaloneApplies() {
 		return this.toFormat.kind === 'text';
-	}
-
-	@cached
-	get blocks(): Block[] {
-		if (this.file) return this.astBlocks ?? [];
-		return (
-			parseLocally(this.text, this.sourceId) ??
-			this.astBlocks ??
-			[]
-		);
-	}
-
-	@cached
-	get rows() {
-		return ledgerRows(this.blocks);
-	}
-
-	get ledgerHeight() {
-		return ledgerHeight(this.rows.length, this.columns);
 	}
 
 	get inputTiles() {
@@ -376,7 +353,6 @@ export default class DocConverterTool extends Component {
 		this.preview = null;
 		this.warnings = [];
 		this.error = null;
-		this.astBlocks = null;
 		this.converting = false;
 	}
 
@@ -484,8 +460,6 @@ export default class DocConverterTool extends Component {
 		this.#changed();
 	};
 
-	setColumns = (columns: number) => (this.columns = columns);
-
 	picker = modifier((element: HTMLInputElement) => {
 		this.#picker = element;
 	});
@@ -535,11 +509,18 @@ export default class DocConverterTool extends Component {
 		const run = this.#run;
 		const live = () => run === this.#run;
 		const file = this.file;
+		const text = this.text;
 		const toFormat = this.toFormat;
 		const fromId = this.sourceId;
 		const name = `${stem(file?.name ?? this.fileName)}.${toFormat.ext}`;
+		// the table of contents and numbering are Pandoc's
+		const local = (to: string) =>
+			!file &&
+			!this.toc &&
+			!this.numberSections &&
+			convertsLocally(fromId, to);
 
-		const stdin = file ? null : this.text;
+		const stdin = file ? null : text;
 		const files: Record<string, Blob | string> = file
 			? { [file.name]: file }
 			: {};
@@ -548,6 +529,17 @@ export default class DocConverterTool extends Component {
 		if (this.toc) base['table-of-contents'] = true;
 		if (this.numberSections) base['number-sections'] = true;
 		const rendered = async () => {
+			if (local('html'))
+				return {
+					warnings: [],
+					stderr: '',
+					html: convertLocally(
+						text,
+						fromId,
+						'html',
+						true,
+					),
+				};
 			const res = await convert(
 				{
 					...base,
@@ -559,14 +551,18 @@ export default class DocConverterTool extends Component {
 				files,
 			);
 			return {
-				res,
+				warnings: extractWarnings(res),
+				stderr: res.stderr,
 				html: res.stdout?.trim()
 					? injectPrintStyles(res.stdout)
 					: null,
 			};
 		};
 
-		if (getEngineState() !== 'ready') {
+		const engine = !local(
+			toFormat.kind === 'pdf' ? 'html' : this.to,
+		);
+		if (engine && getEngineState() !== 'ready') {
 			this.engineState = 'loading';
 			try {
 				await loadEngine((p) => {
@@ -590,9 +586,10 @@ export default class DocConverterTool extends Component {
 		this.converting = true;
 		try {
 			if (toFormat.kind === 'pdf') {
-				const { res, html } = await rendered();
+				const { warnings, stderr, html } =
+					await rendered();
 				if (!live()) return;
-				this.warnings = extractWarnings(res);
+				this.warnings = warnings;
 				if (html) {
 					this.result = {
 						kind: 'pdf',
@@ -603,7 +600,7 @@ export default class DocConverterTool extends Component {
 					printHtmlInIframe(html);
 				} else
 					this.error =
-						res.stderr?.trim() ||
+						stderr?.trim() ||
 						'Conversion produced no output.';
 			} else if (toFormat.kind === 'binary') {
 				const outName = `output.${toFormat.ext}`;
@@ -629,6 +626,17 @@ export default class DocConverterTool extends Component {
 					this.error =
 						res.stderr?.trim() ||
 						'Conversion produced no output.';
+			} else if (local(this.to)) {
+				this.result = {
+					kind: 'text',
+					text: convertLocally(
+						text,
+						fromId,
+						this.to,
+						this.standalone,
+					),
+					name,
+				};
 			} else {
 				const options: Record<string, unknown> = {
 					...base,
@@ -661,17 +669,6 @@ export default class DocConverterTool extends Component {
 				if (live() && html)
 					this.preview = html + PREVIEW_CSS;
 			}
-			if (file || !readsLocally(fromId)) {
-				const ast = await convert(
-					{ ...base, to: 'json' },
-					stdin,
-					files,
-				);
-				if (live() && ast.stdout)
-					this.astBlocks = parsePandocJson(
-						ast.stdout,
-					);
-			}
 		} catch (e) {
 			if (live())
 				this.error =
@@ -701,7 +698,6 @@ export default class DocConverterTool extends Component {
 		<CanonSplit
 			class="doc-converter"
 			@halves={{true}}
-			@collapsesTo={{64}}
 			{{filePaste this.selectFile}}
 			{{this.pasteText}}
 			{{on "dragenter" this.dragEnter}}
@@ -709,19 +705,6 @@ export default class DocConverterTool extends Component {
 			{{on "dragleave" this.dragLeave}}
 			{{on "drop" this.drop}}
 		>
-			<:banner>
-				<CanonCanvas @height={{this.ledgerHeight}}>
-					<Ledger
-						@rows={{this.rows}}
-						@from={{this.sourceId}}
-						@to={{this.to}}
-						@fromLabel={{this.sourceLabel}}
-						@toLabel={{this.toFormat.label}}
-						@columns={{this.columns}}
-						@onColumns={{this.setColumns}}
-					/>
-				</CanonCanvas>
-			</:banner>
 			<:sidebar>
 				<CanonRows class="dc-source" @framed={{true}}>
 					<CanonHeading @text="Source" />
@@ -926,12 +909,7 @@ export default class DocConverterTool extends Component {
 				</CanonRows>
 				<CanonRows class="dc-about" @framed={{true}}>
 					<p class="dc-about-text">
-						Conversion runs entirely in your
-						browser — your documents are
-						never uploaded. On first use the
-						~16 MB Pandoc engine is fetched
-						from a CDN and cached for the
-						rest of your visit. Powered by
+						{{ABOUT}}
 						<a
 							href={{PANDOC_URL}}
 							target="_blank"
