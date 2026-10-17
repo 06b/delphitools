@@ -100,10 +100,10 @@ await client.send('Browser.setDownloadBehavior', {
 });
 
 await visit(page, '/tools/imposer');
-await (await page.$('.dt-imp-drop input[type="file"]')).uploadFile(fixture);
+await (await page.$('.imposer input[type="file"]')).uploadFile(fixture);
 
 const loaded = await page
-	.waitForFunction(() => !!document.querySelector('.dt-imp-file-name'), {
+	.waitForFunction(() => !!document.querySelector('.imp-source'), {
 		timeout: 30000,
 	})
 	.then(() => true)
@@ -118,9 +118,9 @@ check(
 if (loaded) {
 	await sleep(1500);
 	const shape = await page.evaluate(() => ({
-		canvases: document.querySelectorAll('canvas').length,
+		canvases: document.querySelectorAll('.imp-face').length,
 		name: document
-			.querySelector('.dt-imp-file-name')
+			.querySelector('.imp-source .canon-row-title')
 			?.textContent?.trim(),
 	}));
 	check(

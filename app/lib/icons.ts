@@ -134,7 +134,6 @@ import iHighlighter from 'lucide-static/icons/highlighter.svg?raw';
 import iHome from 'lucide-static/icons/home.svg?raw';
 import iImage from 'lucide-static/icons/image.svg?raw';
 import iImagePlus from 'lucide-static/icons/image-plus.svg?raw';
-import iImageUp from 'lucide-static/icons/image-up.svg?raw';
 import iInfo from 'lucide-static/icons/info.svg?raw';
 import iItalic from 'lucide-static/icons/italic.svg?raw';
 import iKeyRound from 'lucide-static/icons/key-round.svg?raw';
@@ -183,6 +182,7 @@ import iPinOff from 'lucide-static/icons/pin-off.svg?raw';
 import iPipette from 'lucide-static/icons/pipette.svg?raw';
 import iPlay from 'lucide-static/icons/play.svg?raw';
 import iPlus from 'lucide-static/icons/plus.svg?raw';
+import iPointer from 'lucide-static/icons/pointer.svg?raw';
 import iPrinter from 'lucide-static/icons/printer.svg?raw';
 import iQrCode from 'lucide-static/icons/qr-code.svg?raw';
 import iRadio from 'lucide-static/icons/radio.svg?raw';
@@ -398,7 +398,6 @@ export const icons: Record<string, string> = {
 	home: iHome,
 	image: iImage,
 	'image-plus': iImagePlus,
-	'image-up': iImageUp,
 	info: iInfo,
 	italic: iItalic,
 	'key-round': iKeyRound,
@@ -447,6 +446,7 @@ export const icons: Record<string, string> = {
 	pipette: iPipette,
 	play: iPlay,
 	plus: iPlus,
+	pointer: iPointer,
 	printer: iPrinter,
 	'qr-code': iQrCode,
 	radio: iRadio,

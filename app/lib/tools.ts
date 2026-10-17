@@ -882,6 +882,7 @@ export const toolCategories: ToolCategory[] = [
 					'Impose PDF pages for booklet, saddle-stitch, and N-up printing',
 				icon: 'layers',
 				href: '/tools/imposer',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},
