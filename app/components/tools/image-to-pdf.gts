@@ -176,7 +176,7 @@ function index(query: URLSearchParams, key: string, count: number) {
 
 /** The port of ImageToPDFViewController: images into one PDF, or a PDF's pages into PNGs. */
 export default class ImageToPdf extends Component {
-	drop = new Drop(ACCEPT, (file) => this.take([file]));
+	drop = new Drop(ACCEPT, (files) => this.take(files), true);
 
 	@tracked toPdf = true;
 	@tracked items: Item[] = [];
@@ -340,18 +340,6 @@ export default class ImageToPdf extends Component {
 	};
 
 	paste = (file: File) => this.take([file]);
-
-	dropped = (event: DragEvent) => {
-		this.drop.over = false;
-		// strip handled drop
-		if (event.defaultPrevented) return;
-		const files = [...(event.dataTransfer?.files ?? [])].filter(
-			(file) => isImage(file) || isPdf(file),
-		);
-		if (!files.length) return;
-		event.preventDefault();
-		this.take(files);
-	};
 
 	pickDirection = (index: number) => {
 		this.toPdf = index === 0;
@@ -634,7 +622,7 @@ export default class ImageToPdf extends Component {
 			{{filePaste this.paste accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
-			{{on "drop" this.dropped}}
+			{{on "drop" this.drop.drop}}
 		>
 			<:banner>
 				<CanonCanvas

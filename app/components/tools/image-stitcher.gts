@@ -29,6 +29,7 @@ import { reducedMotion, springEasing } from 'delphicanon/lib/motion';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
+import { clipboardImages } from 'delphitools-v2/lib/clipboard-images';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
@@ -120,30 +121,6 @@ function loadImage(file: File): Promise<Src> {
 	});
 }
 
-async function clipboardImages(): Promise<File[]> {
-	const files: File[] = [];
-	try {
-		for (const item of await navigator.clipboard.read()) {
-			const type = item.types.find((t) =>
-				t.startsWith('image/'),
-			);
-			if (type)
-				files.push(
-					new File(
-						[await item.getType(type)],
-						'pasted',
-						{
-							type,
-						},
-					),
-				);
-		}
-	} catch {
-		// a denied clipboard pastes nothing
-	}
-	return files;
-}
-
 // ?stitchSample: drawn images in place of the iOS -stitchSamples folder
 function drawnSamples(): Promise<File[]> {
 	const specs: [string, number, number, string][] = [
@@ -213,7 +190,11 @@ export default class ImageStitcher extends Component {
 	@tracked exporting = false;
 	@tracked springs = false;
 
-	drop = new Drop('image/*', () => undefined);
+	drop = new Drop(
+		'image/*',
+		(files) => void this.add(files, this.defaultTarget),
+		true,
+	);
 	#input?: HTMLInputElement;
 	#pending: Target = { kind: 'first' };
 	#timer?: number;
@@ -450,18 +431,6 @@ export default class ImageStitcher extends Component {
 
 	droppedInZone = (files: File[]) =>
 		void this.add(files, this.defaultTarget);
-
-	// the drop zone, the strip and the picture take their own drops
-	dropped = (event: DragEvent) => {
-		this.drop.over = false;
-		if (event.defaultPrevented) return;
-		const files = [...(event.dataTransfer?.files ?? [])].filter(
-			(f) => f.type.startsWith('image/'),
-		);
-		if (!files.length) return;
-		event.preventDefault();
-		void this.add(files, this.defaultTarget);
-	};
 
 	dropInPicture = (target: Target, files: File[]) =>
 		void this.add(files, target);
@@ -849,7 +818,7 @@ export default class ImageStitcher extends Component {
 			{{this.escape}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
-			{{on "drop" this.dropped}}
+			{{on "drop" this.drop.drop}}
 		>
 			<:sidebar>
 				<CanonCanvas

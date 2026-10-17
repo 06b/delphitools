@@ -24,12 +24,14 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { clipboardImages } from 'delphitools-v2/lib/clipboard-images';
 import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import Drop from 'delphitools-v2/components/tools/media/drop';
 import Picture from 'delphitools-v2/components/tools/image-converter/picture';
 import {
 	BIT_DEPTHS,
@@ -174,7 +176,7 @@ export default class ImageConverter extends Component {
 	@tracked busy = false;
 	@tracked zipping = false;
 	@tracked loadError = '';
-	@tracked over = false;
+	drop = new Drop(ACCEPT, (files) => void this.add(files), true);
 
 	#queued = false;
 	#bitmap?: { source: Source; image: ImageBitmap };
@@ -324,55 +326,7 @@ export default class ImageConverter extends Component {
 
 	pasted = (file: File) => void this.add([file]);
 
-	pasteImages = async () => {
-		const files: File[] = [];
-		try {
-			for (const item of await navigator.clipboard.read()) {
-				const type = item.types.find((t) =>
-					t.startsWith('image/'),
-				);
-				if (type)
-					files.push(
-						new File(
-							[
-								await item.getType(
-									type,
-								),
-							],
-							'pasted',
-							{ type },
-						),
-					);
-			}
-		} catch {
-			return;
-		}
-		await this.add(files);
-	};
-
-	dragOver = (event: DragEvent) => {
-		if (!event.dataTransfer?.types.includes('Files')) return;
-		event.preventDefault();
-		this.over = true;
-	};
-
-	dragLeave = (event: DragEvent) => {
-		const root = event.currentTarget as Element;
-		if (!root.contains(event.relatedTarget as Node | null))
-			this.over = false;
-	};
-
-	// the drop zone takes its own drops
-	drop = (event: DragEvent) => {
-		this.over = false;
-		if (event.defaultPrevented) return;
-		const files = [...(event.dataTransfer?.files ?? [])].filter(
-			(f) => matchesAccept(f, ACCEPT),
-		);
-		if (!files.length) return;
-		event.preventDefault();
-		void this.add(files);
-	};
+	pasteImages = async () => this.add(await clipboardImages());
 
 	add = async (files: File[]) => {
 		const images = files.filter((f) => matchesAccept(f, ACCEPT));
@@ -641,9 +595,9 @@ export default class ImageConverter extends Component {
 			@halves={{true}}
 			@collapsesTo={{200}}
 			{{filePaste this.pasted accept=ACCEPT}}
-			{{on "dragover" this.dragOver}}
-			{{on "dragleave" this.dragLeave}}
-			{{on "drop" this.drop}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
 			<:sidebar>
 				<CanonCanvas
@@ -660,7 +614,7 @@ export default class ImageConverter extends Component {
 						@working={{this.busy}}
 						@failed={{this.failed}}
 						@lamps={{this.lamps}}
-						@over={{this.over}}
+						@over={{this.drop.over}}
 						@onChoose={{this.choose}}
 					/>
 				</CanonCanvas>

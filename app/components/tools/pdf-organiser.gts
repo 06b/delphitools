@@ -86,7 +86,7 @@ const pagesLabel = (n: number) => (n === 1 ? '1 page' : `${n} pages`);
 
 /** The port of PDFOrganiserViewController, on the web tool's pdf-lib build. */
 export default class PdfOrganiser extends Component {
-	drop = new Drop(ACCEPT, (file) => this.add([file]));
+	drop = new Drop(ACCEPT, (files) => this.add(files), true);
 
 	@tracked sources: Source[] = [];
 	@tracked entries: Entry[] = [];
@@ -221,16 +221,6 @@ export default class PdfOrganiser extends Component {
 	};
 
 	paste = (file: File) => this.add([file]);
-
-	// strip handles inner drops
-	dropped = (event: DragEvent) => {
-		this.drop.over = false;
-		if (event.defaultPrevented) return;
-		const files = [...(event.dataTransfer?.files ?? [])];
-		if (!files.some((file) => matchesAccept(file, ACCEPT))) return;
-		event.preventDefault();
-		this.add(files);
-	};
 
 	async #read(files: File[], at: number) {
 		let insertAt = at;
@@ -513,7 +503,7 @@ export default class PdfOrganiser extends Component {
 			{{filePaste this.paste accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
-			{{on "drop" this.dropped}}
+			{{on "drop" this.drop.drop}}
 		>
 			<:banner>
 				<CanonCanvas
