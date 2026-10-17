@@ -1053,6 +1053,7 @@ export const toolCategories: ToolCategory[] = [
 					'Text editor with manipulation tools',
 				icon: 'pen-line',
 				href: '/tools/markdown-writer',
+				canon: true,
 				produces: ['text/plain'],
 				accepts: TEXT_ACCEPT,
 			},

@@ -79,6 +79,7 @@ import iContrast from 'lucide-static/icons/contrast.svg?raw';
 import iCookingPot from 'lucide-static/icons/cooking-pot.svg?raw';
 import iCopy from 'lucide-static/icons/copy.svg?raw';
 import iCopyPlus from 'lucide-static/icons/copy-plus.svg?raw';
+import iCornerDownRight from 'lucide-static/icons/corner-down-right.svg?raw';
 import iCornerLeftUp from 'lucide-static/icons/corner-left-up.svg?raw';
 import iCrop from 'lucide-static/icons/crop.svg?raw';
 import iCrosshair from 'lucide-static/icons/crosshair.svg?raw';
@@ -199,7 +200,6 @@ import iScale from 'lucide-static/icons/scale.svg?raw';
 import iScaling from 'lucide-static/icons/scaling.svg?raw';
 import iScan from 'lucide-static/icons/scan.svg?raw';
 import iScanLine from 'lucide-static/icons/scan-line.svg?raw';
-import iScanSearch from 'lucide-static/icons/scan-search.svg?raw';
 import iScissors from 'lucide-static/icons/scissors.svg?raw';
 import iScissorsLineDashed from 'lucide-static/icons/scissors-line-dashed.svg?raw';
 import iSearch from 'lucide-static/icons/search.svg?raw';
@@ -247,7 +247,6 @@ import iTriangleAlert from 'lucide-static/icons/triangle-alert.svg?raw';
 import iType from 'lucide-static/icons/type.svg?raw';
 import iUndo2 from 'lucide-static/icons/undo-2.svg?raw';
 import iUngroup from 'lucide-static/icons/ungroup.svg?raw';
-import iUnlock from 'lucide-static/icons/unlock.svg?raw';
 import iUpload from 'lucide-static/icons/upload.svg?raw';
 import iVariable from 'lucide-static/icons/variable.svg?raw';
 import iVectorSquare from 'lucide-static/icons/vector-square.svg?raw';
@@ -343,6 +342,7 @@ export const icons: Record<string, string> = {
 	'cooking-pot': iCookingPot,
 	copy: iCopy,
 	'copy-plus': iCopyPlus,
+	'corner-down-right': iCornerDownRight,
 	'corner-left-up': iCornerLeftUp,
 	crop: iCrop,
 	crosshair: iCrosshair,
@@ -463,7 +463,6 @@ export const icons: Record<string, string> = {
 	scaling: iScaling,
 	scan: iScan,
 	'scan-line': iScanLine,
-	'scan-search': iScanSearch,
 	scissors: iScissors,
 	'scissors-line-dashed': iScissorsLineDashed,
 	search: iSearch,
@@ -511,7 +510,6 @@ export const icons: Record<string, string> = {
 	type: iType,
 	'undo-2': iUndo2,
 	ungroup: iUngroup,
-	unlock: iUnlock,
 	upload: iUpload,
 	variable: iVariable,
 	'vector-square': iVectorSquare,

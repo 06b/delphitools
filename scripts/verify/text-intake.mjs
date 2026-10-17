@@ -21,15 +21,15 @@ const dropText = (selector) =>
 
 await visit(page, '/tools/markdown-writer');
 await page.evaluate(() => {
-	const area = document.querySelector('.dt-md textarea');
+	const area = document.querySelector('.mw-source');
 	area.value = 'an old draft';
 	area.dispatchEvent(new Event('input', { bubbles: true }));
 });
-await dropText('.dt-md');
+await dropText('.markdown-writer');
 await sleep(300);
 check(
 	'Markdown Writer replaces its draft with the dropped file',
-	(await page.$eval('.dt-md textarea', (a) => a.value)) === MD,
+	(await page.$eval('.mw-source', (a) => a.value)) === MD,
 );
 
 await visit(page, '/tools/text-editor');
