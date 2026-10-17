@@ -661,7 +661,7 @@ export default class PdfRotateCrop extends Component {
 	<template>
 		<CanonSplit
 			class="pdf-rotate-crop"
-			@mainLeadsStacked={{true}}
+			@mainLeadsStacked={{this.loaded}}
 			{{filePaste this.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}

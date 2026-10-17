@@ -503,7 +503,7 @@ export default class PdfPageNumberer extends Component {
 	<template>
 		<CanonSplit
 			class="pdf-page-numberer"
-			@mainLeadsStacked={{true}}
+			@mainLeadsStacked={{this.loaded}}
 			{{filePaste this.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}

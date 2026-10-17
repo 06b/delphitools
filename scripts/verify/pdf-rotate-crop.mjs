@@ -437,4 +437,26 @@ check(
 	`${s.title} ${s.paper} ${s.margins}`,
 );
 
+const order = () =>
+	page.evaluate(() => {
+		const top = (s) => document.querySelector(s)?.getBoundingClientRect().top ?? NaN;
+		return {
+			source: top('.prc-slot, .prc-source'),
+			preview: top('.prc-canvas'),
+			fold: window.innerHeight,
+		};
+	});
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/pdf-rotate-crop');
+let o = await order();
+check(
+	'phone, no file: the Source slot comes before the preview, on screen',
+	o.source < o.preview && o.source >= 0 && o.source < o.fold,
+	JSON.stringify(o),
+);
+await visit(page, '/tools/pdf-rotate-crop?rcSample');
+await page.waitForSelector('.prc-source', { timeout: 15000 });
+o = await order();
+check('phone, loaded: the preview leads again', o.preview < o.source, JSON.stringify(o));
+
 await finish(browser);

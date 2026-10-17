@@ -373,5 +373,24 @@ check(
 	'phone: nothing scrolls sideways',
 	await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
 );
+const order = () =>
+	page.evaluate(() => {
+		const top = (s) => document.querySelector(s)?.getBoundingClientRect().top ?? NaN;
+		return {
+			source: top('.ppn-slot, .ppn-source'),
+			preview: top('.ppn-preview'),
+			fold: window.innerHeight,
+		};
+	});
+let o = await order();
+check(
+	'phone, no file: the Source slot comes before the preview, on screen',
+	o.source < o.preview && o.source >= 0 && o.source < o.fold,
+	JSON.stringify(o),
+);
+await visit(page, '/tools/pdf-page-numberer?ppnSample=2');
+await page.waitForSelector('.ppn-source', { timeout: 15000 });
+o = await order();
+check('phone, loaded: the preview leads again', o.preview < o.source, JSON.stringify(o));
 
 await finish(browser);
