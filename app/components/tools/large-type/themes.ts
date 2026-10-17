@@ -1,3 +1,5 @@
+import type { Rgb } from 'delphicanon/lib/colour';
+
 /** Text and background for the display, with the colours that set digits and symbols apart (LargeTypeTheme). */
 export interface Theme {
 	name: string;
@@ -56,4 +58,29 @@ export const themes: Theme[] = [
 /** The theme as custom properties for a style attribute. */
 export function themeStyle(theme: Theme): string {
 	return `--lt-text: ${theme.text}; --lt-background: ${theme.background}; --lt-digit-colour: ${theme.digit}; --lt-special-colour: ${theme.special}`;
+}
+
+let pixel: CanvasRenderingContext2D | null | undefined;
+
+/** A theme colour, CSS variables included, as 0...1 sRGB read off a canvas pixel. */
+export function resolveColour(css: string): Rgb {
+	const probe = document.createElement('i');
+	probe.style.color = css;
+	document.body.append(probe);
+	const computed = getComputedStyle(probe).color;
+	probe.remove();
+	pixel ??= document
+		.createElement('canvas')
+		.getContext('2d', { willReadFrequently: true });
+	if (!pixel) return [0, 0, 0];
+	pixel.clearRect(0, 0, 1, 1);
+	pixel.fillStyle = computed;
+	pixel.fillRect(0, 0, 1, 1);
+	const [red = 0, green = 0, blue = 0] = pixel.getImageData(
+		0,
+		0,
+		1,
+		1,
+	).data;
+	return [red / 255, green / 255, blue / 255];
 }

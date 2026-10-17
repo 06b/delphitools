@@ -6,6 +6,7 @@ import {
 	frames,
 	marqueeSize,
 	sizes,
+	wordCap,
 	wrap,
 } from 'delphitools-v2/components/tools/large-type/layout';
 
@@ -42,6 +43,81 @@ module('Unit | Tool | large-type', function () {
 		assert.deepEqual(wrap(Array.from('abcdefg'), 4), [4, 3]);
 		assert.deepEqual(wrap(Array.from('a bcdefg'), 4), [4, 4]);
 		assert.deepEqual(wrap(Array.from('abcd ef'), 4), [4, 3]);
+	});
+
+	test('the longest word always fits on one line', function (assert) {
+		const texts = [
+			'Massachusetts',
+			'hello Massachusetts',
+			'Supercalifragilisticexpialidocious',
+			'Pneumonoultramicroscopicsilicovolcanoconiosis',
+			'a bb ccc dddd eeeee ffffff ggggggg',
+			'the quick brown fox jumps over the lazy dog',
+		];
+		for (const text of texts)
+			for (const width of [302, 520, 1100])
+				for (const height of [180, 600])
+					for (const widest of [0.6, 1]) {
+						const glyphs = Array.from(text);
+						const size = fit(
+							glyphs,
+							widest,
+							width,
+							height,
+							true,
+						);
+						const placed = frames(
+							glyphs,
+							size,
+							widest,
+							width,
+							true,
+						);
+						const words =
+							text.matchAll(/\S+/g);
+						const whole = [...words].every(
+							(word) =>
+								placed[
+									word
+										.index
+								]?.y ===
+								placed[
+									word.index +
+										word[0]
+											.length -
+										1
+								]?.y,
+						);
+						assert.true(
+							whole,
+							`${text} at ${width} x ${height}, ${widest}`,
+						);
+					}
+	});
+
+	test('below the smallest size the cell padding shrinks', function (assert) {
+		assert.deepEqual(cell(28, 0.5, false), {
+			width: 26,
+			height: 46,
+		});
+		assert.deepEqual(cell(14, 0.5, false), {
+			width: 13,
+			height: 23,
+		});
+	});
+
+	test('the word cap', function (assert) {
+		assert.strictEqual(wordCap([], 0.6, 300), Infinity);
+		assert.strictEqual(
+			wordCap(Array.from('ab abcd'), 0.5, 200),
+			76,
+			'four cells of 50 px, 12 px of padding',
+		);
+		assert.strictEqual(
+			wordCap(Array<string>(400).fill('x'), 0.6, 100),
+			Infinity,
+			'a word no size holds is left to break',
+		);
 	});
 
 	test('the marquee holds three characters at least', function (assert) {

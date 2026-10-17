@@ -3,10 +3,12 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
+import { service } from '@ember/service';
 import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonRow from 'delphicanon/components/canon-row';
@@ -16,7 +18,9 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import press from 'delphicanon/modifiers/canon-press';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import { clamp, formatDecimal, parseDecimal } from 'delphicanon/lib/number';
+import type ThemeService from 'delphitools-v2/services/theme';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import Display from 'delphitools-v2/components/tools/large-type/display';
 import {
@@ -26,9 +30,11 @@ import {
 	padding,
 	sizes,
 	spaceGlyph,
+	wordCap,
 	type Size,
 } from 'delphitools-v2/components/tools/large-type/layout';
 import {
+	resolveColour,
 	themeStyle,
 	themes,
 } from 'delphitools-v2/components/tools/large-type/themes';
@@ -83,10 +89,13 @@ export default class LargeTypeTool extends Component {
 	@tracked speed = 1;
 	@tracked box: Size = { width: 0, height: 0 };
 	@tracked fontsReady = false;
+	@tracked customText?: Rgb;
+	@tracked customBackground?: Rgb;
+	@service('theme') declare mode: ThemeService;
 	#alive = true;
 	#display?: HTMLElement;
 
-	// ?ltText= ?ltSize=<px> ?ltPositions=no ?ltColours=no ?ltTheme=<0-4> ?ltMarquee=yes ?ltSpeed=<multiple>: the iOS launch flags
+	// ?ltText= ?ltSize=<px> ?ltPositions=no ?ltColours=no ?ltTheme=<0-4> ?ltMarquee=yes ?ltSpeed=<multiple>: the iOS launch flags; ?ltFore=<hex> ?ltBack=<hex> are web only
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
@@ -105,6 +114,8 @@ export default class LargeTypeTool extends Component {
 				0,
 				themes.length - 1,
 			);
+		this.customText = parseHex(query.get('ltFore') ?? '');
+		this.customBackground = parseHex(query.get('ltBack') ?? '');
 		this.marquee = query.get('ltMarquee') === 'yes';
 		const speed = parseDecimal(query.get('ltSpeed') ?? '');
 		if (speed !== undefined)
@@ -156,15 +167,21 @@ export default class LargeTypeTool extends Component {
 				this.advance,
 				manual,
 			);
-		return (
-			manual ??
-			fit(
-				this.glyphs,
-				this.widest,
-				width - padding * 2,
-				height - padding * 2,
-				this.positions,
-			)
+		if (manual !== undefined)
+			return Math.min(
+				manual,
+				wordCap(
+					this.glyphs,
+					this.widest,
+					width - padding * 2,
+				),
+			);
+		return fit(
+			this.glyphs,
+			this.widest,
+			width - padding * 2,
+			height - padding * 2,
+			this.positions,
 		);
 	}
 
@@ -173,7 +190,27 @@ export default class LargeTypeTool extends Component {
 	}
 
 	get themeStyle() {
-		return themeStyle(this.theme);
+		const { customText, customBackground } = this;
+		return themeStyle({
+			...this.theme,
+			...(customText && { text: hex(customText) }),
+			...(customBackground && {
+				background: hex(customBackground),
+			}),
+		});
+	}
+
+	get textRgb(): Rgb {
+		void this.mode.dark;
+		return this.customText ?? resolveColour(this.theme.text);
+	}
+
+	get backgroundRgb(): Rgb {
+		void this.mode.dark;
+		return (
+			this.customBackground ??
+			resolveColour(this.theme.background)
+		);
 	}
 
 	get swatches() {
@@ -197,7 +234,15 @@ export default class LargeTypeTool extends Component {
 
 	setBox = (box: Size) => (this.box = box);
 
-	pickTheme = (index: number) => (this.themeIndex = index);
+	pickTheme = (index: number) => {
+		this.themeIndex = index;
+		this.customText = undefined;
+		this.customBackground = undefined;
+	};
+
+	setTextColour = (colour: Rgb) => (this.customText = colour);
+
+	setBackgroundColour = (colour: Rgb) => (this.customBackground = colour);
 
 	setMarquee = (on: boolean) => (this.marquee = on);
 
@@ -302,6 +347,18 @@ export default class LargeTypeTool extends Component {
 								>{{swatch.name}}</span>
 							</button>
 						{{/each}}
+					</CanonGrid>
+					<CanonGrid @columns={{2}}>
+						<CanonColourWell
+							@label="Text"
+							@colour={{this.textRgb}}
+							@onChange={{this.setTextColour}}
+						/>
+						<CanonColourWell
+							@label="Background"
+							@colour={{this.backgroundRgb}}
+							@onChange={{this.setBackgroundColour}}
+						/>
 					</CanonGrid>
 					<CanonHeading @text="Display" />
 					<CanonRow @title="Marquee" as |titleId|>

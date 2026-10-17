@@ -186,7 +186,77 @@ await visit(page, '/tools/large-type?ltText=12%20ab&ltTheme=4&ltPositions=no&ltS
 s = await state();
 check('launch flags', s.cells.join('') === '12␣ab' && s.size === 60 && (await page.$$('.lt-position')).length === 0, `${s.cells} ${s.size}`);
 
+const stageColours = () =>
+	page.$eval('.lt-stage', (stage) => {
+		const style = getComputedStyle(stage);
+		return `${style.color} on ${style.backgroundColor}`;
+	});
+const wellHex = (label) =>
+	page.$eval(
+		`.large-type .canon-colour-well input[type="text"][aria-label="${label}"]`,
+		(input) => input.value,
+	);
+await visit(page, '/tools/large-type?ltText=Hi');
+const typeHex = (label, digits) =>
+	page.$eval(
+		`.large-type .canon-colour-well input[type="text"][aria-label="${label}"]`,
+		(field, text) => {
+			field.value = text;
+			field.dispatchEvent(new Event('change', { bubbles: true }));
+		},
+		digits,
+	);
+await typeHex('Background', '112233');
+await typeHex('Text', 'ffcc00');
+await sleep(50);
+check(
+	'the colour wells set the display colours',
+	(await stageColours()) === 'rgb(255, 204, 0) on rgb(17, 34, 51)',
+	await stageColours(),
+);
+await page.click('.lt-swatch[aria-label="Paper"]');
+await sleep(50);
+check(
+	'a theme resets the wells to its colours',
+	(await wellHex('Background')) === 'FFFFFF' &&
+		(await stageColours()).endsWith('on rgb(255, 255, 255)'),
+	`${await wellHex('Background')} ${await stageColours()}`,
+);
+await visit(page, '/tools/large-type?ltText=Hi&ltFore=00ff00&ltBack=000000');
+check(
+	'?ltFore and ?ltBack',
+	(await stageColours()) === 'rgb(0, 255, 0) on rgb(0, 0, 0)',
+	await stageColours(),
+);
+
 await page.setViewport({ width: 390, height: 844 });
+// a word never breaks across rows, at the fitted size or a typed one
+const wordsWhole = () =>
+	page.evaluate(() => {
+		const tops = [...document.querySelectorAll('.lt-cell')].map((c) =>
+			Math.round(c.getBoundingClientRect().top),
+		);
+		const glyphs = [...document.querySelectorAll('.lt-cell .lt-glyph')].map(
+			(g) => g.textContent,
+		);
+		let start = 0;
+		for (let i = 0; i <= glyphs.length; i++)
+			if (i === glyphs.length || glyphs[i] === '␣') {
+				if (new Set(tops.slice(start, i)).size > 1) return false;
+				start = i + 1;
+			}
+		return glyphs.length > 0;
+	});
+for (const [text, size] of [
+	['Supercalifragilisticexpialidocious', ''],
+	['hello Massachusetts and Mississippi', ''],
+	['hello Massachusetts', '&ltSize=200'],
+]) {
+	await visit(page, `/tools/large-type?ltText=${encodeURIComponent(text)}${size}`);
+	await sleep(600);
+	check(`no word breaks on a phone: ${text}${size}`, await wordsWhole());
+}
+
 await visit(page, '/tools/large-type?ltText=Hello');
 check(
 	'no horizontal scroll on a phone',

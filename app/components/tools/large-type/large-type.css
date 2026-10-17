@@ -32,7 +32,9 @@
 	flex-direction: column;
 	align-items: center;
 	box-sizing: border-box;
-	padding: 6px;
+
+	/* half of cellPad in layout.ts: 28 is sizes.min */
+	padding: min(6px, var(--lt-size) * 6 / 28);
 	transition:
 		translate 500ms var(--lt-spring),
 		inline-size 500ms var(--lt-spring),

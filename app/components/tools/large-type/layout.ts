@@ -33,12 +33,17 @@ export interface Frame {
 	height: number;
 }
 
+/** Padding around a glyph: 12 px, shrinking with the size below the smallest slider size. */
+export function cellPad(size: number): number {
+	return Math.min(cellPadding, (size * cellPadding) / sizes.min);
+}
+
 export function cell(size: number, widest: number, positions: boolean): Size {
+	const pad = cellPad(size);
 	return {
-		width: Math.ceil(size * widest) + cellPadding,
+		width: Math.ceil(size * widest + pad),
 		height:
-			Math.ceil(size * lineHeight) +
-			cellPadding +
+			Math.ceil(size * lineHeight + pad) +
 			(positions ? positionHeight : 0),
 	};
 }
@@ -72,7 +77,38 @@ export function wrap(glyphs: string[], perRow: number): number[] {
 	return rows;
 }
 
-/** Largest size in steps at which every glyph fits without scrolling; the smallest size otherwise. */
+/** Glyphs in the longest run without a space. */
+export function longestWord(glyphs: string[]): number {
+	let longest = 0;
+	let run = 0;
+	for (const ch of glyphs) {
+		run = isSpace(ch) ? 0 : run + 1;
+		longest = Math.max(longest, run);
+	}
+	return longest;
+}
+
+/**
+ * Largest whole size at which the longest word fits on one row of `width`,
+ * so no word breaks; Infinity when no size of 1 px or more does.
+ */
+export function wordCap(
+	glyphs: string[],
+	widest: number,
+	width: number,
+): number {
+	const longest = longestWord(glyphs);
+	if (!longest || width <= 0) return Infinity;
+	for (let size = sizes.max; size >= 1; size -= 1)
+		if (width / cell(size, widest, false).width >= longest)
+			return size;
+	return Infinity;
+}
+
+/**
+ * Largest size in steps at which every glyph fits without scrolling, the
+ * smallest size otherwise; never larger than the word cap.
+ */
 export function fit(
 	glyphs: string[],
 	widest: number,
@@ -81,6 +117,7 @@ export function fit(
 	positions: boolean,
 ): number {
 	if (!glyphs.length || width <= 0 || height <= 0) return sizes.start;
+	const cap = wordCap(glyphs, widest, width);
 	for (let size = sizes.max; size > sizes.min; size -= sizes.step) {
 		const box = cell(size, widest, positions);
 		const rows = Math.floor(height / box.height);
@@ -90,9 +127,9 @@ export function fit(
 			perRow > 0 &&
 			wrap(glyphs, perRow).length <= rows
 		)
-			return size;
+			return Math.min(size, cap);
 	}
-	return sizes.min;
+	return Math.min(sizes.min, cap);
 }
 
 /** Frames from a top and left of zero, rows centred in `width`. */
