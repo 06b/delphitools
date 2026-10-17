@@ -124,7 +124,7 @@ module('Unit | Tool | image-tracer', function () {
 		);
 		assert.strictEqual(opts.ltres, 0.01);
 		assert.strictEqual(opts.qtres, 0.01);
-		assert.strictEqual(opts.pal, 1);
+		assert.strictEqual((opts as Record<string, unknown>).pal, 1);
 		assert.strictEqual(smoothing(0), '0.01');
 		assert.strictEqual(smoothing(2.5), '2.5');
 	});

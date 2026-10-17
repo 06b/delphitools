@@ -3561,65 +3561,6 @@ body {
 	color: var(--muted-foreground);
 }
 
-// vendored shadcn; animationend unmounts tooltip
-
-.dt-tooltip-trigger {
-	display: inline-block;
-}
-
-.dt-tooltip {
-	z-index: 50;
-	padding: crayon.size(1.5) crayon.size(3);
-	background: var(--foreground);
-	color: var(--background);
-	font-size: crayon.font-size("xs");
-	animation: dt-tooltip-in 0.12s ease-out;
-
-	&[data-state="closed"] {
-		animation: dt-tooltip-out 0.1s ease-in forwards;
-	}
-}
-
-.dt-tooltip-arrow {
-	position: absolute;
-	width: crayon.size(2.5);
-	height: crayon.size(2.5);
-	background: var(--foreground);
-	transform: rotate(45deg);
-}
-
-@keyframes dt-tooltip-in {
-	from {
-		opacity: 0;
-		transform: scale(0.95);
-	}
-
-	to {
-		opacity: 1;
-		transform: scale(1);
-	}
-}
-
-@keyframes dt-tooltip-out {
-	from {
-		opacity: 1;
-		transform: scale(1);
-	}
-
-	to {
-		opacity: 0;
-		transform: scale(0.95);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	// animationend must fire
-	.dt-tooltip,
-	.dt-tooltip[data-state="closed"] {
-		animation-duration: 0.01s;
-	}
-}
-
 .dt-tool-page {
 	container-type: inline-size;
 	padding: crayon.size(6);
