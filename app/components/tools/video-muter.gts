@@ -4,9 +4,7 @@ import { on } from '@ember/modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
@@ -27,6 +25,7 @@ import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import { type WaveformPeaks } from 'delphitools-v2/lib/audio';
 import {
 	analyzeMedia,
+	blankSections,
 	sections,
 	type Section,
 } from 'delphitools-v2/lib/mediainfo';
@@ -41,7 +40,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import {
 	peaks,
@@ -53,12 +54,12 @@ import './media/media.css';
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const NO_AUDIO = 'No audio track';
 const MUTE_ERROR = "Couldn't remux. Try MP4, MOV or WEBM.";
-// filmstrip 40 + waveform 56 (iOS AVEditTrackStrips)
-const bandHeight = readoutBandHeight(96);
 // iOS: height over width at most 1.25, at most 340 pt tall
 const tallest = 1.25;
 const tallestPreview = 340;
 const containerLabels = CONTAINERS.map((c) => c.label);
+// the muted file has no audio track
+const BLANK_INFO = blankSections(['General', 'Video']);
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Mute = <template><IconSvg @name="volume-x" /></template>;
@@ -101,6 +102,10 @@ export default class VideoMuter extends Component {
 		release(this.frames);
 	}
 
+	get shownInfo() {
+		return this.info.length ? this.info : BLANK_INFO;
+	}
+
 	get loaded() {
 		return this.intake.url !== null;
 	}
@@ -121,13 +126,16 @@ export default class VideoMuter extends Component {
 		return this.container || this.probe?.container || 'mp4';
 	}
 
+	// before a file with no pick: the source's container is unknown
 	get containerIndex() {
+		if (!this.container && !this.probe) return -1;
 		return CONTAINERS.findIndex(
 			(c) => c.id === this.targetContainer,
 		);
 	}
 
 	get unsupported() {
+		if (!this.loaded) return [];
 		return CONTAINERS.flatMap((c, index) =>
 			this.support?.[c.id] ? [] : [index],
 		);
@@ -204,7 +212,11 @@ export default class VideoMuter extends Component {
 				if (token === this.#token) this.peaks = found;
 			});
 		const support = await containerSupport(probe.codec);
-		if (token === this.#token) this.support = support;
+		if (token !== this.#token) return;
+		this.support = support;
+		// a pick made before the file that its codec cannot take
+		if (this.container && !support[this.container])
+			this.container = '';
 	}
 
 	metadata = (event: Event) => {
@@ -217,7 +229,7 @@ export default class VideoMuter extends Component {
 
 	pickContainer = (index: number) => {
 		const id = CONTAINERS[index]?.id;
-		if (!id || id === this.targetContainer) return;
+		if (!id || index === this.containerIndex) return;
 		this.container = id;
 		this.failed = false;
 		this.#releaseResult();
@@ -309,7 +321,6 @@ export default class VideoMuter extends Component {
 		this.frames = [];
 		this.peaks = null;
 		this.support = null;
-		this.container = '';
 		this.busy = false;
 		this.progress = 0;
 		this.failed = false;
@@ -318,6 +329,8 @@ export default class VideoMuter extends Component {
 	clear = () => {
 		this.playback.unload();
 		this.#reset();
+		this.container = '';
+		this.aspect = 16 / 9;
 		this.intake.clear();
 	};
 
@@ -326,7 +339,6 @@ export default class VideoMuter extends Component {
 			class="video-muter"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -343,41 +355,35 @@ export default class VideoMuter extends Component {
 						}}
 						@readout="below"
 					>
-						{{#if this.loaded}}
-							<Strips
-								@thumbnails={{this.frames}}
-								@aspect={{this.aspect}}
-								@waveform={{true}}
-								@peaks={{this.peaks}}
-								@audioRemoved={{if
-									this.result
-									true
-									false
-								}}
-								@duration={{this.intake.duration}}
-								@playhead={{this.playback.playhead}}
-								@onScrub={{this.playback.scrub}}
-							/>
-						{{else}}
-							<Slot
-								class="vm-slot"
-								@prompt="Drop a video here"
-								@icon="volume-x"
-								@accept={{ACCEPT}}
-								@over={{this.drop.over}}
-								@onFile={{this.intake.load}}
-							/>
-						{{/if}}
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@waveform={{true}}
+							@peaks={{this.peaks}}
+							@audioRemoved={{if
+								this.result
+								true
+								false
+							}}
+							@duration={{this.intake.duration}}
+							@playhead={{this.playback.playhead}}
+							@onScrub={{this.playback.scrub}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
+						/>
 					</CanonReadoutBand>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				<Sections @sections={{this.info}} />
+				<Sections @sections={{this.shownInfo}} />
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="vm-source"
 							@title={{this.intake.fileName}}
@@ -395,14 +401,41 @@ export default class VideoMuter extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-					</CanonRows>
-					<CanonCanvas
-						class="vm-preview"
-						@aspect={{this.previewAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-						@background="#000"
-					>
+					{{else}}
+						<Slot
+							class="vm-slot"
+							@prompt="Drop a video here"
+							@icon="volume-x"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.warning}}
+							<CanonStatus
+								@text={{this.warning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+				<CanonCanvas
+					class="vm-preview
+						{{unless
+							this.loaded
+							'vm-preview--blank'
+						}}"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if
+						this.loaded
+						"#000"
+						"var(--canon-muted)"
+					}}
+				>
+					{{#if this.loaded}}
 						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
@@ -421,16 +454,8 @@ export default class VideoMuter extends Component {
 								this.intake.failed
 							}}
 						></video>
-					</CanonCanvas>
-				{{else if this.warning}}
-					<CanonRows @framed={{true}}>
-						<CanonStatus
-							@text={{this.warning}}
-							@tone="warn"
-							@row={{true}}
-						/>
-					</CanonRows>
-				{{/if}}
+					{{/if}}
+				</CanonCanvas>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Container" />
 					<CanonSegmented

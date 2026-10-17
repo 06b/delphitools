@@ -34,15 +34,43 @@ check(
 			document.querySelector('.video-muter').getBoundingClientRect().height,
 	),
 );
-check(
-	'empty: the band is the drop slot with the web wording, Mute off',
-	await page.evaluate(
+// readoutBandHeight(96): the shared A/V band
+const BAND = 138;
+const bandHeight = () =>
+	page.evaluate(() => document.querySelector('.media-strips')?.closest('.canon-canvas')?.getBoundingClientRect().height);
+const blankLayout = () =>
+	page.evaluate(() => {
+		const preview = document.querySelector('.vm-preview');
+		const box = preview?.getBoundingClientRect();
+		return (
+			document.querySelectorAll('.media-frame--blank').length > 0 &&
+			!!document.querySelector('.media-strips--blank .media-wave') &&
+			[...document.querySelectorAll('.media-sections .canon-heading')].map((h) => h.textContent.trim()).join('|') ===
+				'General|Video #1' &&
+			[...document.querySelectorAll('.media-sections .canon-tiles-value')].every((v) => v.textContent.trim() === '—') &&
+			[...document.querySelectorAll('.video-muter .canon-heading')].some((h) => h.textContent.trim() === 'Source') &&
+			document.querySelector('.vm-slot.media-slot--row')?.textContent.trim() === 'Drop a video here' &&
+			preview?.classList.contains('vm-preview--blank') &&
+			!preview.querySelector('video') &&
+			preview.textContent.trim() === '' &&
+			// 16:9 plus the frame, at most 340 tall
+			Math.abs(box.height - Math.min((box.width * 9) / 16, 340)) < 3
+		);
+	});
+const emptyControls = () =>
+	page.evaluate(
 		() =>
-			document.querySelector('.vm-slot')?.textContent.trim() === 'Drop a video here' &&
 			document.querySelector('.media-job-run')?.disabled === true &&
-			!document.querySelector('.vm-preview'),
-	),
+			document.querySelector('.media-play')?.disabled === true &&
+			[...document.querySelectorAll('.vm-containers [role="radio"]')].every((c) => !c.disabled),
+	);
+
+check(
+	'empty: the loaded layout in blank: frame cells, flat wave, dashed info, Source slot, 16:9 box',
+	await blankLayout(),
 );
+check('empty: Containers on, Mute and the transport off', await emptyControls());
+check('empty: the band is the shared height', (await bandHeight()) === BAND, String(await bandHeight()));
 
 await captureObjectUrl(page);
 await makeClip(page, { audio: true, name: 'tone.webm' });
@@ -62,6 +90,13 @@ check(
 	/WebM\*/.test((await containers()).join('|')) &&
 		!/WebM!|MKV!/.test((await containers()).join('|')),
 	(await containers()).join('|'),
+);
+check('loaded: the band is the shared height', (await bandHeight()) === BAND, String(await bandHeight()));
+check(
+	'loaded: the strips and the preview are no longer blank',
+	await page.evaluate(
+		() => !document.querySelector('.media-strips--blank') && !document.querySelector('.vm-preview--blank'),
+	),
 );
 check(
 	'the preview shows the video, without native controls',
@@ -112,9 +147,14 @@ await page.evaluate(() =>
 	[...document.querySelectorAll('.vm-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
 );
 await sleep(200);
+check('Clear returns to the blank layout', await blankLayout());
+check('Clear: Containers on, Mute and the transport off', await emptyControls());
+check('Clear: no container chosen', !(await containers()).join('|').includes('*'), (await containers()).join('|'));
+await pick('MKV');
 check(
-	'Clear returns to the slot',
-	!!(await page.$('.vm-slot')) && !(await page.$('.vm-preview')),
+	'empty: a container can be picked before a file',
+	(await containers()).join('|') === 'MP4|MOV|WebM|MKV*',
+	(await containers()).join('|'),
 );
 
 // silent video: the warning and no Mute
@@ -128,6 +168,14 @@ check(
 	'a silent video says No audio track and keeps Mute off',
 	await page.$eval('.media-job-run', (el) => el.disabled),
 );
+await page.waitForFunction(() => !!document.querySelector('.vm-containers [role="radio"]:not([disabled])'), {
+	timeout: 15000,
+});
+check(
+	'the pick made before the file holds',
+	/MKV\*/.test((await containers()).join('|')),
+	(await containers()).join('|'),
+);
 
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/video-muter');
@@ -135,5 +183,7 @@ check(
 	'phone: nothing scrolls sideways',
 	await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
 );
+check('phone: the blank layout', await blankLayout());
+check('phone: the band is the shared height', (await bandHeight()) === BAND, String(await bandHeight()));
 
 await finish(browser);
