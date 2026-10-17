@@ -223,6 +223,11 @@ module('Unit | Tool | gradient-genny', function () {
 			launchFlags('?gradType=corners').mode,
 			'corners',
 		);
+		assert.strictEqual(
+			launchFlags('?gradType=mesh').mode,
+			'freeform',
+		);
+		assert.strictEqual(launchFlags('?gradType=3').mode, 'freeform');
 		assert.strictEqual(launchFlags('').mode, undefined);
 	});
 });

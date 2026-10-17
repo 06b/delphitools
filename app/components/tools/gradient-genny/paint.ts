@@ -650,7 +650,9 @@ export function launchFlags(search: string): LaunchFlags {
 		select: Math.max(0, Math.floor(number('gradSelect') ?? 0)),
 	};
 	const type = query.get('gradType');
-	if (type !== null)
+	// mesh: the mode's old name, for old links
+	if (type === 'mesh') flags.mode = 'freeform';
+	else if (type !== null)
 		flags.mode = modes.includes(type as Mode)
 			? (type as Mode)
 			: iosTypes[Number(type)];

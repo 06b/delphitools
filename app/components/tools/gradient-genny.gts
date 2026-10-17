@@ -397,7 +397,7 @@ export default class GradientGenny extends Component {
 				</CanonCanvas>
 			</:sidebar>
 			<:main>
-				<CanonRows @framed={{true}}>
+				<CanonRows class="gg-type" @framed={{true}}>
 					<CanonSegmented
 						class="gg-modes"
 						@items={{modeTitles}}

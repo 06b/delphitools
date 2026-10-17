@@ -392,6 +392,9 @@ check(
 await visit(page, '/tools/gradient-genny?color=ff0000');
 s = await state();
 check('?color= leads the gradient', s.chosen === '#FF0000' && s.field === '#FF0000', `${s.chosen} ${s.field}`);
+await visit(page, '/tools/gradient-genny?gradType=mesh');
+s = await state();
+check('?gradType=mesh opens Freeform', s.mode === 'Freeform', s.mode);
 await visit(page, '/tools/gradient-genny?gradType=conic&gradSpace=1&gradAngle=45&gradStops=ffd400@0,0033ff@100&gradSelect=1&gradNoise=20');
 s = await state();
 check(
@@ -420,6 +423,10 @@ const phone = await page.evaluate(() => {
 	};
 });
 check('390: no sideways scroll, the document does not scroll', !phone.sideways && !phone.docScroll, JSON.stringify(phone));
+const cut = await page.$$eval('.gg-modes .canon-button-title', (titles) =>
+	titles.filter((t) => t.scrollWidth > t.clientWidth).map((t) => `${t.textContent} ${t.clientWidth}/${t.scrollWidth}`),
+);
+check('390: every type title fits its segment', cut.length === 0, cut.join(', '));
 await page.evaluate(
 	() => (document.querySelector('.gradient-genny .canon-split-body').scrollTop = 800),
 );
