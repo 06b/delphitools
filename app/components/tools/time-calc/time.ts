@@ -479,11 +479,6 @@ export function regions(zones: string[]) {
 
 // world
 
-/** Latitudes drawn: Antarctica's interior and the high Arctic have no cities to mark. */
-export const north = 80;
-export const south = -60;
-export const mapAspect = 360 / (north - south);
-
 /** Where a city of each common zone sits, as [lat, lon]. */
 export const places: Record<string, [number, number]> = {
 	'Europe/Paris': [48.9, 2.3],

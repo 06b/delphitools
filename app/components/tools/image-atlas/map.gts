@@ -3,22 +3,12 @@ import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
 import {
-	landPath,
+	loadLand,
 	locationLabel,
+	mapHeight as height,
 	mapPoint,
-	north,
-	south,
-} from 'delphitools-v2/components/tools/metadata-stripper/blocks';
+} from 'delphitools-v2/lib/world-map';
 import type { GpsPoint } from 'delphitools-v2/components/tools/image-atlas/report';
-
-let land: Promise<string> | undefined;
-const loadLand = () =>
-	(land ??= fetch('/data/world-land.json')
-		.then((response) => response.json() as Promise<number[][][]>)
-		.then(landPath)
-		.catch(() => ''));
-
-const height = north - south;
 
 /** Where the photo was taken: the land faint, the point lit with its latitude and longitude lines (iOS PhotoLocationMap). */
 export default class LocationMap extends Component<{

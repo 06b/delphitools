@@ -4,20 +4,18 @@ import {
 	city,
 	formatter,
 	isWeekend,
-	mapAspect,
-	north,
 	offset,
 	offsetSeconds,
 	places,
 	rung,
 	rungs,
-	south,
 	startOfDay,
 	subsolar,
 	template,
 	terminator,
 	ticks,
 } from 'delphitools-v2/components/tools/time-calc/time';
+import { mapAspect, mapHeight, mapPoint } from 'delphitools-v2/lib/world-map';
 
 export type Scene =
 	| { kind: 'epoch'; date?: Date }
@@ -682,16 +680,13 @@ class Painter {
 		zones: string[],
 	) {
 		const { shown, id, land } = this.d;
-		const span = north - south;
-		const point = (lat: number, lon: number) => ({
-			x: map.x + ((lon + 180) / 360) * map.width,
-			y:
-				map.y +
-				((north -
-					Math.min(Math.max(lat, south), north)) /
-					span) *
-					map.height,
-		});
+		const point = (lat: number, lon: number) => {
+			const { x, y } = mapPoint(lat, lon);
+			return {
+				x: map.x + (x / 360) * map.width,
+				y: map.y + (y / mapHeight) * map.height,
+			};
+		};
 		const instant = new Date(shown.a * 1000);
 		const sun = subsolar(instant);
 		const night: string[] = [];
@@ -727,7 +722,7 @@ class Painter {
 			`<g mask="url(#${across})"><g mask="url(#${down})">`,
 			`<path d="${night.join('')}" style="fill: ${mix(muted, 70)}"/>`,
 			land
-				? `<path d="${land}" transform="translate(${n(map.x)} ${n(map.y)}) scale(${n(map.width / 360) || 0.01} ${n(map.height / span) || 0.01})" vector-effect="non-scaling-stroke" style="fill: ${mix(fg, 7)}; stroke: ${mix(fg, 20)}; stroke-width: 0.5"/>`
+				? `<path d="${land}" transform="translate(${n(map.x)} ${n(map.y)}) scale(${n(map.width / 360) || 0.01} ${n(map.height / mapHeight) || 0.01})" vector-effect="non-scaling-stroke" style="fill: ${mix(fg, 7)}; stroke: ${mix(fg, 20)}; stroke-width: 0.5"/>`
 				: '',
 			`<circle cx="${n(sunSpot.x)}" cy="${n(sunSpot.y)}" r="2.6" style="fill: ${sunColour}"/>`,
 			`<path d="${rays}" style="stroke: ${sunColour}; stroke-width: 1.2; stroke-linecap: round"/>`,

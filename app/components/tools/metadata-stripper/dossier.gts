@@ -4,13 +4,15 @@ import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
 import type { GpsFix } from 'delphitools-v2/lib/metadata';
 import {
-	blockNames,
-	lamps,
-	landPath,
+	loadLand,
 	locationLabel,
+	mapHeight as height,
 	mapPoint,
 	north,
-	south,
+} from 'delphitools-v2/lib/world-map';
+import {
+	blockNames,
+	lamps,
 	type Block,
 } from 'delphitools-v2/components/tools/metadata-stripper/blocks';
 
@@ -24,14 +26,6 @@ export interface DossierSignature {
 	};
 }
 
-let land: Promise<string> | undefined;
-const loadLand = () =>
-	(land ??= fetch('/data/world-land.json')
-		.then((response) => response.json() as Promise<number[][][]>)
-		.then(landPath)
-		.catch(() => ''));
-
-const height = north - south;
 const meridians = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].map(
 	(lon) => lon + 180,
 );

@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
 import CanonFigure from 'delphicanon/components/canon-figure';
-import { landPath } from 'delphitools-v2/components/tools/metadata-stripper/blocks';
+import { loadLand } from 'delphitools-v2/lib/world-map';
 import {
 	draw,
 	pose,
@@ -30,13 +30,6 @@ interface PictureSignature {
 }
 
 const settleMs = 600;
-
-let land: Promise<string> | undefined;
-const loadLand = () =>
-	(land ??= fetch('/data/world-land.json')
-		.then((response) => response.json() as Promise<number[][][]>)
-		.then(landPath)
-		.catch(() => ''));
 
 let context: CanvasRenderingContext2D | null | undefined;
 
