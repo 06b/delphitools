@@ -34,7 +34,7 @@ check(
 
 await visit(page, '/tools/text-editor');
 await page.waitForSelector('.dt-editor', { timeout: 15000 });
-await dropText('.dt-te');
+await dropText('.text-editor');
 await sleep(500);
 const heading = await page.$eval('.dt-editor h1', (h) => h.textContent?.trim()).catch(() => null);
 check('Text Editor loads the dropped file as a document', heading === 'Dropped heading', heading ?? 'no h1');

@@ -1,18 +1,33 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonMenu, {
+	CanonMenuList,
+	showMenu,
+	type CanonMenuEntry,
+	type CanonMenuItem,
+} from 'delphicanon/components/canon-menu';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { attach } from 'delphicanon/lib/popover';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { TEXT_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
+import { passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
-import {
-	Popover,
-	PopoverTrigger,
-	PopoverContent,
-} from 'delphitools-v2/components/ui/popover';
 import {
 	DEFAULT_SETTINGS,
 	type EditorSettings,
@@ -24,36 +39,62 @@ import {
 } from 'delphitools-v2/lib/editor/gutter';
 import type { BlockChoice } from 'delphitools-v2/lib/editor/block-types';
 import type { EditorView } from 'prosemirror-view';
+import type { EditorState } from 'prosemirror-state';
 import type { Node as PMNode } from 'prosemirror-model';
-import type Owner from '@ember/owner';
+import {
+	blockMark,
+	countStats,
+} from 'delphitools-v2/components/tools/text-editor/marks';
+import './text-editor/text-editor.css';
 
 type EditorCore = typeof import('delphitools-v2/lib/editor/core');
 
 const DOC_KEY = 'delphitools-editor';
 const ACCEPT = acceptAttr(TEXT_ACCEPT);
-const SEED = '';
 const PLACEHOLDER =
 	'The Karman Institute for Planetary Observation has confirmed that Earth is no longer able to sustain organic life. After decades of atmospheric collapse, sensor data from the Donna Shirley Space Telescope indicates that oxygen and nitrogen concentrations in the atmosphere have reached irreversible levels of depletion. Carbon dioxide levels, combined with solar radiation and the absence of a protective ozone layer, have rendered the surface barren. The final viable microbial traces recorded last year by automated spectroscopic satellites have now vanished.';
 
 const HIDE_MS = 2500;
-const COPIED_MS = 1500;
+// iOS ManuscriptView: the bubble's half width and height
+const BUBBLE = { half: 96, height: 44 };
+const fonts = ['Sans', 'Serif', 'Mono'];
+const fontClasses = ['', 'te-pane--serif', 'te-pane--mono'];
 
-type BoolKey = Exclude<keyof EditorSettings, 'enabledFields'>;
+type BoolKey = Exclude<keyof EditorSettings, 'enabledFields' | 'codeMode'>;
+
+const switches: { key: BoolKey; title: string }[] = [
+	{ key: 'highlightSentence', title: 'Highlight current sentence' },
+	{ key: 'highlightParagraph', title: 'Highlight current paragraph' },
+	{ key: 'dimInactive', title: 'Dim inactive paragraphs' },
+	{ key: 'typewriter', title: 'Typewriter scrolling' },
+	{ key: 'showGutter', title: 'Show gutter' },
+	{ key: 'showMarginLine', title: 'Show margin line' },
+];
+
+const exports = [
+	{ title: 'Markdown (.md)', kind: 'markdown', download: true },
+	{ title: 'HTML (.html)', kind: 'html', download: true },
+	{ title: 'Copy as rich text', kind: 'rich', download: false },
+	{ title: 'PDF (print)', kind: 'pdf', download: false },
+] as const;
+
+const FolderIcon = <template><IconSvg @name="folder" /></template>;
+const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
+const FullIcon = <template><IconSvg @name="maximize-2" /></template>;
+const ExitIcon = <template><IconSvg @name="minimize-2" /></template>;
+const SourceIcon = <template><IconSvg @name="code-2" /></template>;
+const ExportIcon = <template><IconSvg @name="download" /></template>;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
 
 interface Bubble {
 	top: number;
 	left: number;
+	below: boolean;
 	strong: boolean;
 	em: boolean;
 	strikethrough: boolean;
 	code: boolean;
 	link: boolean;
-}
-
-interface BlockMenu {
-	pos: number;
-	top: number;
-	node: PMNode | null;
 }
 
 function getScrollParent(el: HTMLElement | null): HTMLElement | null {
@@ -70,44 +111,107 @@ function getScrollParent(el: HTMLElement | null): HTMLElement | null {
 	return null;
 }
 
+function plainText(doc: PMNode): string {
+	return doc.textBetween(0, doc.content.size, '\n', ' ');
+}
+
+function isEmptyDoc(doc: PMNode): boolean {
+	const first = doc.firstChild;
+	return (
+		doc.childCount === 1 &&
+		!!first &&
+		first.isTextblock &&
+		first.content.size === 0
+	);
+}
+
+const clamp = (value: number, low: number, high: number) =>
+	Math.min(Math.max(value, low), Math.max(low, high));
+
+/** The port of TextEditorViewController, on the web's ProseMirror editor. */
 export default class TextEditorTool extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
 	@tracked rows: GutterRow[] = [];
 	@tracked settings: EditorSettings = DEFAULT_SETTINGS;
 	@tracked source = '';
-	@tracked copied = false;
+	@tracked plain = '';
+	@tracked empty = true;
+	@tracked font = 0;
 	@tracked zen = false;
 	@tracked toolbarVisible = true;
-	@tracked wordCount = 0;
 	@tracked activeBlockPos: number | null = null;
 	@tracked bubble: Bubble | null = null;
-	@tracked blockMenu: BlockMenu | null = null;
+	@tracked menuNode: PMNode | null = null;
 	@tracked choices: BlockChoice[] = [];
+	// in the browser's full screen, not the overlay
+	@tracked native = false;
+	@tracked overlay = false;
 
 	ed: EditorCore | null = null;
 	view: EditorView | null = null;
 	// arrived before core load
 	#pendingText: string | null = null;
+	#startsInSource = false;
 	frame = 0;
 	// never persisted, privacy
 	dirty = false;
-	menuEl: HTMLElement | null = null;
 	hideTimer: ReturnType<typeof setTimeout> | null = null;
-	copiedTimer: ReturnType<typeof setTimeout> | null = null;
+	#pane?: HTMLElement;
+	#picker?: HTMLInputElement;
+	#menuPanel?: HTMLElement;
+	#menuPoint?: HTMLElement;
+	#menuTrigger?: HTMLElement;
+	#menuPos = 0;
 
 	constructor(owner: Owner, args: Record<string, never>) {
 		super(owner, args);
 		window.addEventListener('beforeunload', this.onBeforeUnload);
+		document.addEventListener(
+			'fullscreenchange',
+			this.fullscreenChanged,
+		);
+		// ?teText= ?teFont=0-2 ?teSentence=1 ?teParagraph=1 ?teDim=1
+		// ?teTypewriter=1 ?teGutter=0 ?teMargin=0 ?teFields=words,chars
+		// ?teSource=1: the iOS launch arguments
+		const query = new URLSearchParams(window.location.search);
+		const text = query.get('teText');
+		if (text !== null) this.#pendingText = text;
+		this.font = Math.min(
+			2,
+			Math.max(0, Number(query.get('teFont')) || 0),
+		);
+		const on = (name: string) => query.get(name) === '1';
+		const off = (name: string) => query.get(name) === '0';
+		const fields = query.get('teFields');
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			highlightSentence: on('teSentence'),
+			highlightParagraph: on('teParagraph'),
+			dimInactive: on('teDim'),
+			typewriter: on('teTypewriter'),
+			showGutter: !off('teGutter'),
+			showMarginLine: !off('teMargin'),
+			enabledFields:
+				fields === null
+					? DEFAULT_SETTINGS.enabledFields
+					: fields.split(',').filter(Boolean),
+		};
+		this.#startsInSource = on('teSource');
 	}
 
 	willDestroy() {
 		super.willDestroy();
 		window.removeEventListener('beforeunload', this.onBeforeUnload);
+		document.removeEventListener(
+			'fullscreenchange',
+			this.fullscreenChanged,
+		);
 		window.removeEventListener('mousemove', this.zenActivity);
 		document.removeEventListener('keydown', this.zenKeydown);
-		document.removeEventListener('mousedown', this.menuOutside);
-		document.removeEventListener('keydown', this.menuKey);
 		if (this.hideTimer) clearTimeout(this.hideTimer);
-		if (this.copiedTimer) clearTimeout(this.copiedTimer);
+		if (document.fullscreenElement === this.#pane)
+			void document.exitFullscreen().catch(() => {});
 	}
 
 	onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -117,6 +221,20 @@ export default class TextEditorTool extends Component {
 		}
 	};
 
+	get paneClass() {
+		return [
+			'te-pane',
+			fontClasses[this.font],
+			this.zen && 'te-pane--zen',
+			this.overlay && 'te-pane--overlay',
+			this.toolbarFaded && 'te-pane--faded',
+			this.settings.typewriter && 'te-pane--typewriter',
+			this.hasPad && 'te-pane--pad',
+		]
+			.filter(Boolean)
+			.join(' ');
+	}
+
 	get toolbarFaded() {
 		return this.zen && !this.toolbarVisible;
 	}
@@ -125,45 +243,108 @@ export default class TextEditorTool extends Component {
 		return this.settings.showGutter || this.settings.showMarginLine;
 	}
 
+	get fonts() {
+		return fonts;
+	}
+
+	get switchRows() {
+		return switches.map((row) => ({
+			...row,
+			on: this.settings[row.key],
+		}));
+	}
+
 	get gutterRows() {
 		return this.rows.map((row) => ({
 			row,
 			key: row.key,
+			mark: blockMark(row.type),
+			name: this.choiceName(row) ?? row.type,
 			active: row.pos === this.activeBlockPos,
 			// offsets from prosemirror measurements
 			style: htmlSafe(`top: ${row.top}px`),
 		}));
 	}
 
-	get menuItems() {
-		const menu = this.blockMenu;
-		if (!menu) return [];
+	// rows lag a replaced document by a frame
+	nodeAt(pos: number): PMNode | null {
+		const doc = this.view?.state.doc;
+		return doc && pos < doc.content.size ? doc.nodeAt(pos) : null;
+	}
+
+	choiceName(row: GutterRow) {
+		const node = this.nodeAt(row.pos);
+		return node
+			? this.choices.find((choice) => choice.isActive(node))
+					?.label
+			: undefined;
+	}
+
+	get menuItems(): CanonMenuEntry[] {
+		const node = this.menuNode;
 		return this.choices.map((choice) => ({
-			choice,
-			pos: menu.pos,
-			active: menu.node ? choice.isActive(menu.node) : false,
+			title: choice.label,
+			kind: 'radio',
+			checked: node ? choice.isActive(node) : false,
 		}));
 	}
 
-	get blockMenuStyle() {
-		return htmlSafe(`top: ${this.blockMenu?.top ?? 0}px; left: 0`);
+	// cached: a pick is found by identity, titles repeat while capturing
+	@cached
+	get exportItems(): CanonMenuEntry[] {
+		return exports.map((entry) => ({
+			title: entry.download
+				? passAlong(entry.title)
+				: entry.title,
+		}));
 	}
 
 	get bubbleStyle() {
 		const b = this.bubble;
 		if (!b) return htmlSafe('');
-		return htmlSafe(`top: ${b.top - 8}px; left: ${b.left}px`);
+		return htmlSafe(`top: ${b.top}px; left: ${b.left}px`);
 	}
 
 	get fieldRows() {
 		return GUTTER_FIELDS.map((field) => ({
 			field,
+			title:
+				field.label.charAt(0).toUpperCase() +
+				field.label.slice(1),
 			enabled: this.settings.enabledFields.includes(field.id),
 		}));
 	}
 
+	get stats() {
+		return countStats(
+			this.settings.codeMode ? this.source : this.plain,
+		);
+	}
+
+	get tiles() {
+		const { stats } = this;
+		return [
+			{ label: 'Words', value: stats.words.toLocaleString() },
+			{
+				label: 'Characters',
+				value: stats.characters.toLocaleString(),
+			},
+			{ label: 'Lines', value: stats.lines.toLocaleString() },
+			{
+				label: 'Reading time',
+				value: `${stats.minutes} min`,
+			},
+		];
+	}
+
+	get isEmpty() {
+		return this.settings.codeMode
+			? this.source.trim() === ''
+			: this.empty;
+	}
+
 	get wordCountLabel() {
-		const n = this.wordCount;
+		const n = this.stats.words;
 		let label = `${n} ${n === 1 ? 'word' : 'words'}`;
 		if (n > 0) label += ` · ~${Math.ceil(n / 200)} min read`;
 		return label;
@@ -173,12 +354,95 @@ export default class TextEditorTool extends Component {
 		cancelAnimationFrame(this.frame);
 		this.frame = requestAnimationFrame(() => {
 			const v = this.view;
+			if (v && this.bubble) this.#updateBubble(v, v.state);
 			if (v && this.settings.showGutter)
 				this.rows = measureGutter(
 					v,
 					this.settings.enabledFields,
 				);
 		});
+	};
+
+	#readDoc(doc: PMNode) {
+		this.plain = plainText(doc);
+		this.empty = isEmptyDoc(doc);
+	}
+
+	#updateBubble(view: EditorView, state: EditorState) {
+		const ed = this.ed;
+		const sel = state.selection;
+		const pane = this.#pane;
+		if (
+			!ed ||
+			!pane ||
+			!(sel instanceof ed.TextSelection) ||
+			sel.empty ||
+			!view.hasFocus()
+		) {
+			this.bubble = null;
+			return;
+		}
+		try {
+			const a = view.coordsAtPos(sel.from);
+			const b = view.coordsAtPos(sel.to);
+			const frame = pane.getBoundingClientRect();
+			const top = Math.min(a.top, b.top) - frame.top;
+			const below = top < BUBBLE.height;
+			const has = (name: string) => {
+				const type = state.schema.marks[name];
+				return type
+					? state.doc.rangeHasMark(
+							sel.from,
+							sel.to,
+							type,
+						)
+					: false;
+			};
+			this.bubble = {
+				top: below
+					? Math.max(a.bottom, b.bottom) -
+						frame.top +
+						8
+					: top - 8,
+				left: clamp(
+					(a.left + b.right) / 2 - frame.left,
+					BUBBLE.half,
+					frame.width - BUBBLE.half,
+				),
+				below,
+				strong: has('strong'),
+				em: has('em'),
+				strikethrough: has('strikethrough'),
+				code: has('code'),
+				link: has('link'),
+			};
+		} catch {
+			this.bubble = null;
+		}
+	}
+
+	keepPane = modifier((element: HTMLElement) => {
+		this.#pane = element;
+	});
+
+	keepPicker = modifier((input: HTMLInputElement) => {
+		this.#picker = input;
+	});
+
+	// one menu for every gutter row, anchored to a point moved to the row
+	keepMenu = modifier((panel: HTMLElement) => {
+		this.#menuPanel = panel;
+		this.#menuPoint = panel.previousElementSibling as HTMLElement;
+		return attach(panel, this.#menuPoint, {
+			placement: 'bottom-start',
+			gap: '0px',
+			returnFocus: () => this.#menuTrigger,
+		});
+	});
+
+	rescroll = () => {
+		const v = this.view;
+		if (v && this.bubble) this.#updateBubble(v, v.state);
 	};
 
 	mount = modifier((element: HTMLElement) => {
@@ -196,11 +460,12 @@ export default class TextEditorTool extends Component {
 			try {
 				localStorage.removeItem(DOC_KEY);
 			} catch {
+				// storage blocked: nothing to remove
 			}
 			ed.clearStoredSettings();
 
 			let initialState = ed.EditorState.create({
-				doc: ed.parseMarkdown(SEED),
+				doc: ed.parseMarkdown(''),
 				plugins: ed.buildPlugins(
 					ed.schema,
 					this.settings,
@@ -215,6 +480,9 @@ export default class TextEditorTool extends Component {
 				attributes: {
 					class: 'dt-editor',
 					spellcheck: 'true',
+					role: 'textbox',
+					'aria-multiline': 'true',
+					'aria-label': 'Text',
 				},
 				nodeViews: ed.buildNodeViews(),
 				// plain-text clipboard only
@@ -239,90 +507,16 @@ export default class TextEditorTool extends Component {
 					const next = view.state.apply(tr);
 					view.updateState(next);
 					this.scheduleMeasure();
-					if (tr.docChanged) this.dirty = true;
-
+					if (tr.docChanged) {
+						this.dirty = true;
+						this.#readDoc(next.doc);
+					}
 					const sel = next.selection;
 					this.activeBlockPos =
 						sel.$from.depth >= 1
 							? sel.$from.before(1)
 							: null;
-					if (
-						sel instanceof
-							ed.TextSelection &&
-						!sel.empty &&
-						view.hasFocus()
-					) {
-						try {
-							const a =
-								view.coordsAtPos(
-									sel.from,
-								);
-							const b =
-								view.coordsAtPos(
-									sel.to,
-								);
-							const has = (
-								name: string,
-							) => {
-								const type =
-									next
-										.schema
-										.marks[
-										name
-									];
-								return type
-									? next.doc.rangeHasMark(
-											sel.from,
-											sel.to,
-											type,
-										)
-									: false;
-							};
-							this.bubble = {
-								top: Math.min(
-									a.top,
-									b.top,
-								),
-								left:
-									(a.left +
-										b.right) /
-									2,
-								strong: has(
-									'strong',
-								),
-								em: has('em'),
-								strikethrough:
-									has(
-										'strikethrough',
-									),
-								code: has(
-									'code',
-								),
-								link: has(
-									'link',
-								),
-							};
-						} catch {
-							this.bubble = null;
-						}
-					} else {
-						this.bubble = null;
-					}
-					if (tr.docChanged) {
-						const text = next.doc
-							.textBetween(
-								0,
-								next.doc.content
-									.size,
-								' ',
-								' ',
-							)
-							.trim();
-						this.wordCount = text
-							? text.split(/\s+/)
-									.length
-							: 0;
-					}
+					this.#updateBubble(view, next);
 				},
 				handleScrollToSelection: (v) => {
 					if (!this.settings.typewriter)
@@ -331,23 +525,13 @@ export default class TextEditorTool extends Component {
 						v.state.selection.from,
 					);
 					const scroller = getScrollParent(v.dom);
-					if (scroller) {
-						const r =
-							scroller.getBoundingClientRect();
-						scroller.scrollTop +=
-							coords.top -
-							r.top -
-							scroller.clientHeight /
-								2;
-					} else {
-						window.scrollTo({
-							top:
-								window.scrollY +
-								coords.top -
-								window.innerHeight /
-									2,
-						});
-					}
+					if (!scroller) return false;
+					const r =
+						scroller.getBoundingClientRect();
+					scroller.scrollTop +=
+						coords.top -
+						r.top -
+						scroller.clientHeight / 2;
 					return true;
 				},
 			});
@@ -357,18 +541,9 @@ export default class TextEditorTool extends Component {
 				this.#pendingText = null;
 				this.#load(text);
 			}
+			if (this.#startsInSource) this.toggleCodeMode();
+			this.#readDoc(view.state.doc);
 			this.scheduleMeasure();
-			const initialText = view.state.doc
-				.textBetween(
-					0,
-					view.state.doc.content.size,
-					' ',
-					' ',
-				)
-				.trim();
-			this.wordCount = initialText
-				? initialText.split(/\s+/).length
-				: 0;
 
 			ro = new ResizeObserver(() => this.scheduleMeasure());
 			ro.observe(view.dom);
@@ -383,13 +558,6 @@ export default class TextEditorTool extends Component {
 		};
 	});
 
-	registerMenu = modifier((element: HTMLElement) => {
-		this.menuEl = element;
-		return () => {
-			this.menuEl = null;
-		};
-	});
-
 	applySettings = (patch: Partial<EditorSettings>) => {
 		const next = { ...this.settings, ...patch };
 		this.settings = next;
@@ -399,17 +567,22 @@ export default class TextEditorTool extends Component {
 		this.scheduleMeasure();
 	};
 
-	toggleBool = (key: BoolKey) => {
-		this.applySettings({ [key]: !this.settings[key] });
+	setBool = (key: BoolKey, value: boolean) => {
+		this.applySettings({ [key]: value });
 	};
 
-	toggleField = (id: string) => {
-		const fields = this.settings.enabledFields;
+	setField = (id: string, value: boolean) => {
+		const fields = this.settings.enabledFields.filter(
+			(x) => x !== id,
+		);
 		this.applySettings({
-			enabledFields: fields.includes(id)
-				? fields.filter((x) => x !== id)
-				: [...fields, id],
+			enabledFields: value ? [...fields, id] : fields,
 		});
+	};
+
+	setFont = (index: number) => {
+		this.font = index;
+		this.scheduleMeasure();
 	};
 
 	toggleCodeMode = () => {
@@ -418,6 +591,7 @@ export default class TextEditorTool extends Component {
 		if (!ed || !v) return;
 		if (!this.settings.codeMode) {
 			this.source = ed.serializeDoc(v.state.doc);
+			this.bubble = null;
 			this.applySettings({ codeMode: true });
 		} else {
 			v.updateState(
@@ -430,9 +604,9 @@ export default class TextEditorTool extends Component {
 					),
 				}),
 			);
+			this.#readDoc(v.state.doc);
 			this.dirty = true;
 			this.applySettings({ codeMode: false });
-			this.scheduleMeasure();
 		}
 	};
 
@@ -444,16 +618,32 @@ export default class TextEditorTool extends Component {
 	// replaces the whole document
 	readFile = async (file: File) => {
 		if (!matchesAccept(file, ACCEPT)) return;
-		this.#load(await file.text());
+		const text = await file.text();
+		if (!this.isDestroying) this.#load(text);
 	};
 
-	drop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
+	chooseFile = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		// the same file can be chosen again
+		input.value = '';
 		if (file) void this.readFile(file);
 	};
 
-	dragOver = (event: DragEvent) => event.preventDefault();
+	openFile = () => this.#picker?.click();
+
+	// a file dropped anywhere on the tool; text drops stay with the editor
+	drop = (event: DragEvent) => {
+		const file = event.dataTransfer?.files[0];
+		if (!file) return;
+		event.preventDefault();
+		void this.readFile(file);
+	};
+
+	dragOver = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
 
 	#load(text: string) {
 		const ed = this.ed;
@@ -476,10 +666,30 @@ export default class TextEditorTool extends Component {
 			const fix = ed.fixTables(state);
 			if (fix) state = state.apply(fix);
 			v.updateState(state);
+			this.#readDoc(state.doc);
 			this.scheduleMeasure();
 		}
 		this.dirty = true;
 	}
+
+	// one undo step, unlike a loaded file
+	clear = () => {
+		const v = this.view;
+		if (this.settings.codeMode) {
+			this.source = '';
+			return;
+		}
+		const paragraph = v?.state.schema.nodes.paragraph;
+		if (!v || !paragraph) return;
+		v.dispatch(
+			v.state.tr.replaceWith(
+				0,
+				v.state.doc.content.size,
+				paragraph.create(),
+			),
+		);
+		v.focus();
+	};
 
 	currentDoc(): PMNode | null {
 		const ed = this.ed;
@@ -490,33 +700,33 @@ export default class TextEditorTool extends Component {
 			: v.state.doc;
 	}
 
-	doExport = (kind: 'markdown' | 'html' | 'pdf') => {
+	copy = () => {
+		const ed = this.ed;
+		const v = this.view;
+		if (!ed || !v) return;
+		void this.toast.copy(
+			this.settings.codeMode
+				? this.source
+				: ed.serializeDoc(v.state.doc),
+		);
+	};
+
+	doExport = (item: CanonMenuItem) => {
 		const ed = this.ed;
 		const doc = this.currentDoc();
-		if (!ed || !doc) return;
+		const kind = exports[this.exportItems.indexOf(item)]?.kind;
+		if (!ed || !doc || !kind) return;
+		if (kind === 'rich') {
+			void ed
+				.copyRichText(doc)
+				.then(() => this.toast.show())
+				.catch(() => {});
+			return;
+		}
 		if (kind === 'markdown') ed.exportMarkdown(doc);
 		else if (kind === 'html') ed.exportHtml(doc);
 		else ed.exportPdf(doc);
 		this.dirty = false;
-	};
-
-	copyRich = () => {
-		const ed = this.ed;
-		const doc = this.currentDoc();
-		if (!ed || !doc) return;
-		void ed
-			.copyRichText(doc)
-			.then(() => {
-				this.copied = true;
-				if (this.copiedTimer)
-					clearTimeout(this.copiedTimer);
-				this.copiedTimer = setTimeout(
-					() => (this.copied = false),
-					COPIED_MS,
-				);
-			})
-			.catch(() => {
-			});
 	};
 
 	applyMark = (markName: string) => {
@@ -552,6 +762,23 @@ export default class TextEditorTool extends Component {
 		event.preventDefault();
 	};
 
+	openBlockMenu = (row: GutterRow, event: MouseEvent) => {
+		const point = this.#menuPoint;
+		const panel = this.#menuPanel;
+		if (!point || !panel) return;
+		const trigger = event.currentTarget as HTMLElement;
+		this.#menuTrigger = trigger;
+		this.#menuPos = row.pos;
+		this.menuNode = this.nodeAt(row.pos);
+		point.style.top = `${trigger.offsetTop + trigger.offsetHeight + row.top}px`;
+		showMenu(panel, 'first');
+	};
+
+	pickBlock = (item: CanonMenuItem) => {
+		const choice = this.choices.find((c) => c.label === item.title);
+		if (choice) this.runBlockCommand(this.#menuPos, choice);
+	};
+
 	runBlockCommand = (pos: number, choice: BlockChoice) => {
 		const ed = this.ed;
 		const view = this.view;
@@ -576,7 +803,6 @@ export default class TextEditorTool extends Component {
 				);
 			}
 			view.focus();
-			this.setBlockMenu(null);
 			return;
 		}
 
@@ -603,62 +829,49 @@ export default class TextEditorTool extends Component {
 		}
 		choice.command(view.state, view.dispatch);
 		view.focus();
-		this.setBlockMenu(null);
-	};
-
-	toggleBlockMenu = (row: GutterRow) => {
-		const node = this.view?.state.doc.nodeAt(row.pos) ?? null;
-		this.setBlockMenu(
-			this.blockMenu?.pos === row.pos
-				? null
-				: { pos: row.pos, top: row.top, node },
-		);
-	};
-
-	setBlockMenu(menu: BlockMenu | null) {
-		if (menu && !this.blockMenu) {
-			document.addEventListener(
-				'mousedown',
-				this.menuOutside,
-			);
-			document.addEventListener('keydown', this.menuKey);
-		} else if (!menu && this.blockMenu) {
-			document.removeEventListener(
-				'mousedown',
-				this.menuOutside,
-			);
-			document.removeEventListener('keydown', this.menuKey);
-		}
-		this.blockMenu = menu;
-	}
-
-	// gutter label toggles it itself
-	menuOutside = (event: MouseEvent) => {
-		const target = event.target as HTMLElement;
-		if (
-			this.menuEl?.contains(target) ||
-			target.closest?.('.dt-block-trigger')
-		)
-			return;
-		this.setBlockMenu(null);
-	};
-
-	menuKey = (event: KeyboardEvent) => {
-		if (event.key === 'Escape') this.setBlockMenu(null);
 	};
 
 	toggleZen = () => {
-		this.toolbarVisible = true;
-		if (this.zen) this.exitZen();
-		else this.enterZen();
+		if (this.zen) {
+			this.exitZen();
+			return;
+		}
+		const pane = this.#pane;
+		this.enterZen();
+		// iPhone Safari has no element full screen
+		if (pane?.requestFullscreen)
+			pane.requestFullscreen()
+				.then(() => (this.native = true))
+				.catch(() => this.#overlay());
+		else this.#overlay();
+		this.view?.focus();
 	};
 
-	// runs before menu escape listener
+	// the canvas's container query contains position: fixed; the top layer does not
+	#overlay() {
+		const pane = this.#pane;
+		if (!pane || !this.zen) return;
+		pane.setAttribute('popover', 'manual');
+		pane.showPopover();
+		this.overlay = true;
+	}
+
+	fullscreenChanged = () => {
+		if (
+			this.zen &&
+			this.native &&
+			document.fullscreenElement !== this.#pane
+		)
+			this.exitZen();
+	};
+
 	enterZen() {
 		this.zen = true;
+		this.toolbarVisible = true;
 		window.addEventListener('mousemove', this.zenActivity);
 		document.addEventListener('keydown', this.zenKeydown);
 		this.armHideTimer();
+		this.scheduleMeasure();
 	}
 
 	exitZen() {
@@ -667,6 +880,15 @@ export default class TextEditorTool extends Component {
 		window.removeEventListener('mousemove', this.zenActivity);
 		document.removeEventListener('keydown', this.zenKeydown);
 		if (this.hideTimer) clearTimeout(this.hideTimer);
+		if (this.native && document.fullscreenElement === this.#pane)
+			void document.exitFullscreen().catch(() => {});
+		if (this.overlay) {
+			this.#pane?.hidePopover();
+			this.#pane?.removeAttribute('popover');
+		}
+		this.native = false;
+		this.overlay = false;
+		this.scheduleMeasure();
 	}
 
 	zenActivity = () => {
@@ -677,7 +899,7 @@ export default class TextEditorTool extends Component {
 	zenKeydown = (event: KeyboardEvent) => {
 		if (
 			event.key === 'Escape' &&
-			!this.blockMenu &&
+			!this.#menuPanel?.matches(':popover-open') &&
 			!(
 				document.activeElement as HTMLElement | null
 			)?.closest?.('.footnote-tooltip')
@@ -697,565 +919,393 @@ export default class TextEditorTool extends Component {
 	}
 
 	<template>
-		<div
-			class={{if this.zen "dt-te-zen"}}
+		<CanonSplit
+			class="text-editor"
+			@halves={{true}}
+			@collapsesTo={{180}}
 			{{filePaste this.readFile accept=ACCEPT}}
 			{{on "drop" this.drop}}
 			{{on "dragover" this.dragOver}}
 		>
-			<div class="dt-te {{if this.zen 'is-zen'}}">
-				<div
-					class="dt-te-toolbar
-						{{if this.zen 'is-zen'}}
-						{{if
-							this.toolbarFaded
-							'is-faded'
-						}}"
-				>
-					<button
-						type="button"
-						class="dt-te-tb-btn is-lead"
-						title={{if
-							this.zen
-							"Exit focus mode"
-							"Distraction-free focus mode"
-						}}
-						{{on "click" this.toggleZen}}
+			<:sidebar>
+				<CanonCanvas @height={{2000}}>
+					<div
+						class={{this.paneClass}}
+						{{this.keepPane}}
 					>
 						{{#if this.zen}}
-							<Icon
-								@name="minimize-2"
-							/>
-							Exit
-						{{else}}
-							<Icon
-								@name="maximize-2"
-							/>
-							Focus
+							<div class="te-zen-bar">
+								<CanonButton
+									@kind="cell"
+									@text="Exit"
+									@icon={{ExitIcon}}
+									title="Exit focus mode"
+									@onClick={{this.toggleZen}}
+								/>
+							</div>
 						{{/if}}
-					</button>
-					<button
-						type="button"
-						class="dt-te-tb-btn"
-						title="Toggle raw Markdown source"
-						{{on
-							"click"
-							this.toggleCodeMode
-						}}
-					>
-						{{#if this.settings.codeMode}}
-							<Icon
-								@name="file-text"
-							/>
-							Preview
-						{{else}}
-							<Icon @name="code-2" />
-							Source
-						{{/if}}
-					</button>
-
-					<Popover>
-						<PopoverTrigger
-							@asChild={{true}}
-							as |trigger|
+						<div
+							class="te-scroll"
+							{{on
+								"scroll"
+								this.rescroll
+							}}
 						>
-							<button
-								type="button"
-								class="dt-te-tb-btn"
-								{{trigger.modifiers}}
-							>
-								<Icon
-									@name="download"
-								/>
-								Export
-							</button>
-						</PopoverTrigger>
-						<PopoverContent
-							class="dt-te-menu is-export"
-							@align="end"
-						>
-							<button
-								type="button"
-								class="dt-te-menu-item"
-								{{on
-									"click"
-									(fn
-										this.doExport
-										"markdown"
-									)
-								}}
-							>
-								<DownloadLabel
-									@label="Markdown (.md)"
-									@icon={{false}}
-								/>
-							</button>
-							<button
-								type="button"
-								class="dt-te-menu-item"
-								{{on
-									"click"
-									(fn
-										this.doExport
-										"html"
-									)
-								}}
-							>
-								<DownloadLabel
-									@label="HTML (.html)"
-									@icon={{false}}
-								/>
-							</button>
-							<button
-								type="button"
-								class="dt-te-menu-item"
-								{{on
-									"click"
-									this.copyRich
-								}}
+							{{#if
+								this.settings.codeMode
+							}}
+								<textarea
+									class="te-source"
+									spellcheck="false"
+									aria-label="Markdown source"
+									value={{this.source}}
+									{{on
+										"input"
+										this.setSource
+									}}
+								></textarea>
+							{{/if}}
+							<div
+								class="te-page
+									{{if
+										this.settings.codeMode
+										'te-page--hidden'
+									}}
+									{{if
+										this.empty
+										'te-page--empty'
+									}}"
 							>
 								{{#if
-									this.copied
-								}}
-									<Icon
-										@name="check"
-									/>
-									Copied!
-								{{else}}
-									<Icon
-										@name="copy"
-									/>
-									Copy as
-									rich
-									text
-								{{/if}}
-							</button>
-							<button
-								type="button"
-								class="dt-te-menu-item"
-								{{on
-									"click"
-									(fn
-										this.doExport
-										"pdf"
-									)
-								}}
-							>
-								PDF (print)
-							</button>
-						</PopoverContent>
-					</Popover>
-
-					<Popover>
-						<PopoverTrigger
-							@asChild={{true}}
-							as |trigger|
-						>
-							<button
-								type="button"
-								class="dt-te-tb-btn is-icon"
-								title="Settings"
-								{{trigger.modifiers}}
-							>
-								<Icon
-									@name="settings"
-								/>
-							</button>
-						</PopoverTrigger>
-						<PopoverContent
-							class="dt-te-menu is-settings"
-							@align="end"
-						>
-							<label
-								class="dt-te-setting"
-							>
-								<span>Highlight
-									current
-									sentence</span>
-								<input
-									type="checkbox"
-									class="dt-te-switch"
-									checked={{this.settings.highlightSentence}}
-									{{on
-										"change"
-										(fn
-											this.toggleBool
-											"highlightSentence"
-										)
-									}}
-								/>
-							</label>
-							<label
-								class="dt-te-setting"
-							>
-								<span>Highlight
-									current
-									paragraph</span>
-								<input
-									type="checkbox"
-									class="dt-te-switch"
-									checked={{this.settings.highlightParagraph}}
-									{{on
-										"change"
-										(fn
-											this.toggleBool
-											"highlightParagraph"
-										)
-									}}
-								/>
-							</label>
-							<label
-								class="dt-te-setting"
-							>
-								<span>Dim
-									inactive
-									paragraphs</span>
-								<input
-									type="checkbox"
-									class="dt-te-switch"
-									checked={{this.settings.dimInactive}}
-									{{on
-										"change"
-										(fn
-											this.toggleBool
-											"dimInactive"
-										)
-									}}
-								/>
-							</label>
-							<label
-								class="dt-te-setting"
-							>
-								<span>Typewriter
-									scrolling</span>
-								<input
-									type="checkbox"
-									class="dt-te-switch"
-									checked={{this.settings.typewriter}}
-									{{on
-										"change"
-										(fn
-											this.toggleBool
-											"typewriter"
-										)
-									}}
-								/>
-							</label>
-							<hr class="dt-te-sep" />
-							<label
-								class="dt-te-setting"
-							>
-								<span>Show
-									gutter</span>
-								<input
-									type="checkbox"
-									class="dt-te-switch"
-									checked={{this.settings.showGutter}}
-									{{on
-										"change"
-										(fn
-											this.toggleBool
-											"showGutter"
-										)
-									}}
-								/>
-							</label>
-							<label
-								class="dt-te-setting"
-							>
-								<span>Show
-									margin
-									line</span>
-								<input
-									type="checkbox"
-									class="dt-te-switch"
-									checked={{this.settings.showMarginLine}}
-									{{on
-										"change"
-										(fn
-											this.toggleBool
-											"showMarginLine"
-										)
-									}}
-								/>
-							</label>
-							<hr class="dt-te-sep" />
-							<p
-								class="dt-te-menu-caption"
-							>Gutter fields</p>
-							{{#each
-								this.fieldRows
-								key="field.id"
-								as |row|
-							}}
-								<label
-									class="dt-te-setting"
-								>
-									<span
-										class="is-capitalised"
-									>{{row.field.label}}</span>
-									<input
-										type="checkbox"
-										class="dt-te-switch"
-										checked={{row.enabled}}
-										{{on
-											"change"
-											(fn
-												this.toggleField
-												row.field.id
-											)
-										}}
-									/>
-								</label>
-							{{/each}}
-						</PopoverContent>
-					</Popover>
-				</div>
-
-				<div class="dt-te-surface">
-					{{#if this.settings.codeMode}}
-						<textarea
-							class="dt-te-source"
-							spellcheck="false"
-							aria-label="Markdown source"
-							value={{this.source}}
-							{{on
-								"input"
-								this.setSource
-							}}
-						></textarea>
-					{{/if}}
-
-					<div
-						class="dt-te-canvas
-							{{if
-								this.settings.codeMode
-								'is-hidden'
-							}}"
-					>
-						{{#if this.settings.showGutter}}
-							<div
-								class="dt-te-gutter"
-							>
-								{{#each
-									this.gutterRows
-									key="key"
-									as |r|
+									this.settings.showGutter
 								}}
 									<div
-										class="dt-te-gutter-row"
-										style={{r.style}}
+										class="te-gutter"
 									>
-										<button
-											type="button"
-											class="dt-block-trigger
-												{{if
-													r.active
-													'is-active'
-												}}"
-											title="Change block type"
-											{{on
-												"click"
-												(fn
-													this.toggleBlockMenu
-													r.row
-												)
-											}}
-										>
-											{{r.row.type}}
-										</button>
 										{{#each
-											r.row.fields
-											key="id"
-											as |f|
+											this.gutterRows
+											key="key"
+											as |r|
 										}}
 											<div
-												class="dt-te-gutter-field"
+												class="te-gutter-row
+													{{if
+														r.active
+														'te-gutter-row--lit'
+													}}"
+												style={{r.style}}
 											>
-												{{f.value}}
-												{{f.label}}
+												<button
+													type="button"
+													class="te-block-trigger"
+													title="Change block type"
+													aria-label={{r.name}}
+													aria-haspopup="menu"
+													{{on
+														"click"
+														(fn
+															this.openBlockMenu
+															r.row
+														)
+													}}
+												>{{r.mark}}</button>
+												{{#each
+													r.row.fields
+													key="id"
+													as |f|
+												}}
+													<span
+														class="te-gutter-field"
+														aria-hidden="true"
+													>{{f.value}}
+														{{f.label}}</span>
+												{{/each}}
 											</div>
 										{{/each}}
 									</div>
-								{{/each}}
-							</div>
-						{{/if}}
-
-						{{#if this.blockMenu}}
-							<div
-								class="dt-te-blockmenu"
-								style={{this.blockMenuStyle}}
-								{{this.registerMenu}}
-							>
-								{{#each
-									this.menuItems
-									key="choice.label"
-									as |item|
+								{{/if}}
+								{{#if
+									this.settings.showMarginLine
 								}}
-									<button
-										type="button"
-										class="dt-te-blockmenu-item
-											{{if
-												item.active
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.runBlockCommand
-												item.pos
-												item.choice
-											)
-										}}
-									>
-										{{item.choice.label}}
-										{{#if
-											item.active
-										}}
-											<Icon
-												@name="check"
-											/>
-										{{/if}}
-									</button>
-								{{/each}}
+									<div
+										class="te-margin"
+										aria-hidden="true"
+									></div>
+								{{/if}}
+								<div
+									class="te-host"
+									{{this.mount}}
+								></div>
+								<span
+									class="te-menu-point"
+									aria-hidden="true"
+								></span>
+								<CanonMenuList
+									@items={{this.menuItems}}
+									@onSelect={{this.pickBlock}}
+									{{this.keepMenu}}
+								/>
+							</div>
+						</div>
+
+						{{#if this.bubble}}
+							{{! mousedown moves selection }}
+							{{! template-lint-disable no-pointer-down-event-binding no-invalid-interactive }}
+							<div
+								class="te-bubble
+									{{if
+										this.bubble.below
+										'te-bubble--below'
+									}}"
+								role="toolbar"
+								aria-label="Format"
+								style={{this.bubbleStyle}}
+								{{on
+									"mousedown"
+									this.eatMousedown
+								}}
+							>
+								<button
+									type="button"
+									class="te-bubble-btn"
+									title="Bold"
+									aria-label="Bold"
+									aria-pressed={{if
+										this.bubble.strong
+										"true"
+										"false"
+									}}
+									{{on
+										"click"
+										(fn
+											this.applyMark
+											"strong"
+										)
+									}}
+								><IconSvg
+										@name="bold"
+									/></button>
+								<button
+									type="button"
+									class="te-bubble-btn"
+									title="Italic"
+									aria-label="Italic"
+									aria-pressed={{if
+										this.bubble.em
+										"true"
+										"false"
+									}}
+									{{on
+										"click"
+										(fn
+											this.applyMark
+											"em"
+										)
+									}}
+								><IconSvg
+										@name="italic"
+									/></button>
+								<button
+									type="button"
+									class="te-bubble-btn"
+									title="Strikethrough"
+									aria-label="Strikethrough"
+									aria-pressed={{if
+										this.bubble.strikethrough
+										"true"
+										"false"
+									}}
+									{{on
+										"click"
+										(fn
+											this.applyMark
+											"strikethrough"
+										)
+									}}
+								><IconSvg
+										@name="strikethrough"
+									/></button>
+								<button
+									type="button"
+									class="te-bubble-btn"
+									title="Code"
+									aria-label="Code"
+									aria-pressed={{if
+										this.bubble.code
+										"true"
+										"false"
+									}}
+									{{on
+										"click"
+										(fn
+											this.applyMark
+											"code"
+										)
+									}}
+								><IconSvg
+										@name="code"
+									/></button>
+								<button
+									type="button"
+									class="te-bubble-btn"
+									title="Link"
+									aria-label="Link"
+									aria-pressed={{if
+										this.bubble.link
+										"true"
+										"false"
+									}}
+									{{on
+										"click"
+										this.addLink
+									}}
+								><IconSvg
+										@name="link"
+									/></button>
 							</div>
 						{{/if}}
 
-						{{#if
-							this.settings.showMarginLine
-						}}
-							<div
-								class="dt-te-margin"
-								aria-hidden="true"
-							></div>
+						{{#if this.zen}}
+							<output
+								class="te-count"
+							>{{this.wordCountLabel}}</output>
 						{{/if}}
-
-						<div
-							class="dt-te-host
-								{{if
-									this.hasPad
-									'has-pad'
-								}}"
-							{{this.mount}}
-						></div>
 					</div>
-				</div>
-
-				{{#if this.bubble}}
-					{{! mousedown moves selection }}
-					{{! template-lint-disable no-pointer-down-event-binding no-invalid-interactive }}
-					<div
-						class="dt-te-bubble"
-						style={{this.bubbleStyle}}
-						{{on
-							"mousedown"
-							this.eatMousedown
-						}}
-					>
-						<button
-							type="button"
-							class="dt-te-bubble-btn
-								{{if
-									this.bubble.strong
-									'is-on'
-								}}"
-							title="Bold"
-							{{on
-								"click"
-								(fn
-									this.applyMark
-									"strong"
-								)
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Document" />
+					<input
+						type="file"
+						class="dt-sr-only"
+						accept={{ACCEPT}}
+						tabindex="-1"
+						aria-hidden="true"
+						aria-label="Files"
+						{{this.keepPicker}}
+						{{on "change" this.chooseFile}}
+					/>
+					<CanonGrid @columns={{2}}>
+						<CanonButton
+							class="te-files"
+							@text="Files"
+							@icon={{FolderIcon}}
+							@onClick={{this.openFile}}
+						/>
+						<CanonButton
+							class="te-clear"
+							@text="Clear"
+							@icon={{ClearIcon}}
+							@disabled={{this.isEmpty}}
+							@onClick={{this.clear}}
+						/>
+						<CanonButton
+							class="te-full"
+							@text="Full Screen"
+							@icon={{FullIcon}}
+							title="Distraction-free focus mode"
+							@onClick={{this.toggleZen}}
+						/>
+						<CanonButton
+							class="te-source-toggle"
+							@text="Source"
+							@icon={{SourceIcon}}
+							@selected={{this.settings.codeMode}}
+							title="Toggle raw Markdown source"
+							aria-pressed={{if
+								this.settings.codeMode
+								"true"
+								"false"
 							}}
+							@onClick={{this.toggleCodeMode}}
+						/>
+					</CanonGrid>
+					<CanonGrid>
+						<CanonMenu
+							@items={{this.exportItems}}
+							@placement="top-start"
+							@onSelect={{this.doExport}}
+							as |menu|
 						>
-							<Icon @name="bold" />
-						</button>
-						<button
-							type="button"
-							class="dt-te-bubble-btn
-								{{if
-									this.bubble.em
-									'is-on'
-								}}"
-							title="Italic"
-							{{on
-								"click"
-								(fn
-									this.applyMark
-									"em"
-								)
-							}}
-						>
-							<Icon @name="italic" />
-						</button>
-						<button
-							type="button"
-							class="dt-te-bubble-btn
-								{{if
-									this.bubble.strikethrough
-									'is-on'
-								}}"
-							title="Strikethrough"
-							{{on
-								"click"
-								(fn
-									this.applyMark
-									"strikethrough"
-								)
-							}}
-						>
-							<Icon
-								@name="strikethrough"
+							<CanonButton
+								class="te-export"
+								@text="Export"
+								@icon={{ExportIcon}}
+								@disabled={{this.isEmpty}}
+								{{menu.trigger}}
 							/>
-						</button>
-						<button
-							type="button"
-							class="dt-te-bubble-btn
-								{{if
-									this.bubble.code
-									'is-on'
-								}}"
-							title="Code"
-							{{on
-								"click"
-								(fn
-									this.applyMark
-									"code"
-								)
-							}}
+						</CanonMenu>
+						<CanonButton
+							class="te-copy"
+							@kind="primary"
+							@text="Copy"
+							@icon={{CopyIcon}}
+							@iconStyle="oversized"
+							@disabled={{this.isEmpty}}
+							@onClick={{this.copy}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonTiles @items={{this.tiles}} />
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Editor Settings" />
+					<CanonRow @title="Font" @form="flush">
+						<CanonSegmented
+							aria-label="Font"
+							@items={{this.fonts}}
+							@selected={{this.font}}
+							@onChange={{this.setFont}}
+						/>
+					</CanonRow>
+					{{#each
+						this.switchRows key="key"
+						as |row|
+					}}
+						<CanonRow
+							@title={{row.title}}
+							as |titleId|
 						>
-							<Icon @name="code" />
-						</button>
-						<button
-							type="button"
-							class="dt-te-bubble-btn
-								{{if
-									this.bubble.link
-									'is-on'
-								}}"
-							title="Link"
-							{{on
-								"click"
-								this.addLink
-							}}
+							<CanonSwitch
+								class="te-switch-{{row.key}}"
+								aria-labelledby={{titleId}}
+								@on={{row.on}}
+								@onChange={{fn
+									this.setBool
+									row.key
+								}}
+							/>
+						</CanonRow>
+					{{/each}}
+					<CanonHeading @text="Gutter fields" />
+					{{#each
+						this.fieldRows key="field.id"
+						as |row|
+					}}
+						<CanonRow
+							@title={{row.title}}
+							as |titleId|
 						>
-							<Icon @name="link" />
-						</button>
-					</div>
-				{{/if}}
-
-				{{#if this.zen}}
-					<div
-						class="dt-te-count
-							{{if
-								this.toolbarFaded
-								'is-faded'
-							}}"
-					>
-						{{this.wordCountLabel}}
-					</div>
-				{{/if}}
-			</div>
-		</div>
+							<CanonSwitch
+								class="te-field-{{row.field.id}}"
+								aria-labelledby={{titleId}}
+								@on={{row.enabled}}
+								@disabled={{if
+									this.settings.showGutter
+									false
+									true
+								}}
+								@onChange={{fn
+									this.setField
+									row.field.id
+								}}
+							/>
+						</CanonRow>
+					{{/each}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

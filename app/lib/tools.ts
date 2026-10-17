@@ -721,6 +721,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Distraction-free Markdown writer',
 				icon: 'pen-line',
 				href: '/tools/text-editor',
+				canon: true,
 				accepts: TEXT_ACCEPT,
 			},
 			{
