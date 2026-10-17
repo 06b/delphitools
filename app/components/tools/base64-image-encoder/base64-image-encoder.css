@@ -32,6 +32,59 @@
 	opacity: 1;
 }
 
+/* the loaded images over the drop target, which keeps taking drops */
+.b64-drop-wrap {
+	position: relative;
+}
+
+.b64-drop-wrap--filled .canon-drop-zone-icon,
+.b64-drop-wrap--filled .canon-drop-zone-prompt {
+	visibility: hidden;
+}
+
+.b64-drop-shown {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	place-content: center;
+	box-sizing: border-box;
+	block-size: var(--canon-drop-height);
+	padding: 12px;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.b64-drop-shown img {
+	display: block;
+	inline-size: var(--b64-thumb);
+	block-size: var(--b64-thumb);
+	background: var(--canon-muted);
+	object-fit: cover;
+}
+
+.b64-drop-shown--one img {
+	inline-size: auto;
+	max-inline-size: 100%;
+	block-size: 100%;
+	background: none;
+	object-fit: contain;
+}
+
+.b64-drop-shown--few {
+	--b64-thumb: 52px;
+}
+
+.b64-drop-shown--many {
+	--b64-thumb: 36px;
+}
+
+.b64-drop-shown--lots {
+	--b64-thumb: 24px;
+}
+
 .b64-top {
 	display: flex;
 	gap: var(--canon-hairline);

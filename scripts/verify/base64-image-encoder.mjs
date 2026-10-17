@@ -90,6 +90,21 @@ check(
 	blocks[0].font,
 );
 check('one image lit of two', blocks.filter((b) => b.lit).length === 1);
+const zone = await page.evaluate(() => {
+	const target = document.querySelector('.b64-drop .canon-drop-zone-target').getBoundingClientRect();
+	const shown = [...document.querySelectorAll('.b64-drop-shown img')];
+	return {
+		count: shown.length,
+		loaded: shown.every((img) => img.complete && img.naturalWidth > 0),
+		inside: shown.every((img) => {
+			const box = img.getBoundingClientRect();
+			return box.width > 0 && box.top >= target.top && box.bottom <= target.bottom && box.left >= target.left && box.right <= target.right;
+		}),
+		prompt: getComputedStyle(document.querySelector('.b64-drop .canon-drop-zone-prompt')).visibility,
+	};
+});
+check('the drop zone shows each loaded image', zone.count === 2 && zone.loaded && zone.inside, JSON.stringify(zone));
+check('and no longer asks for a drop', zone.prompt === 'hidden', zone.prompt);
 const skipped = await page.$$eval('.canon-split-sidebar .canon-status', (els) =>
 	els.map((el) => el.textContent.trim()),
 );
@@ -228,12 +243,18 @@ await page.evaluate(() =>
 );
 await sleep(100);
 check('Remove drops one', (await page.$$('.b64-block')).length === 3);
+check('and its picture leaves the drop zone', (await page.$$('.b64-drop-shown img')).length === 3);
 await page.evaluate(() => document.querySelector('.b64-clear').click());
 await sleep(300);
 check(
 	'Clear all empties the list and the skipped',
 	(await page.$$('.b64-block')).length === 0 &&
 		(await page.$$('.canon-split-sidebar .canon-status')).length === 0,
+);
+check(
+	'the drop zone asks again',
+	!(await page.$('.b64-drop-shown')) &&
+		(await page.$eval('.b64-drop .canon-drop-zone-prompt', (el) => getComputedStyle(el).visibility)) === 'visible',
 );
 check(
 	'and the banner idles',

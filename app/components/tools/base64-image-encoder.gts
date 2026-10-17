@@ -107,6 +107,14 @@ export default class Base64ImageEncoder extends Component {
 		return this.images.length > 1 ? this.selected : undefined;
 	}
 
+	// ponytail: four sizes by count; past about 24 the strip clips; the encoded list names them all
+	get thumbSize() {
+		const count = this.images.length;
+		if (count === 1) return 'one';
+		if (count <= 6) return 'few';
+		return count <= 12 ? 'many' : 'lots';
+	}
+
 	get hasList() {
 		return this.images.length > 0 || this.skipped.length > 0;
 	}
@@ -204,15 +212,40 @@ export default class Base64ImageEncoder extends Component {
 			<:sidebar>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Images" />
-					<CanonDropZone
-						class="b64-drop"
-						@prompt="Drop images here"
-						@accept=""
-						@multiple={{true}}
-						@paste={{false}}
-						@onFiles={{this.loadFiles}}
-						{{on "paste" keepPaste}}
-					/>
+					<div
+						class="b64-drop-wrap
+							{{if
+								this.images.length
+								'b64-drop-wrap--filled'
+							}}"
+					>
+						<CanonDropZone
+							class="b64-drop"
+							@prompt="Drop images here"
+							@accept=""
+							@multiple={{true}}
+							@paste={{false}}
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
+						/>
+						{{#if this.images.length}}
+							<div
+								class="b64-drop-shown b64-drop-shown--{{this.thumbSize}}"
+								aria-hidden="true"
+							>
+								{{#each
+									this.images
+									key="id"
+									as |image|
+								}}
+									<img
+										src={{image.dataUri}}
+										alt=""
+									/>
+								{{/each}}
+							</div>
+						{{/if}}
+					</div>
 					{{#if this.skipped.length}}
 						<CanonHeading @text="Skipped" />
 						{{#each
