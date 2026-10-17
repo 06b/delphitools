@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 import {
+	batchDrop,
+	batchGrid,
 	compositeFrame,
 	drop,
 	exportSize,
@@ -11,6 +13,7 @@ import {
 	nearest,
 	removeLeafNode,
 	seamCentres,
+	splitterGrid,
 	swapLeafContent,
 	wrapNode,
 	type Src,
@@ -116,6 +119,107 @@ module('Unit | Tool | image-stitcher', function () {
 			height: 50,
 		});
 		assert.strictEqual(layoutBatch([]), null);
+	});
+
+	test('batch: a set column count', function (assert) {
+		const four = ['a', 'b', 'c', 'd'].map((id) => src(id, 10, 10));
+		const layout = layoutBatch(four, 4)!;
+		assert.deepEqual(batchGrid(layout), { columns: 4, rows: 1 });
+		assert.deepEqual(batchGrid(layoutBatch(four, 1)!), {
+			columns: 1,
+			rows: 4,
+		});
+		// more columns than images: one row of what there is
+		assert.deepEqual(batchGrid(layoutBatch(four.slice(0, 2), 4)!), {
+			columns: 2,
+			rows: 1,
+		});
+	});
+
+	test('batch: a held tile swaps or moves', function (assert) {
+		const ids = ['a', 'b', 'c', 'd'];
+		assert.deepEqual(
+			batchDrop(ids, 'a', { kind: 'swap', key: 'c' }),
+			['c', 'b', 'a', 'd'],
+		);
+		assert.deepEqual(
+			batchDrop(ids, 'a', {
+				kind: 'place',
+				key: 'c',
+				side: 'right',
+			}),
+			['b', 'c', 'a', 'd'],
+		);
+		assert.deepEqual(
+			batchDrop(ids, 'd', {
+				kind: 'place',
+				key: 'b',
+				side: 'left',
+			}),
+			['a', 'd', 'b', 'c'],
+		);
+		assert.deepEqual(
+			batchDrop(ids, 'a', {
+				kind: 'place',
+				key: 'b',
+				side: 'top',
+			}),
+			['a', 'b', 'c', 'd'],
+		);
+		assert.strictEqual(
+			batchDrop(ids, 'a', { kind: 'swap', key: 'z' }),
+			ids,
+		);
+	});
+
+	test('image-splitter names give the grid and order', function (assert) {
+		assert.deepEqual(
+			splitterGrid([
+				'photo-2-1',
+				'photo-1-2',
+				'photo-1-3',
+				'photo-2-3',
+				'photo-1-1',
+				'photo-2-2',
+			]),
+			{ columns: 3, rows: 2, order: [4, 1, 2, 0, 5, 3] },
+		);
+		// row-major past 9 and a stem with its own digits
+		assert.deepEqual(
+			splitterGrid(
+				Array.from(
+					{ length: 10 },
+					(_, i) => `scan-2024-1-${10 - i}`,
+				),
+			)?.order,
+			[9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+		);
+		assert.deepEqual(splitterGrid(['a-1-1']), {
+			columns: 1,
+			rows: 1,
+			order: [0],
+		});
+		assert.strictEqual(splitterGrid([]), null, 'nothing');
+		assert.strictEqual(
+			splitterGrid(['a-1-1', 'holiday']),
+			null,
+			'one name without a position',
+		);
+		assert.strictEqual(
+			splitterGrid(['a-1-1', 'a-1-2', 'a-2-1']),
+			null,
+			'a cell missing',
+		);
+		assert.strictEqual(
+			splitterGrid(['a-1-1', 'b-1-1']),
+			null,
+			'a cell twice',
+		);
+		assert.strictEqual(
+			splitterGrid(['a-0-1']),
+			null,
+			'counts from 1',
+		);
 	});
 
 	test('export size keeps both caps', function (assert) {

@@ -423,6 +423,67 @@ await page.keyboard.up('Alt');
 await sleep(200);
 s = await state();
 check('Alt+Arrow moves a page', s.stripNames.join() === 'dusk,coast,field,sand', s.stripNames.join());
+
+// batch: held cells drag on the picture, as individual tiles do
+const cell = (name) =>
+	page.evaluate((name) => {
+		const r = document
+			.querySelector(`span.stitch-tile img[alt="${name}"]`)
+			.closest('.stitch-tile')
+			.getBoundingClientRect();
+		return { x: r.x + r.width / 2, y: r.y + r.height / 2, left: r.x, right: r.right };
+	}, name);
+const cellOrder = () =>
+	page.evaluate(() =>
+		[...document.querySelectorAll('span.stitch-tile')]
+			.map((t) => {
+				const r = t.getBoundingClientRect();
+				return { name: t.querySelector('img').alt, x: r.x, y: r.y };
+			})
+			.sort((p, q) => Math.round(p.y - q.y) || p.x - q.x)
+			.map((t) => t.name)
+			.join(),
+	);
+const dragCell = async (fromName, x, y) => {
+	const a = await cell(fromName);
+	await page.mouse.move(a.x, a.y);
+	await page.mouse.down();
+	await page.mouse.move(a.x + 20, a.y, { steps: 4 });
+	await page.mouse.move(x, y, { steps: 8 });
+	const during = await page.evaluate(() => ({
+		ghost: !!document.querySelector('.stitch-ghost'),
+		mark: !!document.querySelector('.stitch-mark'),
+		lifted: !!document.querySelector('span.stitch-tile--lifted'),
+	}));
+	await page.mouse.up();
+	await sleep(600);
+	return during;
+};
+let target = await cell('sand');
+const during = await dragCell('dusk', target.x, target.y);
+check('batch: a held cell lifts, with the ghost and the mark', during.ghost && during.mark && during.lifted, JSON.stringify(during));
+s = await state();
+check(
+	'batch: dropped in the middle, two cells trade places, strip too',
+	(await cellOrder()) === 'sand,coast,field,dusk' && s.stripNames.join() === 'sand,coast,field,dusk',
+	`${await cellOrder()} / ${s.stripNames.join()}`,
+);
+target = await cell('coast');
+await dragCell('dusk', target.left + 4, target.y);
+s = await state();
+check(
+	'batch: dropped on a left edge band, the cell moves before it',
+	s.stripNames.join() === 'sand,dusk,coast,field',
+	s.stripNames.join(),
+);
+target = await cell('field');
+await dragCell('sand', target.right - 4, target.y);
+s = await state();
+check(
+	'batch: dropped on a right edge band, the cell moves after it',
+	s.stripNames.join() === 'dusk,coast,field,sand',
+	s.stripNames.join(),
+);
 await page.click('.stitch-clear');
 await sleep(200);
 s = await state();
@@ -431,6 +492,57 @@ check(
 	s.strip > 1 && s.readout.join('|') === '—|—|—' && s.downloadOff,
 	`${s.strip} ${s.readout.join('|')}`,
 );
+
+// image-splitter tiles (<stem>-<row>-<col>) arrange themselves
+const dropNamed = (names) =>
+	page.evaluate(async (names) => {
+		const data = new DataTransfer();
+		for (const name of names) {
+			const canvas = document.createElement('canvas');
+			canvas.width = 300;
+			canvas.height = 200;
+			const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+			data.items.add(new File([blob], name, { type: 'image/png' }));
+		}
+		const split = document.querySelector('.image-stitcher');
+		for (const type of ['dragover', 'drop'])
+			split.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+	}, names);
+const mode = () => page.$eval('.stitch-modes [aria-checked="true"]', (b) => b.textContent.trim());
+await visit(page, '/tools/image-stitcher');
+await dropNamed(['strip-1-3.png', 'strip-1-1.png', 'strip-1-4.png', 'strip-1-2.png']);
+await page.waitForSelector('span.stitch-tile', { timeout: 5000 });
+await sleep(400);
+s = await state();
+check('splitter tiles into an empty picture open Batch', (await mode()) === 'Batch', await mode());
+check(
+	'splitter tiles take their order',
+	s.stripNames.join() === 'strip-1-1,strip-1-2,strip-1-3,strip-1-4',
+	s.stripNames.join(),
+);
+check('splitter tiles take their grid: 4 × 1, not the square 2 × 2', s.readout[1] === '4 × 1', s.readout.join('|'));
+await dropNamed(['holiday.png']);
+await sleep(600);
+s = await state();
+check(
+	'a file without a position: the near-square grid, order kept',
+	s.readout[1] === '3 × 2' && s.stripNames.join() === 'strip-1-1,strip-1-2,strip-1-3,strip-1-4,holiday',
+	`${s.readout[1]} ${s.stripNames.join()}`,
+);
+await visit(page, '/tools/image-stitcher?stitchMode=batch');
+await dropNamed(['grid-2-2.png', 'grid-1-2.png', 'loose.png', 'grid-1-1.png']);
+await page.waitForSelector('span.stitch-tile', { timeout: 5000 });
+await sleep(400);
+s = await state();
+check(
+	'not every dropped file matches: dropped order, square grid',
+	s.stripNames.join() === 'grid-2-2,grid-1-2,loose,grid-1-1' && s.readout[1] === '2 × 2',
+	`${s.stripNames.join()} ${s.readout[1]}`,
+);
+await visit(page, '/tools/image-stitcher');
+await dropNamed(['pair-1-2.png', 'beach.png']);
+await page.waitForSelector('button.stitch-tile', { timeout: 5000 });
+check('mixed names into an empty picture stay Individual', (await mode()) === 'Individual', await mode());
 
 // phone: stacked, no sideways scroll
 await visit(page, '/tools/image-stitcher?stitchSample');

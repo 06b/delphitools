@@ -114,7 +114,9 @@ interface Held {
  * Individual: a press lights a tile, a held tile drags onto another to swap
  * or to its edge to place, and plus buttons along the composite, in the
  * seams and around the lit tile add images. Batch: the numbered grid with
- * its empty cells dashed. Files dropped on it land where the mark shows. The
+ * its empty cells dashed; a held cell drags onto another to swap, or to its
+ * edge to move before or after it. Files dropped on it land where the mark
+ * shows. The
  * port of iOS ImageStitcherPicture.
  */
 export default class Picture extends Component<PictureSignature> {
@@ -474,7 +476,7 @@ export default class Picture extends Component<PictureSignature> {
 				this.args.onDrag(dragged.key, dragged.drop);
 		};
 		const down = (event: PointerEvent) => {
-			if (this.args.batch || event.button !== 0) return;
+			if (event.button !== 0) return;
 			const tile = (
 				event.target as Element
 			).closest<HTMLElement>('.stitch-tile');
@@ -646,8 +648,13 @@ export default class Picture extends Component<PictureSignature> {
 				{{#each this.tiles key="key" as |tile|}}
 					{{#if @batch}}
 						<span
-							class="stitch-tile"
+							class="stitch-tile
+								{{if
+									tile.lifted
+									'stitch-tile--lifted'
+								}}"
 							style={{tile.style}}
+							data-key={{tile.key}}
 						>
 							<span
 								class="stitch-tile-image

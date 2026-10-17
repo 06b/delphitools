@@ -36,6 +36,7 @@ import Drop from 'delphitools-v2/components/tools/media/drop';
 import Picture from 'delphitools-v2/components/tools/image-stitcher/picture';
 import {
 	FITS,
+	batchDrop,
 	batchGrid,
 	exportSize,
 	findLeaf,
@@ -48,6 +49,7 @@ import {
 	moveLeafNode,
 	removeLeafNode,
 	settingFit,
+	splitterGrid,
 	swapLeafContent,
 	wrapNode,
 	type Drop as TileDrop,
@@ -184,6 +186,8 @@ export default class ImageStitcher extends Component {
 	@tracked baseId: string | null = null;
 	@tracked selected: string | null = null;
 	@tracked batchIds: string[] = [];
+	/** Set by image-splitter tiles; none lays the batch out near square. */
+	@tracked batchColumns: number | null = null;
 	@tracked format: ExportFormat = 'png';
 	@tracked loads = 0;
 	@tracked exporting = false;
@@ -234,7 +238,11 @@ export default class ImageStitcher extends Component {
 
 	@cached
 	get layout(): Layout | null {
-		if (this.batch) return layoutBatch(this.batchSrcs);
+		if (this.batch)
+			return layoutBatch(
+				this.batchSrcs,
+				this.batchColumns ?? undefined,
+			);
 		if (!this.root || !this.baseId) return null;
 		return layoutTree(this.root, this.byId, this.baseId);
 	}
@@ -466,6 +474,15 @@ export default class ImageStitcher extends Component {
 		if (!firstAdded) return;
 		const leaves = added.map((s) => leaf(s.id));
 		const { root } = this;
+		// image-splitter tiles into an empty picture go back on their grid
+		if (
+			target.kind === 'first' &&
+			added.length > 1 &&
+			splitterGrid(added.map((s) => s.name))
+		) {
+			this.batch = true;
+			target = { kind: 'batch', at: this.batchIds.length };
+		}
 		if (target.kind === 'batch') {
 			const ids = [...this.batchIds];
 			ids.splice(
@@ -473,7 +490,7 @@ export default class ImageStitcher extends Component {
 				0,
 				...added.map((s) => s.id),
 			);
-			this.batchIds = ids;
+			this.#arrange(ids);
 		} else if (!root) {
 			this.baseId = firstAdded.id;
 			this.root =
@@ -510,6 +527,15 @@ export default class ImageStitcher extends Component {
 		this.#spring();
 	}
 
+	// a batch made only of image-splitter tiles takes their grid and order
+	#arrange(ids: string[]) {
+		const grid = splitterGrid(
+			ids.map((id) => this.byId.get(id)?.name ?? ''),
+		);
+		this.batchColumns = grid?.columns ?? null;
+		this.batchIds = grid ? grid.order.map((i) => ids[i]!) : ids;
+	}
+
 	#forget(ids: string[]) {
 		const gone = new Set(ids);
 		for (const s of this.srcs)
@@ -539,6 +565,11 @@ export default class ImageStitcher extends Component {
 	});
 
 	drag = (key: string, drop: TileDrop) => {
+		if (this.batch) {
+			this.batchIds = batchDrop(this.batchIds, key, drop);
+			this.#spring();
+			return;
+		}
 		const { root } = this;
 		if (!root) return;
 		if (drop.kind === 'swap') {
@@ -588,6 +619,7 @@ export default class ImageStitcher extends Component {
 		if (this.batch) {
 			this.#forget(this.batchIds);
 			this.batchIds = [];
+			this.batchColumns = null;
 		} else {
 			if (this.root) this.#forget(leafSrcIds(this.root));
 			this.root = null;

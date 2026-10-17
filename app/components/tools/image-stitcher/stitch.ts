@@ -327,11 +327,14 @@ export function layoutTree(
 }
 
 /** Near-square grid, each cell the first image's size, every image cover-cropped to it. */
-export function layoutBatch(srcs: Src[]): Layout | null {
+/** A grid `columns` wide, or near square without it. */
+export function layoutBatch(srcs: Src[], columns?: number): Layout | null {
 	const first = srcs[0];
 	if (!first) return null;
 	const { w: cellW, h: cellH } = first;
-	const cols = Math.ceil(Math.sqrt(srcs.length));
+	const cols = columns
+		? Math.min(columns, srcs.length)
+		: Math.ceil(Math.sqrt(srcs.length));
 	return {
 		width: cols * cellW,
 		height: Math.ceil(srcs.length / cols) * cellH,
@@ -350,6 +353,53 @@ export function layoutBatch(srcs: Src[]): Layout | null {
 		})),
 		seams: [],
 	};
+}
+
+/** The batch order after a held tile is let go: the middle swaps, an edge band moves it before or after. */
+export function batchDrop(ids: string[], key: string, drop: Drop): string[] {
+	const from = ids.indexOf(key);
+	const to = ids.indexOf(drop.key);
+	if (from < 0 || to < 0 || from === to) return ids;
+	const out = [...ids];
+	if (drop.kind === 'swap') {
+		out[from] = drop.key;
+		out[to] = key;
+		return out;
+	}
+	out.splice(from, 1);
+	const after = drop.side === 'right' || drop.side === 'bottom';
+	out.splice(out.indexOf(drop.key) + (after ? 1 : 0), 0, key);
+	return out;
+}
+
+// image-splitter names its tiles <stem>-<row>-<column>, both from 1
+const splitterName = /-(\d+)-(\d+)$/;
+
+/**
+ * The grid a set of image-splitter tiles came from: its column count and
+ * the indices of `names` (extensionless) in row-major order. Null unless
+ * every name carries a position and together they fill the grid once.
+ */
+export function splitterGrid(
+	names: string[],
+): { columns: number; rows: number; order: number[] } | null {
+	const cells = [];
+	for (const [index, name] of names.entries()) {
+		const match = splitterName.exec(name);
+		if (!match) return null;
+		const row = Number(match[1]);
+		const col = Number(match[2]);
+		if (row < 1 || col < 1) return null;
+		cells.push({ index, row, col });
+	}
+	if (!cells.length) return null;
+	const rows = Math.max(...cells.map((c) => c.row));
+	const columns = Math.max(...cells.map((c) => c.col));
+	const taken = new Set(cells.map((c) => `${c.row}-${c.col}`));
+	if (taken.size !== cells.length || cells.length !== rows * columns)
+		return null;
+	cells.sort((a, b) => a.row - b.row || a.col - b.col);
+	return { columns, rows, order: cells.map((c) => c.index) };
 }
 
 export function batchGrid(layout: Layout) {
