@@ -52,3 +52,28 @@
 .artwork-grain .canon-image-compare img {
 	image-rendering: pixelated;
 }
+
+.artwork-loupe {
+	position: absolute;
+	box-sizing: border-box;
+	border: 2px solid var(--canon-primary);
+	box-shadow: 0 0 0 var(--canon-hairline) var(--canon-card);
+	cursor: grab;
+	touch-action: none;
+}
+
+/* a 64 px detail on a large image is a few screen pixels: a wider grip */
+.artwork-loupe::before {
+	position: absolute;
+	inset: -12px;
+	content: "";
+}
+
+.artwork-loupe:active {
+	cursor: grabbing;
+}
+
+.artwork-loupe:focus-visible {
+	outline: 2px solid var(--canon-foreground);
+	outline-offset: 2px;
+}

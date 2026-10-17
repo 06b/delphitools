@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import {
+	busyness,
 	detailRect,
 	enhance,
 	fillNoise,
@@ -40,6 +41,45 @@ module('Unit | Tool | artwork-enhancer', function () {
 			y: 0,
 			side: 30,
 		});
+	});
+
+	test('detailRect: around a centre, kept inside the image', function (assert) {
+		assert.deepEqual(detailRect(200, 100, 64, { x: 50, y: 40 }), {
+			x: 18,
+			y: 8,
+			side: 64,
+		});
+		assert.deepEqual(detailRect(200, 100, 64, { x: -10, y: 500 }), {
+			x: 0,
+			y: 36,
+			side: 64,
+		});
+	});
+
+	test('busyness: flat is 0, an edge is busiest, far from it is quieter', function (assert) {
+		const width = 32;
+		const height = 8;
+		const flat = new Uint8ClampedArray(width * height * 4).fill(
+			128,
+		);
+		assert.ok(
+			busyness(flat, width, height, 2).every((v) => v === 0),
+			'a flat image has no detail',
+		);
+		const edge = new Uint8ClampedArray(width * height * 4);
+		for (let i = 0; i < width * height; i++)
+			edge.fill(
+				i % width < width / 2 ? 0 : 255,
+				i * 4,
+				i * 4 + 4,
+			);
+		const busy = busyness(edge, width, height, 2);
+		const row = (x: number) => busy[4 * width + x]!;
+		assert.strictEqual(Math.max(...busy), 1, 'normalised to 1');
+		assert.ok(row(15) > 0.999, 'busiest at the edge');
+		assert.ok(row(16) > 0.999, 'on both sides');
+		assert.strictEqual(row(0), 0, 'nothing far from it');
+		assert.ok(row(13) < row(15), 'falls off with distance');
 	});
 
 	test('enhance keeps the size; magnified is the detail at 8x', function (assert) {

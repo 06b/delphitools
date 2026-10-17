@@ -1,4 +1,4 @@
-// the canon artwork-enhancer: picture compare, detail, live noise, export
+// the canon artwork-enhancer: picture compare, detail loupe, live noise, Intelligent mode, export
 
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -54,6 +54,9 @@ const pngBase64 = await page.evaluate(() => {
 	const context = canvas.getContext('2d');
 	context.fillStyle = '#808080';
 	context.fillRect(0, 0, 300, 200);
+	// the red channel stays flat for the spread checks
+	context.fillStyle = '#80ff80';
+	context.fillRect(0, 0, 40, 40);
 	return canvas.toDataURL('image/png').split(',')[1];
 });
 const grey = join(dir, 'grey.png');
@@ -125,6 +128,104 @@ check(
 	(await page.$eval('.artwork-opacity .canon-slider', (el) => el.getAttribute('aria-valuenow'))) === '20',
 );
 check('and the noise spreads further', twenty.spread > two.spread, `${two.spread} → ${twenty.spread}`);
+
+// red spread of the result inside a rect
+const spreadIn = (x, y, w, h) =>
+	page.evaluate(
+		async ({ x, y, w, h }) => {
+			const img = document.querySelector('.canon-split-sidebar .canon-image-compare-after img');
+			const bitmap = await createImageBitmap(await (await fetch(img.src)).blob());
+			const canvas = document.createElement('canvas');
+			canvas.width = bitmap.width;
+			canvas.height = bitmap.height;
+			const context = canvas.getContext('2d');
+			context.drawImage(bitmap, 0, 0);
+			const { data } = context.getImageData(x, y, w, h);
+			let min = 255;
+			let max = 0;
+			for (let i = 0; i < data.length; i += 4) {
+				min = Math.min(min, data[i]);
+				max = Math.max(max, data[i]);
+			}
+			return { src: img.src, spread: max - min };
+		},
+		{ x, y, w, h },
+	);
+const pickMode = (name) =>
+	page.evaluate(
+		(name) =>
+			[...document.querySelectorAll('.artwork-modes [role="radio"], .artwork-modes button')]
+				.find((el) => el.textContent.trim() === name)
+				.click(),
+		name,
+	);
+const changed = (src) =>
+	page.waitForFunction(
+		(src) => document.querySelector('.canon-split-sidebar .canon-image-compare-after img')?.src !== src,
+		{ timeout: 5000 },
+		src,
+	);
+
+// Intelligent: noise only where the picture is busy (the square's edges), none on flat grey
+const classicFlat = await spreadIn(200, 120, 100, 80);
+check('Classic: noise everywhere, flat grey too', classicFlat.spread > 0, String(classicFlat.spread));
+await pickMode('Intelligent');
+await changed(classicFlat.src);
+const smartFlat = await spreadIn(200, 120, 100, 80);
+const smartEdge = await spreadIn(36, 0, 8, 40);
+check('Intelligent: flat grey keeps no noise', smartFlat.spread === 0, String(smartFlat.spread));
+check('Intelligent: the square edge gets noise', smartEdge.spread > 0, String(smartEdge.spread));
+await pickMode('Classic');
+await changed(smartFlat.src);
+check('Classic again: noise on flat grey', (await spreadIn(200, 120, 100, 80)).spread > 0);
+
+// the loupe: a slider on the picture, arrow keys and drag move the detail
+const loupe = () =>
+	page.evaluate(() => {
+		const el = document.querySelector('.artwork-loupe');
+		const box = el?.getBoundingClientRect();
+		return {
+			role: el?.getAttribute('role'),
+			label: el?.getAttribute('aria-label'),
+			text: el?.getAttribute('aria-valuetext'),
+			x: box && box.x + box.width / 2,
+			y: box && box.y + box.height / 2,
+			grain: document.querySelector('.artwork-grain .canon-image-compare-before')?.src,
+		};
+	});
+const centred = await loupe();
+check('the loupe is a named slider on the picture', centred.role === 'slider' && centred.label === 'Detail');
+check('the loupe starts at the centre', centred.text === '150, 100', centred.text);
+await page.focus('.artwork-loupe');
+await page.keyboard.press('ArrowRight');
+await page.keyboard.press('ArrowDown');
+await sleep(300);
+const nudged = await loupe();
+check('arrows move the loupe a quarter of its side', nudged.text === '166, 116', nudged.text);
+check('and redraw the detail', nudged.grain && nudged.grain !== centred.grain);
+for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowRight');
+await sleep(200);
+const edge = await loupe();
+check('the loupe stays inside the image', edge.text === '268, 116', edge.text);
+// top-left: the detail shows the green square
+await page.mouse.move(edge.x, edge.y);
+await page.mouse.down();
+await page.mouse.move(edge.x - 900, edge.y - 600, { steps: 6 });
+await page.mouse.up();
+await sleep(400);
+const dragged = await loupe();
+check('a drag moves the loupe to the corner', dragged.text === '32, 32', dragged.text);
+const green = await page.evaluate(async () => {
+	const img = document.querySelector('.artwork-grain .canon-image-compare-before');
+	const bitmap = await createImageBitmap(await (await fetch(img.src)).blob());
+	const canvas = document.createElement('canvas');
+	canvas.width = bitmap.width;
+	canvas.height = bitmap.height;
+	const context = canvas.getContext('2d');
+	context.drawImage(bitmap, 0, 0);
+	return [...context.getImageData(8, 8, 1, 1).data].slice(0, 3).join();
+});
+check('the detail shows the region under the loupe', green === '128,255,128', green);
 
 // scale: 4× makes 4 px blocks
 await page.evaluate(() =>
