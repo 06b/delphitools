@@ -253,6 +253,8 @@ export const toolCategories: ToolCategory[] = [
 				accepts: ['image/*'],
 				new: true,
 				beta: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'substrata',

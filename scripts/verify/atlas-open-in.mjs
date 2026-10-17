@@ -23,7 +23,14 @@ const openInIds = () =>
 	);
 
 await visit(page, '/tools/image-atlas');
-check('image-atlas: no open-in block before a file', (await openInIds()).length === 0);
+check(
+	'image-atlas: the open-in block is inert before a file',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.ia-open--blank[inert] .dt-atlas-open [data-tool]') &&
+			!document.querySelector('.ia-open:not([inert])'),
+	),
+);
 await page.evaluate(
 	() =>
 		new Promise((resolve) => {
@@ -35,7 +42,7 @@ await page.evaluate(
 				transfer.items.add(
 					new File([blob], 'IMG_2041.png', { type: 'image/png' }),
 				);
-				document.querySelector('.dt-ia-frame').dispatchEvent(
+				document.querySelector('.image-atlas').dispatchEvent(
 					new DragEvent('drop', { dataTransfer: transfer, bubbles: true }),
 				);
 				resolve();
