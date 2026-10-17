@@ -43,8 +43,7 @@ export interface Tool {
 	route?: string;
 	highlight?: boolean;
 	atlas?: boolean;
-	wide?: boolean;
-	// built on the delphicanon kit; fills the sheet without the tool header
+	// built on the delphicanon kit; the drawer row shows a marker
 	canon?: boolean;
 	// a canon tool whose picture may grow past the 1200 px column
 	expands?: boolean;
@@ -1251,7 +1250,7 @@ export const toolCategories: ToolCategory[] = [
 	},
 ];
 
-export const EXPERIMENTS_ID = 'experiments';
+const EXPERIMENTS_ID = 'experiments';
 
 export const experimentsCategory = toolCategories.find(
 	(category) => category.id === EXPERIMENTS_ID,

@@ -190,18 +190,6 @@ body {
 	border-radius: 0 !important;
 }
 
-.taxiway-glyph {
-	position: absolute;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	font-family: var(--font-mono);
-	font-weight: 700;
-	font-size: 22px;
-	line-height: 1;
-	color: #d4952a;
-	text-shadow: 0 0 10px rgb(212 149 42 / 15%);
-}
-
 .dt-editor {
 	outline: none;
 	min-height: 60vh;
@@ -549,47 +537,6 @@ body {
 	}
 }
 
-// ponytail: single-span marquee; needs wide text
-.favour-banner {
-	animation: favour-rise 0.4s ease-out;
-}
-
-.favour-marquee {
-	animation: favour-marquee 32s linear infinite;
-	will-change: transform;
-}
-
-@keyframes favour-rise {
-	from {
-		transform: translateY(-100%);
-	}
-
-	to {
-		transform: translateY(0);
-	}
-}
-
-@keyframes favour-marquee {
-	from {
-		transform: translateX(100%);
-	}
-
-	to {
-		transform: translateX(-100%);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.favour-banner {
-		animation: none;
-	}
-
-	.favour-marquee {
-		animation: none;
-		transform: none;
-	}
-}
-
 // keep brand visible in hc
 @media (forced-colors: active) {
 	.pride-wordmark,
@@ -599,147 +546,6 @@ body {
 		-webkit-text-fill-color: CanvasText;
 		-webkit-text-stroke: 0;
 		animation: none;
-	}
-}
-
-// react bits sticker peel
-.sticker-btn {
-	// --peel = fold position
-	--p: 10px;
-	--peel-start: calc(-1 * var(--p));
-	--peel-end: calc(100% + var(--p));
-	--peel: 0%;
-
-	display: block;
-	border: 0;
-	padding: 0;
-	background: none;
-	cursor: pointer;
-	position: relative;
-	z-index: 1;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.sticker-btn:hover,
-.sticker-btn:focus-visible {
-	z-index: 5;
-}
-
-.sticker-btn.is-peeling {
-	z-index: 30;
-	cursor: default;
-}
-
-.sticker-btn:focus-visible {
-	outline: none;
-}
-
-.sticker-btn:focus-visible .sticker-fold {
-	outline: 2px solid var(--ring);
-	outline-offset: 4px;
-	border-radius: 6px;
-}
-
-// gsap lift, alpha shadow
-.peel-lift {
-	display: block;
-	transition: transform 0.25s ease;
-	will-change: transform;
-	filter: drop-shadow(0 4px 6px rgb(0 0 0 / 28%));
-}
-
-.dark .peel-lift {
-	filter: drop-shadow(0 5px 10px rgb(0 0 0 / 50%));
-}
-
-.sticker-btn:not(.is-peeling):hover .peel-lift {
-	transform: translateY(-5px) scale(1.03);
-}
-
-.sticker-btn.is-peeling .peel-lift {
-	transition: none;
-}
-
-.sticker-fold {
-	position: relative;
-	display: block;
-	transform: rotate(var(--rot));
-	transform-origin: center;
-}
-
-.sticker-face {
-	display: block;
-	clip-path: polygon(
-		var(--peel-start) var(--peel),
-		var(--peel-end) var(--peel),
-		var(--peel-end) var(--peel-end),
-		var(--peel-start) var(--peel-end)
-	);
-}
-
-.sticker-flap {
-	position: absolute;
-	left: 0;
-	top: calc(-100% + 2 * var(--peel) - 1px);
-	width: 100%;
-	height: 100%;
-	transform: scaleY(-1);
-	clip-path: polygon(
-		var(--peel-start) var(--peel-start),
-		var(--peel-end) var(--peel-start),
-		var(--peel-end) var(--peel),
-		var(--peel-start) var(--peel)
-	);
-}
-
-.sticker-flap .sticker-img {
-	filter: url("#sticker-back");
-}
-
-.sticker-img {
-	display: block;
-	width: 100%;
-	height: auto;
-	user-select: none;
-	-webkit-user-drag: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.peel-lift {
-		transition: none;
-	}
-
-	.sticker-btn:not(.is-peeling):hover .peel-lift {
-		transform: none;
-	}
-}
-
-@media (forced-colors: active) {
-	.sticker-btn:focus-visible .sticker-fold {
-		outline-color: Highlight;
-	}
-}
-
-// static icons only; pathlength=1 set in tsx
-@media (prefers-reduced-motion: no-preference) {
-	.tool-ic-draw svg > * {
-		stroke-dasharray: 1;
-		stroke-dashoffset: 0;
-	}
-
-	.tool-cell:hover .tool-ic-draw svg > *,
-	.tool-cell:focus-visible .tool-ic-draw svg > * {
-		animation: tool-icon-draw 0.55s ease forwards;
-	}
-
-	@keyframes tool-icon-draw {
-		from {
-			stroke-dashoffset: 1;
-		}
-
-		to {
-			stroke-dashoffset: 0;
-		}
 	}
 }
 
@@ -2351,16 +2157,6 @@ body {
 	}
 }
 
-.dt-badge {
-	padding: crayon.size(0.5) crayon.size(2);
-	background: var(--secondary);
-	color: var(--secondary-foreground);
-	font-size: crayon.font-size("xs");
-	white-space: nowrap;
-
-	@include crayon.show-from("sm");
-}
-
 .dt-icon-btn {
 	display: inline-flex;
 	align-items: center;
@@ -2651,22 +2447,6 @@ body {
 	translate: 0 calc(var(--fig-drop) - var(--fig-lift));
 	filter: drop-shadow(0 0 2px var(--cast-glow))
 		drop-shadow(0 0 10px var(--cast-glow));
-}
-
-.dt-cast-meta {
-	display: flex;
-	flex-wrap: wrap;
-	margin: 0;
-	gap: crayon.size(1) crayon.size(3);
-	color: var(--muted-foreground);
-	font-size: crayon.font-size("xs");
-}
-
-.dt-cast-blurb {
-	min-height: crayon.size(8);
-	margin: 0;
-	font-size: crayon.font-size("xs");
-	line-height: 1.5;
 }
 
 .dt-about-note {
@@ -3563,7 +3343,6 @@ body {
 	}
 }
 
-.dt-tool-body.is-capped,
 .dt-tool-header.is-capped {
 	max-width: 56rem;
 	margin-inline: auto;
@@ -3609,71 +3388,9 @@ body {
 	}
 }
 
-.dt-badge.is-beta {
-	background: transparent;
-	border: 1px solid
-		color-mix(in oklch, oklch(76% 0.16 70deg) 50%, transparent);
-	color: oklch(60% 0.14 70deg);
-}
-
-.dt-badge.is-new {
-	background: transparent;
-	border: 1px solid color-mix(in oklch, var(--primary) 50%, transparent);
-	color: var(--primary);
-}
-
-.dt-badge.is-experiment {
-	padding-inline-start: crayon.size(1);
-
-	&::before {
-		content: "";
-		display: inline-block;
-		width: 1em;
-		height: 1em;
-		margin-inline-end: crayon.size(1);
-		vertical-align: -0.15em;
-		background: url("/art/alien-badge.webp") center / contain
-			no-repeat;
-	}
-}
-
 .dt-tool-desc {
 	margin-top: crayon.size(1);
 	color: var(--muted-foreground);
-}
-
-.dt-tool-soon {
-	padding: crayon.size(10) crayon.size(6);
-	border: 1px dashed var(--border);
-	text-align: center;
-
-	h2 {
-		font-size: crayon.font-size("xl");
-		font-weight: crayon.font-weight("bold");
-	}
-
-	p {
-		max-width: 28rem;
-		margin: crayon.size(2) auto 0;
-		color: var(--muted-foreground);
-	}
-}
-
-.dt-tool-soon-mark {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: crayon.size(16);
-	height: crayon.size(16);
-	margin-bottom: crayon.size(4);
-	background: var(--muted);
-	border-radius: crayon.rounded("full");
-
-	.dt-icon {
-		width: crayon.size(8);
-		height: crayon.size(8);
-		color: var(--muted-foreground);
-	}
 }
 
 .dt-popover {

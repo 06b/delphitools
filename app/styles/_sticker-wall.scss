@@ -97,26 +97,3 @@
 	pointer-events: none;
 	user-select: none;
 }
-
-.dt-sticker-caption {
-	margin-top: crayon.size(3);
-	text-align: center;
-	font-size: crayon.font-size("sm");
-	color: var(--muted-foreground);
-}
-
-.dt-tool-sticker {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	margin-top: crayon.size(24);
-
-	@include crayon.screen("md") {
-		margin-top: crayon.size(32);
-	}
-
-	// collapse when sticker 404s
-	&:not(:has(.dt-sticker-btn)) {
-		display: none;
-	}
-}

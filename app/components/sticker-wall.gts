@@ -2,8 +2,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
-import { concat, hash } from '@ember/helper';
-import { and, or } from 'ember-truth-helpers';
 import type { TOC } from '@ember/component/template-only';
 
 interface Sticker {
@@ -52,19 +50,10 @@ const WALL_STICKERS: Sticker[] = [
 	},
 ];
 
-const LOUSY_STICKER: Sticker = {
-	file: '',
-	label: '',
-	rot: -2.5,
-	width: 'clamp(220px, 60vw, 360px)',
-	align: 'center',
-};
-
 function downloadSticker(file: string) {
-	const base = file.split('/').pop() ?? file;
 	const a = document.createElement('a');
 	a.href = `/stickers/${file}@2x.png`;
-	a.download = `delphitools-${base}-sticker.png`;
+	a.download = `delphitools-${file}-sticker.png`;
 	a.setAttribute('aria-hidden', 'true');
 	document.body.appendChild(a);
 	a.click();
@@ -75,7 +64,6 @@ interface StickerButtonSignature {
 	Element: HTMLButtonElement;
 	Args: {
 		sticker: Sticker;
-		caption?: string;
 	};
 }
 
@@ -152,34 +140,9 @@ class StickerButton extends Component<StickerButtonSignature> {
 					/>
 				</span>
 			</button>
-			{{#if (and this.loaded @caption)}}
-				<p class="dt-sticker-caption">{{@caption}}</p>
-			{{/if}}
 		{{/unless}}
 	</template>
 }
-
-interface PeelStickerSignature {
-	Args: {
-		tool: string;
-		label?: string;
-	};
-}
-
-const TOOL_STICKER_CAPTION = 'Have a sticker! Peel it off to download.';
-
-const PeelSticker: TOC<PeelStickerSignature> = <template>
-	<StickerButton
-		@sticker={{hash
-			file=(concat "lousy/" @tool)
-			label=(or @label @tool)
-			rot=LOUSY_STICKER.rot
-			width=LOUSY_STICKER.width
-			align=LOUSY_STICKER.align
-		}}
-		@caption={{TOOL_STICKER_CAPTION}}
-	/>
-</template>;
 
 const WALL_HEADING = 'Stickers';
 
@@ -198,4 +161,4 @@ const StickerWall: TOC<{ Element: HTMLElement }> = <template>
 	</section>
 </template>;
 
-export { StickerWall, PeelSticker };
+export { StickerWall };

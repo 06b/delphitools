@@ -20,8 +20,6 @@ const UNSTYLED_CONTAINERS = new Set([
 	'sub-pg-zoom', // CanonGrid carries styling
 	'sub-ring-band', // focus targets over the ring canvas
 	'sub-ring-keys',
-	'sub-grip', // draggable modifier handle
-	'sub-preset-strip', // .segmented carries styling
 	'sub-topbar-seg-hook', // span[title] rigs read
 ]);
 
