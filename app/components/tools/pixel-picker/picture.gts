@@ -4,7 +4,6 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import CanonLoupe from 'delphicanon/components/canon-loupe';
-import { frame, type LoupeSides } from 'delphicanon/lib/loupe';
 import grabPan from 'delphicanon/modifiers/canon-grab-pan';
 import type { Rgb } from 'delphicanon/lib/colour';
 import Slot from 'delphitools-v2/components/tools/media/slot';
@@ -12,13 +11,14 @@ import {
 	clampPixel,
 	contains,
 	fitRect,
+	lensLayout,
 	pixelAt,
 	place,
 	type Point,
 	type Size,
 } from 'delphitools-v2/components/tools/pixel-picker/geometry';
 
-export type Move = 'hover' | 'drag' | 'tap' | 'key';
+export type Move = 'drag' | 'tap' | 'key';
 
 interface PixelPictureSignature {
 	Args: {
@@ -27,11 +27,11 @@ interface PixelPictureSignature {
 		pixel: Point;
 		loupe?: ImageData;
 		colour: Rgb;
-		/** Read out as the reticle moves. */
+		/** The sampled colour in the header notation, above the lens. */
+		value: string;
+		/** Read out as the lens moves. */
 		reading: string;
 		onMove: (pixel: Point, how: Move) => void;
-		/** The pointer left; the hover preview ends. */
-		onLeave: () => void;
 		onPick: () => void;
 		onChoose: () => void;
 	};
@@ -40,9 +40,6 @@ interface PixelPictureSignature {
 /** iOS PixelPickerPicture: 15 pixels across the loupe. */
 const loupeRadius = 7;
 const loupeSides = { min: 84, max: 128 };
-const loupeGap = 28;
-/** Points from the reticle centre that still grab it. */
-const reach = 36;
 const keySteps: Record<string, Point> = {
 	ArrowLeft: { x: -1, y: 0 },
 	ArrowRight: { x: 1, y: 0 },
@@ -50,20 +47,24 @@ const keySteps: Record<string, Point> = {
 	ArrowDown: { x: 0, y: 1 },
 };
 
-type Grab =
-	| { kind: 'crosshair'; offset: Point }
-	| { kind: 'loupe'; from: Point; at: Point };
+/**
+ * `image`: the lens follows the pointer's travel over the image, so the
+ * pointer never covers it. `lens`: a press on the lens moves one image
+ * pixel per loupe cell.
+ */
+type Grab = { kind: 'image' | 'lens'; from: Point; at: Point };
 
 /**
- * The image fitted to the pane with a reticle on the sampled pixel and a
- * loupe beside it. A tap or click moves the reticle there and picks; the
- * reticle and the loupe drag; a mouse previews by hovering; the arrow
- * keys move one pixel (Shift: ten) and Enter picks.
+ * The image fitted to the pane with the lens, a loupe centred on the
+ * sampled pixel. A drag anywhere on the image moves the lens by the drag;
+ * a click or tap moves it there. Once it rests, a Pick button sits under
+ * it and the sampled value above it. The arrow keys move one pixel
+ * (Shift: ten) and Enter picks.
  */
 export default class PixelPicture extends Component<PixelPictureSignature> {
 	@tracked area: Size = { width: 0, height: 0 };
-	@tracked sides?: LoupeSides;
 	@tracked eases = false;
+	@tracked dragging = false;
 	#grab?: Grab;
 	#dragged = false;
 
@@ -82,19 +83,12 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 		return place(this.args.pixel, this.fit, this.image);
 	}
 
-	get loupeFrame() {
+	get layout() {
 		const side = Math.min(
 			Math.max(this.area.height * 0.5, loupeSides.min),
 			loupeSides.max,
 		);
-		return frame(
-			this.centre,
-			side,
-			loupeGap,
-			this.area,
-			8,
-			this.sides,
-		);
+		return lensLayout(this.centre, side, this.area);
 	}
 
 	get imageStyle() {
@@ -108,16 +102,39 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 		return this.fit.width > this.image.width;
 	}
 
+	/** The reticle shows only where an edge holds the lens well off the pixel. */
+	get reticleShown() {
+		const { lens } = this.layout;
+		const { x, y } = this.centre;
+		return (
+			Math.hypot(
+				lens.x + lens.width / 2 - x,
+				lens.y + lens.height / 2 - y,
+			) >
+			lens.width / 6
+		);
+	}
+
 	get reticleStyle() {
 		const { x, y } = this.centre;
 		return htmlSafe(`translate: ${x}px ${y}px`);
 	}
 
 	get loupeStyle() {
-		const { x, y, width } = this.loupeFrame;
+		const { x, y, width } = this.layout.lens;
 		return htmlSafe(
 			`translate: ${x}px ${y}px; --canon-loupe-side: ${width}px`,
 		);
+	}
+
+	get pickStyle() {
+		const { x, y } = this.layout.pick;
+		return htmlSafe(`translate: ${x}px ${y}px`);
+	}
+
+	get detailStyle() {
+		const { x, y } = this.layout.detail;
+		return htmlSafe(`translate: calc(${x}px - 50%) ${y}px`);
 	}
 
 	measure = modifier((element: HTMLElement) => {
@@ -148,35 +165,29 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 		this.args.onMove(clampPixel(pixel, this.image), how);
 	}
 
-	grabs = (point: Point) => {
-		if (!this.args.canvas) return false;
-		const loupe = this.loupeFrame;
-		if (contains(loupe, point)) return true;
-		const { x, y } = this.centre;
-		return Math.hypot(point.x - x, point.y - y) < reach;
-	};
+	#onPick(point: Point) {
+		return !this.dragging && contains(this.layout.pick, point);
+	}
+
+	grabs = (point: Point) =>
+		Boolean(this.args.canvas) &&
+		!this.#onPick(point) &&
+		(contains(this.fit, point) ||
+			contains(this.layout.lens, point));
 
 	begin = (event: PointerEvent) => {
 		const point = this.#local(
 			event,
 			event.currentTarget as HTMLElement,
 		);
-		const loupe = this.loupeFrame;
-		const { x, y } = this.centre;
-		this.#grab = contains(loupe, point)
-			? { kind: 'loupe', from: this.args.pixel, at: point }
-			: {
-					kind: 'crosshair',
-					offset: {
-						x: point.x - x,
-						y: point.y - y,
-					},
-				};
-		this.#dragged = false;
-		this.sides = {
-			left: loupe.x + loupe.width / 2 < x,
-			above: loupe.y + loupe.height / 2 < y,
+		this.#grab = {
+			kind: contains(this.layout.lens, point)
+				? 'lens'
+				: 'image',
+			from: this.args.pixel,
+			at: point,
 		};
+		this.#dragged = false;
 	};
 
 	drag = (event: PointerEvent) => {
@@ -186,14 +197,16 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 			event,
 			event.currentTarget as HTMLElement,
 		);
+		const dx = point.x - grab.at.x;
+		const dy = point.y - grab.at.y;
+		if (!this.#dragged && Math.hypot(dx, dy) < 3) return;
 		this.#dragged = true;
-		if (grab.kind === 'crosshair') {
+		this.dragging = true;
+		if (grab.kind === 'image') {
+			const from = place(grab.from, this.fit, this.image);
 			this.#move(
 				pixelAt(
-					{
-						x: point.x - grab.offset.x,
-						y: point.y - grab.offset.y,
-					},
+					{ x: from.x + dx, y: from.y + dy },
 					this.fit,
 					this.image,
 				),
@@ -201,71 +214,42 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 			);
 			return;
 		}
-		// one image pixel per loupe cell
-		const cell = this.loupeFrame.width / (loupeRadius * 2 + 1);
+		const cell = this.layout.lens.width / (loupeRadius * 2 + 1);
 		this.#move(
 			{
-				x:
-					grab.from.x +
-					Math.round(
-						(point.x - grab.at.x) / cell,
-					),
-				y:
-					grab.from.y +
-					Math.round(
-						(point.y - grab.at.y) / cell,
-					),
+				x: grab.from.x + Math.round(dx / cell),
+				y: grab.from.y + Math.round(dy / cell),
 			},
 			'drag',
 		);
 	};
 
-	end = () => {
+	end = (event: PointerEvent) => {
+		const grab = this.#grab;
 		this.#grab = undefined;
-		this.sides = undefined;
-	};
-
-	hover = (event: PointerEvent) => {
-		if (
-			event.pointerType !== 'mouse' ||
-			event.buttons ||
-			this.#grab
-		)
-			return;
-		const point = this.#local(
-			event,
-			event.currentTarget as HTMLElement,
-		);
-		if (
-			contains(this.fit, point) &&
-			!contains(this.loupeFrame, point)
-		)
-			this.#move(
-				pixelAt(point, this.fit, this.image),
-				'hover',
+		this.dragging = false;
+		if (grab && !this.#dragged)
+			this.#tap(
+				this.#local(
+					event,
+					event.currentTarget as HTMLElement,
+				),
 			);
 	};
 
-	tap = (event: MouseEvent) => {
-		if (!this.args.canvas) return;
-		if (this.#dragged) {
-			this.#dragged = false;
-			return;
-		}
-		const point = this.#local(
-			event,
-			event.currentTarget as HTMLElement,
-		);
+	// taps land here: a touch the grab took gives no click
+	#tap(point: Point) {
 		if (
+			this.#onPick(point) ||
 			!contains(this.fit, point) ||
-			contains(this.loupeFrame, point)
+			contains(this.layout.lens, point)
 		)
 			return;
 		this.#move(pixelAt(point, this.fit, this.image), 'tap');
-		this.args.onPick();
-	};
+	}
 
 	key = (event: KeyboardEvent) => {
+		if (event.target !== event.currentTarget) return;
 		if (event.key === 'Enter' || event.key === ' ') {
 			event.preventDefault();
 			this.args.onPick();
@@ -291,6 +275,10 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 						{{if
 							this.eases
 							'pp-area--eases'
+						}}
+						{{if
+							this.dragging
+							'pp-area--dragging'
 						}}"
 					tabindex="0"
 					role="group"
@@ -303,9 +291,6 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 						onMove=this.drag
 						onEnd=this.end
 					}}
-					{{on "pointermove" this.hover}}
-					{{on "pointerleave" @onLeave}}
-					{{on "click" this.tap}}
 					{{on "keydown" this.key}}
 				>
 					<div
@@ -317,14 +302,6 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 						style={{this.imageStyle}}
 						{{this.show @canvas}}
 					></div>
-					<svg
-						class="pp-reticle"
-						style={{this.reticleStyle}}
-						viewBox="0 0 40 40"
-						aria-hidden="true"
-					><path
-							d="M25 20H35M15 20H5M20 25V35M20 15V5"
-						/></svg>
 					<div
 						class="pp-loupe"
 						style={{this.loupeStyle}}
@@ -334,6 +311,29 @@ export default class PixelPicture extends Component<PixelPictureSignature> {
 							@colour={{@colour}}
 						/>
 					</div>
+					{{#if this.reticleShown}}
+						<svg
+							class="pp-reticle"
+							style={{this.reticleStyle}}
+							viewBox="0 0 40 40"
+							aria-hidden="true"
+						><path
+								d="M25 20H35M15 20H5M20 25V35M20 15V5"
+							/></svg>
+					{{/if}}
+					{{#unless this.dragging}}
+						<span
+							class="pp-lens-detail"
+							style={{this.detailStyle}}
+							aria-hidden="true"
+						>{{@value}}</span>
+						<button
+							type="button"
+							class="pp-lens-pick"
+							style={{this.pickStyle}}
+							{{on "click" @onPick}}
+						>Pick</button>
+					{{/unless}}
 					<output
 						class="pp-reading"
 						aria-live="polite"

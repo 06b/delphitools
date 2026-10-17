@@ -3,6 +3,7 @@ import {
 	clampPixel,
 	fitRect,
 	launchFlags,
+	lensLayout,
 	pixelAt,
 	place,
 } from 'delphitools-v2/components/tools/pixel-picker/geometry';
@@ -46,5 +47,31 @@ module('Unit | Tool | pixel-picker', function () {
 		]);
 		assert.false(flags.later);
 		assert.strictEqual(launchFlags('').pixel, undefined);
+	});
+
+	test('the lens centres on the pixel, Pick under it, the value above', function (assert) {
+		const area = { width: 600, height: 400 };
+		const mid = lensLayout({ x: 300, y: 200 }, 120, area);
+		assert.deepEqual(mid.lens, {
+			x: 240,
+			y: 140,
+			width: 120,
+			height: 120,
+		});
+		assert.deepEqual(mid.pick, {
+			x: 268,
+			y: 266,
+			width: 64,
+			height: 36,
+		});
+		assert.deepEqual(mid.detail, { x: 300, y: 110 });
+		const top = lensLayout({ x: 0, y: 0 }, 120, area);
+		assert.deepEqual(
+			[top.lens.x, top.lens.y, top.detail.y],
+			[8, 34, 4],
+		);
+		const bottom = lensLayout({ x: 600, y: 400 }, 120, area);
+		assert.strictEqual(bottom.pick.y + bottom.pick.height, 396);
+		assert.strictEqual(bottom.lens.x, 472);
 	});
 });

@@ -95,7 +95,7 @@ await sleep(200);
 let rows = await page.$$eval('.pp-pick-value', (els) => els.map((e) => e.textContent.trim()));
 check('Enter picks', rows.join() === '#0000FF', rows.join());
 
-// pointer: a click moves the reticle there and picks
+// pointer: a click moves the lens there without picking; Pick under the lens picks
 const cell = (x, y) =>
 	page.evaluate(
 		({ x, y }) => {
@@ -104,38 +104,54 @@ const cell = (x, y) =>
 		},
 		{ x, y },
 	);
+const lensParts = () =>
+	page.evaluate(() => ({
+		pick: !!document.querySelector('.pp-lens-pick'),
+		detail: document.querySelector('.pp-lens-detail')?.textContent.trim() ?? null,
+	}));
 let at = await cell(0, 0);
 await page.mouse.click(at.x, at.y);
+await sleep(500);
+rows = await page.$$eval('.pp-pick-value', (els) => els.map((e) => e.textContent.trim()));
+check('a click moves the lens there', (await strip()) === '#FF0000', await strip());
+check('and does not pick', rows.join() === '#0000FF', rows.join());
+let parts = await lensParts();
+check('at rest: Pick under the lens, the value above it', parts.pick && parts.detail === '#FF0000', JSON.stringify(parts));
+const lensBoxes = await page.evaluate(() => {
+	const box = (q) => document.querySelector(q).getBoundingClientRect();
+	const [lens, pick, detail] = [box('.pp-loupe .canon-loupe'), box('.pp-lens-pick'), box('.pp-lens-detail')];
+	return {
+		under: pick.top >= lens.bottom && pick.top - lens.bottom < 12 && Math.abs(pick.left + pick.width / 2 - (lens.left + lens.width / 2)) < 2,
+		above: detail.bottom <= lens.top && lens.top - detail.bottom < 12,
+	};
+});
+check('directly under and above it', lensBoxes.under && lensBoxes.above, JSON.stringify(lensBoxes));
+await page.click('.pp-lens-pick');
 await sleep(200);
 rows = await page.$$eval('.pp-pick-value', (els) => els.map((e) => e.textContent.trim()));
-check('a click picks the pixel under it', rows.join() === '#0000FF,#FF0000', rows.join());
-check('the reticle moved there', (await strip()) === '#FF0000');
+check('Pick under the lens picks', rows.join() === '#0000FF,#FF0000', rows.join());
 
-// hover previews, leaving restores
-at = await cell(1, 0);
-await page.mouse.move(at.x, at.y);
-await sleep(100);
-check('a mouse hover previews', (await strip()) === '#00FF00', await strip());
-const outside = await page.evaluate(() => {
-	const box = document.querySelector('.pixel-picker .canon-split-main').getBoundingClientRect();
-	return { x: box.left + 20, y: box.top + 20 };
-});
-await page.mouse.move(outside.x, outside.y);
-await sleep(100);
-check('leaving the picture restores the reticle', (await strip()) === '#FF0000', await strip());
-
-// drag the reticle: no pick on release
-at = await cell(0, 0);
+// a drag anywhere moves the lens by the drag, not to the press; no pick
+at = await cell(1, 1);
 const to = await cell(2, 1);
 await page.mouse.move(at.x, at.y);
 await page.mouse.down();
-await page.mouse.move((at.x + to.x) / 2, (at.y + to.y) / 2, { steps: 4 });
+await page.mouse.move((at.x + to.x) / 2, at.y, { steps: 4 });
+parts = await lensParts();
+check('while dragging, no Pick and no value', !parts.pick && parts.detail === null, JSON.stringify(parts));
 await page.mouse.move(to.x, to.y, { steps: 4 });
 await page.mouse.up();
 await sleep(200);
-check('dragging the reticle moves it', (await strip()) === '#808080', await strip());
+check('a drag moves the lens by its travel', (await strip()) === '#00FF00', await strip());
 check('a drag does not pick', (await page.$$('.pp-pick')).length === 2);
-
+parts = await lensParts();
+check('Pick and the value come back when it stops', parts.pick && parts.detail === '#00FF00', JSON.stringify(parts));
+check('no hover preview', await (async () => {
+	const c = await cell(2, 1);
+	await page.mouse.move(c.x, c.y);
+	await sleep(100);
+	return (await strip()) === '#00FF00';
+})());
 // recall, copy, remove, clear
 await page.click('.pp-pick-cell');
 await sleep(200);
@@ -209,5 +225,96 @@ check('phone: the picture is first and large', phone.full > 250, String(phone.fu
 check('phone: the picture collapses to its band', phone.band <= 250, String(phone.band));
 check('phone: no horizontal scroll', !phone.wide);
 check('phone: the last block scrolls clear of Pick', phone.clear);
+
+
+// picking never moves the layout: five picks, same boxes, nothing scrolled
+const layout = () =>
+	page.evaluate(() => {
+		const box = (q) => {
+			const r = document.querySelector(q)?.getBoundingClientRect();
+			return r ? [r.top, r.height].map(Math.round).join('/') : '-';
+		};
+		const scrolls = ['.dt-main', '.pixel-picker .canon-split-main', '.pixel-picker .canon-split-body']
+			.map((q) => document.querySelector(q)?.scrollTop ?? 0)
+			.join(',');
+		return `${box('.pixel-picker .canon-canvas')} ${box('.pp-image')} ${box('.pp-card')} ${box('.pp-pick-button')} ${box('.pp-picks')} ${scrolls}`;
+	});
+for (const [width, height] of [
+	[1400, 1000],
+	[390, 844],
+]) {
+	await page.setViewport({ width, height });
+	await visit(page, '/tools/pixel-picker?pickerImage');
+	await page.waitForSelector('.pp-lens-pick', { timeout: 5000 });
+	await sleep(300);
+	const before = await layout();
+	for (let i = 0; i < 5; i++) {
+		await page.evaluate(() => document.querySelector('.pp-lens-pick').click());
+		await sleep(150);
+	}
+	await sleep(600);
+	const after = await layout();
+	check(`${width}: five picks leave the layout as it was`, before === after, `${before} | ${after}`);
+	check(`${width}: and are all listed`, (await page.$$('.pp-pick')).length === 5);
+	check(
+		`${width}: the newest scrolled into view inside the list`,
+		await page.evaluate(() => {
+			const list = document.querySelector('.pp-picks');
+			const last = list.lastElementChild.getBoundingClientRect();
+			return list.scrollTop > 0 && last.bottom <= list.getBoundingClientRect().bottom + 1;
+		}),
+	);
+}
+
+// phone, touch: a finger drags the lens without scrolling the page
+await page.setViewport({ width: 390, height: 844, hasTouch: true, isMobile: true });
+await visit(page, '/tools/pixel-picker?pickerImage');
+await page.waitForSelector('.pp-lens-pick', { timeout: 5000 });
+await sleep(300);
+const scrollSum = () =>
+	page.evaluate(() =>
+		['.dt-main', '.pixel-picker .canon-split-main', '.pixel-picker .canon-split-body']
+			.map((q) => document.querySelector(q)?.scrollTop ?? 0)
+			.reduce((a, b) => a + b, 0),
+	);
+const startValue = await strip();
+const startAt = await page.evaluate(() => {
+	const image = document.querySelector('.pp-image').getBoundingClientRect();
+	const lens = document.querySelector('.pp-loupe .canon-loupe').getBoundingClientRect();
+	// a point on the image, clear of the lens and its Pick
+	const x = lens.left > image.left + 60 ? image.left + 20 : image.right - 20;
+	return { x, y: image.top + 20 };
+});
+const touch = await page.touchscreen.touchStart(startAt.x, startAt.y);
+for (let i = 1; i <= 8; i++) await touch.move(startAt.x + (startAt.x < 195 ? i * 6 : -i * 6), startAt.y + i * 8);
+await sleep(100);
+const midDrag = await lensParts();
+const midScroll = await scrollSum();
+await touch.end();
+await sleep(400);
+check('touch: a drag moves the lens', (await strip()) !== startValue, `${startValue} -> ${await strip()}`);
+check('touch: the page does not scroll during the drag', midScroll === 0 && (await scrollSum()) === 0, String(midScroll));
+check('touch: no Pick during the drag', !midDrag.pick);
+parts = await lensParts();
+check('touch: Pick appears after release', parts.pick, JSON.stringify(parts));
+const pickAt = await page.$eval('.pp-lens-pick', (el) => {
+	const r = el.getBoundingClientRect();
+	return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+const pickedValue = await strip();
+await page.touchscreen.tap(pickAt.x, pickAt.y);
+await sleep(300);
+rows = await page.$$eval('.pp-pick-value', (els) => els.map((e) => e.textContent.trim()));
+check('touch: Pick adds the colour', rows.join() === pickedValue, rows.join());
+// the emulated finger does scroll elsewhere, so the check above has teeth
+const cardAt = await page.$eval('.pp-card', (el) => {
+	const r = el.getBoundingClientRect();
+	return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+const swipe = await page.touchscreen.touchStart(cardAt.x, cardAt.y);
+for (let i = 1; i <= 8; i++) await swipe.move(cardAt.x, cardAt.y - i * 25);
+await swipe.end();
+await sleep(600);
+check('touch: a drag on the settings scrolls the page', (await scrollSum()) > 0, String(await scrollSum()));
 
 await finish(browser);

@@ -59,13 +59,74 @@
 	position: absolute;
 	inset-block-start: 0;
 	inset-inline-start: 0;
-	cursor: move;
-	touch-action: none;
+	cursor: grab;
+}
+
+.pp-area--dragging,
+.pp-area--dragging .pp-loupe {
+	cursor: grabbing;
 }
 
 .pp-area--eases .pp-reticle,
-.pp-area--eases .pp-loupe {
+.pp-area--eases .pp-loupe,
+.pp-area--eases .pp-lens-pick,
+.pp-area--eases .pp-lens-detail {
 	transition: translate 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* geometry lensParts: the Pick button 64 x 36, the value line 24 tall */
+.pp-lens-pick {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: 64px;
+	block-size: 36px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 18px;
+	background: var(--canon-primary);
+	box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+	color: var(--canon-primary-foreground);
+	font: inherit;
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+	animation: pp-lens-in 0.2s ease-out;
+	appearance: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.pp-lens-pick:focus-visible {
+	outline: 2px solid var(--canon-foreground);
+	outline-offset: 2px;
+}
+
+.pp-lens-detail {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	box-sizing: border-box;
+	max-inline-size: calc(100% - 8px);
+	block-size: 24px;
+	padding: 0 8px;
+	overflow: hidden;
+	border-radius: 12px;
+	background: rgb(0 0 0 / 70%);
+	color: white;
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	line-height: 24px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+	animation: pp-lens-in 0.2s ease-out;
+}
+
+@keyframes pp-lens-in {
+	from {
+		opacity: 0;
+	}
 }
 
 .pp-reading {
@@ -96,17 +157,34 @@
 	font-weight: var(--canon-weight-semibold);
 }
 
-/* picked rows: swatch 56, the recall cell, copy and remove cells */
+/* four rows tall whatever the count, so a pick never moves the layout */
 .pp-picks {
 	display: flex;
 	flex-direction: column;
-	gap: var(--canon-hairline);
-	background: var(--canon-border);
+	block-size: calc(4 * (var(--canon-row-height) + var(--canon-hairline)));
+	overflow-y: auto;
+	background: var(--canon-card);
 }
 
+.pp-picks-empty {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+/* picked rows: swatch 56, the recall cell, copy and remove cells */
 .pp-pick {
 	display: flex;
+	flex: none;
 	gap: var(--canon-hairline);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-border);
 	min-block-size: var(--canon-row-height);
 	animation: pp-pick-in 0.45s ease-out;
 }
@@ -190,11 +268,15 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.pp-area--eases .pp-reticle,
-	.pp-area--eases .pp-loupe {
+	.pp-area--eases .pp-loupe,
+	.pp-area--eases .pp-lens-pick,
+	.pp-area--eases .pp-lens-detail {
 		transition: none;
 	}
 
-	.pp-pick {
+	.pp-pick,
+	.pp-lens-pick,
+	.pp-lens-detail {
 		animation: none;
 	}
 }

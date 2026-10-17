@@ -67,6 +67,47 @@ export function contains(rect: Rect, point: Point) {
 	);
 }
 
+/** The Pick button under the lens and the value line above it, px. */
+export const lensParts = {
+	pick: { width: 64, height: 36 },
+	detail: 24,
+	gap: 6,
+};
+
+const clamp = (value: number, low: number, high: number) =>
+	Math.max(Math.min(value, high), low);
+
+/**
+ * The lens centred on `centre`, the value line above it and the Pick
+ * button under it, the three kept inside `area` together (the lens then
+ * sits off the pixel). `detail` is the value line's top centre.
+ */
+export function lensLayout(centre: Point, side: number, area: Size) {
+	const { pick, detail, gap } = lensParts;
+	const above = detail + gap;
+	const below = gap + pick.height;
+	const x = clamp(centre.x - side / 2, 8, area.width - side - 8);
+	const y = clamp(
+		centre.y - side / 2,
+		4 + above,
+		area.height - 4 - below - side,
+	);
+	const mid = x + side / 2;
+	return {
+		lens: { x, y, width: side, height: side },
+		pick: {
+			x: clamp(
+				mid - pick.width / 2,
+				4,
+				area.width - pick.width - 4,
+			),
+			y: y + side + gap,
+			...pick,
+		},
+		detail: { x: mid, y: y - above },
+	};
+}
+
 const pairs = (text: string | null): Point[] =>
 	(text ?? '').split(';').flatMap((pair) => {
 		const [x, y, ...rest] = pair.split(',').map(Number);

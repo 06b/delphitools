@@ -38,9 +38,7 @@ import {
 	launchFlags,
 	type Point,
 } from 'delphitools-v2/components/tools/pixel-picker/geometry';
-import Picture, {
-	type Move,
-} from 'delphitools-v2/components/tools/pixel-picker/picture';
+import Picture from 'delphitools-v2/components/tools/pixel-picker/picture';
 // the card markup without the component, which shows hex whatever the notation
 import 'delphicanon/components/canon-colour-card.css';
 import './pixel-picker/pixel-picker.css';
@@ -87,7 +85,6 @@ export default class PixelPicker extends Component {
 
 	@tracked image?: Loaded;
 	@tracked pixel: Point = { x: 0, y: 0 };
-	@tracked hover?: Point;
 	@tracked picks: Pick[] = [];
 	readonly p3Supported = p3Supported;
 	#loading = 0;
@@ -132,7 +129,7 @@ export default class PixelPicker extends Component {
 	}
 
 	get shown() {
-		return this.hover ?? this.pixel;
+		return this.pixel;
 	}
 
 	@cached
@@ -239,6 +236,10 @@ export default class PixelPicker extends Component {
 		}));
 	}
 
+	get noPicks() {
+		return this.picks.length === 0;
+	}
+
 	get carried() {
 		return this.image ? this.hex : undefined;
 	}
@@ -248,16 +249,7 @@ export default class PixelPicker extends Component {
 		if (canvas) this.pixel = clampPixel(pixel, canvas);
 	}
 
-	move = (pixel: Point, how: Move) => {
-		if (how === 'hover') {
-			this.hover = pixel;
-			return;
-		}
-		this.hover = undefined;
-		this.pixel = pixel;
-	};
-
-	leave = () => (this.hover = undefined);
+	move = (pixel: Point) => (this.pixel = pixel);
 
 	pick = () => {
 		if (!this.image) return;
@@ -269,18 +261,17 @@ export default class PixelPicker extends Component {
 				pixel: this.shown,
 			},
 		];
+		// inside the list only: scrolling the page would collapse the picture
+		const list = this.#list;
 		requestAnimationFrame(() =>
-			this.#list?.lastElementChild?.scrollIntoView({
-				block: 'nearest',
+			list?.scrollTo({
+				top: list.scrollHeight,
 				behavior: reducedMotion() ? 'auto' : 'smooth',
 			}),
 		);
 	};
 
-	recall = (pick: Pick) => {
-		this.hover = undefined;
-		this.pixel = pick.pixel;
-	};
+	recall = (pick: Pick) => (this.pixel = pick.pixel);
 
 	copy = (value: string) => void this.toast.copy(value);
 
@@ -363,7 +354,6 @@ export default class PixelPicker extends Component {
 			p3: p3 ?? undefined,
 		};
 		this.picks = [];
-		this.hover = undefined;
 		this.pixel = {
 			x: Math.floor(srgb.canvas.width / 2),
 			y: Math.floor(srgb.canvas.height / 2),
@@ -374,7 +364,6 @@ export default class PixelPicker extends Component {
 		this.#loading++;
 		this.image = undefined;
 		this.picks = [];
-		this.hover = undefined;
 	};
 
 	<template>
@@ -400,9 +389,9 @@ export default class PixelPicker extends Component {
 							@pixel={{this.shown}}
 							@loupe={{this.loupe}}
 							@colour={{this.sampled}}
+							@value={{this.value}}
 							@reading={{this.reading}}
 							@onMove={{this.move}}
-							@onLeave={{this.leave}}
 							@onPick={{this.pick}}
 							@onChoose={{this.choose}}
 						/>
@@ -496,7 +485,7 @@ export default class PixelPicker extends Component {
 						</CanonRows>
 					{{/if}}
 				{{/if}}
-				{{#if this.rows}}
+				{{#if this.image}}
 					<CanonRows @framed={{true}}>
 						<CanonHeading @text="Picked" />
 						<div
@@ -563,6 +552,12 @@ export default class PixelPicker extends Component {
 									/>
 								</div>
 							{{/each}}
+							{{#unless this.rows}}
+								<p
+									class="pp-picks-empty"
+								>No colours
+									picked</p>
+							{{/unless}}
 						</div>
 						<CanonGrid>
 							<CanonButton
@@ -570,6 +565,7 @@ export default class PixelPicker extends Component {
 								@kind="cell"
 								@text="Clear"
 								@icon={{Trash}}
+								@disabled={{this.noPicks}}
 								@onClick={{this.clearPicks}}
 							/>
 						</CanonGrid>
