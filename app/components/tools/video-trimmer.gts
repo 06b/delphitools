@@ -56,7 +56,6 @@ import {
 	thumbnails,
 } from 'delphitools-v2/components/tools/media/frames';
 import './media/media.css';
-import './video-trimmer/video-trimmer.css';
 
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const TRIM_ERROR = "Couldn't process. Try MP4, MOV or WEBM";

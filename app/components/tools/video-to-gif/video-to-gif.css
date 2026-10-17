@@ -14,14 +14,6 @@
 	object-fit: contain;
 }
 
-/* the loaded Source row: 10 px padding, title and detail at 1.3, 2 px gap */
-.vg-slot.media-slot--row {
-	min-block-size: calc(
-		22px + 1.3 *
-			(var(--canon-text-body) + var(--canon-text-caption))
-	);
-}
-
 .vg-source .canon-row-title {
 	overflow: hidden;
 	text-overflow: ellipsis;
