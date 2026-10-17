@@ -2,7 +2,7 @@ import { BASE, check, finish, launch, sleep, visit } from "./harness.mjs";
 
 const { browser, page } = await launch();
 
-await visit(page, "/tools/image-converter");
+await visit(page, "/tools/tailwind-cheatsheet");
 await page.evaluate(() => {
 	const el = document.querySelector(".dt-tool-sticker");
 	if (el) el.scrollIntoView({ block: "center" });
@@ -25,7 +25,7 @@ const qrVisible = await page.evaluate(
 			".dt-tool-sticker .dt-sticker-lift.is-hidden",
 		),
 );
-check("image-converter per-tool sticker renders and loads", hasQrBtn && qrVisible);
+check("tailwind-cheatsheet per-tool sticker renders and loads", hasQrBtn && qrVisible);
 
 // no lousy art: image 404 removes whole sticker block (a tool with no art, not canon)
 await visit(page, "/tools/recipe-table");

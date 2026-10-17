@@ -352,6 +352,8 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between PNG, JPEG, WebP, JXL, GIF, BMP, TIFF, ICO, ICNS with resize and format options',
 				icon: 'refresh-cw',
 				href: '/tools/image-converter',
+				canon: true,
+				expands: true,
 				produces: [
 					'image/png',
 					'image/jpeg',
