@@ -1,36 +1,25 @@
-/* the deck: chips hang from a rivet near the top leading corner */
+/* the deck: chips hang from a rivet, the fan centred in the canvas */
 .pc-deck {
 	position: relative;
-	container-type: size;
 	block-size: 100%;
 	overflow: hidden;
 	font-family: var(--canon-font);
 }
 
 .pc-deck-fan {
-	--pc-len: calc(min(100cqi, 100cqb) * 0.8 - 12px);
-	--pc-chip: calc(var(--pc-len) * 0.19);
-	--pc-tail: calc(var(--pc-chip) * 0.62);
-
 	position: absolute;
-	inset-block-start: calc(14px + var(--pc-len) * 0.15);
-	inset-inline-start: calc(16px + var(--pc-len) * 0.15);
 }
 
 .pc-chip {
 	position: absolute;
 	inset-block-start: calc(var(--pc-len) * -1);
 	inset-inline-start: calc(var(--pc-chip) / -2);
-	display: flex;
-	box-sizing: border-box;
-	justify-content: center;
 	inline-size: var(--pc-chip);
 	block-size: calc(var(--pc-len) + var(--pc-tail));
 	margin: 0;
-	padding: 10px 0 0;
+	padding: 0;
 	border: 0;
-	border-radius: 3px;
-	box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+	background: none;
 	cursor: pointer;
 	transform-origin: 50% var(--pc-len);
 	rotate: var(--pc-angle);
@@ -41,6 +30,10 @@
 }
 
 .pc-chip:focus-visible {
+	outline: none;
+}
+
+.pc-chip:focus-visible .pc-chip-face {
 	outline: 2px solid var(--canon-primary);
 	outline-offset: 2px;
 }
@@ -51,21 +44,80 @@
 	}
 }
 
+/* iOS DeckChip.slide: back on a 0.55-damped spring over 0.4 s */
+.pc-chip-face {
+	position: absolute;
+	inset: 0;
+	border: 0.5px solid rgb(0 0 0 / 14%);
+	border-radius: 3px;
+	box-shadow: 0 1px 4px rgb(0 0 0 / 22%);
+	transition: translate 400ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+/* out 12 px along the chip in 0.12 s */
+.pc-chip:not(.pc-chip--cover):active .pc-chip-face,
+.pc-chip:focus-visible .pc-chip-face {
+	translate: 0 -12px;
+	transition-duration: 120ms;
+	transition-timing-function: ease-out;
+}
+
+@media (hover: hover) {
+	.pc-chip:not(.pc-chip--cover):hover .pc-chip-face {
+		translate: 0 -12px;
+		transition-duration: 120ms;
+		transition-timing-function: ease-out;
+	}
+}
+
+/* text runs rivet to tip and hugs the tip, as iOS */
+.pc-chip-text {
+	position: absolute;
+	inset-block-start: calc(var(--pc-text-top) + var(--pc-text-len) / 2);
+	inset-inline-start: 50%;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	inline-size: var(--pc-text-len);
+	block-size: calc(var(--pc-chip) - 8px);
+	overflow: hidden;
+	translate: -50% -50%;
+	rotate: -90deg;
+	text-align: end;
+	white-space: nowrap;
+}
+
+.pc-chip-hex,
+.pc-chip-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.2;
+}
+
 .pc-chip-hex {
-	/* at the chip's free end: a long notation clears the cover */
-	align-self: flex-start;
-	rotate: 180deg;
 	font-family: var(--canon-mono-font);
-	font-size: 10px;
-	writing-mode: vertical-rl;
+	font-size: var(--pc-value-size);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.pc-chip-name {
+	opacity: 0.75;
+	font-size: var(--pc-name-size);
+	font-weight: var(--canon-weight-medium);
 }
 
 .pc-chip--cover {
-	padding: 12px 0 0;
-	background: var(--canon-card);
-	color: var(--canon-foreground);
 	cursor: default;
 	animation: none;
+}
+
+.pc-chip--cover .pc-chip-face {
+	display: flex;
+	justify-content: center;
+	padding-block-start: calc(var(--pc-chip) * 0.3);
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
 }
 
 .pc-cover-text {
@@ -74,28 +126,31 @@
 	flex-direction: column;
 	gap: 2px;
 	align-items: center;
+	max-block-size: var(--pc-text-len);
 	overflow: hidden;
 	writing-mode: vertical-rl;
 	white-space: nowrap;
 }
 
 .pc-cover-title {
-	font-size: var(--canon-text-title3);
-	font-weight: var(--canon-weight-semibold);
+	font-size: var(--pc-title-size);
+	font-weight: var(--canon-weight-bold);
 }
 
 .pc-cover-detail {
 	color: var(--canon-muted-foreground);
-	font-size: var(--canon-text-caption);
+	font-size: var(--pc-detail-size);
 }
 
 .pc-rivet {
+	--pc-rivet: max(calc(var(--pc-chip) * 0.26), 8px);
+
 	position: absolute;
 	z-index: 100;
 	box-sizing: border-box;
-	inline-size: 10px;
-	block-size: 10px;
-	border: 3px solid
+	inline-size: var(--pc-rivet);
+	block-size: var(--pc-rivet);
+	border: calc(var(--pc-rivet) * 0.28) solid
 		color-mix(in srgb, var(--canon-foreground) 55%, transparent);
 	border-radius: 50%;
 	background: var(--canon-muted);
@@ -105,6 +160,10 @@
 @media (prefers-reduced-motion: reduce) {
 	.pc-chip {
 		animation: none;
+	}
+
+	.pc-chip-face {
+		transition: none;
 	}
 }
 
@@ -200,18 +259,63 @@
 	inline-size: 100%;
 }
 
-.pc-empty {
-	position: absolute;
-	inset: 0 0 0 clamp(112px, 36%, 210px);
+/* every palette of the shelf; scrolls inside the canvas when it overflows */
+.pc-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+	align-content: start;
+	gap: 8px;
+	box-sizing: border-box;
+	block-size: 100%;
+	padding: 12px 16px;
+	overflow-y: auto;
+	font-family: var(--canon-font);
+	overscroll-behavior: contain;
+}
+
+.pc-tile {
 	display: flex;
-	align-items: center;
-	justify-content: center;
+	flex-direction: column;
+	gap: 6px;
+	inline-size: 100%;
 	margin: 0;
-	padding: 16px;
-	color: var(--canon-muted-foreground);
+	padding: 8px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
 	font-size: var(--canon-text-subheadline);
-	text-align: center;
-	pointer-events: none;
+	text-align: start;
+	cursor: pointer;
+	appearance: none;
+}
+
+.pc-tile[aria-current="true"] {
+	border-color: var(--canon-primary);
+	box-shadow: inset 0 0 0 1px var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.pc-tile:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+@media (hover: hover) {
+	.pc-tile:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.pc-tile-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pc-tile-ribbon {
+	block-size: 22px;
+	border-radius: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

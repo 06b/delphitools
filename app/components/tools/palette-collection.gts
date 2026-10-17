@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
-import { hash } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { LinkTo } from '@ember/routing';
@@ -36,14 +37,21 @@ const shelves = Object.keys(
 	COLLECTION_CATEGORIES,
 ) as PaletteCollectionCategory[];
 const byCategory = getPalettesByCategory();
-const sizes = [...new Set(CURATED_PALETTES.map((p) => p.colors.length))].sort(
-	(a, b) => a - b,
-);
-const sizeTitles = ['Any size', ...sizes.map((n) => `${n} colours`)];
+const views = ['Fan', 'Grid'];
+
+/** Bands of the palette's colours, left to right, for a CSS background. */
+function bands(colours: string[]) {
+	return `linear-gradient(to right, ${colours
+		.map(
+			(c, i, all) =>
+				`${c} ${(i / all.length) * 100}% ${((i + 1) / all.length) * 100}%`,
+		)
+		.join(', ')})`;
+}
 
 /**
  * The iOS launch arguments as query flags: ?collectionCategory=<key or
- * label> ?collectionPalette=<id>.
+ * label> ?collectionPalette=<id>, and ?collectionView=grid (web only).
  */
 function launchFlags(search: string) {
 	const query = new URLSearchParams(search);
@@ -63,6 +71,7 @@ function launchFlags(search: string) {
 	return {
 		shelf: Math.max(shelf, 0),
 		palette: found ? byCategory[found.category].indexOf(found) : 0,
+		grid: query.get('collectionView') === 'grid',
 	};
 }
 
@@ -72,25 +81,34 @@ export default class PaletteCollection extends Component {
 
 	@tracked shelf: number;
 	@tracked selected: number;
-	@tracked size = 0;
+	/** Every palette of the shelf at once, in place of the deck. */
+	@tracked grid: boolean;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const flags = launchFlags(window.location.search);
 		this.shelf = flags.shelf;
 		this.selected = flags.palette;
+		this.grid = flags.grid;
 	}
 
-	#fits = (palette: CuratedPalette) =>
-		this.size === 0 ||
-		palette.colors.length === sizes[this.size - 1];
+	shelfPalettes = (index: number) => byCategory[shelves[index]!];
 
-	shelfPalettes = (index: number) =>
-		byCategory[shelves[index]!].filter(this.#fits);
-
-	@cached
 	get shown(): CuratedPalette[] {
 		return this.shelfPalettes(this.shelf);
+	}
+
+	@cached
+	get tiles() {
+		const current = this.palette;
+		return this.shown.map((palette, index) => ({
+			index,
+			name: palette.name,
+			current: palette === current,
+			ribbon: htmlSafe(
+				`background: ${bands(palette.colors)}`,
+			),
+		}));
 	}
 
 	get palette(): CuratedPalette | undefined {
@@ -127,7 +145,7 @@ export default class PaletteCollection extends Component {
 		return COLLECTION_CATEGORIES[shelves[this.shelf]!];
 	}
 
-	get colorsQuery() {
+	get coloursQuery() {
 		return this.palette?.colors.join(',') ?? '';
 	}
 
@@ -148,14 +166,7 @@ export default class PaletteCollection extends Component {
 			title: palette?.name ?? '',
 			style: focusStyle(focus),
 			ribbon: htmlSafe(
-				`block-size: ${3 + 4 * focus}px; background: linear-gradient(to right, ${(
-					palette?.colors ?? []
-				)
-					.map(
-						(c, i, all) =>
-							`${c} ${(i / all.length) * 100}% ${((i + 1) / all.length) * 100}%`,
-					)
-					.join(', ')})`,
+				`block-size: ${3 + 4 * focus}px; background: ${bands(palette?.colors ?? [])}`,
 			),
 		};
 	};
@@ -167,9 +178,11 @@ export default class PaletteCollection extends Component {
 
 	pickPalette = (index: number) => (this.selected = index);
 
-	pickSize = (index: number) => {
-		this.size = index;
-		this.selected = 0;
+	pickView = (index: number) => (this.grid = index === 1);
+
+	pickTile = (index: number) => {
+		this.selected = index;
+		this.grid = false;
 	};
 
 	<template>
@@ -184,12 +197,50 @@ export default class PaletteCollection extends Component {
 					@maxHeight={{640}}
 					@background="var(--canon-muted)"
 				>
-					<Deck
-						@palette={{this.palette}}
-						@detail={{this.detail}}
-						@emptyTitle={{this.category.label}}
-						@format={{this.colourNotation.format}}
-					/>
+					{{#if this.grid}}
+						<div
+							class="pc-grid"
+							role="list"
+							aria-label={{this.category.label}}
+						>
+							{{#each
+								this.tiles
+								as |tile|
+							}}
+								<div
+									role="listitem"
+								>
+									<button
+										type="button"
+										class="pc-tile"
+										aria-current={{if
+											tile.current
+											"true"
+										}}
+										{{on
+											"click"
+											(fn
+												this.pickTile
+												tile.index
+											)
+										}}
+									><span
+											class="pc-tile-name"
+										>{{tile.name}}</span><span
+											class="pc-tile-ribbon"
+											style={{tile.ribbon}}
+										></span></button>
+								</div>
+							{{/each}}
+						</div>
+					{{else}}
+						<Deck
+							@palette={{this.palette}}
+							@detail={{this.detail}}
+							@emptyTitle={{this.category.label}}
+							@format={{this.colourNotation.format}}
+						/>
+					{{/if}}
 				</CanonCanvas>
 			</:sidebar>
 			<:main>
@@ -266,24 +317,19 @@ export default class PaletteCollection extends Component {
 								</span>
 							{{/let}}
 						</CanonDetentWheel>
-						{{#unless this.shown.length}}
-							<p class="pc-empty">No
-								palettes found
-								matching your
-								filters.</p>
-						{{/unless}}
 					</div>
 				</CanonCanvas>
 				<CanonRows @framed={{true}}>
-					<CanonRow
-						@title="Colours"
-						@form="stacked"
-					>
+					<CanonRow @title="View">
 						<CanonSegmented
-							@items={{sizeTitles}}
-							@selected={{this.size}}
-							@columns={{3}}
-							@onChange={{this.pickSize}}
+							class="pc-view"
+							@items={{views}}
+							@selected={{if
+								this.grid
+								1
+								0
+							}}
+							@onChange={{this.pickView}}
 						/>
 					</CanonRow>
 					<p
@@ -324,7 +370,7 @@ export default class PaletteCollection extends Component {
 							@route="tools.tool"
 							@model="palette-genny"
 							@query={{hash
-								colors=this.colorsQuery
+								colors=this.coloursQuery
 							}}
 							class="pc-open"
 						>
