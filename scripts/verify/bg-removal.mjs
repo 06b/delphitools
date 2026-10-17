@@ -50,14 +50,18 @@ console.log(
 await page.click('.bg-run');
 
 await sleep(1500);
-const busy = await page.evaluate(() => {
-	const button = document.querySelector('.bg-run');
-	return {
-		disabled: button?.disabled,
-		label: button?.textContent.trim().replace(/\s+/g, ' '),
-	};
-});
-check('the run button disables while it works', busy.disabled === true);
+const busy = await page.evaluate(() => ({
+	run: !!document.querySelector('.bg-run'),
+	loader: !!document.querySelector('.bg-busy .canon-loader'),
+	label: document
+		.querySelector('.bg-busy .canon-row-title')
+		?.textContent.trim()
+		.replace(/\s+/g, ' '),
+}));
+check(
+	'a busy row with the Canon loader replaces the run button',
+	!busy.run && busy.loader,
+);
 check(
 	'and says what it is doing',
 	/Downloading|Removing background/.test(busy.label ?? ''),
@@ -91,77 +95,43 @@ if (outcome === 'done') {
 	check('the cut-out lies on the source trace', await page.$('.cutout-box--done .cutout-cut'));
 	check(
 		'with the original and the cut-out in the picture',
-		(await page.$$eval(
-			'.cutout-box img',
-			(els) => els.length,
-		)) === 2,
+		(await page.$$eval('.cutout-box img', (els) => els.length)) ===
+			1 && !!(await page.$('.cutout-box canvas.cutout-cut')),
 	);
 	check(
 		'and a download button',
 		await page.$('.bg-download'),
 	);
 
-	const alpha = await page.evaluate(
-		() =>
-			new Promise((resolve) => {
-				const images = [
-					...document.querySelectorAll(
-						'.cutout-box img',
-					),
-				];
-				const [source, result] = images;
-				const probe = new Image();
-				probe.onload = () => {
-					const canvas =
-						document.createElement(
-							'canvas',
-						);
-					canvas.width = probe.naturalWidth;
-					canvas.height = probe.naturalHeight;
-					const ctx = canvas.getContext('2d');
-					ctx.drawImage(probe, 0, 0);
-					const { data } = ctx.getImageData(
-						0,
-						0,
-						canvas.width,
-						canvas.height,
-					);
-					// rmbg sigmoid saturates at 254
-					let clear = 0;
-					let opaque = 0;
-					let min = 255;
-					let max = 0;
-					for (
-						let i = 3;
-						i < data.length;
-						i += 4
-					) {
-						const a = data[i];
-						if (a < 8) clear++;
-						else if (a > 247) opaque++;
-						if (a < min) min = a;
-						if (a > max) max = a;
-					}
-					const pixels = data.length / 4;
-					resolve({
-						isPng: result.src.startsWith(
-							'data:image/png',
-						),
-						width: probe.naturalWidth,
-						sourceWidth:
-							source.naturalWidth,
-						clear: clear / pixels,
-						opaque: opaque / pixels,
-						min,
-						max,
-					});
-				};
-				probe.onerror = () => resolve(null);
-				probe.src = result.src;
-			}),
-	);
+	const alpha = await page.evaluate(() => {
+		const source = document.querySelector('.cutout-ghost');
+		const canvas = document.querySelector('.cutout-cut');
+		const { data } = canvas
+			.getContext('2d')
+			.getImageData(0, 0, canvas.width, canvas.height);
+		// rmbg sigmoid saturates at 254
+		let clear = 0;
+		let opaque = 0;
+		let min = 255;
+		let max = 0;
+		for (let i = 3; i < data.length; i += 4) {
+			const a = data[i];
+			if (a < 8) clear++;
+			else if (a > 247) opaque++;
+			if (a < min) min = a;
+			if (a > max) max = a;
+		}
+		const pixels = data.length / 4;
+		return {
+			width: canvas.width,
+			sourceWidth: source.naturalWidth,
+			clear: clear / pixels,
+			opaque: opaque / pixels,
+			min,
+			max,
+		};
+	});
 
-	check('the result is a PNG', alpha?.isPng, `${alpha?.width}px wide`);
 	check(
 		'at the source resolution',
 		alpha && alpha.width === alpha.sourceWidth,

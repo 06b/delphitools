@@ -1,4 +1,6 @@
 import type { TOC } from '@ember/component/template-only';
+import type { SafeString } from '@ember/template';
+import type { ModifierLike } from '@glint/template';
 import { htmlSafe } from '@ember/template';
 import CanonLoader from 'delphicanon/components/canon-loader';
 import Slot from 'delphitools-v2/components/tools/media/slot';
@@ -9,8 +11,11 @@ interface CutoutPictureSignature {
 		source?: string | null;
 		width?: number;
 		height?: number;
-		/** Data URL of the cut-out. */
-		result?: string | null;
+		/** The cut-out is ready: `cut` draws it on a canvas and takes the brush. */
+		done?: boolean;
+		cut?: ModifierLike<{ Element: HTMLCanvasElement }>;
+		/** Where the brush ring is, over the picture. */
+		ring?: SafeString;
 		/** CSS colour behind the cut-out; none shows the checks. */
 		fill?: string;
 		busy: boolean;
@@ -44,10 +49,7 @@ const CutoutPicture: TOC<CutoutPictureSignature> = <template>
 							@fill
 							'cutout-box--filled'
 						}}
-						{{if
-							@result
-							'cutout-box--done'
-						}}"
+						{{if @done 'cutout-box--done'}}"
 					style={{boxStyle @width @height @fill}}
 				>
 					<span
@@ -60,12 +62,17 @@ const CutoutPicture: TOC<CutoutPictureSignature> = <template>
 						src={{@source}}
 						alt=""
 					/>
-					{{#if @result}}
-						<img
+					{{#if @done}}
+						<canvas
 							class="cutout-cut"
-							src={{@result}}
-							alt=""
-						/>
+							{{@cut}}
+						></canvas>
+						{{#if @ring}}
+							<span
+								class="cutout-ring"
+								style={{@ring}}
+							></span>
+						{{/if}}
 					{{/if}}
 				</div>
 			{{else}}

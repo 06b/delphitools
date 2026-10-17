@@ -31,6 +31,7 @@
 }
 
 .cutout-box img,
+.cutout-box canvas,
 .cutout-name {
 	position: absolute;
 	inset: 0;
@@ -48,7 +49,21 @@
 }
 
 .cutout-cut {
+	cursor: crosshair;
 	animation: cutout-in 700ms ease-in-out;
+	touch-action: none;
+}
+
+.cutout-ring {
+	position: absolute;
+	box-sizing: border-box;
+	inline-size: var(--cutout-brush);
+	block-size: var(--cutout-brush);
+	border: var(--canon-hairline) solid var(--canon-card);
+	border-radius: 50%;
+	box-shadow: 0 0 0 var(--canon-hairline) var(--canon-foreground);
+	pointer-events: none;
+	translate: -50% -50%;
 }
 
 @keyframes cutout-in {

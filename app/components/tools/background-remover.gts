@@ -3,9 +3,11 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type Owner from '@ember/owner';
+import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import CanonBar from 'delphicanon/components/canon-bar';
 import CanonButton from 'delphicanon/components/canon-button';
+import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonColourWell from 'delphicanon/components/canon-colour-well';
 import CanonGrid from 'delphicanon/components/canon-grid';
@@ -13,18 +15,19 @@ import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import { downloadBlob, downloadUrl } from 'delphitools-v2/lib/download';
+import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
+	alphaMask,
 	loadRemover,
 	maskToCanvas,
-	applyMask,
 	loadImage,
 	type Remover,
 } from 'delphitools-v2/lib/bg-removal';
@@ -36,11 +39,43 @@ import './background-remover/background-remover.css';
 type Status = 'idle' | 'downloading' | 'processing' | 'done' | 'error';
 
 const modes = ['Transparent', 'Colour'];
+const brushModes = ['Add', 'Remove'];
+const pxText = (value: number) => `${value} px`;
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Copy = <template><IconSvg @name="copy" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Eraser = <template><IconSvg @name="eraser" /></template>;
+const Undo = <template><IconSvg @name="undo-2" /></template>;
+const Reset = <template><IconSvg @name="rotate-ccw" /></template>;
+
+const blank = (width: number, height: number) => {
+	const canvas = document.createElement('canvas');
+	canvas.width = width;
+	canvas.height = height;
+	return canvas;
+};
+
+/** A stand-in for the model: a centred ellipse, grey mask style. */
+function drawnMask(width: number, height: number) {
+	const canvas = blank(width, height);
+	const context = canvas.getContext('2d')!;
+	context.fillStyle = '#000';
+	context.fillRect(0, 0, width, height);
+	context.fillStyle = '#fff';
+	context.beginPath();
+	context.ellipse(
+		width / 2,
+		height / 2,
+		width * 0.3,
+		height * 0.3,
+		0,
+		0,
+		Math.PI * 2,
+	);
+	context.fill();
+	return canvas;
+}
 
 function readDataUrl(file: File): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -52,15 +87,15 @@ function readDataUrl(file: File): Promise<string> {
 	});
 }
 
-/** Mean opacity of an image, measured on a copy at most 256 px across. */
-async function keptShare(url: string) {
-	const image = await loadImage(url);
-	const scale = Math.min(1, 256 / Math.max(image.width, image.height));
-	const canvas = document.createElement('canvas');
-	canvas.width = Math.max(1, Math.round(image.width * scale));
-	canvas.height = Math.max(1, Math.round(image.height * scale));
+/** Mean opacity of a mask, measured on a copy at most 256 px across. */
+function keptShare(mask: HTMLCanvasElement) {
+	const scale = Math.min(1, 256 / Math.max(mask.width, mask.height));
+	const canvas = blank(
+		Math.max(1, Math.round(mask.width * scale)),
+		Math.max(1, Math.round(mask.height * scale)),
+	);
 	const context = canvas.getContext('2d', { willReadFrequently: true })!;
-	context.drawImage(image, 0, 0, canvas.width, canvas.height);
+	context.drawImage(mask, 0, 0, canvas.width, canvas.height);
 	const { data } = context.getImageData(
 		0,
 		0,
@@ -72,22 +107,32 @@ async function keptShare(url: string) {
 	return sum / 255 / (data.length / 4);
 }
 
-/** The cut-out as a PNG blob, on the background colour when one is set. */
-async function pngOf(result: string, fill?: string) {
-	const image = await loadImage(result);
-	const canvas = document.createElement('canvas');
-	canvas.width = image.naturalWidth;
-	canvas.height = image.naturalHeight;
+/** The source cut by `mask`, on `fill` when one is set. */
+function cutOut(
+	source: HTMLImageElement,
+	mask: HTMLCanvasElement,
+	fill?: string,
+	into?: HTMLCanvasElement,
+) {
+	const canvas = into ?? blank(source.naturalWidth, source.naturalHeight);
 	const context = canvas.getContext('2d')!;
+	context.globalCompositeOperation = 'copy';
+	context.drawImage(source, 0, 0);
+	context.globalCompositeOperation = 'destination-in';
+	context.drawImage(mask, 0, 0);
 	if (fill) {
+		context.globalCompositeOperation = 'destination-over';
 		context.fillStyle = fill;
 		context.fillRect(0, 0, canvas.width, canvas.height);
 	}
-	context.drawImage(image, 0, 0);
-	return new Promise<Blob | null>((resolve) =>
+	context.globalCompositeOperation = 'source-over';
+	return canvas;
+}
+
+const pngOf = (canvas: HTMLCanvasElement) =>
+	new Promise<Blob | null>((resolve) =>
 		canvas.toBlob(resolve, 'image/png'),
 	);
-}
 
 /** The port of BackgroundRemoverViewController, on the web tool's model. */
 export default class BackgroundRemover extends Component {
@@ -96,7 +141,7 @@ export default class BackgroundRemover extends Component {
 	@tracked sourceName = '';
 	@tracked width = 0;
 	@tracked height = 0;
-	@tracked resultImage: string | null = null;
+	@tracked done = false;
 	@tracked kept?: number;
 	@tracked status: Status = 'idle';
 	@tracked percent = 0;
@@ -104,11 +149,26 @@ export default class BackgroundRemover extends Component {
 	@tracked mode = 0;
 	@tracked colour: Rgb = [1, 1, 1];
 	@tracked over = false;
+	@tracked brushMode = 0;
+	@tracked brush = 40;
+	@tracked refined = false;
+	@tracked canUndo = false;
+	@tracked ring: { x: number; y: number } | null = null;
 
 	#remover: Remover | null = null;
 	#destroyed = false;
 	#input?: HTMLInputElement;
 	#loading = 0;
+	#fakeMask = false;
+	#image: HTMLImageElement | null = null;
+	/** The model's mask, white with the subject opaque, at the source size. */
+	#mask: HTMLCanvasElement | null = null;
+	/** The mask with the brush strokes; every view and export uses it. */
+	#refined: HTMLCanvasElement | null = null;
+	#undo: HTMLCanvasElement | null = null;
+	#view: HTMLCanvasElement | null = null;
+	#stroke: { x: number; y: number; scale: number } | null = null;
+	#frame = 0;
 
 	// ?bgSample: the iOS -bgSample launch argument, with a drawn image; ?bgFill=<hex>: the iOS -bgFill
 	constructor(owner: Owner, args: object) {
@@ -119,6 +179,8 @@ export default class BackgroundRemover extends Component {
 			this.mode = 1;
 			this.colour = fill;
 		}
+		// ?bgMask (dev builds): a drawn mask stands in for the model, the iOS -bgMask
+		this.#fakeMask = import.meta.env.DEV && query.has('bgMask');
 		if (query.has('bgSample'))
 			void drawnSample().then((file) => this.readFile(file));
 	}
@@ -126,6 +188,7 @@ export default class BackgroundRemover extends Component {
 	willDestroy() {
 		super.willDestroy();
 		this.#destroyed = true;
+		cancelAnimationFrame(this.#frame);
 		// release model memory
 		this.#remover?.dispose();
 		this.#remover = null;
@@ -136,6 +199,10 @@ export default class BackgroundRemover extends Component {
 			this.status === 'downloading' ||
 			this.status === 'processing'
 		);
+	}
+
+	get canRun() {
+		return !this.done;
 	}
 
 	get isDownloading() {
@@ -179,6 +246,162 @@ export default class BackgroundRemover extends Component {
 	get hasError() {
 		return this.status === 'error';
 	}
+
+	get ringStyle() {
+		const { ring } = this;
+		if (!ring) return undefined;
+		return htmlSafe(
+			`inset-inline-start: ${ring.x}px; inset-block-start: ${ring.y}px; --cutout-brush: ${this.brush}px`,
+		);
+	}
+
+	/** The cut-out view: the source through the refined mask, painted on by the brush. */
+	cutCanvas = modifier((canvas: HTMLCanvasElement) => {
+		this.#view = canvas;
+		this.#draw();
+		const down = (event: PointerEvent) => this.strokeStart(event);
+		const move = (event: PointerEvent) => this.strokeMove(event);
+		const up = () => this.strokeEnd();
+		const leave = () => {
+			if (!this.#stroke) this.ring = null;
+		};
+		canvas.addEventListener('pointerdown', down);
+		canvas.addEventListener('pointermove', move);
+		canvas.addEventListener('pointerup', up);
+		canvas.addEventListener('pointercancel', up);
+		canvas.addEventListener('pointerleave', leave);
+		return () => {
+			canvas.removeEventListener('pointerdown', down);
+			canvas.removeEventListener('pointermove', move);
+			canvas.removeEventListener('pointerup', up);
+			canvas.removeEventListener('pointercancel', up);
+			canvas.removeEventListener('pointerleave', leave);
+			if (this.#view === canvas) this.#view = null;
+		};
+	});
+
+	#draw() {
+		const view = this.#view;
+		const image = this.#image;
+		const mask = this.#refined;
+		if (!view || !image || !mask) return;
+		if (view.width !== image.naturalWidth)
+			view.width = image.naturalWidth;
+		if (view.height !== image.naturalHeight)
+			view.height = image.naturalHeight;
+		cutOut(image, mask, undefined, view);
+	}
+
+	#redraw() {
+		if (this.#frame) return;
+		this.#frame = requestAnimationFrame(() => {
+			this.#frame = 0;
+			this.#draw();
+		});
+	}
+
+	/** Where the pointer is, in mask pixels; `scale` is mask pixels per screen pixel. */
+	#point(event: PointerEvent) {
+		const view = event.currentTarget as HTMLCanvasElement;
+		const box = view.getBoundingClientRect();
+		const scale = box.width > 0 ? view.width / box.width : 1;
+		this.ring = {
+			x: event.clientX - box.left,
+			y: event.clientY - box.top,
+		};
+		return {
+			x: (event.clientX - box.left) * scale,
+			y: (event.clientY - box.top) * scale,
+			scale,
+		};
+	}
+
+	#paint(
+		from: { x: number; y: number },
+		to: { x: number; y: number },
+		scale: number,
+	) {
+		const context = this.#refined?.getContext('2d');
+		if (!context) return;
+		context.globalCompositeOperation =
+			this.brushMode === 0
+				? 'source-over'
+				: 'destination-out';
+		context.strokeStyle = '#fff';
+		context.lineCap = 'round';
+		context.lineJoin = 'round';
+		context.lineWidth = this.brush * scale;
+		context.beginPath();
+		context.moveTo(from.x, from.y);
+		context.lineTo(to.x, to.y);
+		context.stroke();
+		context.globalCompositeOperation = 'source-over';
+	}
+
+	strokeStart = (event: PointerEvent) => {
+		const refined = this.#refined;
+		if (!refined || event.button > 0) return;
+		event.preventDefault();
+		(event.currentTarget as HTMLElement).setPointerCapture(
+			event.pointerId,
+		);
+		this.#undo ??= blank(refined.width, refined.height);
+		const undo = this.#undo.getContext('2d')!;
+		undo.globalCompositeOperation = 'copy';
+		undo.drawImage(refined, 0, 0);
+		const point = this.#point(event);
+		this.#stroke = point;
+		this.#paint(point, point, point.scale);
+		this.#redraw();
+	};
+
+	strokeMove = (event: PointerEvent) => {
+		const point = this.#point(event);
+		const stroke = this.#stroke;
+		if (!stroke) return;
+		this.#paint(stroke, point, point.scale);
+		this.#stroke = point;
+		this.#redraw();
+	};
+
+	strokeEnd = () => {
+		if (!this.#stroke) return;
+		this.#stroke = null;
+		this.refined = true;
+		this.canUndo = true;
+		this.#measure();
+	};
+
+	#measure() {
+		if (this.#refined) this.kept = keptShare(this.#refined);
+	}
+
+	undo = () => {
+		const refined = this.#refined?.getContext('2d');
+		if (!refined || !this.#undo || !this.canUndo) return;
+		refined.globalCompositeOperation = 'copy';
+		refined.drawImage(this.#undo, 0, 0);
+		refined.globalCompositeOperation = 'source-over';
+		this.canUndo = false;
+		this.#draw();
+		this.#measure();
+	};
+
+	resetRefine = () => {
+		const refined = this.#refined?.getContext('2d');
+		if (!refined || !this.#mask) return;
+		refined.globalCompositeOperation = 'copy';
+		refined.drawImage(this.#mask, 0, 0);
+		refined.globalCompositeOperation = 'source-over';
+		this.refined = false;
+		this.canUndo = false;
+		this.#draw();
+		this.#measure();
+	};
+
+	pickBrushMode = (index: number) => (this.brushMode = index);
+
+	setBrush = (value: number) => (this.brush = value);
 
 	keepInput = modifier((input: HTMLInputElement) => {
 		this.#input = input;
@@ -227,8 +450,8 @@ export default class BackgroundRemover extends Component {
 			this.sourceName = file.name || 'image';
 			this.width = image.naturalWidth;
 			this.height = image.naturalHeight;
-			this.resultImage = null;
-			this.kept = undefined;
+			this.#image = image;
+			this.#dropCut();
 			this.status = 'idle';
 			this.errorDetail = '';
 		} catch (error) {
@@ -244,11 +467,23 @@ export default class BackgroundRemover extends Component {
 	clear = () => {
 		this.#loading++;
 		this.sourceImage = null;
-		this.resultImage = null;
-		this.kept = undefined;
+		this.#image = null;
+		this.#dropCut();
 		this.status = 'idle';
 		this.errorDetail = '';
 	};
+
+	#dropCut() {
+		this.done = false;
+		this.kept = undefined;
+		this.#mask = null;
+		this.#refined = null;
+		this.#undo = null;
+		this.#stroke = null;
+		this.refined = false;
+		this.canUndo = false;
+		this.ring = null;
+	}
 
 	report = (detail: string) => {
 		this.status = 'error';
@@ -258,6 +493,11 @@ export default class BackgroundRemover extends Component {
 	remove = async () => {
 		const source = this.sourceImage;
 		if (!source || this.isBusy) return;
+
+		if (this.#fakeMask) {
+			this.#cut(drawnMask(this.width, this.height), source);
+			return;
+		}
 
 		try {
 			if (!this.#remover) {
@@ -285,15 +525,7 @@ export default class BackgroundRemover extends Component {
 			if (!mask)
 				throw new Error('the model returned no mask');
 
-			const image = await loadImage(source);
-			if (this.#destroyed || source !== this.sourceImage)
-				return;
-
-			const result = applyMask(image, maskToCanvas(mask));
-			this.resultImage = result;
-			this.status = 'done';
-			const kept = await keptShare(result);
-			if (result === this.resultImage) this.kept = kept;
+			this.#cut(maskToCanvas(mask), source);
 		} catch (error) {
 			if (this.#destroyed) return;
 			this.report(
@@ -304,13 +536,31 @@ export default class BackgroundRemover extends Component {
 		}
 	};
 
+	#cut(grey: HTMLCanvasElement, source: string) {
+		const image = this.#image;
+		if (this.#destroyed || source !== this.sourceImage || !image)
+			return;
+		const { naturalWidth: width, naturalHeight: height } = image;
+		this.#mask = alphaMask(grey, width, height);
+		this.#refined = blank(width, height);
+		this.#refined.getContext('2d')!.drawImage(this.#mask, 0, 0);
+		this.done = true;
+		this.status = 'done';
+		this.#measure();
+	}
+
+	#export() {
+		return this.#image && this.#refined
+			? pngOf(cutOut(this.#image, this.#refined, this.fill))
+			: Promise.resolve(null);
+	}
+
 	pickMode = (index: number) => (this.mode = index);
 
 	pickColour = (colour: Rgb) => (this.colour = colour);
 
 	copy = async () => {
-		if (!this.resultImage) return;
-		const blob = await pngOf(this.resultImage, this.fill);
+		const blob = await this.#export();
 		if (!blob) return;
 		try {
 			await navigator.clipboard.write([
@@ -323,12 +573,7 @@ export default class BackgroundRemover extends Component {
 	};
 
 	download = async () => {
-		if (!this.resultImage) return;
-		if (!this.fill) {
-			downloadUrl(this.resultImage, 'background-removed.png');
-			return;
-		}
-		const blob = await pngOf(this.resultImage, this.fill);
+		const blob = await this.#export();
 		if (blob) downloadBlob(blob, 'background-removed.png');
 	};
 
@@ -352,7 +597,9 @@ export default class BackgroundRemover extends Component {
 						@source={{this.sourceImage}}
 						@width={{this.width}}
 						@height={{this.height}}
-						@result={{this.resultImage}}
+						@done={{this.done}}
+						@cut={{this.cutCanvas}}
+						@ring={{this.ringStyle}}
 						@fill={{this.fill}}
 						@busy={{this.isBusy}}
 						@over={{this.over}}
@@ -378,15 +625,16 @@ export default class BackgroundRemover extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-						{{#unless this.resultImage}}
-							<CanonButton
-								class="bg-run"
-								@kind="primary"
-								@text={{this.runText}}
-								@icon={{Eraser}}
-								@disabled={{this.isBusy}}
-								@onClick={{this.remove}}
-							/>
+						{{#if this.isBusy}}
+							<CanonRow
+								class="bg-busy"
+								@title={{this.runText}}
+							>
+								<CanonLoader
+									@cell={{5}}
+									@gap={{1}}
+								/>
+							</CanonRow>
 							{{#if
 								this.isDownloading
 							}}
@@ -395,7 +643,15 @@ export default class BackgroundRemover extends Component {
 									@share={{this.share}}
 								/>
 							{{/if}}
-						{{/unless}}
+						{{else if this.canRun}}
+							<CanonButton
+								class="bg-run"
+								@kind="primary"
+								@text={{this.runText}}
+								@icon={{Eraser}}
+								@onClick={{this.remove}}
+							/>
+						{{/if}}
 					</CanonRows>
 				{{/if}}
 				{{#if this.hasError}}
@@ -408,7 +664,59 @@ export default class BackgroundRemover extends Component {
 						/>
 					</CanonRows>
 				{{/if}}
-				{{#if this.resultImage}}
+				{{#if this.done}}
+					<CanonRows
+						class="bg-refine"
+						@framed={{true}}
+					>
+						<CanonHeading @text="Refine" />
+						<CanonSegmented
+							class="bg-brush-modes"
+							@items={{brushModes}}
+							@selected={{this.brushMode}}
+							@onChange={{this.pickBrushMode}}
+						/>
+						<CanonRow
+							class="bg-brush"
+							@title="Brush"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.brush}}
+								@min={{4}}
+								@max={{120}}
+								@step={{2}}
+								@readout={{pxText}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setBrush}}
+							/>
+						</CanonRow>
+						<CanonGrid>
+							<CanonButton
+								class="bg-undo"
+								@text="Undo"
+								@icon={{Undo}}
+								@disabled={{if
+									this.canUndo
+									false
+									true
+								}}
+								@onClick={{this.undo}}
+							/>
+							<CanonButton
+								class="bg-reset"
+								@text="Reset"
+								@icon={{Reset}}
+								@disabled={{if
+									this.refined
+									false
+									true
+								}}
+								@onClick={{this.resetRefine}}
+							/>
+						</CanonGrid>
+					</CanonRows>
 					<CanonRows @framed={{true}}>
 						<CanonHeading @text="Subject" />
 						<CanonTiles

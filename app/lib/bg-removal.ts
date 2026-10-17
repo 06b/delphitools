@@ -96,7 +96,7 @@ export function maskToCanvas(mask: MaskImage): HTMLCanvasElement {
 	const ctx = canvas.getContext('2d');
 	if (!ctx) throw new Error('no 2d context');
 
-	// expand grayscale to rgba
+	// expand greyscale to rgba
 	const image = ctx.createImageData(mask.width, mask.height);
 	for (let i = 0; i < mask.data.length; i++) {
 		const value = mask.data[i]!;
@@ -109,35 +109,27 @@ export function maskToCanvas(mask: MaskImage): HTMLCanvasElement {
 	return canvas;
 }
 
-export function applyMask(
-	source: HTMLImageElement,
+/** The grey mask scaled to `width` x `height` as an alpha mask: white, opaque where the subject is. */
+export function alphaMask(
 	mask: HTMLCanvasElement,
-): string {
-	const { naturalWidth: width, naturalHeight: height } = source;
-
+	width: number,
+	height: number,
+): HTMLCanvasElement {
 	const canvas = document.createElement('canvas');
 	canvas.width = width;
 	canvas.height = height;
 	const ctx = canvas.getContext('2d');
 	if (!ctx) throw new Error('no 2d context');
-
-	ctx.drawImage(source, 0, 0);
+	ctx.drawImage(mask, 0, 0, width, height);
 	const image = ctx.getImageData(0, 0, width, height);
-
-	const scaled = document.createElement('canvas');
-	scaled.width = width;
-	scaled.height = height;
-	const scaledCtx = scaled.getContext('2d');
-	if (!scaledCtx) throw new Error('no 2d context');
-	scaledCtx.drawImage(mask, 0, 0, width, height);
-	const maskData = scaledCtx.getImageData(0, 0, width, height).data;
-
 	for (let i = 0; i < image.data.length; i += 4) {
-		image.data[i + 3] = maskData[i]!;
+		image.data[i + 3] = image.data[i]!;
+		image.data[i] = 255;
+		image.data[i + 1] = 255;
+		image.data[i + 2] = 255;
 	}
-
 	ctx.putImageData(image, 0, 0);
-	return canvas.toDataURL('image/png');
+	return canvas;
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {
