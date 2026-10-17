@@ -358,6 +358,7 @@ export default class MarkdownWriterTool extends Component {
 		if (!confirm('Clear all content?')) return;
 		this.#write('');
 		window.clearTimeout(this.#saveTimer);
+		this.#saveTimer = undefined;
 		if (this.#persists) writeStore('');
 		this.lastSaved = null;
 	};
