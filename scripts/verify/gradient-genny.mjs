@@ -283,11 +283,11 @@ await sleep(150);
 s = await state();
 check('a click on a corner chooses it', s.chosen === '#8B5CF6', s.chosen);
 
-// mesh
-await pick('.gg-modes', 'Mesh');
+// freeform
+await pick('.gg-modes', 'Freeform');
 await sleep(300);
 s = await state();
-check('Mesh starts with the 2×2 grid, approximate CSS', s.handles === 4 && s.approximate && s.css.startsWith('/* Mesh'), s.handles);
+check('Freeform starts with the 2×2 grid, approximate CSS', s.handles === 4 && s.approximate && s.css.startsWith('/* Freeform'), s.handles);
 await page.mouse.click(paint.cx, paint.cy);
 await sleep(200);
 s = await state();
@@ -332,8 +332,60 @@ const saved = await page.evaluate(async () => {
 });
 check(
 	'Download PNG saves the gradient at the export size',
-	saved.name === 'gradient-mesh.png' && saved.type === 'image/png' && saved.w === 1080 && saved.h === 1920,
+	saved.name === 'gradient-freeform.png' && saved.type === 'image/png' && saved.w === 1080 && saved.h === 1920,
 	JSON.stringify(saved),
+);
+
+// linear: a drag anywhere off the handles turns the gradient
+await visit(page, '/tools/gradient-genny');
+const field = await rectOf('.gg-paint');
+s = await state();
+await drag({ x: field.x + field.w * 0.3, y: field.y + field.h * 0.15 }, { x: field.x + field.w * 0.85, y: field.y + field.h * 0.4 });
+await page.mouse.up();
+await sleep(200);
+const turned = await state();
+check(
+	'linear: a drag on the image turns it, no stop added',
+	turned.angle !== s.angle && turned.handles === s.handles,
+	`${s.angle} -> ${turned.angle}, ${turned.handles} stops`,
+);
+
+// radial: the crosshair stays under the pointer when the far corner flips
+await visit(page, '/tools/gradient-genny?gradType=radial');
+const cross = await rectOf('.gg-hub');
+const target = { x: cross.cx - field.w * 0.25, y: cross.cy - field.h * 0.25 };
+await drag({ x: cross.cx, y: cross.cy }, target, 20);
+const held = await rectOf('.gg-hub');
+const outer = await page.evaluate(() => {
+	const stops = [...document.querySelectorAll('.gg-handle')];
+	const last = stops.sort((a, b) => b.getAttribute('aria-valuenow') - a.getAttribute('aria-valuenow'))[0].getBoundingClientRect();
+	const image = document.querySelector('.gg-paint').getBoundingClientRect();
+	return { x: last.x + last.width / 2 - image.right, y: last.y + last.height / 2 - image.bottom };
+});
+await page.mouse.up();
+await sleep(200);
+check(
+	'radial: the outer stop flipped to the bottom right corner',
+	Math.hypot(outer.x, outer.y) < 2,
+	JSON.stringify(outer),
+);
+check(
+	'radial: the crosshair stays within 1 px of the pointer',
+	Math.hypot(held.cx - target.x, held.cy - target.y) <= 1,
+	`${(held.cx - target.x).toFixed(2)}, ${(held.cy - target.y).toFixed(2)}`,
+);
+
+// conic: the ring is as big near the left and right edges as near the top and bottom
+const ring = async (centre) => {
+	await visit(page, `/tools/gradient-genny?gradType=conic&gradSize=1080x1080&gradCentre=${centre}`);
+	return page.evaluate(() => Number(/a([\d.]+) /.exec(document.querySelector('.gg-lines-ink').getAttribute('d'))[1]));
+};
+const radii = [];
+for (const centre of ['15,50', '85,50', '50,15', '50,85']) radii.push(await ring(centre));
+check(
+	'conic: the ring radius is the same near every edge',
+	Math.max(...radii) - Math.min(...radii) < 0.5,
+	radii.join(', '),
 );
 
 // ?color= carry and launch flags

@@ -142,8 +142,8 @@ export default class GradientGenny extends Component {
 		return spaces.indexOf(this.model.space);
 	}
 
-	get isMesh() {
-		return this.model.mode === 'mesh';
+	get isFreeform() {
+		return this.model.mode === 'freeform';
 	}
 
 	get isCorners() {
@@ -186,7 +186,7 @@ export default class GradientGenny extends Component {
 		const { mode } = this.model;
 		// web titles for corners, iOS for the rest
 		if (mode === 'corners') return 'Corner Colours';
-		return mode === 'mesh' ? 'Points' : 'Colour Stops';
+		return mode === 'freeform' ? 'Points' : 'Colour Stops';
 	}
 
 	get cornerIndex() {
@@ -216,7 +216,7 @@ export default class GradientGenny extends Component {
 			return cornerKeys
 				.filter((key) => key !== model.selected)
 				.map((key) => rgbOf(model.corners[key]));
-		if (model.mode === 'mesh')
+		if (model.mode === 'freeform')
 			return model.points
 				.filter((point) => point.id !== model.selected)
 				.map((point) => rgbOf(point.colour));
@@ -460,7 +460,7 @@ export default class GradientGenny extends Component {
 							/>
 						</CanonRow>
 					{{/if}}
-					{{#if this.isMesh}}
+					{{#if this.isFreeform}}
 						<CanonRow
 							@title="Grid"
 							@form="flush"
@@ -574,7 +574,7 @@ export default class GradientGenny extends Component {
 								title="Add intermediate colours using OKLab blending for vibrant, paint-like transitions"
 							/>
 						</CanonGrid>
-					{{else if this.isMesh}}
+					{{else if this.isFreeform}}
 						<CanonGrid @columns={{2}}>
 							<CanonButton
 								@kind="cell"
@@ -671,7 +671,7 @@ export default class GradientGenny extends Component {
 						@code={{this.css}}
 						@language="CSS"
 					/>
-					{{#if this.isMesh}}
+					{{#if this.isFreeform}}
 						<CanonStatus
 							@text="Approximate"
 							@tone="muted"

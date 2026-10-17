@@ -19,7 +19,7 @@ import {
 	renderGradient,
 	snapAngle,
 	type CornerKey,
-	type MeshPoint,
+	type FreeformPoint,
 	type Point,
 	type Rail,
 	type Stop,
@@ -40,7 +40,7 @@ type Grab =
 	| { kind: 'stop' | 'point'; id: string; offset: Point }
 	| { kind: 'corner'; id: string }
 	| { kind: 'turn' }
-	| { kind: 'centre'; offset: Point };
+	| { kind: 'centre'; offset: Point; grip: Point };
 
 interface Rect {
 	x: number;
@@ -56,7 +56,7 @@ const hintRoom = 22;
 const reach = 24;
 /** A stop pulled this far off its line is removed on release. */
 const pullDistance = 64;
-/** A mesh point pulled this far outside the image is removed on release. */
+/** A freeform point pulled this far outside the image is removed on release. */
 const pullOutside = 36;
 /** Distance from the centre to the linear and radial grip. */
 const gripReach = 44;
@@ -79,7 +79,7 @@ const pair = (p: Point) =>
  * drag along the CSS line (linear), the centre-to-corner ray (radial) or the
  * ring (conic); pulled off, a stop is removed on release. A click adds a
  * stop; the grip or ring knob turns the gradient; a radial or conic centre
- * drags. Mesh points drag on the image; corners only select.
+ * drags. Freeform points drag on the image; corners only select.
  */
 export default class GradientPicture extends Component<Signature> {
 	@tracked box = { width: 0, height: 0 };
@@ -88,7 +88,7 @@ export default class GradientPicture extends Component<Signature> {
 	@tracked lifted: Point | null = null;
 	@tracked tether: Point | null = null;
 	/** A stop or point held off the picture: out of the model until it comes back or is let go. */
-	@tracked pulled: Stop | MeshPoint | null = null;
+	@tracked pulled: Stop | FreeformPoint | null = null;
 	@tracked figure: { text: string; unit: string; top: boolean } | null =
 		null;
 
@@ -165,18 +165,19 @@ export default class GradientPicture extends Component<Signature> {
 			return { kind: 'line', from: c, to: far };
 		}
 		if (mode === 'conic') {
-			const { width, height } = this.box;
+			// image edges, not pane
 			const edge = Math.min(
-				c.x,
-				width - c.x,
-				c.y,
-				height - c.y,
+				c.x - r.x,
+				r.x + r.width - c.x,
+				c.y - r.y,
+				r.y + r.height - c.y,
 			);
+			// knob stays in margin
 			const radius = Math.max(
 				28,
 				Math.min(
 					Math.min(r.width, r.height) * 0.32,
-					edge - 60,
+					edge + margin - 50,
 				),
 			);
 			return {
@@ -206,6 +207,12 @@ export default class GradientPicture extends Component<Signature> {
 	get hubPoint(): Point | undefined {
 		const { mode } = this.model;
 		const c = this.centre;
+		// rail flips; grip holds
+		if (this.grab?.kind === 'centre' && mode === 'radial')
+			return this.inside({
+				x: c.x + this.grab.grip.x,
+				y: c.y + this.grab.grip.y,
+			});
 		const away = railNormal(this.rail, 0);
 		if (mode === 'linear')
 			return this.inside({
@@ -310,9 +317,10 @@ export default class GradientPicture extends Component<Signature> {
 				name: cornerTitles[i]!,
 			}));
 		}
-		if (model.mode === 'mesh') {
+		if (model.mode === 'freeform') {
 			const list = [...model.points];
-			if (this.pulled) list.push(this.pulled as MeshPoint);
+			if (this.pulled)
+				list.push(this.pulled as FreeformPoint);
 			return list.map((point) =>
 				shown(
 					point.id,
@@ -349,7 +357,7 @@ export default class GradientPicture extends Component<Signature> {
 		const { mode } = this.model;
 		return mode === 'corners'
 			? 'corner'
-			: mode === 'mesh'
+			: mode === 'freeform'
 				? 'point'
 				: 'stop';
 	}
@@ -430,9 +438,9 @@ export default class GradientPicture extends Component<Signature> {
 
 	get hint() {
 		const { mode } = this.model;
-		// wording carried over from the web tool (corners, mesh) and iOS (stops)
+		// wording carried over from the web tool (corners, freeform) and iOS (stops)
 		if (mode === 'corners') return 'Click dots to change colours';
-		if (mode === 'mesh')
+		if (mode === 'freeform')
 			return 'Drag dots to reposition, click to change colour';
 		return 'Tap to add a stop, drag one off to remove it';
 	}
@@ -459,7 +467,7 @@ export default class GradientPicture extends Component<Signature> {
 		const { width, height } = this.image;
 		if (!width) return;
 		const { mode } = this.model;
-		const perPixel = mode === 'corners' || mode === 'mesh';
+		const perPixel = mode === 'corners' || mode === 'freeform';
 		const scale = perPixel
 			? Math.min(1, pixelCap / Math.max(width, height))
 			: 1;
@@ -509,6 +517,7 @@ export default class GradientPicture extends Component<Signature> {
 			return {
 				kind: 'centre',
 				offset: { x: p.x - c.x, y: p.y - c.y },
+				grip: { x: hub.x - c.x, y: hub.y - c.y },
 			};
 		}
 		return undefined;
@@ -518,7 +527,7 @@ export default class GradientPicture extends Component<Signature> {
 		const { model } = this;
 		if (model.mode === 'corners')
 			return corner(id as CornerKey, this.image);
-		if (model.mode === 'mesh') {
+		if (model.mode === 'freeform') {
 			const point = model.points.find(
 				(entry) => entry.id === id,
 			);
@@ -534,7 +543,7 @@ export default class GradientPicture extends Component<Signature> {
 	get canRemove() {
 		const { model } = this;
 		const count =
-			(model.mode === 'mesh'
+			(model.mode === 'freeform'
 				? model.points.length
 				: model.stops.length) + (this.pulled ? 1 : 0);
 		return model.mode !== 'corners' && count > 2;
@@ -666,7 +675,7 @@ export default class GradientPicture extends Component<Signature> {
 		} else if (!removing && this.pulled) {
 			model.points = [
 				...model.points,
-				this.pulled as MeshPoint,
+				this.pulled as FreeformPoint,
 			];
 			this.pulled = null;
 		}
@@ -702,8 +711,8 @@ export default class GradientPicture extends Component<Signature> {
 	cancel() {
 		const { model } = this;
 		const back = this.pulled;
-		if (back && model.mode === 'mesh')
-			model.points = [...model.points, back as MeshPoint];
+		if (back && model.mode === 'freeform')
+			model.points = [...model.points, back as FreeformPoint];
 		else if (back) model.stops = [...model.stops, back as Stop];
 		this.pulled = null;
 		this.end();
@@ -720,7 +729,7 @@ export default class GradientPicture extends Component<Signature> {
 			p.y > r.y + r.height + margin
 		)
 			return;
-		if (model.mode === 'mesh') {
+		if (model.mode === 'freeform') {
 			model.addPointAt(this.unit(p));
 		} else {
 			let t = clamp(railProject(this.rail, p).t, 0, 1);
@@ -753,6 +762,14 @@ export default class GradientPicture extends Component<Signature> {
 			const p = local(event);
 			if (Math.hypot(p.x - start.x, p.y - start.y) > slop)
 				start.moved = true;
+			if (
+				!this.grab &&
+				start.moved &&
+				this.model.mode === 'linear'
+			) {
+				element.setPointerCapture(event.pointerId);
+				this.begin({ kind: 'turn' }, start);
+			}
 			if (this.grab) {
 				event.preventDefault();
 				this.move(p);
@@ -809,7 +826,7 @@ export default class GradientPicture extends Component<Signature> {
 			this.args.onSelect(model.selected);
 			return;
 		}
-		if (model.mode === 'mesh') {
+		if (model.mode === 'freeform') {
 			const step = this.stepOf(event);
 			const point = model.points.find(
 				(entry) => entry.id === id,

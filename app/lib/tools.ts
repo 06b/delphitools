@@ -168,7 +168,7 @@ export const toolCategories: ToolCategory[] = [
 				id: 'gradient-genny',
 				name: 'Gradient Generator',
 				description:
-					'Create linear, corner, and mesh gradients',
+					'Create linear, corner, and freeform gradients',
 				icon: 'blend',
 				href: '/tools/gradient-genny',
 				produces: ['image/png'],

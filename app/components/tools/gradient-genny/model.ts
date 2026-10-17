@@ -4,7 +4,7 @@ import {
 	clamp,
 	colourAt,
 	cornerKeys,
-	meshColour,
+	freeformColour,
 	minStops,
 	newId,
 	pigmentBlend,
@@ -15,7 +15,7 @@ import {
 	type Corners,
 	type Gradient,
 	type GridSize,
-	type MeshPoint,
+	type FreeformPoint,
 	type Mode,
 	type Point,
 	type Space,
@@ -31,7 +31,7 @@ export class GradientModel implements Gradient {
 	@tracked noise: number;
 	@tracked stops: readonly Stop[];
 	@tracked corners: Corners;
-	@tracked points: readonly MeshPoint[];
+	@tracked points: readonly FreeformPoint[];
 	@tracked gridSize: GridSize = 2;
 	/** A stop or point id, or a corner key. */
 	@tracked selected = '';
@@ -64,7 +64,7 @@ export class GradientModel implements Gradient {
 		const order =
 			mode === 'corners'
 				? cornerKeys
-				: mode === 'mesh'
+				: mode === 'freeform'
 					? points.map((point) => point.id)
 					: sortStops(stops).map(
 							(stop) => stop.id,
@@ -87,13 +87,14 @@ export class GradientModel implements Gradient {
 	}
 
 	get isStops() {
-		return this.mode !== 'corners' && this.mode !== 'mesh';
+		return this.mode !== 'corners' && this.mode !== 'freeform';
 	}
 
 	get selectedColour(): string | undefined {
 		if (this.mode === 'corners')
 			return this.corners[this.selected as CornerKey];
-		const list = this.mode === 'mesh' ? this.points : this.stops;
+		const list =
+			this.mode === 'freeform' ? this.points : this.stops;
 		return list.find((entry) => entry.id === this.selected)?.colour;
 	}
 
@@ -103,7 +104,7 @@ export class GradientModel implements Gradient {
 
 	get canRemove() {
 		const count =
-			this.mode === 'mesh'
+			this.mode === 'freeform'
 				? this.points.length
 				: this.stops.length;
 		return this.mode !== 'corners' && count > minStops;
@@ -115,7 +116,7 @@ export class GradientModel implements Gradient {
 
 	selectFirst() {
 		if (this.mode === 'corners') this.selected = cornerKeys[0]!;
-		else if (this.mode === 'mesh')
+		else if (this.mode === 'freeform')
 			this.selected = this.points[0]?.id ?? '';
 		else this.selected = sortStops(this.stops)[0]?.id ?? '';
 	}
@@ -134,7 +135,7 @@ export class GradientModel implements Gradient {
 					...this.corners,
 					[key]: colour,
 				};
-		} else if (this.mode === 'mesh') {
+		} else if (this.mode === 'freeform') {
 			this.points = this.points.map((point) =>
 				point.id === id && point.colour !== colour
 					? { ...point, colour }
@@ -196,7 +197,7 @@ export class GradientModel implements Gradient {
 			id: newId(),
 			x: clamp(at.x, 0, 1),
 			y: clamp(at.y, 0, 1),
-			colour: meshColour(this.points, at),
+			colour: freeformColour(this.points, at),
 		};
 		this.points = [...this.points, point];
 		this.selected = point.id;
@@ -211,7 +212,7 @@ export class GradientModel implements Gradient {
 	/** Removes a stop or point; the nearest stop, or the first point, takes the selection. */
 	remove(id: string) {
 		if (!this.canRemove) return;
-		if (this.mode === 'mesh') {
+		if (this.mode === 'freeform') {
 			this.points = this.points.filter(
 				(point) => point.id !== id,
 			);

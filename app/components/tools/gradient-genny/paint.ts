@@ -8,7 +8,7 @@ import {
 	type Rgb,
 } from 'delphicanon/lib/colour';
 
-export type Mode = 'linear' | 'radial' | 'conic' | 'corners' | 'mesh';
+export type Mode = 'linear' | 'radial' | 'conic' | 'corners' | 'freeform';
 export type Space = 'srgb' | 'oklab' | 'oklch';
 export type CornerKey = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 export type GridSize = 2 | 3;
@@ -26,7 +26,7 @@ export interface Stop {
 	position: number;
 }
 
-export interface MeshPoint extends Point {
+export interface FreeformPoint extends Point {
 	id: string;
 	colour: string;
 }
@@ -42,13 +42,19 @@ export interface Gradient {
 	space: Space;
 	stops: readonly Stop[];
 	corners: Corners;
-	points: readonly MeshPoint[];
+	points: readonly FreeformPoint[];
 	/** 0...100 */
 	noise: number;
 }
 
-export const modes: Mode[] = ['linear', 'radial', 'conic', 'corners', 'mesh'];
-export const modeTitles = ['Linear', 'Radial', 'Conic', 'Corners', 'Mesh'];
+export const modes: Mode[] = [
+	'linear',
+	'radial',
+	'conic',
+	'corners',
+	'freeform',
+];
+export const modeTitles = ['Linear', 'Radial', 'Conic', 'Corners', 'Freeform'];
 export const spaces: Space[] = ['srgb', 'oklab', 'oklch'];
 export const spaceTitles = ['sRGB', 'OKLab', 'OKLCH'];
 export const cornerKeys: CornerKey[] = [
@@ -259,8 +265,8 @@ export function pigmentBlend(stops: readonly Stop[]): Stop[] {
 	return out;
 }
 
-const meshColours2 = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B'];
-const meshColours3 = [
+const freeformColours2 = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B'];
+const freeformColours3 = [
 	'#3B82F6',
 	'#8B5CF6',
 	'#EC4899',
@@ -273,8 +279,8 @@ const meshColours3 = [
 ];
 
 /** The web tool's grid colours, inset as on iOS so every handle sits on the image. */
-export function seedGrid(size: GridSize): MeshPoint[] {
-	const colours = size === 2 ? meshColours2 : meshColours3;
+export function seedGrid(size: GridSize): FreeformPoint[] {
+	const colours = size === 2 ? freeformColours2 : freeformColours3;
 	const step = 0.7 / (size - 1);
 	return colours.slice(0, size * size).map((colour, index) => ({
 		id: newId(),
@@ -285,14 +291,18 @@ export function seedGrid(size: GridSize): MeshPoint[] {
 }
 
 // web weights: inverse square, softened
-const meshWeight = (dx: number, dy: number) => 1 / (dx * dx + dy * dy + 0.01);
+const freeformWeight = (dx: number, dy: number) =>
+	1 / (dx * dx + dy * dy + 0.01);
 
-/** The mesh colour at a unit point, as the renderer blends it. */
-export function meshColour(points: readonly MeshPoint[], at: Point): string {
+/** The freeform colour at a unit point, as the renderer blends it. */
+export function freeformColour(
+	points: readonly FreeformPoint[],
+	at: Point,
+): string {
 	let total = 0;
 	const sum = [0, 0, 0];
 	for (const point of points) {
-		const weight = meshWeight(at.x - point.x, at.y - point.y);
+		const weight = freeformWeight(at.x - point.x, at.y - point.y);
 		const rgb = rgbOf(point.colour);
 		total += weight;
 		sum[0]! += rgb[0] * weight;
@@ -430,14 +440,14 @@ export function gradientCss(g: Gradient, fmt: (code: string) => string) {
   radial-gradient(ellipse at bottom left, ${fmt(c.bottomLeft)}, transparent 70%),
   radial-gradient(ellipse at bottom right, ${fmt(c.bottomRight)}, transparent 70%);`;
 		}
-		case 'mesh': {
+		case 'freeform': {
 			const layers = g.points
 				.map(
 					(p) =>
 						`radial-gradient(circle at ${Math.round(p.x * 100)}% ${Math.round(p.y * 100)}%, ${fmt(p.colour)}, transparent 60%)`,
 				)
 				.join(',\n  ');
-			return `/* Mesh gradients cannot be perfectly replicated in CSS.
+			return `/* Freeform gradients cannot be perfectly replicated in CSS.
    Use image export for accurate results.
    Below is a rough approximation: */
 background: ${layers};`;
@@ -533,11 +543,11 @@ function drawCorners(
 	);
 }
 
-function drawMesh(
+function drawFreeform(
 	ctx: CanvasRenderingContext2D,
 	width: number,
 	height: number,
-	points: readonly MeshPoint[],
+	points: readonly FreeformPoint[],
 ) {
 	if (!points.length) return;
 	const weighted = points.map((p) => ({
@@ -551,7 +561,7 @@ function drawMesh(
 		let gr = 0;
 		let b = 0;
 		for (const point of weighted) {
-			const weight = meshWeight(u - point.x, v - point.y);
+			const weight = freeformWeight(u - point.x, v - point.y);
 			total += weight;
 			r += point.rgb[0] * weight;
 			gr += point.rgb[1] * weight;
@@ -598,7 +608,8 @@ export function renderGradient(
 	});
 	if (!ctx) return;
 	if (g.mode === 'corners') drawCorners(ctx, width, height, g.corners);
-	else if (g.mode === 'mesh') drawMesh(ctx, width, height, g.points);
+	else if (g.mode === 'freeform')
+		drawFreeform(ctx, width, height, g.points);
 	else drawStops(ctx, width, height, g);
 	grain(ctx, width, height, g.noise);
 }
@@ -617,11 +628,11 @@ export interface LaunchFlags {
 	select: number;
 }
 
-const iosTypes: Mode[] = ['linear', 'radial', 'conic', 'mesh'];
+const iosTypes: Mode[] = ['linear', 'radial', 'conic', 'freeform'];
 
 /**
  * The iOS launch arguments as query flags: ?gradType=<0 linear, 1 radial,
- * 2 conic, 3 mesh, or a mode name> ?gradSpace=<0 srgb, 1 oklab, 2 oklch>
+ * 2 conic, 3 freeform, or a mode name> ?gradSpace=<0 srgb, 1 oklab, 2 oklch>
  * ?gradAngle=<degrees> ?gradCentre=30,40 ?gradStops=ffd400@0,0033ff@100
  * ?gradAutoStep=<taps> ?gradSize=1080x1920 ?gradNoise=<0...100>
  * ?gradSelect=<index in position order>

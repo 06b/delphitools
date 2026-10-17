@@ -46,7 +46,7 @@ module('Unit | Tool | gradient-genny', function () {
 		assert.strictEqual(ramp(stops, 'srgb').length, 2);
 	});
 
-	test('css follows the iOS shape and the web corner and mesh text', function (assert) {
+	test('css follows the iOS shape and the web corner and freeform text', function (assert) {
 		const model = new GradientModel();
 		model.stops = stops;
 		assert.strictEqual(
@@ -73,10 +73,10 @@ module('Unit | Tool | gradient-genny', function () {
 				'ellipse at top left',
 			),
 		);
-		model.mode = 'mesh';
+		model.mode = 'freeform';
 		assert.true(
 			gradientCss(model, same).startsWith(
-				'/* Mesh gradients',
+				'/* Freeform gradients',
 			),
 		);
 	});
