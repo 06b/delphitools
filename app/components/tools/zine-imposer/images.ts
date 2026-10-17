@@ -55,14 +55,18 @@ function decode(blob: Blob, name: string): Promise<ZineImage> {
 	});
 }
 
-function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+function canvasBlob(
+	canvas: HTMLCanvasElement,
+	type = 'image/png',
+): Promise<Blob> {
 	return new Promise((resolve, reject) =>
 		canvas.toBlob(
 			(blob) =>
 				blob
 					? resolve(blob)
 					: reject(new Error('no blob')),
-			'image/png',
+			type,
+			0.92,
 		),
 	);
 }
@@ -84,12 +88,10 @@ async function pdfPages(file: File, max: number): Promise<ZineImage[]> {
 			canvas.width = Math.ceil(viewport.width);
 			canvas.height = Math.ceil(viewport.height);
 			await page.render({ canvas, viewport }).promise;
-			out.push(
-				await decode(
-					await canvasBlob(canvas),
-					`${base} p${n}`,
-				),
-			);
+			// png pages run to tens of MB
+			const blob = await canvasBlob(canvas, 'image/jpeg');
+			canvas.width = 0;
+			out.push(await decode(blob, `${base} p${n}`));
 		}
 	} finally {
 		void pdf.destroy();
@@ -173,7 +175,11 @@ export function placement(
 }
 
 // centre-crop; pdf-lib cannot clip
-function cropToAspect(img: HTMLImageElement, targetAspect: number) {
+function cropToAspect(
+	img: HTMLImageElement,
+	targetAspect: number,
+	type?: string,
+) {
 	const imgAspect = img.width / img.height;
 	let sourceX = 0;
 	let sourceY = 0;
@@ -202,12 +208,19 @@ function cropToAspect(img: HTMLImageElement, targetAspect: number) {
 		canvas.width,
 		canvas.height,
 	);
-	return canvasBlob(canvas);
+	return canvasBlob(canvas, type);
 }
 
 // pdf-lib embeds png and jpeg only
 async function embeddable(image: ZineImage, aspect: number | null) {
-	if (aspect !== null) return cropToAspect(image.element, aspect);
+	if (aspect !== null)
+		return cropToAspect(
+			image.element,
+			aspect,
+			image.blob.type === 'image/jpeg'
+				? 'image/jpeg'
+				: undefined,
+		);
 	if (/^image\/(png|jpeg)$/.test(image.blob.type)) return image.blob;
 	return cropToAspect(
 		image.element,

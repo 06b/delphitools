@@ -131,13 +131,14 @@ check(
 	}),
 );
 check(
-	'empty: Container and Cut preset the output; Trim, Start, End, Set in, Set out and the transport are off',
+	'empty: no Container picked, Cut presets the output; Trim, Start, End, Set in, Set out and the transport are off',
 	await page.evaluate(
 		() =>
 			[...document.querySelectorAll('.vt-containers [role="radio"], .vt-modes [role="radio"]')].every(
 				(b) => !b.disabled,
 			) &&
-			document.querySelector('.vt-containers [aria-checked="true"]')?.textContent.trim() === 'MP4' &&
+			// the source container is unknown, so none is picked
+			!document.querySelector('.vt-containers [aria-checked="true"]') &&
 			['.media-job-run', '.vt-start input', '.vt-end input', '.vt-set-in', '.vt-set-out', '.vt-back', '.vt-forward', '.media-play', '.media-loop'].every(
 				(sel) => document.querySelector(sel)?.disabled === true,
 			),

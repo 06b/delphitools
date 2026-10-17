@@ -218,14 +218,17 @@ export default class PdfOrganiser extends Component {
 
 	// files
 
-	add = (files: File[], at = this.entries.length) => {
+	#queue: Promise<void> = Promise.resolve();
+
+	add = (files: File[], at = Infinity) => {
 		const pdfs = files.filter((file) =>
 			matchesAccept(file, ACCEPT),
 		);
 		if (!pdfs.length || this.busy) return;
 		this.readFailure = '';
 		this.reading += pdfs.length;
-		void this.#read(pdfs, at);
+		// one read at a time keeps each file's pages together
+		this.#queue = this.#queue.then(() => this.#read(pdfs, at));
 	};
 
 	paste = (file: File) => this.add([file]);

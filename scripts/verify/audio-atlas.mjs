@@ -170,14 +170,13 @@ check(
 check(
 	'empty: the Open in cells, all off',
 	await page.evaluate(() => {
-		const cells = [...document.querySelectorAll('.aa-open .aa-open-blank')];
-		const ids = cells.map((c) => c.dataset.tool);
+		const open = document.querySelector('.aa-open.media-open--blank');
+		const ids = [...(open?.querySelectorAll('[data-tool]') ?? [])].map((c) => c.dataset.tool);
 		return (
-			cells.length > 0 &&
-			cells.every((c) => c.disabled) &&
+			open?.inert === true &&
 			ids.includes('audio-trimmer') &&
 			!ids.includes('audio-atlas') &&
-			!document.querySelector('.aa-open a')
+			!document.querySelector('.aa-open:not(.media-open--blank) a')
 		);
 	}),
 );
@@ -219,7 +218,7 @@ await page.waitForFunction(
 check('loaded: the band is bandHeight tall', (await bandTall()) === BAND, String(await bandTall()));
 check(
 	'loaded: no blank objects left',
-	!(await page.$('.media-strips--blank, .aa-sheet--blank, .aa-open-blank, .aa-slot')),
+	!(await page.$('.media-strips--blank, .aa-sheet--blank, .media-open--blank, .aa-slot')),
 );
 const detail = await page.$eval('.aa-source .canon-row-detail', (el) =>
 	el.textContent.trim(),

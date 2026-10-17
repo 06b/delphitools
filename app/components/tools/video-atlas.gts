@@ -39,7 +39,6 @@ import {
 	thumbnails,
 } from 'delphitools-v2/components/tools/media/frames';
 import './media/media.css';
-import './video-atlas/video-atlas.css';
 
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const READ_ERROR = "Couldn't read that file's container";
@@ -326,7 +325,7 @@ export default class VideoAtlas extends Component {
 				{{else}}
 					{{! no file to hand off yet }}
 					<OpenIn
-						class="va-open va-open--blank"
+						class="va-open media-open--blank"
 						@tools={{BLANK_OPEN}}
 						inert
 					/>

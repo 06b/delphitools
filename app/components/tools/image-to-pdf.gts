@@ -331,7 +331,7 @@ export default class ImageToPdf extends Component {
 		const images = files.filter(isImage);
 		if (images.length) {
 			this.toPdf = true;
-			void this.add(images, this.items.length);
+			void this.add(images, Infinity);
 		} else if (pdf) {
 			this.toPdf = false;
 			void this.loadPdf(pdf);
@@ -357,7 +357,7 @@ export default class ImageToPdf extends Component {
 	};
 
 	chooseImages = (files: File[]) =>
-		void this.add(files.filter(isImage), this.items.length);
+		void this.add(files.filter(isImage), Infinity);
 
 	dropInStrip = (at: number, files: File[]) => void this.add(files, at);
 

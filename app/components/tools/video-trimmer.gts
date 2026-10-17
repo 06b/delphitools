@@ -123,7 +123,6 @@ export default class VideoTrimmer extends Component {
 	#token = 0;
 	#job = 0;
 	#abort: AbortController | null = null;
-	#fresh = true;
 
 	willDestroy() {
 		super.willDestroy();
@@ -172,7 +171,9 @@ export default class VideoTrimmer extends Component {
 		return this.container || this.intake.probe?.container || 'mp4';
 	}
 
+	// before a file with no pick: the source's container is unknown
 	get containerIndex() {
+		if (!this.container && !this.intake.probe) return -1;
 		return CONTAINERS.findIndex(
 			(c) => c.id === this.targetContainer,
 		);
@@ -255,9 +256,7 @@ export default class VideoTrimmer extends Component {
 	stepForward = () => this.playback.stepBy(this.#frameSeconds);
 
 	#load(file: File) {
-		// pre-file pick carries over
-		const container = this.#fresh ? this.container : '';
-		this.#fresh = false;
+		const { container } = this;
 		this.#reset();
 		this.container = container;
 		const token = this.#token;
@@ -283,7 +282,11 @@ export default class VideoTrimmer extends Component {
 			return;
 		}
 		const support = await containerSupport(probe.codec);
-		if (token === this.#token) this.support = support;
+		if (token !== this.#token) return;
+		this.support = support;
+		// a pick made before the file that its codec cannot take
+		if (this.container && !support[this.container])
+			this.container = '';
 	}
 
 	select = (start: number, end: number, moved?: TrimEdge) => {
@@ -315,7 +318,7 @@ export default class VideoTrimmer extends Component {
 
 	pickContainer = (index: number) => {
 		const id = CONTAINERS[index]?.id;
-		if (!id || id === this.targetContainer) return;
+		if (!id || index === this.containerIndex) return;
 		this.container = id;
 		this.#invalidate();
 	};
@@ -432,7 +435,6 @@ export default class VideoTrimmer extends Component {
 	clear = () => {
 		this.playback.unload();
 		this.#reset();
-		this.#fresh = true;
 		this.intake.clear();
 	};
 

@@ -195,27 +195,3 @@
 	content: "";
 	opacity: 0.5;
 }
-
-/* the open-in cells before a file, as the shared links, off */
-.media-open .dt-atlas-open .aa-open-blank {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 6px;
-	padding: 14px 8px;
-	border: 0;
-	background: var(--canon-card);
-	color: color-mix(in srgb, var(--canon-foreground) 40%, transparent);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-footnote);
-	font-weight: var(--canon-weight-semibold);
-	line-height: inherit;
-	text-align: center;
-	cursor: default;
-}
-
-.media-open .dt-atlas-open .aa-open-blank .dt-icon {
-	inline-size: 20px;
-	block-size: 20px;
-	color: color-mix(in srgb, var(--canon-primary) 40%, transparent);
-}

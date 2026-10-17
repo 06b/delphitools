@@ -51,7 +51,8 @@ import './media/media.css';
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const NO_AUDIO = 'No audio track detected';
 const EXTRACT_ERROR = "Couldn't extract, try WAV format";
-const BLANK_INFO = blankSections(['General', 'Video', 'Audio']);
+// the extracted file has no video
+const BLANK_INFO = blankSections(['General', 'Audio']);
 const formatLabels = AUDIO_TARGETS.map((t) => t.label);
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;

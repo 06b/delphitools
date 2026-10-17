@@ -164,6 +164,7 @@ export default class PdfPageNumberer extends Component {
 	#bytes: ArrayBuffer | null = null;
 	#pdf?: PDFDocumentProxy;
 	#token = 0;
+	#job = 0;
 	#shown = 0;
 	#queued?: Section[];
 
@@ -399,6 +400,8 @@ export default class PdfPageNumberer extends Component {
 
 	// a setting change drops the result
 	#changed() {
+		this.#job++;
+		this.busy = false;
 		this.stamped = null;
 		this.failed = false;
 	}
@@ -471,7 +474,8 @@ export default class PdfPageNumberer extends Component {
 	async #stamp() {
 		const bytes = this.#bytes;
 		if (!bytes || this.busy || !this.file) return;
-		const token = this.#token;
+		const job = this.#job;
+		const current = () => job === this.#job;
 		this.busy = true;
 		this.failed = false;
 		try {
@@ -479,7 +483,7 @@ export default class PdfPageNumberer extends Component {
 				bytes.slice(0),
 				this.options,
 			);
-			if (token !== this.#token) return;
+			if (!current()) return;
 			const stem = this.file.name.replace(/\.pdf$/i, '');
 			this.stamped = {
 				blob: new Blob([new Uint8Array(out)], {
@@ -489,9 +493,9 @@ export default class PdfPageNumberer extends Component {
 				size: out.byteLength,
 			};
 		} catch {
-			if (token === this.#token) this.failed = true;
+			if (current()) this.failed = true;
 		} finally {
-			if (token === this.#token) this.busy = false;
+			if (current()) this.busy = false;
 		}
 	}
 

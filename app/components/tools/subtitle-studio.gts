@@ -193,7 +193,6 @@ export default class SubtitleStudioTool extends Component {
 	@tracked formatId = '';
 
 	canvas: HTMLCanvasElement | null = null;
-	picker: HTMLInputElement | null = null;
 
 	#token = 0;
 	#burnId = 0;
@@ -464,21 +463,6 @@ export default class SubtitleStudioTool extends Component {
 	};
 
 	readFiles = (files: File[]) => files.forEach(this.readAny);
-
-	keepPicker = modifier((element: HTMLInputElement) => {
-		this.picker = element;
-	});
-
-	// the video and its subtitles in one pick, as the drop zone took them
-	choose = () => this.picker?.click();
-
-	picked = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const files = [...(input.files ?? [])];
-		// the same file twice fires change again
-		input.value = '';
-		this.readFiles(files);
-	};
 
 	allowDrop = (event: DragEvent) => {
 		if (event.dataTransfer?.types.includes('Files'))
@@ -1202,20 +1186,9 @@ export default class SubtitleStudioTool extends Component {
 							@prompt="Choose video file"
 							@icon="film"
 							@row={{true}}
-							@onChoose={{this.choose}}
-						/>
-						{{! the slot is its label }}
-						{{! template-lint-disable require-input-label }}
-						<input
-							type="file"
-							accept={{ANY}}
-							multiple
-							hidden
-							{{this.keepPicker}}
-							{{on
-								"change"
-								this.picked
-							}}
+							@multiple={{true}}
+							@accept={{ANY}}
+							@onFiles={{this.readFiles}}
 						/>
 						{{#if this.intake.error}}
 							<CanonStatus

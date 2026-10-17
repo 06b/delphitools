@@ -10,7 +10,7 @@ import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
-import Icon, { IconSvg } from 'delphitools-v2/components/icon';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import {
 	AudioIntake,
@@ -538,32 +538,11 @@ export default class AudioAtlas extends Component {
 						@self="audio-atlas"
 					/>
 				{{else}}
-					<CanonRows
-						class="media-open aa-open"
-						@framed={{true}}
-					>
-						<CanonHeading @text="Open in" />
-						<div class="dt-atlas-open">
-							{{#each
-								BLANK_OPEN
-								key="id"
-								as |tool|
-							}}
-								<button
-									type="button"
-									class="aa-open-blank"
-									data-tool={{tool.id}}
-									disabled
-								>
-									<Icon
-										@name={{tool.icon}}
-									/>
-									<span
-									>{{tool.name}}</span>
-								</button>
-							{{/each}}
-						</div>
-					</CanonRows>
+					<OpenIn
+						class="aa-open media-open--blank"
+						@tools={{BLANK_OPEN}}
+						inert
+					/>
 				{{/if}}
 			</:main>
 			<:footer>

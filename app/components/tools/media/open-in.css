@@ -31,3 +31,12 @@
 		color: var(--canon-foreground);
 	}
 }
+
+/* before a file: the list a file would get, off */
+.media-open--blank .dt-atlas-open a {
+	color: var(--canon-muted-foreground);
+}
+
+.media-open--blank .dt-atlas-open a .dt-icon {
+	color: inherit;
+}

@@ -1,3 +1,4 @@
+import exifr from 'exifr';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import {
 	layout,
@@ -10,27 +11,28 @@ export interface Source {
 	height: number;
 }
 
-function canvasPng(canvas: HTMLCanvasElement): Promise<Blob> {
+function encode(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
 	return new Promise((resolve, reject) =>
 		canvas.toBlob(
 			(blob) =>
 				blob
 					? resolve(blob)
 					: reject(new Error('encode failed')),
-			'image/png',
+			type,
+			0.92,
 		),
 	);
 }
 
 // pdf-lib embeds only jpeg and png
-async function pngBytes(file: File): Promise<ArrayBuffer> {
+async function redrawn(file: File, type: string): Promise<ArrayBuffer> {
 	const bitmap = await createImageBitmap(file);
 	const canvas = document.createElement('canvas');
 	canvas.width = bitmap.width;
 	canvas.height = bitmap.height;
 	canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
 	bitmap.close();
-	return (await canvasPng(canvas)).arrayBuffer();
+	return (await encode(canvas, type)).arrayBuffer();
 }
 
 /** One page per image, the picture clipped to the margin as iOS draws it. */
@@ -52,11 +54,24 @@ export async function buildPdf(
 		const { file } = source;
 		const embedded =
 			file.type === 'image/jpeg'
-				? await doc.embedJpg(await file.arrayBuffer())
+				? await doc.embedJpg(
+						// pdf viewers ignore exif orientation
+						((await exifr.orientation(
+							file,
+						)) ?? 1) > 1
+							? await redrawn(
+									file,
+									'image/jpeg',
+								)
+							: await file.arrayBuffer(),
+					)
 				: await doc.embedPng(
 						file.type === 'image/png'
 							? await file.arrayBuffer()
-							: await pngBytes(file),
+							: await redrawn(
+									file,
+									'image/png',
+								),
 					);
 		const {
 			page: size,
@@ -89,5 +104,5 @@ export async function pagePng(
 	canvas.width = Math.ceil(viewport.width);
 	canvas.height = Math.ceil(viewport.height);
 	await page.render({ canvas, viewport }).promise;
-	return canvasPng(canvas);
+	return encode(canvas, 'image/png');
 }

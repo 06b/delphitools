@@ -114,7 +114,7 @@ check(
 check(
 	'empty: the Open in cells are shown, inert, without this tool',
 	await page.evaluate(() => {
-		const open = document.querySelector('.va-open--blank');
+		const open = document.querySelector('.media-open--blank');
 		const ids = [...(open?.querySelectorAll('[data-tool]') ?? [])].map((a) => a.dataset.tool);
 		return open?.inert === true && ids.includes('video-muter') && !ids.includes('video-atlas');
 	}),
@@ -187,7 +187,7 @@ check('loaded: the picture keeps the blank box size and place (16:9 clip)', (awa
 check('loaded: the same headings in the same order as empty', (await headings()) === emptyOrder, emptyOrder);
 check(
 	'loaded: the Open in cells are live',
-	await page.evaluate(() => !document.querySelector('.va-open--blank') && !document.querySelector('.va-open').inert),
+	await page.evaluate(() => !document.querySelector('.media-open--blank') && !document.querySelector('.va-open').inert),
 );
 await shots('loaded');
 check(
