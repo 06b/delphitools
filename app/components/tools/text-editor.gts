@@ -42,9 +42,8 @@ import {
 	blockMark,
 	countStats,
 } from 'delphitools-v2/components/tools/text-editor/marks';
+import * as ed from 'delphitools-v2/lib/editor/core';
 import './text-editor/text-editor.css';
-
-type EditorCore = typeof import('delphitools-v2/lib/editor/core');
 
 const DOC_KEY = 'delphitools-editor';
 const ACCEPT = acceptAttr(TEXT_ACCEPT);
@@ -147,9 +146,8 @@ export default class TextEditorTool extends Component {
 	@tracked overlay = false;
 	@tracked settingsOpen = false;
 
-	ed: EditorCore | null = null;
 	view: EditorView | null = null;
-	// arrived before core load
+	// arrived before mount
 	#pendingText: string | null = null;
 	#startsInSource = false;
 	frame = 0;
@@ -369,11 +367,9 @@ export default class TextEditorTool extends Component {
 	}
 
 	#updateBubble(view: EditorView, state: EditorState) {
-		const ed = this.ed;
 		const sel = state.selection;
 		const pane = this.#pane;
 		if (
-			!ed ||
 			!pane ||
 			!(sel instanceof ed.TextSelection) ||
 			sel.empty ||
@@ -458,124 +454,124 @@ export default class TextEditorTool extends Component {
 	};
 
 	mount = modifier((element: HTMLElement) => {
-		let disposed = false;
-		let ro: ResizeObserver | null = null;
+		let gone = false;
+		let tearDown: (() => void) | undefined;
+		// a synchronous set-up autotracks this.settings, so each settings change would rebuild the editor
+		queueMicrotask(() => {
+			if (!gone) tearDown = this.#setUp(element);
+		});
+		return () => {
+			gone = true;
+			tearDown?.();
+		};
+	});
 
-		void (async () => {
-			const ed =
-				await import('delphitools-v2/lib/editor/core');
-			if (disposed) return;
-			this.ed = ed;
-			this.choices = ed.blockChoices(ed.schema);
+	#setUp(element: HTMLElement) {
+		this.choices = ed.blockChoices(ed.schema);
 
-			// older-build leftovers
-			try {
-				localStorage.removeItem(DOC_KEY);
-			} catch {
-				// storage blocked: nothing to remove
-			}
-			ed.clearStoredSettings();
+		// older-build leftovers
+		try {
+			localStorage.removeItem(DOC_KEY);
+		} catch {
+			// storage blocked: nothing to remove
+		}
+		ed.clearStoredSettings();
 
-			let initialState = ed.EditorState.create({
-				doc: ed.parseMarkdown(''),
-				plugins: ed.buildPlugins(
-					ed.schema,
-					this.settings,
-					PLACEHOLDER,
-				),
-			});
-			const fix = ed.fixTables(initialState);
-			if (fix) initialState = initialState.apply(fix);
+		let initialState = ed.EditorState.create({
+			doc: ed.parseMarkdown(''),
+			plugins: ed.buildPlugins(
+				ed.schema,
+				this.settings,
+				PLACEHOLDER,
+			),
+		});
+		const fix = ed.fixTables(initialState);
+		if (fix) initialState = initialState.apply(fix);
 
-			const view: EditorView = new ed.EditorView(element, {
-				state: initialState,
-				attributes: {
-					class: 'dt-editor',
-					spellcheck: 'true',
-					role: 'textbox',
-					'aria-multiline': 'true',
-					'aria-label': 'Text',
-				},
-				nodeViews: ed.buildNodeViews(),
-				// plain-text clipboard only
-				clipboardTextParser: (text) => {
-					const doc = ed.parseMarkdown(text);
-					const first = doc.firstChild;
-					// single paragraph pastes inline
-					if (
-						doc.childCount === 1 &&
-						first &&
-						first.type.name === 'paragraph'
-					) {
-						return new ed.Slice(
-							first.content,
-							0,
-							0,
-						);
-					}
-					return doc.slice(0, doc.content.size);
-				},
-				dispatchTransaction: (tr) => {
-					const next = view.state.apply(tr);
-					view.updateState(next);
-					this.scheduleMeasure();
-					if (tr.docChanged) {
-						this.dirty = true;
-						this.#readDoc(next.doc);
-					}
-					const sel = next.selection;
-					this.activeBlockPos =
-						sel.$from.depth >= 1
-							? sel.$from.before(1)
-							: null;
-					this.#updateBubble(view, next);
-				},
-				handleScrollToSelection: (v) => {
-					if (!this.settings.typewriter)
-						return false;
-					const coords = v.coordsAtPos(
-						v.state.selection.from,
+		const view: EditorView = new ed.EditorView(element, {
+			state: initialState,
+			attributes: {
+				class: 'dt-editor',
+				spellcheck: 'true',
+				role: 'textbox',
+				'aria-multiline': 'true',
+				'aria-label': 'Text',
+			},
+			nodeViews: ed.buildNodeViews(),
+			// plain-text clipboard only
+			clipboardTextParser: (text) => {
+				const doc = ed.parseMarkdown(text);
+				const first = doc.firstChild;
+				// single paragraph pastes inline
+				if (
+					doc.childCount === 1 &&
+					first &&
+					first.type.name === 'paragraph'
+				) {
+					return new ed.Slice(
+						first.content,
+						0,
+						0,
 					);
-					const scroller = getScrollParent(v.dom);
-					if (!scroller) return false;
-					const r =
-						scroller.getBoundingClientRect();
-					scroller.scrollTop +=
-						coords.top -
-						r.top -
-						scroller.clientHeight / 2;
-					return true;
-				},
-			});
-			this.view = view;
-			if (this.#pendingText !== null) {
-				const text = this.#pendingText;
-				this.#pendingText = null;
-				this.#load(text);
-			}
-			if (this.#startsInSource) this.toggleCodeMode();
-			this.#readDoc(view.state.doc);
-			this.scheduleMeasure();
+				}
+				return doc.slice(0, doc.content.size);
+			},
+			dispatchTransaction: (tr) => {
+				const next = view.state.apply(tr);
+				view.updateState(next);
+				this.scheduleMeasure();
+				if (tr.docChanged) {
+					this.dirty = true;
+					this.#readDoc(next.doc);
+				}
+				const sel = next.selection;
+				this.activeBlockPos =
+					sel.$from.depth >= 1
+						? sel.$from.before(1)
+						: null;
+				this.#updateBubble(view, next);
+			},
+			handleScrollToSelection: (v) => {
+				if (!this.settings.typewriter) return false;
+				const coords = v.coordsAtPos(
+					v.state.selection.from,
+				);
+				const scroller = getScrollParent(v.dom);
+				if (!scroller) return false;
+				const r = scroller.getBoundingClientRect();
+				scroller.scrollTop +=
+					coords.top -
+					r.top -
+					scroller.clientHeight / 2;
+				return true;
+			},
+		});
+		this.view = view;
+		if (this.#pendingText !== null) {
+			const text = this.#pendingText;
+			this.#pendingText = null;
+			this.#load(text);
+		}
+		if (this.#startsInSource) this.toggleCodeMode();
+		this.#readDoc(view.state.doc);
+		this.scheduleMeasure();
 
-			ro = new ResizeObserver(() => this.scheduleMeasure());
-			ro.observe(view.dom);
-		})();
+		const ro = new ResizeObserver(() => this.scheduleMeasure());
+		ro.observe(view.dom);
 
 		return () => {
-			disposed = true;
-			ro?.disconnect();
+			ro.disconnect();
 			cancelAnimationFrame(this.frame);
 			this.view?.destroy();
 			this.view = null;
 		};
-	});
+	}
 
 	applySettings = (patch: Partial<EditorSettings>) => {
 		const next = { ...this.settings, ...patch };
 		this.settings = next;
 		const v = this.view;
-		if (v && this.ed)
-			v.dispatch(v.state.tr.setMeta(this.ed.focusKey, next));
+		if (v) v.dispatch(v.state.tr.setMeta(ed.focusKey, next));
 		this.scheduleMeasure();
 	};
 
@@ -598,9 +594,8 @@ export default class TextEditorTool extends Component {
 	};
 
 	toggleCodeMode = () => {
-		const ed = this.ed;
 		const v = this.view;
-		if (!ed || !v) return;
+		if (!v) return;
 		if (!this.settings.codeMode) {
 			this.source = ed.serializeDoc(v.state.doc);
 			this.bubble = null;
@@ -658,9 +653,8 @@ export default class TextEditorTool extends Component {
 	};
 
 	#load(text: string) {
-		const ed = this.ed;
 		const v = this.view;
-		if (!ed || !v) {
+		if (!v) {
 			this.#pendingText = text;
 			return;
 		}
@@ -712,18 +706,16 @@ export default class TextEditorTool extends Component {
 	};
 
 	currentDoc(): PMNode | null {
-		const ed = this.ed;
 		const v = this.view;
-		if (!ed || !v) return null;
+		if (!v) return null;
 		return this.settings.codeMode
 			? ed.parseMarkdown(this.source)
 			: v.state.doc;
 	}
 
 	copy = () => {
-		const ed = this.ed;
 		const v = this.view;
-		if (!ed || !v) return;
+		if (!v) return;
 		void this.toast.copy(
 			this.settings.codeMode
 				? this.source
@@ -732,10 +724,9 @@ export default class TextEditorTool extends Component {
 	};
 
 	doExport = (item: CanonMenuItem) => {
-		const ed = this.ed;
 		const doc = this.currentDoc();
 		const kind = exports[this.exportItems.indexOf(item)]?.kind;
-		if (!ed || !doc || !kind) return;
+		if (!doc || !kind) return;
 		if (kind === 'rich') {
 			void ed
 				.copyRichText(doc)
@@ -750,18 +741,16 @@ export default class TextEditorTool extends Component {
 	};
 
 	applyMark = (markName: string) => {
-		const ed = this.ed;
 		const view = this.view;
-		if (!ed || !view) return;
+		if (!view) return;
 		const type = view.state.schema.marks[markName];
 		if (type) ed.toggleMark(type)(view.state, view.dispatch);
 		view.focus();
 	};
 
 	addLink = () => {
-		const ed = this.ed;
 		const view = this.view;
-		if (!ed || !view) return;
+		if (!view) return;
 		const type = view.state.schema.marks.link;
 		if (!type) return;
 		const { from, to } = view.state.selection;
@@ -800,9 +789,8 @@ export default class TextEditorTool extends Component {
 	};
 
 	runBlockCommand = (pos: number, choice: BlockChoice) => {
-		const ed = this.ed;
 		const view = this.view;
-		if (!ed || !view) return;
+		if (!view) return;
 		const { bullet_list, ordered_list, paragraph } =
 			view.state.schema.nodes;
 		const block = view.state.doc.nodeAt(pos);

@@ -2,7 +2,7 @@
 // usage: npm start, then node scripts/verify/text-editor.mjs
 //   SHOTS=<dir> also saves screenshots
 
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -40,6 +40,17 @@ const focused = () => page.evaluate(() => document.activeElement?.className ?? '
 const disabled = (sel) => page.$eval(sel, (el) => el.disabled);
 const click = (sel) => page.$eval(sel, (el) => el.click());
 const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+const editorText = () => page.$eval('.text-editor .dt-editor', (el) => el.textContent);
+// a real pointer hit, so an overlay over the editor fails it
+async function clickAndType(text) {
+	const box = await page.$eval('.text-editor .dt-editor', (el) => {
+		const r = el.getBoundingClientRect();
+		return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 40) };
+	});
+	await page.mouse.click(box.x, box.y);
+	await page.keyboard.type(text);
+	await sleep(200);
+}
 
 async function waitForDownload(match, timeout = 15000) {
 	const until = Date.now() + timeout;
@@ -179,6 +190,27 @@ check(
 	'a file dropped on the bar loads into the editor',
 	(await page.$eval('.text-editor .dt-editor h1', (h) => h.textContent.trim()).catch(() => null)) === 'Field notes',
 );
+await page.evaluate(() => {
+	document.querySelector('.text-editor input[type=file]').value = '';
+});
+const picked = join(mkdtempSync(join(tmpdir(), 'dt-te-in-')), 'picked.md');
+writeFileSync(picked, '# Picked file\n\nFrom the file input.\n');
+await (await page.$('.text-editor input[type=file]')).uploadFile(picked);
+await sleep(400);
+check(
+	'a Markdown file chosen through Files loads into the editor',
+	(await page.$eval('.text-editor .dt-editor h1', (h) => h.textContent.trim()).catch(() => null)) === 'Picked file',
+);
+await page.evaluate((text) => {
+	const transfer = new DataTransfer();
+	transfer.items.add(new File([text], 'notes.md', { type: '' }));
+	document.querySelector('.te-pane').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true }));
+}, DOC);
+await sleep(400);
+check(
+	'a .md file with no type dropped on the editor loads',
+	(await page.$eval('.text-editor .dt-editor h1', (h) => h.textContent.trim()).catch(() => null)) === 'Field notes',
+);
 const loaded = await tiles();
 check('loaded: tiles count the document', loaded.Words === '15' && loaded.Lines === '4', JSON.stringify(loaded));
 
@@ -190,8 +222,14 @@ check('Copy copies the Markdown', copied.startsWith('# Field notes') && /[-*] on
 check('Copy confirms through the toast', await page.evaluate(() => !!document.querySelector('.canon-toast')));
 
 // Source mode round trip
-await click('.te-source-toggle');
+await page.click('.te-source-toggle');
 await sleep(200);
+const sourceView = await page.evaluate(() => {
+	const area = document.querySelector('.te-source')?.getBoundingClientRect();
+	const rich = document.querySelector('.text-editor .dt-editor').getBoundingClientRect();
+	return { area: area ? Math.round(area.height) : 0, rich: Math.round(rich.height) };
+});
+check('Source swaps the rich page for the Markdown text', sourceView.area > 100 && sourceView.rich === 0, JSON.stringify(sourceView));
 const source = await page.$eval('.te-source', (el) => el.value).catch(() => null);
 check('Source shows the raw Markdown', source?.startsWith('# Field notes'), JSON.stringify(source?.slice(0, 30)));
 check('Source is pressed', (await page.$eval('.te-source-toggle', (el) => el.getAttribute('aria-pressed'))) === 'true');
@@ -201,7 +239,7 @@ await page.$eval('.te-source', (el) => {
 });
 await sleep(100);
 check('source edits count live', (await tiles()).Words === '5');
-await click('.te-source-toggle');
+await page.click('.te-source-toggle');
 await sleep(250);
 check(
 	'leaving Source parses the edit back',
@@ -334,6 +372,8 @@ check(
 	full.w === 1400 && full.h === 1000 && /words/.test(full.count ?? ''),
 	JSON.stringify(full),
 );
+await clickAndType(' Full screen words.');
+check('full screen: typing lands in the editor', (await editorText()).includes('Full screen words.'), await editorText());
 await page.keyboard.press('Escape');
 await sleep(400);
 check(
@@ -352,6 +392,8 @@ const overlay = await page.evaluate(() => {
 	return { w: pane.width, h: pane.height, top: pane.top };
 });
 check('with no full screen API the overlay covers the window', overlay.w === 1400 && overlay.h === 1000 && overlay.top === 0, JSON.stringify(overlay));
+await clickAndType(' Overlay words.');
+check('overlay: typing lands in the editor', (await editorText()).includes('Overlay words.'), await editorText());
 await click('.te-zen-bar button');
 await sleep(200);
 check('Exit closes the overlay', (await page.$('.te-pane--zen')) === null);
@@ -376,6 +418,8 @@ check(
 	phone.width && phone.tall && phone.scrolls && phone.symbols && !phone.overflow,
 	JSON.stringify(phone),
 );
+await clickAndType(' Phone words.');
+check('390: typing lands in the editor', (await editorText()).includes('Phone words.'), await editorText());
 await click('.te-settings-cell');
 await sleep(400);
 const phoneSheet = await page.evaluate(() => {
