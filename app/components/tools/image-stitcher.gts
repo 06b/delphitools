@@ -1,608 +1,247 @@
-import { concat, fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
+import { concat } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import { eq } from 'ember-truth-helpers';
-
-import type { TOC } from '@ember/component/template-only';
-
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+	type CanonPageMenuItem,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { stem } from 'delphicanon/lib/files';
+import { reducedMotion, springEasing } from 'delphicanon/lib/motion';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import { encodeJxl } from 'delphitools-v2/lib/jxl';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Picture from 'delphitools-v2/components/tools/image-stitcher/picture';
+import {
+	FITS,
+	batchGrid,
+	exportSize,
+	findLeaf,
+	insertIntoSplit,
+	layoutBatch,
+	layoutTree,
+	leaf,
+	leafKeyOf,
+	leafSrcIds,
+	moveLeafNode,
+	removeLeafNode,
+	settingFit,
+	swapLeafContent,
+	wrapNode,
+	type Drop as TileDrop,
+	type Fit,
+	type Layout,
+	type Side,
+	type Src,
+	type Target,
+	type TreeNode,
+} from 'delphitools-v2/components/tools/image-stitcher/stitch';
+import {
+	encode,
+	formats,
+	jxlAvailable,
+	render,
+	type ExportFormat,
+} from 'delphitools-v2/components/tools/image-stitcher/export';
+import './image-stitcher/image-stitcher.css';
 
-const DROP_HINT = 'Add several images at once or paste';
+// iOS: usingSpringWithDamping 0.82 over 0.5 s
+const spring = htmlSafe(`--stitch-spring: ${springEasing(0.82)}`);
+const springMs = 450;
+const stripStyle = htmlSafe(`block-size: ${pageStripHeight}px`);
+const aspects = { min: 0.75, max: 1.5, empty: 4 / 3 };
+const modes = ['Individual', 'Batch'];
+const fitLabels = ['Match', 'Cheese', 'Matte'];
+const formatLabels = formats.map((f) => f.label);
+const dash = '—';
 
-type Side = 'top' | 'left' | 'right' | 'bottom';
-type Fit = 'match' | 'cheese' | 'matte';
-type Mode = 'individual' | 'batch';
-type Dir = 'row' | 'col';
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const SortUp = <template><IconSvg @name="arrow-down" /></template>;
+const SortDown = <template><IconSvg @name="arrow-up" /></template>;
+const Pin = <template><IconSvg @name="pin" /></template>;
 
-const MATTE_COLOUR = '#ffffff';
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
 
-const MODES: Mode[] = ['individual', 'batch'];
-const FITS: Fit[] = ['match', 'cheese', 'matte'];
+const pixels = (width: number, height: number) =>
+	`${Math.round(width)} × ${Math.round(height)} px`;
 
-interface SideMeta {
-	side: Side;
-	add: string;
-	place: string;
-}
+let nextId = 1;
 
-// generator needs literal icons
-const SIDE_META: SideMeta[] = [
-	{ side: 'top', add: 'Add top', place: 'Place top' },
-	{ side: 'left', add: 'Add left', place: 'Place left' },
-	{ side: 'right', add: 'Add right', place: 'Place right' },
-	{ side: 'bottom', add: 'Add bottom', place: 'Place bottom' },
-];
-
-interface Src {
-	id: string;
-	name: string;
-	el: HTMLImageElement;
-	url: string;
-	w: number;
-	h: number;
-}
-
-type ExportFormat = 'png' | 'jpeg' | 'webp' | 'jxl';
-
-interface FormatMeta {
-	id: ExportFormat;
-	label: string;
-	mime: string;
-	ext: string;
-	lossy: boolean;
-	alpha: boolean;
-}
-
-const EXPORT_FORMATS: FormatMeta[] = [
-	{
-		id: 'png',
-		label: 'PNG',
-		mime: 'image/png',
-		ext: 'png',
-		lossy: false,
-		alpha: true,
-	},
-	{
-		id: 'jpeg',
-		label: 'JPEG',
-		mime: 'image/jpeg',
-		ext: 'jpg',
-		lossy: true,
-		alpha: false,
-	},
-	{
-		id: 'webp',
-		label: 'WebP',
-		mime: 'image/webp',
-		ext: 'webp',
-		lossy: true,
-		alpha: true,
-	},
-	{
-		id: 'jxl',
-		label: 'JXL',
-		mime: 'image/jxl',
-		ext: 'jxl',
-		lossy: true,
-		alpha: true,
-	},
-];
-
-function formatMeta(id: ExportFormat): FormatMeta {
-	return EXPORT_FORMATS.find((f) => f.id === id)!;
-}
-
-// libjxl needs origin
-function jxlAvailable(): boolean {
-	return typeof window !== 'undefined' && window.isSecureContext;
-}
-
-function canvasToBlob(
-	canvas: HTMLCanvasElement,
-	mimeType: string,
-	quality?: number,
-): Promise<Blob> {
-	return new Promise((resolve, reject) => {
-		canvas.toBlob(
-			(blob) =>
-				blob
-					? resolve(blob)
-					: reject(
-							new Error(
-								'Canvas toBlob failed',
-							),
-						),
-			mimeType,
-			quality === undefined ? undefined : quality / 100,
-		);
-	});
-}
-
-async function encodeCanvas(
-	canvas: HTMLCanvasElement,
-	format: ExportFormat,
-	quality: number,
-): Promise<Blob> {
-	const meta = formatMeta(format);
-	if (format === 'jxl') {
-		return encodeJxl(canvas, { quality, lossless: quality >= 100 });
-	}
-	const blob = await canvasToBlob(
-		canvas,
-		meta.mime,
-		meta.lossy ? quality : undefined,
-	);
-	if (blob.type && blob.type !== meta.mime) {
-		throw new Error(
-			`Encoder produced ${blob.type} instead of ${meta.mime}`,
-		);
-	}
-	return blob;
-}
-
-interface LeafNode {
-	kind: 'img';
-	key: string;
-	srcId: string;
-	fit: Fit;
-}
-
-interface SplitNode {
-	kind: 'split';
-	key: string;
-	dir: Dir;
-	children: TreeNode[];
-}
-
-type TreeNode = LeafNode | SplitNode;
-
-const leaf = (srcId: string, fit: Fit = 'cheese'): LeafNode => ({
-	kind: 'img',
-	key: crypto.randomUUID(),
-	srcId,
-	fit,
-});
-
-function leafSrcIds(node: TreeNode, into: string[] = []): string[] {
-	if (node.kind === 'img') into.push(node.srcId);
-	else node.children.forEach((c) => leafSrcIds(c, into));
-	return into;
-}
-
-function mapLeaves(node: TreeNode, fn: (l: LeafNode) => LeafNode): TreeNode {
-	if (node.kind === 'img') return fn(node);
-	return {
-		...node,
-		children: node.children.map((c) => mapLeaves(c, fn)),
-	};
-}
-
-function wrapNode(
-	root: TreeNode,
-	key: string | null,
-	side: Side,
-	added: LeafNode[],
-): TreeNode {
-	const wrap = (node: TreeNode): TreeNode => ({
-		kind: 'split',
-		key: crypto.randomUUID(),
-		dir: side === 'left' || side === 'right' ? 'row' : 'col',
-		children:
-			side === 'left' || side === 'top'
-				? [...added, node]
-				: [node, ...added],
-	});
-	if (key === null) return wrap(root);
-	const walk = (node: TreeNode): TreeNode => {
-		if (node.key === key) return wrap(node);
-		if (node.kind === 'split')
-			return { ...node, children: node.children.map(walk) };
-		return node;
-	};
-	return walk(root);
-}
-
-function insertIntoSplit(
-	root: TreeNode,
-	splitKey: string,
-	at: number,
-	added: LeafNode[],
-): TreeNode {
-	const walk = (node: TreeNode): TreeNode => {
-		if (node.kind !== 'split') return node;
-		if (node.key === splitKey) {
-			return {
-				...node,
-				children: [
-					...node.children.slice(0, at),
-					...added,
-					...node.children.slice(at),
-				],
-			};
-		}
-		return { ...node, children: node.children.map(walk) };
-	};
-	return walk(root);
-}
-
-function swapLeafContent(root: TreeNode, aKey: string, bKey: string): TreeNode {
-	let a: LeafNode | undefined;
-	let b: LeafNode | undefined;
-	mapLeaves(root, (l) => {
-		if (l.key === aKey) a = l;
-		if (l.key === bKey) b = l;
-		return l;
-	});
-	if (!a || !b) return root;
-	// preserve type narrowing
-	const from = a;
-	const to = b;
-	return mapLeaves(root, (l) => {
-		if (l.key === aKey)
-			return { ...l, srcId: to.srcId, fit: to.fit };
-		if (l.key === bKey)
-			return { ...l, srcId: from.srcId, fit: from.fit };
-		return l;
-	});
-}
-
-function removeLeafNode(root: TreeNode, key: string): TreeNode | null {
-	const walk = (node: TreeNode): TreeNode | null => {
-		if (node.kind === 'img') return node.key === key ? null : node;
-		const children = node.children
-			.map(walk)
-			.filter((c): c is TreeNode => !!c);
-		if (children.length === 0) return null;
-		if (children.length === 1) return children[0]!;
-		return { ...node, children };
-	};
-	return walk(root);
-}
-
-function moveLeafNode(
-	root: TreeNode,
-	movedKey: string,
-	targetKey: string,
-	side: Side,
-): TreeNode {
-	if (movedKey === targetKey) return root;
-	let moved: LeafNode | undefined;
-	mapLeaves(root, (l) => {
-		if (l.key === movedKey) moved = l;
-		return l;
-	});
-	const without = removeLeafNode(root, movedKey);
-	if (!moved || !without) return root;
-	return wrapNode(without, targetKey, side, [moved]);
-}
-
-interface Op {
-	src: Src;
-	leafKey: string;
-	isBase: boolean;
-	fit: Fit;
-	sx: number;
-	sy: number;
-	sw: number;
-	sh: number;
-	dx: number;
-	dy: number;
-	dw: number;
-	dh: number;
-}
-
-interface Seam {
-	x: number;
-	y: number;
-	len: number;
-	vertical: boolean;
-	splitKey: string;
-	at: number;
-}
-
-interface Layout {
-	w: number;
-	h: number;
-	ops: Op[];
-	seams: Seam[];
-}
-
-function coverCrop(src: Src, aspect: number) {
-	if (src.w / src.h > aspect) {
-		const sw = src.h * aspect;
-		return { sx: (src.w - sw) / 2, sy: 0, sw, sh: src.h };
-	}
-	const sh = src.w / aspect;
-	return { sx: 0, sy: (src.h - sh) / 2, sw: src.w, sh };
-}
-
-function nodeAspect(
-	node: TreeNode,
-	byId: Map<string, Src>,
-	baseAspect: number,
-): number {
-	if (node.kind === 'img') {
-		const src = byId.get(node.srcId);
-		if (!src) return 1;
-		return node.fit === 'cheese' ? src.w / src.h : baseAspect;
-	}
-	const as = node.children.map((c) => nodeAspect(c, byId, baseAspect));
-	return node.dir === 'row'
-		? as.reduce((s, a) => s + a, 0)
-		: 1 / as.reduce((s, a) => s + 1 / a, 0);
-}
-
-function layoutTree(
-	root: TreeNode,
-	byId: Map<string, Src>,
-	baseId: string,
-): Layout | null {
-	const base = byId.get(baseId);
-	if (!base) return null;
-	const baseAspect = base.w / base.h;
-	const ops: Op[] = [];
-	const seams: Seam[] = [];
-	const walk = (
-		node: TreeNode,
-		x: number,
-		y: number,
-		w: number,
-		h: number,
-	) => {
-		if (node.kind === 'img') {
-			const src = byId.get(node.srcId);
-			if (!src) return;
-			const crop =
-				node.fit === 'match'
-					? coverCrop(src, w / h)
-					: {
-							sx: 0,
-							sy: 0,
-							sw: src.w,
-							sh: src.h,
-						};
-			ops.push({
-				src,
-				leafKey: node.key,
-				isBase: node.srcId === baseId,
-				fit: node.fit,
-				...crop,
-				dx: x,
-				dy: y,
-				dw: w,
-				dh: h,
-			});
-			return;
-		}
-		const as = node.children.map((c) =>
-			nodeAspect(c, byId, baseAspect),
-		);
-		if (node.dir === 'row') {
-			const total = as.reduce((s, a) => s + a, 0);
-			let cx = x;
-			node.children.forEach((c, i) => {
-				const cw = w * (as[i]! / total);
-				if (i > 0) {
-					seams.push({
-						x: cx,
-						y,
-						len: h,
-						vertical: true,
-						splitKey: node.key,
-						at: i,
-					});
-				}
-				walk(c, cx, y, cw, h);
-				cx += cw;
-			});
-		} else {
-			const inv = as.map((a) => 1 / a);
-			const total = inv.reduce((s, a) => s + a, 0);
-			let cy = y;
-			node.children.forEach((c, i) => {
-				const ch = h * (inv[i]! / total);
-				if (i > 0) {
-					seams.push({
-						x,
-						y: cy,
-						len: w,
-						vertical: false,
-						splitKey: node.key,
-						at: i,
-					});
-				}
-				walk(c, x, cy, w, ch);
-				cy += ch;
-			});
-		}
-	};
-	const rootAspect = nodeAspect(root, byId, baseAspect);
-	walk(root, 0, 0, rootAspect * 1000, 1000);
-	const baseOp = ops.find((o) => o.isBase);
-	const k = baseOp ? base.w / baseOp.dw : 1;
-	for (const op of ops) {
-		op.dx *= k;
-		op.dy *= k;
-		op.dw *= k;
-		op.dh *= k;
-	}
-	for (const s of seams) {
-		s.x *= k;
-		s.y *= k;
-		s.len *= k;
-	}
-	return { w: rootAspect * 1000 * k, h: 1000 * k, ops, seams };
-}
-
-function layoutBatch(srcs: Src[]): Layout | null {
-	const first = srcs[0];
-	if (!first) return null;
-	const cellW = first.w;
-	const cellH = first.h;
-	const aspect = cellW / cellH;
-	const cols = Math.ceil(Math.sqrt(srcs.length));
-	const ops = srcs.map((src, i) => ({
-		src,
-		leafKey: src.id,
-		isBase: i === 0,
-		fit: 'match' as const,
-		...coverCrop(src, aspect),
-		dx: (i % cols) * cellW,
-		dy: Math.floor(i / cols) * cellH,
-		dw: cellW,
-		dh: cellH,
-	}));
-	return {
-		w: cols * cellW,
-		h: Math.ceil(srcs.length / cols) * cellH,
-		ops,
-		seams: [],
-	};
-}
-
-function drawLayout(
-	canvas: HTMLCanvasElement,
-	layout: Layout,
-	maxSide: number,
-	bg?: string,
-) {
-	const scale = Math.min(1, maxSide / Math.max(layout.w, layout.h));
-	canvas.width = Math.max(1, Math.round(layout.w * scale));
-	canvas.height = Math.max(1, Math.round(layout.h * scale));
-	const ctx = canvas.getContext('2d');
-	if (!ctx) return;
-	ctx.clearRect(0, 0, canvas.width, canvas.height);
-	if (bg) {
-		ctx.fillStyle = bg;
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
-	}
-	for (const op of layout.ops) {
-		if (op.fit === 'matte') {
-			ctx.fillStyle = MATTE_COLOUR;
-			ctx.fillRect(
-				op.dx * scale,
-				op.dy * scale,
-				op.dw * scale,
-				op.dh * scale,
-			);
-			const s = Math.min(op.dw / op.src.w, op.dh / op.src.h);
-			const w = op.src.w * s;
-			const h = op.src.h * s;
-			ctx.drawImage(
-				op.src.el,
-				(op.dx + (op.dw - w) / 2) * scale,
-				(op.dy + (op.dh - h) / 2) * scale,
-				w * scale,
-				h * scale,
-			);
-		} else {
-			ctx.drawImage(
-				op.src.el,
-				op.sx,
-				op.sy,
-				op.sw,
-				op.sh,
-				op.dx * scale,
-				op.dy * scale,
-				op.dw * scale,
-				op.dh * scale,
-			);
-		}
-	}
-}
-
-type Target =
-	| { kind: 'first' }
-	| { kind: 'add'; nodeKey: string | null; side: Side }
-	| { kind: 'insert'; splitKey: string; at: number }
-	| { kind: 'batch' };
-
-function loadImageFile(file: File): Promise<Src> {
+function loadImage(file: File): Promise<Src> {
 	return new Promise((resolve, reject) => {
 		const url = URL.createObjectURL(file);
 		const el = new Image();
-		el.onload = () =>
-			resolve({
-				id: crypto.randomUUID(),
-				name: file.name.replace(/\.[^.]+$/, ''),
-				el,
-				url,
-				w: el.naturalWidth,
-				h: el.naturalHeight,
-			});
-		el.onerror = () => {
+		const fail = () => {
 			URL.revokeObjectURL(url);
 			reject(new Error('undecodable image'));
 		};
+		el.onload = () =>
+			// a sizeless svg has no tile
+			el.naturalWidth && el.naturalHeight
+				? resolve({
+						id: `s${nextId++}`,
+						name:
+							stem(file.name) ||
+							'pasted',
+						el,
+						url,
+						w: el.naturalWidth,
+						h: el.naturalHeight,
+					})
+				: fail();
+		el.onerror = fail;
 		el.src = url;
 	});
 }
 
-const pct = (n: number, of: number) => `${(n / of) * 100}%`;
-
-// prevent file navigation
-function allowDrop(event: DragEvent) {
-	event.preventDefault();
+async function clipboardImages(): Promise<File[]> {
+	const files: File[] = [];
+	try {
+		for (const item of await navigator.clipboard.read()) {
+			const type = item.types.find((t) =>
+				t.startsWith('image/'),
+			);
+			if (type)
+				files.push(
+					new File(
+						[await item.getType(type)],
+						'pasted',
+						{
+							type,
+						},
+					),
+				);
+		}
+	} catch {
+		// a denied clipboard pastes nothing
+	}
+	return files;
 }
 
-interface UploaderSignature {
-	Args: {
-		onPick: () => void;
-		onDrop: (event: DragEvent) => void;
-	};
+// ?stitchSample: drawn images in place of the iOS -stitchSamples folder
+function drawnSamples(): Promise<File[]> {
+	const specs: [string, number, number, string][] = [
+		['coast', 1600, 1200, '#2b5fc0'],
+		['field', 900, 1200, '#2b9c5f'],
+		['dusk', 1200, 800, '#c0392b'],
+		['sand', 1000, 1000, '#d9a43a'],
+	];
+	return Promise.all(
+		specs.map(
+			([name, width, height, colour]) =>
+				new Promise<File>((resolve) => {
+					const canvas =
+						document.createElement(
+							'canvas',
+						);
+					canvas.width = width;
+					canvas.height = height;
+					const ctx = canvas.getContext('2d')!;
+					ctx.fillStyle = colour;
+					ctx.fillRect(0, 0, width, height);
+					ctx.fillStyle =
+						'rgb(255 255 255 / 0.6)';
+					ctx.beginPath();
+					ctx.arc(
+						width * 0.35,
+						height * 0.4,
+						Math.min(width, height) * 0.22,
+						0,
+						7,
+					);
+					ctx.fill();
+					canvas.toBlob((blob) =>
+						resolve(
+							new File(
+								[blob!],
+								`${name}.png`,
+								{
+									type: 'image/png',
+								},
+							),
+						),
+					);
+				}),
+		),
+	);
 }
 
-const Uploader: TOC<UploaderSignature> = <template>
-	<button
-		type="button"
-		class="dt-stitch-drop"
-		{{on "click" @onPick}}
-		{{on "drop" @onDrop}}
-		{{on "dragover" allowDrop}}
-	>
-		<Icon @name="upload" />
-		<span class="dt-stitch-drop-title">Drop images here</span>
-		<span class="dt-stitch-drop-hint">{{DROP_HINT}}</span>
-	</button>
-</template>;
+const sides: Record<string, Side> = {
+	top: 'top',
+	left: 'left',
+	right: 'right',
+	bottom: 'bottom',
+};
 
-export default class ImageStitcherTool extends Component {
-	@tracked mode: Mode = 'individual';
+/** The port of ImageStitcherViewController, with the web tool's formats. */
+export default class ImageStitcher extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+	@tracked batch = false;
 	@tracked srcs: Src[] = [];
 	@tracked root: TreeNode | null = null;
 	@tracked baseId: string | null = null;
-	@tracked selectedKey: string | null = null;
+	@tracked selected: string | null = null;
 	@tracked batchIds: string[] = [];
 	@tracked format: ExportFormat = 'png';
+	@tracked loads = 0;
+	@tracked exporting = false;
+	@tracked springs = false;
 
-	@tracked draggedLeafKey: string | null = null;
-	@tracked dragOverLeafKey: string | null = null;
-	@tracked dragOverPlace: string | null = null;
-	@tracked draggedBatchId: string | null = null;
-	@tracked dragOverBatchId: string | null = null;
+	drop = new Drop('image/*', () => undefined);
+	#input?: HTMLInputElement;
+	#pending: Target = { kind: 'first' };
+	#timer?: number;
+	// keeps added images in the order they came
+	#adding: Promise<unknown> = Promise.resolve();
 
-	#fileInput: HTMLInputElement | null = null;
-	#pendingTarget: Target = { kind: 'first' };
-
-	willDestroy() {
-		super.willDestroy();
-		this.srcs.forEach((s) => URL.revokeObjectURL(s.url));
+	// ?stitchSample ?stitchMode=batch ?stitchScript=<op>;<op>: the iOS -stitchSamples, -stitchMode, -stitchScript
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		if (query.get('stitchMode') === 'batch') this.batch = true;
+		if (query.has('stitchSample'))
+			void drawnSamples().then((files) =>
+				this.#script(
+					files,
+					query.get('stitchScript') ??
+						(this.batch
+							? 'batch:all'
+							: 'seed:all'),
+				),
+			);
+		registerDestructor(this, () => {
+			window.clearTimeout(this.#timer);
+			this.srcs.forEach((s) => URL.revokeObjectURL(s.url));
+		});
 	}
 
 	@cached
 	get byId(): Map<string, Src> {
 		return new Map(this.srcs.map((s) => [s.id, s]));
-	}
-
-	get base(): Src | null {
-		return (this.baseId && this.byId.get(this.baseId)) || null;
 	}
 
 	get batchSrcs(): Src[] {
@@ -612,339 +251,310 @@ export default class ImageStitcherTool extends Component {
 	}
 
 	@cached
-	get trailLayout(): Layout | null {
+	get layout(): Layout | null {
+		if (this.batch) return layoutBatch(this.batchSrcs);
 		if (!this.root || !this.baseId) return null;
 		return layoutTree(this.root, this.byId, this.baseId);
 	}
 
-	get isIndividual() {
-		return this.mode === 'individual';
-	}
-
-	get hasResult() {
-		return this.isIndividual
-			? !!this.trailLayout
-			: this.batchSrcs.length > 0;
-	}
-
-	get stageStyle() {
-		const layout = this.trailLayout;
-		if (!layout) return htmlSafe('');
-		return htmlSafe(
-			`width:min(100%, ${(440 * layout.w) / layout.h}px);aspect-ratio:${layout.w} / ${layout.h}`,
+	get aspect() {
+		const { layout } = this;
+		if (!layout) return aspects.empty;
+		return Math.min(
+			Math.max(
+				layout.width / Math.max(layout.height, 1),
+				aspects.min,
+			),
+			aspects.max,
 		);
 	}
 
-	get trailTiles() {
-		const layout = this.trailLayout;
-		if (!layout) return [];
-		const { w, h } = layout;
-		return layout.ops.map((op) => ({
-			key: op.leafKey,
-			srcId: op.src.id,
-			url: op.src.url,
-			name: op.src.name,
-			isBase: op.isBase,
-			fit: op.fit,
-			isMatte: op.fit === 'matte',
-			style: htmlSafe(
-				`left:${pct(op.dx, w)};top:${pct(op.dy, h)};width:${pct(op.dw, w)};height:${pct(op.dh, h)}`,
-			),
-			matteStyle: htmlSafe(
-				op.fit === 'matte'
-					? `background-color:${MATTE_COLOUR}`
-					: '',
-			),
-		}));
+	get modeIndex() {
+		return this.batch ? 1 : 0;
 	}
 
-	get trailSeams() {
-		const layout = this.trailLayout;
-		if (!layout) return [];
-		const { w, h } = layout;
-		return layout.seams.map((s) => ({
-			id: `${s.splitKey}-${s.at}`,
-			splitKey: s.splitKey,
-			at: s.at,
-			vertical: s.vertical,
-			style: htmlSafe(
-				s.vertical
-					? `left:${pct(s.x, w)};top:${pct(s.y, h)};height:${pct(s.len, h)};width:0`
-					: `left:${pct(s.x, w)};top:${pct(s.y, h)};width:${pct(s.len, w)};height:0`,
-			),
-		}));
+	get base() {
+		return (this.baseId && this.byId.get(this.baseId)) || undefined;
 	}
 
-	get selectionAdders() {
-		const layout = this.trailLayout;
-		if (!layout || !this.selectedKey) return [];
-		const sel = layout.ops.find(
-			(o) => o.leafKey === this.selectedKey,
-		);
-		if (!sel) return [];
-		const { w, h } = layout;
-		return SIDE_META.map(({ side }) => {
-			const horizontal = side === 'left' || side === 'right';
-			const style = horizontal
-				? [
-						`top:${pct(sel.dy, h)}`,
-						`height:${pct(sel.dh, h)}`,
-						'width:22px',
-						side === 'left'
-							? `left:${pct(sel.dx, w)}`
-							: `left:calc(${pct(sel.dx + sel.dw, w)} - 22px)`,
-					]
-				: [
-						`left:${pct(sel.dx, w)}`,
-						`width:${pct(sel.dw, w)}`,
-						'height:22px',
-						side === 'top'
-							? `top:${pct(sel.dy, h)}`
-							: `top:calc(${pct(sel.dy + sel.dh, h)} - 22px)`,
-					];
+	get baseDetail() {
+		const { base } = this;
+		return base ? `Base · ${pixels(base.w, base.h)}` : 'Base';
+	}
+
+	get selectedLeaf() {
+		return this.selected && this.root
+			? findLeaf(this.root, this.selected)
+			: undefined;
+	}
+
+	get tile() {
+		const leaf = this.selectedLeaf;
+		const src = leaf && this.byId.get(leaf.srcId);
+		if (!leaf || !src) return undefined;
+		const isBase = leaf.srcId === this.baseId;
+		return {
+			name: src.name,
+			size: pixels(src.w, src.h),
+			fit: FITS.indexOf(leaf.fit),
+			isBase,
+		};
+	}
+
+	get first(): Target {
+		return this.batch
+			? { kind: 'batch', at: this.batchIds.length }
+			: { kind: 'first' };
+	}
+
+	get defaultTarget(): Target {
+		if (this.batch)
+			return { kind: 'batch', at: this.batchIds.length };
+		return this.root
+			? { kind: 'add', node: this.selected, side: 'right' }
+			: { kind: 'first' };
+	}
+
+	get tiles() {
+		const { layout } = this;
+		const size = layout
+			? exportSize(layout.width, layout.height)
+			: undefined;
+		const sizeTile = {
+			label: 'Size',
+			value: size ? pixels(size.width, size.height) : dash,
+		};
+		if (!this.batch)
+			return [
+				sizeTile,
+				{
+					label: 'Tiles',
+					value: layout
+						? `${layout.ops.length}`
+						: dash,
+				},
+			];
+		const cell = layout?.ops[0]?.dest;
+		const grid = layout && batchGrid(layout);
+		return [
+			sizeTile,
+			{
+				label: 'Grid',
+				value: grid
+					? `${grid.columns} × ${grid.rows}`
+					: dash,
+			},
+			{
+				label: 'Cell',
+				value: cell
+					? pixels(cell.width, cell.height)
+					: dash,
+			},
+		];
+	}
+
+	get pages(): CanonPage[] {
+		const srcs = this.batchSrcs;
+		const first = srcs[0];
+		if (!first) return [{ size: { width: 4, height: 3 } }];
+		const size = { width: first.w, height: first.h };
+		return srcs.map((src) => {
+			// the cover crop, centred, as the stitch draws it
+			const scale = Math.max(
+				first.w / src.w,
+				first.h / src.h,
+			);
+			const width = src.w * scale;
+			const height = src.h * scale;
 			return {
-				side,
-				nodeKey: sel.leafKey,
-				label: `Add ${side} here`,
-				style: htmlSafe(style.join(';')),
+				size,
+				placement: {
+					x: (first.w - width) / 2,
+					y: (first.h - height) / 2,
+					width,
+					height,
+				},
+				picture: src.url,
+				name: src.name,
 			};
 		});
 	}
 
-	get batchThumbs() {
-		return this.batchSrcs.map((src, i) => ({
-			id: src.id,
-			src,
-			number: i + 1,
-		}));
+	get blankBatch() {
+		return this.batchIds.length === 0;
 	}
 
-	get batchPreview() {
-		const srcs = this.batchSrcs;
-		const first = srcs[0];
-		if (!first) return null;
-		const cols = Math.ceil(Math.sqrt(srcs.length));
-		return {
-			srcs,
-			gridStyle: htmlSafe(
-				`grid-template-columns:repeat(${cols}, 1fr)`,
-			),
-			cellStyle: htmlSafe(
-				`aspect-ratio:${first.w} / ${first.h}`,
-			),
-		};
+	get formatIndex() {
+		return formats.findIndex((f) => f.id === this.format);
 	}
 
-	get formatOptions() {
-		const jxlOk = jxlAvailable();
-		return EXPORT_FORMATS.map((f) => ({
-			...f,
-			disabled: f.id === 'jxl' && !jxlOk,
-		}));
+	get formatDisabled() {
+		return jxlAvailable()
+			? []
+			: [formats.findIndex((f) => f.id === 'jxl')];
 	}
 
 	get formatLabel() {
-		return formatMeta(this.format).label;
+		return formats[this.formatIndex]!.label;
 	}
 
-	async #addFiles(files: Iterable<File>): Promise<Src[]> {
-		// snapshot transient file lists
-		const list = Array.from(files);
-		const added: Src[] = [];
-		for (const file of list) {
-			if (!file.type.startsWith('image/')) continue;
-			try {
-				added.push(await loadImageFile(file));
-			} catch {
+	get exportDisabled() {
+		return !this.layout || this.exporting;
+	}
+
+	get stem() {
+		const name = this.batch
+			? this.batchSrcs[0]?.name
+			: this.base?.name;
+		return name || 'image';
+	}
+
+	// layout edits spring; resizes do not
+	#spring() {
+		if (reducedMotion()) return;
+		this.springs = true;
+		window.clearTimeout(this.#timer);
+		this.#timer = window.setTimeout(
+			() => (this.springs = false),
+			springMs,
+		);
+	}
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = (target: Target) => {
+		this.#pending = target;
+		this.#input?.click();
+	};
+
+	picked = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const files = [...(input.files ?? [])];
+		// the same file twice fires change again
+		input.value = '';
+		void this.add(files, this.#pending);
+	};
+
+	pasteInto = async (target: Target) =>
+		this.add(await clipboardImages(), target);
+
+	pasted = (file: File) => void this.add([file], this.defaultTarget);
+
+	droppedInZone = (files: File[]) =>
+		void this.add(files, this.defaultTarget);
+
+	// the drop zone, the strip and the picture take their own drops
+	dropped = (event: DragEvent) => {
+		this.drop.over = false;
+		if (event.defaultPrevented) return;
+		const files = [...(event.dataTransfer?.files ?? [])].filter(
+			(f) => f.type.startsWith('image/'),
+		);
+		if (!files.length) return;
+		event.preventDefault();
+		void this.add(files, this.defaultTarget);
+	};
+
+	dropInPicture = (target: Target, files: File[]) =>
+		void this.add(files, target);
+
+	dropInStrip = (at: number, files: File[]) =>
+		void this.add(files, { kind: 'batch', at });
+
+	add(files: File[], target: Target) {
+		const images = files.filter((f) => f.type.startsWith('image/'));
+		if (!images.length) return this.#adding;
+		this.loads++;
+		this.#adding = this.#adding.then(async () => {
+			const results = await Promise.allSettled(
+				images.map(loadImage),
+			);
+			const added = results.flatMap((r) =>
+				r.status === 'fulfilled' ? [r.value] : [],
+			);
+			if (isDestroying(this)) {
+				added.forEach((s) =>
+					URL.revokeObjectURL(s.url),
+				);
+				return;
 			}
-		}
-		if (added.length) this.srcs = [...this.srcs, ...added];
-		return added;
+			this.loads--;
+			this.srcs = [...this.srcs, ...added];
+			this.#place(added, target);
+		});
+		return this.#adding;
 	}
 
 	#place(added: Src[], target: Target) {
 		const firstAdded = added[0];
 		if (!firstAdded) return;
 		const leaves = added.map((s) => leaf(s.id));
+		const { root } = this;
 		if (target.kind === 'batch') {
-			this.batchIds = [
-				...this.batchIds,
+			const ids = [...this.batchIds];
+			ids.splice(
+				Math.min(Math.max(0, target.at), ids.length),
+				0,
 				...added.map((s) => s.id),
-			];
-		} else if (target.kind === 'first') {
+			);
+			this.batchIds = ids;
+		} else if (!root) {
 			this.baseId = firstAdded.id;
 			this.root =
 				leaves.length === 1
 					? leaves[0]!
 					: {
 							kind: 'split',
-							key: crypto.randomUUID(),
+							key: `r${nextId++}`,
 							dir: 'row',
 							children: leaves,
 						};
-		} else if (target.kind === 'add') {
-			if (this.root) {
-				this.root = wrapNode(
-					this.root,
-					target.nodeKey,
-					target.side,
-					leaves,
-				);
-			}
-		} else if (this.root) {
+		} else if (target.kind === 'insert') {
 			this.root = insertIntoSplit(
-				this.root,
-				target.splitKey,
+				root,
+				target.split,
 				target.at,
 				leaves,
 			);
+		} else {
+			this.root = wrapNode(
+				root,
+				target.kind === 'add' ? target.node : null,
+				target.kind === 'add' ? target.side : 'right',
+				leaves,
+			);
 		}
+		// the target left the tree meanwhile
+		if (
+			target.kind !== 'batch' &&
+			this.root &&
+			!leafSrcIds(this.root).includes(firstAdded.id)
+		)
+			this.root = wrapNode(this.root, null, 'right', leaves);
+		this.#spring();
 	}
 
-	async #dropFiles(files: Iterable<File>, target: Target) {
-		this.#place(await this.#addFiles(files), target);
+	#forget(ids: string[]) {
+		const gone = new Set(ids);
+		for (const s of this.srcs)
+			if (gone.has(s.id)) URL.revokeObjectURL(s.url);
+		this.srcs = this.srcs.filter((s) => !gone.has(s.id));
 	}
 
-	#openPicker(target: Target) {
-		this.#pendingTarget = target;
-		this.#fileInput?.click();
-	}
-
-	registerFileInput = modifier((element: HTMLInputElement) => {
-		this.#fileInput = element;
-		return () => {
-			this.#fileInput = null;
-		};
-	});
-
-	pickFiles = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		if (input.files) {
-			void this.#dropFiles(input.files, this.#pendingTarget);
-		}
-		// reset file input
-		input.value = '';
+	pickMode = (index: number) => {
+		this.batch = index === 1;
 	};
 
-	pasteFile = (file: File) => {
-		if (this.mode === 'batch') {
-			void this.#dropFiles([file], { kind: 'batch' });
-			return;
-		}
-		void this.#dropFiles(
-			[file],
-			this.root
-				? {
-						kind: 'add',
-						nodeKey: this.selectedKey,
-						side: 'right',
-					}
-				: { kind: 'first' },
-		);
+	select = (key: string | null) => {
+		this.selected = key === this.selected ? null : key;
 	};
 
-	pickFirst = () => this.#openPicker({ kind: 'first' });
-	pickBatch = () => this.#openPicker({ kind: 'batch' });
-
-	pickSide = (side: Side, event: Event) => {
-		event.stopPropagation();
-		this.#openPicker({ kind: 'add', nodeKey: null, side });
-	};
-
-	pickAdd = (nodeKey: string, side: Side, event: Event) => {
-		event.stopPropagation();
-		this.#openPicker({ kind: 'add', nodeKey, side });
-	};
-
-	pickSeam = (splitKey: string, at: number, event: Event) => {
-		event.stopPropagation();
-		this.#openPicker({ kind: 'insert', splitKey, at });
-	};
-
-	dropFirst = (event: DragEvent) => {
-		event.preventDefault();
-		void this.#dropFiles(event.dataTransfer?.files ?? [], {
-			kind: 'first',
-		});
-	};
-
-	dropBatch = (event: DragEvent) => {
-		event.preventDefault();
-		void this.#dropFiles(event.dataTransfer?.files ?? [], {
-			kind: 'batch',
-		});
-	};
-
-	dropSide = (side: Side, event: DragEvent) => {
-		event.preventDefault();
-		void this.#dropFiles(event.dataTransfer?.files ?? [], {
-			kind: 'add',
-			nodeKey: null,
-			side,
-		});
-	};
-
-	dropAdd = (nodeKey: string, side: Side, event: DragEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		void this.#dropFiles(event.dataTransfer?.files ?? [], {
-			kind: 'add',
-			nodeKey,
-			side,
-		});
-	};
-
-	#revoke(ids: Set<string>) {
-		for (const id of ids) {
-			const s = this.byId.get(id);
-			if (s) URL.revokeObjectURL(s.url);
-		}
-		this.srcs = this.srcs.filter((s) => !ids.has(s.id));
-	}
-
-	setMode = (mode: Mode) => (this.mode = mode);
-	setFormat = (format: ExportFormat) => (this.format = format);
-
-	selectTile = (key: string, event: Event) => {
-		event.stopPropagation();
-		this.selectedKey = this.selectedKey === key ? null : key;
-	};
-
-	clearSelection = () => {
-		this.selectedKey = null;
-	};
-
-	setFit = (key: string, fit: Fit, event: Event) => {
-		event.stopPropagation();
-		if (!this.root) return;
-		this.root = mapLeaves(this.root, (l) =>
-			l.key === key ? { ...l, fit } : l,
-		);
-	};
-
-	removeTile = (key: string, srcId: string, event: Event) => {
-		event.stopPropagation();
-		if (this.root) this.root = removeLeafNode(this.root, key);
-		if (this.selectedKey === key) this.selectedKey = null;
-		this.#revoke(new Set([srcId]));
-	};
-
-	removeBatchSrc = (id: string, event: Event) => {
-		event.stopPropagation();
-		this.batchIds = this.batchIds.filter((x) => x !== id);
-		this.#revoke(new Set([id]));
-	};
-
-	clearTrail = () => {
-		if (this.root) this.#revoke(new Set(leafSrcIds(this.root)));
-		this.root = null;
-		this.baseId = null;
-		this.selectedKey = null;
-	};
-
-	escapeKey = modifier((element: HTMLElement) => {
+	// Escape lets go of the lit tile, as the web tool did
+	escape = modifier((element: HTMLElement) => {
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === 'Escape') this.selectedKey = null;
+			if (event.key === 'Escape') this.selected = null;
 		};
 		element.ownerDocument.addEventListener('keydown', onKeyDown);
 		return () =>
@@ -954,733 +564,511 @@ export default class ImageStitcherTool extends Component {
 			);
 	});
 
-	#endTrailDrag() {
-		this.draggedLeafKey = null;
-		this.dragOverLeafKey = null;
-		this.dragOverPlace = null;
-	}
-
-	dragStartTile = (key: string, event: DragEvent) => {
-		this.draggedLeafKey = key;
-		if (event.dataTransfer) {
-			event.dataTransfer.effectAllowed = 'move';
-			event.dataTransfer.setData('text/plain', key);
+	drag = (key: string, drop: TileDrop) => {
+		const { root } = this;
+		if (!root) return;
+		if (drop.kind === 'swap') {
+			this.root = swapLeafContent(root, key, drop.key);
+			if (this.selected === key) this.selected = drop.key;
+			else if (this.selected === drop.key)
+				this.selected = key;
+		} else {
+			this.root = moveLeafNode(
+				root,
+				key,
+				drop.key,
+				drop.side,
+			);
 		}
+		this.#spring();
 	};
 
-	dragEndTile = () => this.#endTrailDrag();
+	pickFit = (index: number) => {
+		const fit: Fit | undefined = FITS[index];
+		if (!fit || !this.root || !this.selected) return;
+		this.root = settingFit(this.root, this.selected, fit);
+		this.#spring();
+	};
 
-	// avoid redundant tracked writes
-	dragOverTile = (key: string, event: DragEvent) => {
-		event.preventDefault();
-		if (this.dragOverPlace !== null) this.dragOverPlace = null;
-		const next =
-			this.draggedLeafKey && this.draggedLeafKey !== key
-				? key
+	makeBase = () => {
+		const leaf = this.selectedLeaf;
+		if (!leaf) return;
+		this.baseId = leaf.srcId;
+		this.#spring();
+	};
+
+	removeTile = () => {
+		const leaf = this.selectedLeaf;
+		if (!leaf || !this.root) return;
+		this.root = removeLeafNode(this.root, leaf.key);
+		this.selected = null;
+		this.#forget([leaf.srcId]);
+		if (this.baseId === leaf.srcId)
+			this.baseId = this.root
+				? (leafSrcIds(this.root)[0] ?? null)
 				: null;
-		if (this.dragOverLeafKey !== next) this.dragOverLeafKey = next;
+		this.#spring();
 	};
 
-	// clear bubbled dragleave state
-	dragLeaveTile = () => {
-		if (this.dragOverLeafKey !== null) this.dragOverLeafKey = null;
-		if (this.dragOverPlace !== null) this.dragOverPlace = null;
-	};
-
-	dropOnTile = (key: string, event: DragEvent) => {
-		event.preventDefault();
-		const from = this.draggedLeafKey;
-		this.#endTrailDrag();
-		if (!from || from === key || !this.root) return;
-		this.root = swapLeafContent(this.root, from, key);
-	};
-
-	// prioritize edge drops
-	dragOverPlaceZone = (key: string, side: Side, event: DragEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		if (!this.draggedLeafKey) return;
-		if (this.dragOverLeafKey !== null) this.dragOverLeafKey = null;
-		const next = `${key}:${side}`;
-		if (this.dragOverPlace !== next) this.dragOverPlace = next;
-	};
-
-	dropOnPlace = (key: string, side: Side, event: DragEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		const from = this.draggedLeafKey;
-		this.#endTrailDrag();
-		if (!from || !this.root) return;
-		this.root = moveLeafNode(this.root, from, key, side);
-	};
-
-	dragStartThumb = (id: string, event: DragEvent) => {
-		this.draggedBatchId = id;
-		if (event.dataTransfer) {
-			event.dataTransfer.effectAllowed = 'move';
-			event.dataTransfer.setData('text/plain', id);
+	clear = () => {
+		if (this.batch) {
+			this.#forget(this.batchIds);
+			this.batchIds = [];
+		} else {
+			if (this.root) this.#forget(leafSrcIds(this.root));
+			this.root = null;
+			this.baseId = null;
+			this.selected = null;
 		}
 	};
 
-	dragOverThumb = (id: string, event: DragEvent) => {
-		event.preventDefault();
-		if (this.draggedBatchId === id) return;
-		if (this.dragOverBatchId !== id) this.dragOverBatchId = id;
+	move = (from: number, to: number) => {
+		const ids = [...this.batchIds];
+		const [id] = ids.splice(from, 1);
+		if (id === undefined || to < 0 || to > ids.length) return;
+		ids.splice(to, 0, id);
+		this.batchIds = ids;
+		this.#spring();
 	};
 
-	dragLeaveThumb = () => {
-		if (this.dragOverBatchId !== null) this.dragOverBatchId = null;
+	sort = (ascending: boolean) => {
+		const name = (id: string) => this.byId.get(id)?.name ?? '';
+		this.batchIds = [...this.batchIds].sort((a, b) => {
+			const order = name(a).localeCompare(
+				name(b),
+				undefined,
+				{
+					numeric: true,
+				},
+			);
+			return ascending ? order : -order;
+		});
+		this.#spring();
 	};
 
-	dragEndThumb = () => {
-		this.draggedBatchId = null;
-		this.dragOverBatchId = null;
+	sortUp = () => this.sort(true);
+	sortDown = () => this.sort(false);
+
+	menu = (at: number): CanonPageMenuItem[] | undefined => {
+		const id = this.batchIds[at];
+		if (id === undefined) return undefined;
+		const moveTo = (start: boolean) => {
+			const from = this.batchIds.indexOf(id);
+			if (from >= 0)
+				this.move(
+					from,
+					start ? 0 : this.batchIds.length - 1,
+				);
+		};
+		return [
+			{ title: 'Move to start', action: () => moveTo(true) },
+			{ title: 'Move to end', action: () => moveTo(false) },
+			{
+				title: 'Remove',
+				destructive: true,
+				action: () => {
+					this.batchIds = this.batchIds.filter(
+						(x) => x !== id,
+					);
+					this.#forget([id]);
+				},
+			},
+		];
 	};
 
-	dropOnThumb = (id: string, event: DragEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		const from = this.draggedBatchId;
-		this.draggedBatchId = null;
-		this.dragOverBatchId = null;
-
-		const files = event.dataTransfer?.files;
-		if (files && files.length) {
-			void this.#dropFiles(files, { kind: 'batch' });
-			return;
-		}
-		if (!from || from === id) return;
-
-		const next = [...this.batchIds];
-		const fromIndex = next.indexOf(from);
-		const toIndex = next.indexOf(id);
-		if (fromIndex < 0 || toIndex < 0) return;
-		const [moved] = next.splice(fromIndex, 1);
-		next.splice(toIndex, 0, moved!);
-		this.batchIds = next;
+	pickFormat = (index: number) => {
+		this.format = formats[index]?.id ?? this.format;
 	};
 
-	download = async () => {
-		const layout = this.isIndividual
-			? this.trailLayout
-			: layoutBatch(this.batchSrcs);
-		if (!layout) return;
-		const meta = formatMeta(this.format);
-		const canvas = document.createElement('canvas');
-		// canvas side cap
-		drawLayout(
-			canvas,
-			layout,
-			16384,
-			meta.alpha ? undefined : MATTE_COLOUR,
-		);
+	async #render(format: ExportFormat) {
+		const { layout } = this;
+		if (!layout || this.exporting) return undefined;
+		this.exporting = true;
 		try {
-			const blob = await encodeCanvas(
-				canvas,
-				this.format,
-				90,
-			);
-			const name = this.isIndividual
-				? this.base?.name
-				: this.batchSrcs[0]?.name;
-			downloadBlob(
-				blob,
-				`${name || 'stitched'}-stitched.${meta.ext}`,
-			);
+			return await encode(render(layout, format), format);
 		} catch (err) {
 			console.error('stitch export failed', err);
+			return undefined;
+		} finally {
+			if (!isDestroying(this)) this.exporting = false;
 		}
+	}
+
+	copy = async () => {
+		const blob = await this.#render('png');
+		if (!blob) return;
+		try {
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob }),
+			]);
+		} catch {
+			// a denied clipboard leaves no toast
+			return;
+		}
+		this.toast.show();
 	};
 
-	<template>
-		<div
-			class="dt-stitch"
-			{{filePaste this.pasteFile accept="image/*"}}
-			{{this.escapeKey}}
-		>
-			<input
-				type="file"
-				accept="image/*"
-				multiple
-				aria-label="Add images"
-				hidden
-				{{this.registerFileInput}}
-				{{on "change" this.pickFiles}}
-			/>
+	export = async () => {
+		const { format } = this;
+		const blob = await this.#render(format);
+		const meta = formats[this.formatIndex]!;
+		if (blob)
+			downloadBlob(blob, `${this.stem}-stitched.${meta.ext}`);
+	};
 
-			<div class="dt-stitch-frame">
-				<div class="dt-stitch-modes">
-					{{#each MODES key="@index" as |m|}}
-						<button
-							type="button"
-							class="dt-stitch-mode
+	async #script(files: File[], script: string) {
+		await this.add(files, { kind: 'batch', at: 0 });
+		// the pool loads unplaced
+		const pool = [...this.srcs];
+		this.batchIds = [];
+		const list = (text: string) =>
+			text === 'all'
+				? pool
+				: text
+						.split(',')
+						.map((i) => pool[Number(i)])
+						.filter((s): s is Src => !!s);
+		const key = (text: string) => {
+			const src = pool[Number(text)];
+			return src && this.root
+				? leafKeyOf(this.root, src.id)
+				: undefined;
+		};
+		for (const op of script.split(';')) {
+			const [name, a = '', b = '', c = ''] = op.split(':');
+			switch (name) {
+				case 'seed':
+					this.#place(list(a), { kind: 'first' });
+					break;
+				case 'add': {
+					const side = sides[b];
+					if (side)
+						this.#place(list(c), {
+							kind: 'add',
+							node:
+								a === '*'
+									? null
+									: (key(
+											a,
+										) ??
+										null),
+							side,
+						});
+					break;
+				}
+				case 'insert': {
+					const seam =
+						this.layout?.seams[Number(a)];
+					if (seam)
+						this.#place(list(b), {
+							kind: 'insert',
+							split: seam.splitKey,
+							at: seam.at,
+						});
+					break;
+				}
+				case 'swap': {
+					const from = key(a);
+					const to = key(b);
+					if (from && to)
+						this.drag(from, {
+							kind: 'swap',
+							key: to,
+						});
+					break;
+				}
+				case 'place': {
+					const from = key(a);
+					const to = key(b);
+					const side = sides[c];
+					if (from && to && side)
+						this.drag(from, {
+							kind: 'place',
+							key: to,
+							side,
+						});
+					break;
+				}
+				case 'fit':
+					this.selected = key(a) ?? null;
+					this.pickFit(FITS.indexOf(b as Fit));
+					break;
+				case 'select':
+					this.selected = key(a) ?? null;
+					break;
+				case 'deselect':
+					this.selected = null;
+					break;
+				case 'remove':
+					this.selected = key(a) ?? null;
+					this.removeTile();
+					break;
+				case 'base':
+					this.selected = key(a) ?? null;
+					this.makeBase();
+					break;
+				case 'batch':
+					this.#place(list(a), {
+						kind: 'batch',
+						at: this.batchIds.length,
+					});
+					break;
+				case 'move':
+					this.move(Number(a), Number(b));
+					break;
+				case 'mode':
+					this.batch = a === 'batch';
+					break;
+			}
+		}
+		// pool sources no op placed
+		const used = new Set([
+			...this.batchIds,
+			...(this.root ? leafSrcIds(this.root) : []),
+		]);
+		this.#forget(
+			this.srcs
+				.filter((s) => !used.has(s.id))
+				.map((s) => s.id),
+		);
+	}
+
+	<template>
+		<CanonSplit
+			class="image-stitcher"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			style={{spring}}
+			{{filePaste this.pasted accept="image/*"}}
+			{{this.escape}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.dropped}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@springs={{this.springs}}
+						@layout={{this.layout}}
+						@batch={{this.batch}}
+						@selected={{this.selected}}
+						@loading={{if
+							this.loads
+							true
+							false
+						}}
+						@over={{this.drop.over}}
+						@first={{this.first}}
+						@onChoose={{this.choose}}
+						@onPaste={{this.pasteInto}}
+						@onSelect={{this.select}}
+						@onDrag={{this.drag}}
+						@onDropFiles={{this.dropInPicture}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Mode" />
+					<CanonSegmented
+						class="stitch-modes"
+						@items={{modes}}
+						@selected={{this.modeIndex}}
+						@onChange={{this.pickMode}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Images" />
+					{{#if this.batch}}
+						<CanonPageStrip
+							class="stitch-strip
 								{{if
-									(eq
-										this.mode
-										m
-									)
-									'is-active'
+									this.blankBatch
+									'stitch-strip--blank'
 								}}"
-							{{on
-								"click"
-								(fn
-									this.setMode
-									m
+							style={{stripStyle}}
+							inert={{this.blankBatch}}
+							@pages={{this.pages}}
+							@reorders={{if
+								this.blankBatch
+								false
+								true
+							}}
+							@onMove={{this.move}}
+							@onDrop={{this.dropInStrip}}
+							@menu={{this.menu}}
+						/>
+					{{else}}
+						<CanonRow
+							class="stitch-base"
+							@title={{if
+								this.base
+								this.base.name
+								dash
+							}}
+							@detail={{this.baseDetail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{if
+									this.root
+									false
+									true
+								}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonDropZone
+						class="stitch-drop"
+						@prompt="Drop images here"
+						@multiple={{true}}
+						@onFiles={{this.droppedInZone}}
+						{{on "paste" keepPaste}}
+					/>
+					{{#if this.batch}}
+						<CanonGrid class="stitch-order">
+							<CanonButton
+								class="stitch-sort-up"
+								@kind="cell"
+								@text="A–Z"
+								@icon={{SortUp}}
+								@disabled={{this.blankBatch}}
+								@onClick={{this.sortUp}}
+							/>
+							<CanonButton
+								class="stitch-sort-down"
+								@kind="cell"
+								@text="Z–A"
+								@icon={{SortDown}}
+								@disabled={{this.blankBatch}}
+								@onClick={{this.sortDown}}
+							/>
+							<CanonButton
+								class="stitch-clear"
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{this.blankBatch}}
+								@onClick={{this.clear}}
+							/>
+						</CanonGrid>
+					{{/if}}
+				</CanonRows>
+				{{#unless this.batch}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Tile" />
+						{{#if this.tile}}
+							<CanonRow
+								class="stitch-tile-row"
+								@title={{this.tile.name}}
+								@detail={{this.tile.size}}
+							/>
+							<CanonHeading
+								@text="Fit"
+							/>
+							<CanonSegmented
+								class="stitch-fit"
+								@items={{fitLabels}}
+								@selected={{this.tile.fit}}
+								@disabled={{this.tile.isBase}}
+								@onChange={{this.pickFit}}
+							/>
+							<CanonGrid>
+								<CanonButton
+									class="stitch-make-base"
+									@kind="cell"
+									@text={{if
+										this.tile.isBase
+										"Base"
+										"Make base"
+									}}
+									@icon={{Pin}}
+									@disabled={{this.tile.isBase}}
+									@onClick={{this.makeBase}}
+								/>
+								<CanonButton
+									class="stitch-remove"
+									@kind="cell"
+									@text="Remove"
+									@icon={{Trash}}
+									@onClick={{this.removeTile}}
+								/>
+							</CanonGrid>
+						{{else}}
+							<CanonStatus
+								class="stitch-no-tile"
+								@text="Tap a tile"
+								@tone="muted"
+								@row={{true}}
+							/>
+						{{/if}}
+					</CanonRows>
+				{{/unless}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Output" />
+					<CanonTiles @items={{this.tiles}} />
+					<CanonHeading @text="Format" />
+					<CanonSegmented
+						class="stitch-formats"
+						@items={{formatLabels}}
+						@selected={{this.formatIndex}}
+						@disabledIndices={{this.formatDisabled}}
+						@onChange={{this.pickFormat}}
+					/>
+					<CanonGrid>
+						<CanonButton
+							class="stitch-copy"
+							@text="Copy"
+							@icon={{Copy}}
+							@disabled={{this.exportDisabled}}
+							@onClick={{this.copy}}
+						/>
+						<CanonButton
+							class="stitch-download"
+							@kind="primary"
+							@text={{passAlong
+								(concat
+									"Download "
+									this.formatLabel
 								)
 							}}
-						>{{m}}</button>
-					{{/each}}
-				</div>
-
-				{{#if this.isIndividual}}
-					{{#if this.trailLayout}}
-						<div class="dt-stitch-bar">
-							<button
-								type="button"
-								class="dt-stitch-clear"
-								{{on
-									"click"
-									this.clearTrail
-								}}
-							>
-								<Icon
-									@name="trash-2"
-								/>
-								Clear
-							</button>
-						</div>
-
-						{{! template-lint-disable no-invalid-interactive }}
-						<div
-							class="dt-stitch-stage"
-							{{on
-								"click"
-								this.clearSelection
-							}}
-						>
-							{{#each
-								SIDE_META
-								key="side"
-								as |meta|
-							}}
-								<button
-									type="button"
-									class="dt-stitch-side is-{{meta.side}}
-										{{if
-											this.selectedKey
-											'is-hidden'
-										}}"
-									aria-label={{meta.add}}
-									{{on
-										"click"
-										(fn
-											this.pickSide
-											meta.side
-										)
-									}}
-									{{on
-										"drop"
-										(fn
-											this.dropSide
-											meta.side
-										)
-									}}
-									{{on
-										"dragover"
-										allowDrop
-									}}
-								>
-									<Icon
-										@name="plus"
-									/>
-								</button>
-							{{/each}}
-
-							<div
-								class="dt-stitch-trail"
-							>
-								<div
-									class="dt-stitch-canvas
-										{{if
-											this.draggedLeafKey
-											'is-dragging'
-										}}"
-									style={{this.stageStyle}}
-								>
-									{{#each
-										this.trailTiles
-										key="key"
-										as |tile|
-									}}
-										{{! template-lint-disable no-invalid-interactive }}
-										<div
-											class="dt-stitch-tile
-												{{if
-													(eq
-														this.dragOverLeafKey
-														tile.key
-													)
-													'is-over'
-												}}"
-											style={{tile.style}}
-											{{on
-												"click"
-												(fn
-													this.selectTile
-													tile.key
-												)
-											}}
-											{{on
-												"dragover"
-												(fn
-													this.dragOverTile
-													tile.key
-												)
-											}}
-											{{on
-												"dragleave"
-												this.dragLeaveTile
-											}}
-											{{on
-												"drop"
-												(fn
-													this.dropOnTile
-													tile.key
-												)
-											}}
-										>
-											<div
-												class="dt-stitch-grab
-													{{if
-														(eq
-															this.draggedLeafKey
-															tile.key
-														)
-														'is-dragging'
-													}}"
-												style={{tile.matteStyle}}
-												draggable="true"
-												{{on
-													"dragstart"
-													(fn
-														this.dragStartTile
-														tile.key
-													)
-												}}
-												{{on
-													"dragend"
-													this.dragEndTile
-												}}
-											>
-												<img
-													class="dt-stitch-img
-														{{if
-															tile.isMatte
-															'is-contain'
-														}}"
-													src={{tile.url}}
-													alt={{tile.name}}
-												/>
-											</div>
-
-											<span
-												class="dt-stitch-ring
-													{{if
-														(eq
-															this.selectedKey
-															tile.key
-														)
-														'is-selected'
-													}}"
-												aria-hidden="true"
-											></span>
-
-											{{#if
-												this.draggedLeafKey
-											}}
-												{{#unless
-													(eq
-														this.draggedLeafKey
-														tile.key
-													)
-												}}
-													{{#each
-														SIDE_META
-														key="side"
-														as |meta|
-													}}
-														{{! template-lint-disable no-invalid-interactive }}
-														<div
-															class="dt-stitch-place is-{{meta.side}}
-																{{if
-																	(eq
-																		this.dragOverPlace
-																		(concat
-																			tile.key
-																			':'
-																			meta.side
-																		)
-																	)
-																	'is-over'
-																}}"
-															aria-label={{meta.place}}
-															{{on
-																"dragover"
-																(fn
-																	this.dragOverPlaceZone
-																	tile.key
-																	meta.side
-																)
-															}}
-															{{on
-																"drop"
-																(fn
-																	this.dropOnPlace
-																	tile.key
-																	meta.side
-																)
-															}}
-														>
-															<span
-																class="dt-stitch-place-badge"
-															><Icon
-																	@name={{if
-																		(eq
-																			meta.side
-																			"top"
-																		)
-																		"arrow-up"
-																		(if
-																			(eq
-																				meta.side
-																				"bottom"
-																			)
-																			"arrow-down"
-																			(if
-																				(eq
-																					meta.side
-																					"left"
-																				)
-																				"arrow-left"
-																				"arrow-right"
-																			)
-																		)
-																	}}
-																/></span>
-														</div>
-													{{/each}}
-												{{/unless}}
-											{{else}}
-												{{#unless
-													tile.isBase
-												}}
-													<div
-														class="dt-stitch-pill"
-													>
-														{{#each
-															FITS
-															key="@index"
-															as |f|
-														}}
-															<button
-																type="button"
-																class="dt-stitch-fit
-																	{{if
-																		(eq
-																			tile.fit
-																			f
-																		)
-																		'is-active'
-																	}}"
-																{{on
-																	"click"
-																	(fn
-																		this.setFit
-																		tile.key
-																		f
-																	)
-																}}
-															>{{f}}</button>
-														{{/each}}
-														<button
-															type="button"
-															class="dt-stitch-tile-remove"
-															aria-label="Remove tile"
-															{{on
-																"click"
-																(fn
-																	this.removeTile
-																	tile.key
-																	tile.srcId
-																)
-															}}
-														>
-															<Icon
-																@name="x"
-															/>
-														</button>
-													</div>
-												{{/unless}}
-											{{/if}}
-										</div>
-									{{/each}}
-
-									{{#unless
-										this.draggedLeafKey
-									}}
-										{{#each
-											this.trailSeams
-											key="id"
-											as |seam|
-										}}
-											<div
-												class="dt-stitch-seam
-													{{if
-														seam.vertical
-														'is-vertical'
-													}}"
-												style={{seam.style}}
-											>
-												<span
-													class="dt-stitch-seam-hit"
-												></span>
-												<button
-													type="button"
-													class="dt-stitch-seam-add"
-													aria-label="Insert here"
-													{{on
-														"click"
-														(fn
-															this.pickSeam
-															seam.splitKey
-															seam.at
-														)
-													}}
-												>
-													<Icon
-														@name="plus"
-													/>
-												</button>
-											</div>
-										{{/each}}
-
-										{{#each
-											this.selectionAdders
-											key="side"
-											as |adder|
-										}}
-											<button
-												type="button"
-												class="dt-stitch-adder"
-												style={{adder.style}}
-												aria-label={{adder.label}}
-												{{on
-													"click"
-													(fn
-														this.pickAdd
-														adder.nodeKey
-														adder.side
-													)
-												}}
-												{{on
-													"drop"
-													(fn
-														this.dropAdd
-														adder.nodeKey
-														adder.side
-													)
-												}}
-												{{on
-													"dragover"
-													allowDrop
-												}}
-											>
-												<Icon
-													@name="plus"
-												/>
-											</button>
-										{{/each}}
-									{{/unless}}
-								</div>
-							</div>
-						</div>
-					{{else}}
-						<Uploader
-							@onPick={{this.pickFirst}}
-							@onDrop={{this.dropFirst}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{this.exportDisabled}}
+							@onClick={{this.export}}
 						/>
-					{{/if}}
-				{{else if this.batchThumbs.length}}
-						{{! template-lint-disable no-invalid-interactive }}
-					<div
-						class="dt-stitch-pool"
-						{{on "drop" this.dropBatch}}
-						{{on "dragover" allowDrop}}
-					>
-						{{#each
-							this.batchThumbs
-							key="id"
-							as |thumb|
-						}}
-							<div
-								class="dt-stitch-thumb
-									{{if
-										(eq
-											this.draggedBatchId
-											thumb.id
-										)
-										'is-dragging'
-									}}
-									{{if
-										(eq
-											this.dragOverBatchId
-											thumb.id
-										)
-										'is-over'
-									}}"
-								draggable="true"
-								{{on
-									"dragstart"
-									(fn
-										this.dragStartThumb
-										thumb.id
-									)
-								}}
-								{{on
-									"dragover"
-									(fn
-										this.dragOverThumb
-										thumb.id
-									)
-								}}
-								{{on
-									"dragleave"
-									this.dragLeaveThumb
-								}}
-								{{on
-									"drop"
-									(fn
-										this.dropOnThumb
-										thumb.id
-									)
-								}}
-								{{on
-									"dragend"
-									this.dragEndThumb
-								}}
-							>
-								<img
-									class="dt-stitch-thumb-img"
-									src={{thumb.src.url}}
-									alt={{thumb.src.name}}
-								/>
-								<span
-									class="dt-stitch-thumb-index"
-								>{{thumb.number}}</span>
-								<button
-									type="button"
-									class="dt-stitch-thumb-remove"
-									aria-label="Remove image"
-									{{on
-										"click"
-										(fn
-											this.removeBatchSrc
-											thumb.id
-										)
-									}}
-								>
-									<Icon
-										@name="x"
-									/>
-								</button>
-							</div>
-						{{/each}}
-						<button
-							type="button"
-							class="dt-stitch-pool-add"
-							aria-label="Add images"
-							{{on
-								"click"
-								this.pickBatch
-							}}
+					</CanonGrid>
+					{{#if this.exporting}}
+						<CanonRow
+							class="stitch-busy"
+							@title="Processing…"
 						>
-							<Icon @name="plus" />
-						</button>
-					</div>
-
-					{{#if this.batchPreview}}
-						<div class="dt-stitch-preview">
-							<div
-								class="dt-stitch-preview-grid"
-								style={{this.batchPreview.gridStyle}}
-							>
-								{{#each
-									this.batchPreview.srcs
-									key="id"
-									as |s|
-								}}
-									<div
-										class="dt-stitch-preview-cell"
-										style={{this.batchPreview.cellStyle}}
-									>
-										<img
-											src={{s.url}}
-											alt={{s.name}}
-										/>
-									</div>
-								{{/each}}
-							</div>
-						</div>
-					{{/if}}
-				{{else}}
-					<Uploader
-						@onPick={{this.pickBatch}}
-						@onDrop={{this.dropBatch}}
-					/>
-				{{/if}}
-
-				{{#if this.hasResult}}
-					<div class="dt-stitch-export">
-						{{#each
-							this.formatOptions
-							key="id"
-							as |f|
-						}}
-							<button
-								type="button"
-								class="dt-stitch-format
-									{{if
-										(eq
-											this.format
-											f.id
-										)
-										'is-active'
-									}}"
-								disabled={{f.disabled}}
-								{{on
-									"click"
-									(fn
-										this.setFormat
-										f.id
-									)
-								}}
-							>{{f.label}}</button>
-						{{/each}}
-						<button
-							type="button"
-							class="dt-stitch-download"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel
-								@label="Download {{this.formatLabel}}"
+							<CanonLoader
+								@cell={{5}}
+								@gap={{1}}
 							/>
-						</button>
-					</div>
-				{{/if}}
-			</div>
-		</div>
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				{{! the picture's plus buttons open it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					multiple
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

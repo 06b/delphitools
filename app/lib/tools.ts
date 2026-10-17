@@ -409,6 +409,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Combine multiple images into one',
 				icon: 'combine',
 				href: '/tools/image-stitcher',
+				canon: true,
+				expands: true,
 				produces: [
 					'image/png',
 					'image/jpeg',
