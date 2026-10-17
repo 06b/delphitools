@@ -87,7 +87,7 @@ const stripState = () =>
 		const box = paper?.getBoundingClientRect();
 		return {
 			cells: strip?.querySelectorAll('.canon-page-strip-cell').length,
-			inert: strip?.hasAttribute('inert'),
+			hidden: strip?.getAttribute('aria-hidden') === 'true',
 			aspect: box ? box.width / box.height : 0,
 			band: strip?.closest('.canon-canvas')?.getBoundingClientRect()
 				.height,
@@ -108,8 +108,8 @@ check(
 
 const empty = await stripState();
 check(
-	'empty: blank pages across the strip, inert, portrait A4',
-	empty.cells > 1 && empty.inert && Math.abs(empty.aspect - 0.707) < 0.02,
+	'empty: blank pages across the strip, hidden, portrait A4',
+	empty.cells > 1 && empty.hidden && Math.abs(empty.aspect - 0.707) < 0.02,
 	JSON.stringify(empty),
 );
 check(
@@ -178,7 +178,7 @@ check('two dropped images queue up in order', queued, (await names()).join('|'))
 const loaded = await stripState();
 check(
 	'loaded: the strip takes pages, the band keeps its height',
-	!loaded.inert && loaded.band === empty.band,
+	!loaded.hidden && loaded.band === empty.band,
 	`${empty.band} → ${loaded.band}`,
 );
 
@@ -296,7 +296,7 @@ const pdfEmpty = await stripState();
 check(
 	'PDF to Image empty: blank A4, the Source slot, Download zip off',
 	pdfEmpty.cells > 1 &&
-		pdfEmpty.inert &&
+		pdfEmpty.hidden &&
 		pdfEmpty.band === empty.band &&
 		(await page.evaluate(
 			() =>
@@ -313,7 +313,7 @@ const rendered = await page
 	.waitForFunction(
 		() =>
 			document.querySelectorAll('.i2p-strip img').length === 3 &&
-			!document.querySelector('.i2p-strip[inert]'),
+			!document.querySelector('.i2p-strip[aria-hidden]'),
 		{ timeout: 30000 },
 	)
 	.then(() => true)

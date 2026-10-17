@@ -32,7 +32,6 @@ import {
 } from 'delphitools-v2/lib/pdf-pages';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
-import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -273,8 +272,9 @@ export default class ImageToPdf extends Component {
 		return this.toPdf ? !this.items.length : !this.pdfFile;
 	}
 
-	get blankSize() {
-		return this.toPdf ? blankPage(this.options).size : A4;
+	get blankPages(): CanonPage[] {
+		const size = this.toPdf ? blankPage(this.options).size : A4;
+		return [{ size }];
 	}
 
 	get stripPages(): CanonPage[] {
@@ -630,9 +630,10 @@ export default class ImageToPdf extends Component {
 					@background="var(--canon-muted)"
 				>
 					{{#if this.blank}}
-						<BlankStrip
+						<CanonPageStrip
 							class="i2p-strip i2p-strip--blank"
-							@size={{this.blankSize}}
+							@pages={{this.blankPages}}
+							@blank={{true}}
 						/>
 					{{else}}
 						<CanonPageStrip

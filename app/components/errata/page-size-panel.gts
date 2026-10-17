@@ -6,9 +6,6 @@ import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import PaperMenu from 'delphitools-v2/components/errata/paper-menu';
 import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
-import Fresh, {
-	both,
-} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import ToolPanel, {
 	AnchorPicker,
 	Field,
@@ -269,22 +266,14 @@ export default class PageSizePanel extends Component<{
 			<:default>
 				<Group class="is-tall">
 					<Field @label="Preset">
-						<Fresh
-							@value={{this.presetIndex}}
-							as |mine|
-						>
-							<CanonSegmented
-								class="err-mode-seg"
-								@items={{PRESET_LABELS}}
-								@columns={{3}}
-								@selected={{this.presetIndex}}
-								@onChange={{both
-									mine
-									this.pickPreset
-								}}
-								aria-label="Preset"
-							/>
-						</Fresh>
+						<CanonSegmented
+							class="err-mode-seg"
+							@items={{PRESET_LABELS}}
+							@columns={{3}}
+							@selected={{this.presetIndex}}
+							@onChange={{this.pickPreset}}
+							aria-label="Preset"
+						/>
 						<PaperMenu
 							class="err-paper-other"
 							@value={{this.otherId}}

@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import type { PDFDocument } from 'pdf-lib';
@@ -30,7 +30,6 @@ import {
 } from 'delphitools-v2/lib/pdf-pages';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
-import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { open, thumbnails } from 'delphitools-v2/lib/pdfjs';
 import {
@@ -527,8 +526,10 @@ export default class PdfOrganiser extends Component {
 							{{this.stripKeys}}
 						/>
 					{{else}}
-						<BlankStrip
+						<CanonPageStrip
 							class="porg-blank"
+							@pages={{(array)}}
+							@blank={{true}}
 						/>
 					{{/if}}
 				</CanonCanvas>

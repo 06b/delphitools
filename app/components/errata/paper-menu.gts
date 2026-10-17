@@ -1,8 +1,5 @@
 import Component from '@glimmer/component';
 import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
-import Fresh, {
-	both,
-} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import { paperSizeGroups } from 'delphitools-v2/lib/paper-sizes';
 import './paper-menu.css';
 
@@ -37,16 +34,14 @@ export default class PaperMenu extends Component<{
 	};
 
 	<template>
-		<Fresh @value={{this.index}} as |mine|>
-			<CanonMenuCell
-				class="err-menu-cell"
-				@items={{TITLES}}
-				@selected={{this.index}}
-				@placeholder={{@placeholder}}
-				@label={{@label}}
-				@onChange={{both mine this.pick}}
-				...attributes
-			/>
-		</Fresh>
+		<CanonMenuCell
+			class="err-menu-cell"
+			@items={{TITLES}}
+			@selected={{this.index}}
+			@placeholder={{@placeholder}}
+			@label={{@label}}
+			@onChange={{this.pick}}
+			...attributes
+		/>
 	</template>
 }

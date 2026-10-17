@@ -12,9 +12,6 @@ import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSlider from 'delphicanon/components/canon-slider';
-import Fresh, {
-	both,
-} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
 import { menuIcon } from 'delphitools-v2/components/substrata/editor/tool-bar/bar-cells';
 import type { Stamped } from 'delphitools-v2/lib/errata/doc-model';
@@ -180,11 +177,11 @@ export class Segmented<V extends string | number> extends Component<{
 			: undefined;
 	}
 
-	// -1 shows no cell picked; CanonSegmented reads undefined as the first
-	get selected(): number {
-		return this.args.options.findIndex(
+	get selected(): number | null {
+		const index = this.args.options.findIndex(
 			(o) => o.value === this.args.value,
 		);
+		return index < 0 ? null : index;
 	}
 
 	change = (index: number) => {
@@ -193,18 +190,15 @@ export class Segmented<V extends string | number> extends Component<{
 	};
 
 	<template>
-		{{! a value set elsewhere remounts the cells (Fresh) }}
-		<Fresh @value={{this.selected}} as |mine|>
-			<CanonSegmented
-				class="err-mode-seg"
-				@items={{this.items}}
-				@icons={{this.icons}}
-				@selected={{this.selected}}
-				@onChange={{both mine this.change}}
-				aria-label={{@label}}
-				...attributes
-			/>
-		</Fresh>
+		<CanonSegmented
+			class="err-mode-seg"
+			@items={{this.items}}
+			@icons={{this.icons}}
+			@selected={{this.selected}}
+			@onChange={{this.change}}
+			aria-label={{@label}}
+			...attributes
+		/>
 	</template>
 }
 

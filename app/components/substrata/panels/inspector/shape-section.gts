@@ -203,17 +203,12 @@ export default class ShapeSection extends Component<{
 		<CanonHeading @text="Shape" />
 		{{#if this.hasFill}}
 			<CanonRow @title="Fill" @form="stacked" as |titleId|>
-				<Fresh @value={{if this.grad 1 0}} as |mine|>
-					<CanonSegmented
-						@items={{FILL_TITLES}}
-						@selected={{if this.grad 1 0}}
-						@onChange={{both
-							mine
-							this.pickFill
-						}}
-						aria-labelledby={{titleId}}
-					/>
-				</Fresh>
+				<CanonSegmented
+					@items={{FILL_TITLES}}
+					@selected={{if this.grad 1 0}}
+					@onChange={{this.pickFill}}
+					aria-labelledby={{titleId}}
+				/>
 			</CanonRow>
 			{{#if this.grad}}
 				<GradientEditor

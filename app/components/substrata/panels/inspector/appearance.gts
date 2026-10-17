@@ -11,7 +11,6 @@ import {
 	commitTransient,
 	isGestureActive,
 } from 'delphitools-v2/lib/substrata/doc-store';
-import Fresh, { both } from './fresh';
 import { renameLayer, setBlendModes, setOpacities } from './logic';
 
 const BLEND_TITLES = BLEND_OPTIONS.map((o) => o.label);
@@ -83,16 +82,14 @@ export class OpacityRow extends Component<OpacityRowSignature> {
 
 	<template>
 		<CanonRow @title="Opacity" @form="flush" as |titleId|>
-			<Fresh @value={{@value}} as |mine|>
-				<CanonSlider
-					@value={{@value}}
-					@labelledBy={{titleId}}
-					@onChange={{both mine this.change}}
-					{{on "pointerup" this.end}}
-					{{on "pointercancel" this.end}}
-					{{on "lostpointercapture" this.end}}
-				/>
-			</Fresh>
+			<CanonSlider
+				@value={{@value}}
+				@labelledBy={{titleId}}
+				@onChange={{this.change}}
+				{{on "pointerup" this.end}}
+				{{on "pointercancel" this.end}}
+				{{on "lostpointercapture" this.end}}
+			/>
 		</CanonRow>
 	</template>
 }
@@ -116,14 +113,12 @@ export class BlendRow extends Component<BlendRowSignature> {
 
 	<template>
 		<CanonRow @title="Blend" @form="flush" as |titleId|>
-			<Fresh @value={{this.selected}} as |mine|>
-				<CanonMenuCell
-					@items={{BLEND_TITLES}}
-					@selected={{this.selected}}
-					@labelledBy={{titleId}}
-					@onChange={{both mine this.pick}}
-				/>
-			</Fresh>
+			<CanonMenuCell
+				@items={{BLEND_TITLES}}
+				@selected={{this.selected}}
+				@labelledBy={{titleId}}
+				@onChange={{this.pick}}
+			/>
 		</CanonRow>
 	</template>
 }

@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -30,12 +31,8 @@ import {
 	resolvePageNumbers,
 	type Anchor,
 } from 'delphitools-v2/lib/pdf-stamp';
-import Fresh, {
-	both,
-} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
-import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -136,8 +133,6 @@ export default class PdfPageNumberer extends Component {
 	@tracked opacity = 15;
 	@tracked sections: Section[] = [section()];
 	@tracked sectionId = this.sections[0]!.id;
-	// remount when clamp unchanged
-	@tracked fromKey = 0;
 
 	@tracked busy = false;
 	@tracked failed = false;
@@ -273,7 +268,7 @@ export default class PdfPageNumberer extends Component {
 
 	// remount clears held pick
 	get currentKeys() {
-		return [`${this.current.id}:${this.fromKey}`];
+		return [this.current.id];
 	}
 
 	get styleIndex() {
@@ -412,8 +407,7 @@ export default class PdfPageNumberer extends Component {
 			value,
 			this.count,
 		);
-		if (start === current.fromPage) this.fromKey++;
-		else this.#edit({ fromPage: start });
+		if (start !== current.fromPage) this.#edit({ fromPage: start });
 	};
 
 	/** splits at lit page */
@@ -522,8 +516,10 @@ export default class PdfPageNumberer extends Component {
 							@onSelect={{this.selectPage}}
 						/>
 					{{else}}
-						<BlankStrip
+						<CanonPageStrip
 							class="ppn-blank-strip"
+							@pages={{(array)}}
+							@blank={{true}}
 						/>
 					{{/if}}
 				</CanonCanvas>
@@ -634,20 +630,12 @@ export default class PdfPageNumberer extends Component {
 						<CanonHeading
 							@text="Position"
 						/>
-						<Fresh
-							@value={{this.anchorIndex}}
-							as |mine|
-						>
-							<AnchorPicker
-								class="ppn-anchors"
-								aria-label="Position"
-								@selected={{this.anchorIndex}}
-								@onChange={{both
-									mine
-									this.pickAnchor
-								}}
-							/>
-						</Fresh>
+						<AnchorPicker
+							class="ppn-anchors"
+							aria-label="Position"
+							@selected={{this.anchorIndex}}
+							@onChange={{this.pickAnchor}}
+						/>
 					{{/if}}
 				</CanonRows>
 				<CanonRows

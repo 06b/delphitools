@@ -53,15 +53,15 @@ const empty = await page.evaluate(() => {
 	const strip = document.querySelector('.pf-strip--blank');
 	return {
 		blank: strip?.querySelectorAll('.canon-page-strip-paper').length,
-		inert: strip?.hasAttribute('inert'),
+		hidden: strip?.getAttribute('aria-hidden') === 'true',
 		pictures: strip?.querySelectorAll('img').length,
 		slot: document.querySelector('.pf-slot')?.textContent.trim(),
 		files: !!document.querySelector('.media-slot-files'),
 	};
 });
 check(
-	'empty: blank inert pages in the strip, the Source slot with a Files cell',
-	empty.blank > 3 && empty.inert && empty.pictures === 0 && empty.slot === 'Drop PDF here' && empty.files,
+	'empty: blank hidden pages in the strip, the Source slot with a Files cell',
+	empty.blank > 3 && empty.hidden && empty.pictures === 0 && empty.slot === 'Drop PDF here' && empty.files,
 	JSON.stringify(empty),
 );
 const dashes = [

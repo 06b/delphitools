@@ -112,7 +112,7 @@ check(
 const empty = await page.evaluate(() => ({
 	slot: document.querySelector('.ppn-slot')?.textContent.trim(),
 	files: !!document.querySelector('.media-slot-files'),
-	sheets: document.querySelectorAll('.media-blank-strip .canon-page-strip-cell').length,
+	sheets: document.querySelectorAll('.ppn-blank-strip .canon-page-strip-cell').length,
 	blank: !!document.querySelector('.ppn-page--blank'),
 	blankText: document.querySelector('.ppn-page--blank')?.textContent.trim(),
 	run: document.querySelector('.media-job-run')?.disabled,

@@ -252,9 +252,6 @@ export default class ImageTracer extends Component {
 	@tracked tracing = false;
 	@tracked failure = '';
 	@tracked outlines = false;
-	// kit controls hold a pick while their value arg returns to the one it replaced; remount instead
-	@tracked settingsKey = 0;
-	@tracked menuKey = 0;
 
 	drop = new Drop('image/*', (file) => void this.load(file));
 	#extras: Record<string, unknown> = {};
@@ -350,14 +347,6 @@ export default class ImageTracer extends Component {
 
 	get scaleIndex() {
 		return SCALES.indexOf(this.options.scale);
-	}
-
-	get settingsKeys() {
-		return [{ id: this.settingsKey }];
-	}
-
-	get menuKeys() {
-		return [{ id: this.menuKey }];
 	}
 
 	get retraceDisabled() {
@@ -536,10 +525,7 @@ export default class ImageTracer extends Component {
 		if (optionValue(this.options, key) === value) return;
 		this.options = { ...this.options, [key]: value };
 		this.dirty = true;
-		if (this.preset !== undefined) {
-			this.preset = undefined;
-			this.menuKey++;
-		}
+		this.preset = undefined;
 	};
 
 	pickStroke = (index: number) =>
@@ -573,7 +559,6 @@ export default class ImageTracer extends Component {
 		this.#extras = extras;
 		this.preset = index;
 		this.dirty = true;
-		this.settingsKey++;
 	};
 
 	pickOutlines = (on: boolean) => (this.outlines = on);
@@ -663,144 +648,129 @@ export default class ImageTracer extends Component {
 						@form="flush"
 						as |titleId|
 					>
-						{{#each this.menuKeys key="id"}}
-							<CanonMenuCell
-								@items={{presetNames}}
-								@selected={{this.preset}}
-								@placeholder="Custom"
-								@labelledBy={{titleId}}
-								@onChange={{this.pickPreset}}
-							/>
-						{{/each}}
+						<CanonMenuCell
+							@items={{presetNames}}
+							@selected={{this.preset}}
+							@placeholder="Custom"
+							@labelledBy={{titleId}}
+							@onChange={{this.pickPreset}}
+						/>
 					</CanonRow>
-					{{#each this.settingsKeys key="id"}}
-						<CanonRow
-							class="trace-row trace-colours"
-							@title="Colours"
-							@form="flush"
-							as |titleId|
-						>
-							<Tip
-								@label="Colours"
-								@text={{TIPS.colours}}
-							/>
-							<CanonNumberField
-								@value={{this.options.numberofcolors}}
-								@min={{2}}
-								@max={{64}}
-								@labelledBy={{titleId}}
-								@onChange={{fn
-									this.setOption
-									"numberofcolors"
-								}}
-							/>
-						</CanonRow>
-						{{#each
-							TRACE_SLIDERS
-							as |spec|
-						}}
-							<SliderRow
-								@spec={{spec}}
-								@value={{optionValue
-									this.options
-									spec.key
-								}}
-								@onChange={{this.setOption}}
-							/>
-						{{/each}}
-						<TitleRow
-							@title="Stroke Width"
-							@tip={{TIPS.stroke}}
+					<CanonRow
+						class="trace-row trace-colours"
+						@title="Colours"
+						@form="flush"
+						as |titleId|
+					>
+						<Tip
+							@label="Colours"
+							@text={{TIPS.colours}}
 						/>
-						<CanonSegmented
-							class="trace-strokes"
-							@items={{strokeNames}}
-							@columns={{6}}
-							@selected={{this.strokeIndex}}
-							@onChange={{this.pickStroke}}
-							aria-label="Stroke Width"
+						<CanonNumberField
+							@value={{this.options.numberofcolors}}
+							@min={{2}}
+							@max={{64}}
+							@labelledBy={{titleId}}
+							@onChange={{fn
+								this.setOption
+								"numberofcolors"
+							}}
 						/>
-						<TitleRow
-							@title="Scale"
-							@tip={{TIPS.scale}}
-						/>
-						<CanonSegmented
-							class="trace-scales"
-							@items={{scaleNames}}
-							@columns={{5}}
-							@selected={{this.scaleIndex}}
-							@onChange={{this.pickScale}}
-							aria-label="Scale"
+					</CanonRow>
+					{{#each TRACE_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
+							}}
+							@onChange={{this.setOption}}
 						/>
 					{{/each}}
+					<TitleRow
+						@title="Stroke Width"
+						@tip={{TIPS.stroke}}
+					/>
+					<CanonSegmented
+						class="trace-strokes"
+						@items={{strokeNames}}
+						@columns={{6}}
+						@selected={{this.strokeIndex}}
+						@onChange={{this.pickStroke}}
+						aria-label="Stroke Width"
+					/>
+					<TitleRow
+						@title="Scale"
+						@tip={{TIPS.scale}}
+					/>
+					<CanonSegmented
+						class="trace-scales"
+						@items={{scaleNames}}
+						@columns={{5}}
+						@selected={{this.scaleIndex}}
+						@onChange={{this.pickScale}}
+						aria-label="Scale"
+					/>
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Advanced" />
-					{{#each this.settingsKeys key="id"}}
-						{{#each BLUR_SLIDERS as |spec|}}
-							<SliderRow
-								@spec={{spec}}
-								@value={{optionValue
-									this.options
-									spec.key
-								}}
-								@onChange={{this.setOption}}
-							/>
-						{{/each}}
-						<TitleRow
-							@title="Colour sampling"
-							@tip={{TIPS.sampling}}
-						/>
-						<CanonSegmented
-							class="trace-sampling"
-							@items={{SAMPLING}}
-							@selected={{this.options.colorsampling}}
-							@onChange={{fn
-								this.setOption
-								"colorsampling"
+					{{#each BLUR_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
 							}}
-							aria-label="Colour sampling"
+							@onChange={{this.setOption}}
 						/>
-						{{#each
-							RATIO_SLIDERS
-							as |spec|
+					{{/each}}
+					<TitleRow
+						@title="Colour sampling"
+						@tip={{TIPS.sampling}}
+					/>
+					<CanonSegmented
+						class="trace-sampling"
+						@items={{SAMPLING}}
+						@selected={{this.options.colorsampling}}
+						@onChange={{fn
+							this.setOption
+							"colorsampling"
 						}}
-							<SliderRow
-								@spec={{spec}}
-								@value={{optionValue
-									this.options
-									spec.key
-								}}
-								@onChange={{this.setOption}}
-							/>
-						{{/each}}
-						<TitleRow
-							@title="Layering mode"
-							@tip={{TIPS.layering}}
-						/>
-						<CanonSegmented
-							class="trace-layering"
-							@items={{LAYERING}}
-							@selected={{this.options.layering}}
-							@onChange={{fn
-								this.setOption
-								"layering"
+						aria-label="Colour sampling"
+					/>
+					{{#each RATIO_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
 							}}
-							aria-label="Layering mode"
+							@onChange={{this.setOption}}
 						/>
-						{{#each
-							POINT_SLIDERS
-							as |spec|
+					{{/each}}
+					<TitleRow
+						@title="Layering mode"
+						@tip={{TIPS.layering}}
+					/>
+					<CanonSegmented
+						class="trace-layering"
+						@items={{LAYERING}}
+						@selected={{this.options.layering}}
+						@onChange={{fn
+							this.setOption
+							"layering"
 						}}
-							<SliderRow
-								@spec={{spec}}
-								@value={{optionValue
-									this.options
-									spec.key
-								}}
-								@onChange={{this.setOption}}
-							/>
-						{{/each}}
+						aria-label="Layering mode"
+					/>
+					{{#each POINT_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
+							}}
+							@onChange={{this.setOption}}
+						/>
 					{{/each}}
 				</CanonRows>
 				<CanonRows @framed={{true}}>

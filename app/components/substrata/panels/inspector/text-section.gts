@@ -32,7 +32,6 @@ import {
 } from 'delphitools-v2/lib/substrata/text-style';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 import ColourWell from './colour-well';
-import Fresh, { both } from './fresh';
 import NumField from './num-field';
 import Presets from './presets';
 
@@ -209,14 +208,12 @@ export default class TextSection extends Component<{
 			/>
 		</CanonRow>
 		<CanonRow @title="Font" @form="flush" as |titleId|>
-			<Fresh @value={{this.familyIndex}} as |mine|>
-				<CanonMenuCell
-					@items={{this.familyTitles}}
-					@selected={{this.familyIndex}}
-					@labelledBy={{titleId}}
-					@onChange={{both mine this.pickFamily}}
-				/>
-			</Fresh>
+			<CanonMenuCell
+				@items={{this.familyTitles}}
+				@selected={{this.familyIndex}}
+				@labelledBy={{titleId}}
+				@onChange={{this.pickFamily}}
+			/>
 		</CanonRow>
 		<CanonRow @title="Size" @form="flush" as |titleId|>
 			<NumField
@@ -235,15 +232,13 @@ export default class TextSection extends Component<{
 			aria-label="Size"
 		/>
 		<CanonRow @title="Style" @form="stacked" as |titleId|>
-			<Fresh @value={{this.styleIndex}} as |mine|>
-				<CanonSegmented
-					@items={{STYLE_TITLES}}
-					@selected={{this.styleIndex}}
-					@columns={{2}}
-					@onChange={{both mine this.pickStyle}}
-					aria-labelledby={{titleId}}
-				/>
-			</Fresh>
+			<CanonSegmented
+				@items={{STYLE_TITLES}}
+				@selected={{this.styleIndex}}
+				@columns={{2}}
+				@onChange={{this.pickStyle}}
+				aria-labelledby={{titleId}}
+			/>
 		</CanonRow>
 		<CanonRow @title="Colour" @form="stacked">
 			<ColourWell
@@ -253,15 +248,13 @@ export default class TextSection extends Component<{
 			/>
 		</CanonRow>
 		<CanonRow @title="Align" @form="stacked" as |titleId|>
-			<Fresh @value={{this.alignIndex}} as |mine|>
-				<CanonSegmented
-					@items={{ALIGN_TITLES}}
-					@icons={{ALIGN_ICONS}}
-					@selected={{this.alignIndex}}
-					@onChange={{both mine this.pickAlign}}
-					aria-labelledby={{titleId}}
-				/>
-			</Fresh>
+			<CanonSegmented
+				@items={{ALIGN_TITLES}}
+				@icons={{ALIGN_ICONS}}
+				@selected={{this.alignIndex}}
+				@onChange={{this.pickAlign}}
+				aria-labelledby={{titleId}}
+			/>
 		</CanonRow>
 		<CanonRow @title="Line height" @form="flush" as |titleId|>
 			<NumField
@@ -287,17 +280,12 @@ export default class TextSection extends Component<{
 			/>
 		</CanonRow>
 		<CanonRow @title="Direction" @form="stacked" as |titleId|>
-			<Fresh @value={{this.directionIndex}} as |mine|>
-				<CanonSegmented
-					@items={{DIRECTION_TITLES}}
-					@selected={{this.directionIndex}}
-					@onChange={{both
-						mine
-						this.pickDirection
-					}}
-					aria-labelledby={{titleId}}
-				/>
-			</Fresh>
+			<CanonSegmented
+				@items={{DIRECTION_TITLES}}
+				@selected={{this.directionIndex}}
+				@onChange={{this.pickDirection}}
+				aria-labelledby={{titleId}}
+			/>
 		</CanonRow>
 	</template>
 }

@@ -28,7 +28,6 @@ import { stem } from 'delphicanon/lib/files';
 import { reducedMotion, springEasing } from 'delphicanon/lib/motion';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import { clipboardImages } from 'delphitools-v2/lib/clipboard-images';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
@@ -72,7 +71,7 @@ import './image-stitcher/image-stitcher.css';
 const spring = htmlSafe(`--stitch-spring: ${springEasing(0.82)}`);
 const springMs = 450;
 const stripStyle = htmlSafe(`block-size: ${pageStripHeight}px`);
-const BLANK_SIZE = { width: 4, height: 3 };
+const BLANK_PAGES: CanonPage[] = [{ size: { width: 4, height: 3 } }];
 const aspects = { min: 0.75, max: 1.5, empty: 4 / 3 };
 const modes = ['Individual', 'Batch'];
 const fitLabels = ['Match', 'Cheese', 'Matte'];
@@ -859,10 +858,11 @@ export default class ImageStitcher extends Component {
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Images" />
 					{{#if this.emptyBatch}}
-						<BlankStrip
+						<CanonPageStrip
 							class="stitch-strip stitch-strip--blank"
 							style={{stripStyle}}
-							@size={{BLANK_SIZE}}
+							@pages={{BLANK_PAGES}}
+							@blank={{true}}
 						/>
 					{{else if this.batch}}
 						<CanonPageStrip

@@ -81,8 +81,6 @@ export default class SubtitleConverterTool extends Component {
 	@tracked rateTo?: number;
 	@tracked vttKind = '';
 	@tracked vttLanguage = '';
-	// a kit menu holds a pick while its arg returns to the value the pick replaced
-	@tracked rateCleared = 0;
 
 	// ?subText= ?subShift=2.5 ?subScale=0.95904 ?subRate=0,2: the iOS launch arguments, the text in place of -subSample's path
 	constructor(owner: Owner, args: object) {
@@ -188,11 +186,6 @@ export default class SubtitleConverterTool extends Component {
 		return this.stats || 'Timeline';
 	}
 
-	/** One key per clear, so the rate menus remount empty. */
-	get rateKeys() {
-		return [this.rateCleared];
-	}
-
 	get downloadText() {
 		return passAlong('Download');
 	}
@@ -230,7 +223,6 @@ export default class SubtitleConverterTool extends Component {
 	// a typed scale lets go of the rate pair
 	setScale = (factor: number) => {
 		this.scaleFactor = factor;
-		if (this.rateFrom !== undefined) this.rateCleared++;
 		this.rateFrom = undefined;
 		this.rateTo = undefined;
 	};
@@ -372,18 +364,16 @@ export default class SubtitleConverterTool extends Component {
 						/>
 					</CanonRow>
 					<CanonHeading @text="Rate" />
-					{{#each this.rateKeys key="@identity"}}
-						<CanonFromTo
-							class="sc-rate"
-							@items={{RATE_LABELS}}
-							@from={{this.rateFrom}}
-							@to={{this.rateTo}}
-							@fromLabel="Source"
-							@toLabel="Target"
-							@onFromChange={{this.pickRateFrom}}
-							@onToChange={{this.pickRateTo}}
-						/>
-					{{/each}}
+					<CanonFromTo
+						class="sc-rate"
+						@items={{RATE_LABELS}}
+						@from={{this.rateFrom}}
+						@to={{this.rateTo}}
+						@fromLabel="Source"
+						@toLabel="Target"
+						@onFromChange={{this.pickRateFrom}}
+						@onToChange={{this.pickRateTo}}
+					/>
 					{{#if this.isVtt}}
 						<CanonHeading @text="Kind" />
 						<CanonSegmented

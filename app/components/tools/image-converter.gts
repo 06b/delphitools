@@ -213,11 +213,6 @@ export default class ImageConverter extends Component {
 		return SCALE_PRESETS.indexOf(this.settings.percentage);
 	}
 
-	// CanonSegmented holds a pick over a value set elsewhere; remount when the field leaves the presets
-	get presetKeys() {
-		return [this.presetIndex === -1 ? 'none' : 'preset'];
-	}
-
 	get depthIndex() {
 		return BIT_DEPTHS.indexOf(this.settings.bmpBitDepth);
 	}
@@ -1043,17 +1038,12 @@ export default class ImageConverter extends Component {
 							"percentage"
 						)
 					}}
-						{{#each
-							this.presetKeys
-							key="@identity"
-						}}
-							<CanonSegmented
-								class="conv-presets"
-								@items={{presetLabels}}
-								@selected={{this.presetIndex}}
-								@onChange={{this.pickPreset}}
-							/>
-						{{/each}}
+						<CanonSegmented
+							class="conv-presets"
+							@items={{presetLabels}}
+							@selected={{this.presetIndex}}
+							@onChange={{this.pickPreset}}
+						/>
 						<CanonRow
 							class="conv-percent"
 							@title="Scale"

@@ -136,10 +136,6 @@ export default class SocialCropper extends Component {
 		return Math.max(0.5, width / height);
 	}
 
-	get platformKey() {
-		return [this.platform];
-	}
-
 	get platformIndex() {
 		return platforms.indexOf(this.platform);
 	}
@@ -391,16 +387,13 @@ export default class SocialCropper extends Component {
 						@onChange={{this.pickPlatform}}
 					/>
 					<CanonHeading @text="Ratio" />
-					{{! a held pick outlives the platform (kit picked.over); remount per platform }}
-					{{#each this.platformKey key="id"}}
-						<CanonSegmented
-							class="social-ratios"
-							@items={{this.ratioNames}}
-							@columns={{2}}
-							@selected={{this.ratioIndex}}
-							@onChange={{this.pickRatio}}
-						/>
-					{{/each}}
+					<CanonSegmented
+						class="social-ratios"
+						@items={{this.ratioNames}}
+						@columns={{2}}
+						@selected={{this.ratioIndex}}
+						@onChange={{this.pickRatio}}
+					/>
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Crop" />

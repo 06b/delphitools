@@ -76,8 +76,8 @@ const state = () =>
 		const q = (s) => document.querySelector(s);
 		const crop = q('.media-crop-rect');
 		return {
-			strip: document.querySelectorAll('.canon-page-strip:not(.media-blank-strip) .canon-page-strip-cell').length,
-			blankStrip: !!q('.media-blank-strip .canon-page-strip-cell'),
+			strip: document.querySelectorAll('.canon-page-strip:not(.prc-blank-strip) .canon-page-strip-cell').length,
+			blankStrip: !!q('.prc-blank-strip .canon-page-strip-cell'),
 			blank: !!q('.prc-blank'),
 			slot: q('.prc-slot')?.innerText.trim(),
 			files: !!q('.media-slot-files'),

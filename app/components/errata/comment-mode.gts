@@ -132,6 +132,7 @@ export default class CommentPanel extends Component<{
 						@items={{this.labels}}
 						@selected={{this.entryIndex}}
 						@placeholder={{this.count}}
+						@repicks={{true}}
 						@label="List"
 						@disabled={{if
 							this.entries.length

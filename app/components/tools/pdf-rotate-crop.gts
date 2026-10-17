@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
@@ -18,9 +18,7 @@ import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import Fresh, {
-	both,
-} from 'delphitools-v2/components/substrata/panels/inspector/fresh';
+import Fresh from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
@@ -41,7 +39,6 @@ import {
 } from 'delphitools-v2/lib/pdf-crop';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
-import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { open, thumbnails } from 'delphitools-v2/lib/pdfjs';
 import { integral } from 'delphitools-v2/lib/crop-rect';
@@ -679,8 +676,10 @@ export default class PdfRotateCrop extends Component {
 							@onSelect={{this.select}}
 						/>
 					{{else}}
-						<BlankStrip
+						<CanonPageStrip
 							class="prc-blank-strip"
+							@pages={{(array)}}
+							@blank={{true}}
 						/>
 					{{/if}}
 				</CanonCanvas>
@@ -818,23 +817,15 @@ export default class PdfRotateCrop extends Component {
 						@form="flush"
 						as |titleId|
 					>
-						<Fresh
-							@value={{this.paperIndex}}
-							as |mine|
-						>
-							<CanonMenuCell
-								class="prc-paper-menu"
-								@items={{PAPER_TITLES}}
-								@selected={{this.paperIndex}}
-								@placeholder="None"
-								@labelledBy={{titleId}}
-								@disabled={{this.noFile}}
-								@onChange={{both
-									mine
-									this.pickPaperIndex
-								}}
-							/>
-						</Fresh>
+						<CanonMenuCell
+							class="prc-paper-menu"
+							@items={{PAPER_TITLES}}
+							@selected={{this.paperIndex}}
+							@placeholder="None"
+							@labelledBy={{titleId}}
+							@disabled={{this.noFile}}
+							@onChange={{this.pickPaperIndex}}
+						/>
 					</CanonRow>
 					<CanonGrid class="prc-crop-actions">
 						<CanonButton

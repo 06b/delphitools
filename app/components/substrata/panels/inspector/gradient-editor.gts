@@ -19,7 +19,6 @@ import {
 } from 'delphitools-v2/lib/substrata/gradient-geometry';
 import { setFill } from 'delphitools-v2/lib/substrata/layer-ops';
 import ColourWell from './colour-well';
-import Fresh, { both } from './fresh';
 import NumField from './num-field';
 
 const MAX_STOPS = 6;
@@ -181,14 +180,12 @@ export default class GradientEditor extends Component<GradientEditorSignature> {
 
 	<template>
 		<CanonRow @title="Type" @form="stacked" as |titleId|>
-			<Fresh @value={{this.typeIndex}} as |mine|>
-				<CanonSegmented
-					@items={{TYPE_TITLES}}
-					@selected={{this.typeIndex}}
-					@onChange={{both mine this.pickType}}
-					aria-labelledby={{titleId}}
-				/>
-			</Fresh>
+			<CanonSegmented
+				@items={{TYPE_TITLES}}
+				@selected={{this.typeIndex}}
+				@onChange={{this.pickType}}
+				aria-labelledby={{titleId}}
+			/>
 		</CanonRow>
 		<div class="sub-ip-grad">
 			<div class="sub-ip-grad-track">

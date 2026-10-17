@@ -476,9 +476,3 @@ img.ProseMirror-separator {
 .te-pane .pm-sentence-active {
 	border-radius: 0;
 }
-
-/* the bundle orders canon-dialog.css after canon-sheet.css, so the dialog's centring and height cap win */
-.te-settings.canon-sheet {
-	max-block-size: none;
-	margin: 0;
-}
