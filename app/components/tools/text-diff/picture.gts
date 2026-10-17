@@ -1,10 +1,10 @@
 import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import MarkedEditor from 'delphitools-v2/components/tools/media/marked-editor';
 import {
 	pieces,
 	type SideMark,
@@ -68,7 +68,6 @@ function lines(text: string, marks: SideMark[]) {
 	return text.split('\n').map((line, index) => {
 		const mark = marks[index] ?? plain;
 		return {
-			number: index + 1,
 			lit: mark.lit,
 			// an empty line keeps its height
 			pieces: line
@@ -91,24 +90,16 @@ export default class Picture extends Component<PictureSignature> {
 				id: 'old' as SideId,
 				label: 'Original',
 				text: oldText,
-				lines: oldText ? lines(oldText, oldMarks) : [],
-				style: gutter(oldText),
+				lines: lines(oldText, oldMarks),
 			},
 			{
 				id: 'new' as SideId,
 				label: 'Modified',
 				text: newText,
-				lines: newText ? lines(newText, newMarks) : [],
-				style: gutter(newText),
+				lines: lines(newText, newMarks),
 			},
 		];
 	}
-
-	input = (side: SideId, event: Event) =>
-		this.args.onInput(
-			side,
-			(event.target as HTMLTextAreaElement).value,
-		);
 
 	paste = async (side: SideId) => {
 		const text = await navigator.clipboard
@@ -232,74 +223,37 @@ export default class Picture extends Component<PictureSignature> {
 						</span>
 					</div>
 					<div class="td-side-scroll">
-						{{! the marks lie under a transparent textarea set in the same type }}
-						<div
+						<MarkedEditor
 							class="td-side-text"
-							style={{side.style}}
-						>
-							{{#if
-								side.lines.length
+							@text={{side.text}}
+							@lines={{side.lines}}
+							@placeholder="Type or paste"
+							@label={{side.label}}
+							@onInput={{fn
+								@onInput
+								side.id
 							}}
-								<div
-									class="td-marks"
-									aria-hidden="true"
-								>
-									{{#each
-										side.lines
-										key="@index"
-										as |line|
-									}}
-										<div
-											class="td-mark-line
-												{{if
-													line.lit
-													'td-mark-line--lit'
-												}}"
-										><span
-												class="td-gutter"
-											>{{line.number}}</span><span
-												class="td-mark-text"
-											>{{~#each
-													line.pieces
-													key="@index"
-													as |piece|
-												~}}<span
-														class={{if
-															piece.on
-															"td-word"
-														}}
-													>{{piece.text}}</span>{{~/each~}}</span></div>
-									{{/each}}
-								</div>
-							{{/if}}
-							<textarea
-								class="td-source"
-								rows="1"
-								placeholder="Type or paste"
-								aria-label={{side.label}}
-								autocomplete="off"
-								autocapitalize="off"
-								spellcheck="false"
-								value={{side.text}}
-								{{on
-									"input"
-									(fn
-										this.input
-										side.id
-									)
-								}}
-							></textarea>
-						</div>
+						>
+							<:line as |line|>
+								{{~#each
+									line.pieces
+									key="@index"
+									as |piece|
+								~}}
+									<span
+										class={{if
+											piece.on
+											"td-word"
+										}}
+									>{{piece.text}}</span>
+								{{~/each~}}
+							</:line>
+						</MarkedEditor>
 					</div>
 				</section>
 			{{/each}}
 		</div>
 	</template>
-}
-
-function gutter(text: string) {
-	const digits = String(text.split('\n').length).length;
-	return htmlSafe(`--td-gutter: calc(${Math.max(2, digits)}ch + 14px)`);
 }
 
 function isNew(side: SideId) {

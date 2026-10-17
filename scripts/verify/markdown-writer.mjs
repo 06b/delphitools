@@ -28,14 +28,14 @@ const KEY = 'delphitools-scratchpad';
 
 const typing = (text) =>
 	page.$eval(
-		'.mw-source',
+		'.media-marked-source',
 		(el, value) => {
 			el.value = value;
 			el.dispatchEvent(new Event('input', { bubbles: true }));
 		},
 		text,
 	);
-const source = () => page.$eval('.mw-source', (el) => el.value);
+const source = () => page.$eval('.media-marked-source', (el) => el.value);
 const press = (label) =>
 	page.$$eval(
 		'.markdown-writer .canon-button',
@@ -95,7 +95,7 @@ check(
 	),
 );
 const editor = await page.evaluate(() => {
-	const area = document.querySelector('.mw-source');
+	const area = document.querySelector('.media-marked-source');
 	const pane = document.querySelector('.canon-split-sidebar').getBoundingClientRect();
 	const box = area.getBoundingClientRect();
 	return {
@@ -123,7 +123,7 @@ check(
 		(await counts()) === '0 words, 0 chars, 0 lines',
 );
 
-await page.click('.mw-source');
+await page.click('.media-marked-source');
 await page.keyboard.type('pear apple\nfig');
 await settle();
 check(
@@ -134,8 +134,8 @@ check(
 check(
 	'the marks carry the text under the transparent textarea',
 	await page.evaluate(() => {
-		const marks = document.querySelector('.mw-marks');
-		const area = document.querySelector('.mw-source');
+		const marks = document.querySelector('.media-marked-marks');
+		const area = document.querySelector('.media-marked-source');
 		return (
 			marks.textContent === `${area.value} ` &&
 			getComputedStyle(area).color === 'rgba(0, 0, 0, 0)' &&
@@ -168,7 +168,7 @@ check('focus stays on the pressed cell', (await button('Sort A–Z')).focused);
 await press('Remove Duplicates');
 await settle();
 check('Remove Duplicates', (await source()) === 'apple\nfig\npear');
-await page.$eval('.mw-source', (el) => el.focus());
+await page.$eval('.media-marked-source', (el) => el.focus());
 await page.evaluate(() => document.execCommand('undo'));
 await settle();
 check(

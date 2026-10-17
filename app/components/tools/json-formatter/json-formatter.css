@@ -89,81 +89,11 @@
 	overflow-y: auto;
 }
 
-/* both in one cell, set alike, so the caret sits on the marks */
 .jf-editor-text {
-	display: grid;
 	padding-block: 4px var(--canon-panel-padding);
 	font-family: var(--canon-mono-font);
 	font-size: 15px;
 	line-height: 1.5;
-}
-
-.jf-marks,
-.jf-source {
-	grid-area: 1 / 1;
-	min-inline-size: 0;
-}
-
-.jf-mark-line {
-	display: grid;
-	grid-template-columns: var(--jf-gutter) minmax(0, 1fr);
-}
-
-.jf-mark-line--error {
-	background: color-mix(
-		in srgb,
-		var(--canon-destructive) 14%,
-		transparent
-	);
-}
-
-.jf-mark-line > .jf-gutter {
-	padding-inline-end: 10px;
-	line-height: inherit;
-}
-
-.jf-mark-text,
-.jf-source {
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
-	tab-size: 8;
-}
-
-.jf-source {
-	box-sizing: border-box;
-	min-block-size: 96px;
-	margin: 0;
-	padding: 0 0 0 var(--jf-gutter);
-	overflow: hidden;
-	border: 0;
-	background: transparent;
-	color: transparent;
-	caret-color: var(--canon-foreground);
-	font: inherit;
-	line-height: inherit;
-	resize: none;
-	outline: none;
-}
-
-.jf-source::selection {
-	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
-}
-
-.jf-source::placeholder {
-	color: var(--canon-muted-foreground);
-}
-
-/* empty: the dashed box, the place to paste */
-.jf-source:placeholder-shown {
-	padding: 12px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
-}
-
-.jf-source:focus-visible:placeholder-shown {
-	border-style: solid;
-	border-color: var(--canon-primary);
 }
 
 /* the shape band */

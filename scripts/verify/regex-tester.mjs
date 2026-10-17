@@ -71,7 +71,7 @@ check(
 await page.$$eval('.canon-grid button', (els) =>
 	els.find((el) => el.textContent.trim() === 'Email')?.click(),
 );
-await page.$eval('.rx-editor', (el) => {
+await page.$eval('.media-marked-source', (el) => {
 	el.value = 'a@b.co x c@d.org';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
 });
@@ -90,8 +90,8 @@ const box = (sel) =>
 	});
 check(
 	'the editor sits exactly on the marks',
-	JSON.stringify(await box('.rx-editor')) ===
-		JSON.stringify(await box('.rx-marks')),
+	JSON.stringify(await box('.media-marked-source')) ===
+		JSON.stringify(await box('.media-marked-marks')),
 );
 check(
 	'and the test string is typed in the picture, not the main pane',

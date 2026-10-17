@@ -1,10 +1,12 @@
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
-import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import MarkedEditor, {
+	reportHeight,
+} from 'delphitools-v2/components/tools/media/marked-editor';
 import {
 	failed,
 	pieces,
@@ -65,19 +67,6 @@ function pieceStyle(piece: Piece) {
 
 const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
 const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
-
-// .rx-picture-head: 6 px over a 44 px head
-const headHeight = 50;
-
-const reportHeight = modifier(
-	(element: HTMLElement, [report]: [(height: number) => void]) => {
-		const observer = new ResizeObserver(() =>
-			report(headHeight + element.offsetHeight),
-		);
-		observer.observe(element);
-		return () => observer.disconnect();
-	},
-);
 
 // iOS MarkedTextView.reveal: first match into view, unless the reader is typing
 const revealFirst = modifier((scroller: HTMLElement, [key]: [unknown]) => {
@@ -145,9 +134,6 @@ export default class Picture extends Component<PictureSignature> {
 			text === shownText ? this.matched?.matches : undefined;
 		return pieces(text, matches ?? []);
 	}
-
-	input = (event: Event) =>
-		this.args.onInput((event.target as HTMLTextAreaElement).value);
 
 	paste = async () => {
 		const text = await navigator.clipboard
@@ -217,54 +203,36 @@ export default class Picture extends Component<PictureSignature> {
 				class="rx-picture-scroll"
 				{{revealFirst this.pieces}}
 			>
-				{{! the marks lie under a transparent textarea set in the same type }}
-				<div
+				<MarkedEditor
 					class="rx-picture-text"
 					style={{this.textStyle}}
+					@text={{@text}}
+					@placeholder="Test String"
+					@label="Test String"
+					@onInput={{@onInput}}
 					{{reportHeight @onHeight}}
 				>
-					<div
-						class="rx-marks"
-						aria-hidden="true"
-					>
-						{{~#each
-							this.pieces
-							as |piece|
-						~}}
-							{{~#if
-								(isCaret piece)
-							~}}
-								<span
-									class="rx-caret"
-									style={{caretStyle
-										piece
-									}}
-								></span>
-							{{~else~}}
-								<span
-									class={{if
-										piece.shade
-										"rx-hit"
-									}}
-									style={{pieceStyle
-										piece
-									}}
-								>{{piece.text}}</span>
-							{{~/if~}}
-						{{~/each~}}
-					</div>
-					<textarea
-						class="rx-editor"
-						rows="1"
-						placeholder="Test String"
-						aria-label="Test String"
-						autocomplete="off"
-						autocapitalize="off"
-						spellcheck="false"
-						value={{@text}}
-						{{on "input" this.input}}
-					></textarea>
-				</div>
+					{{~#each this.pieces as |piece|~}}
+						{{~#if (isCaret piece)~}}
+							<span
+								class="rx-caret"
+								style={{caretStyle
+									piece
+								}}
+							></span>
+						{{~else~}}
+							<span
+								class={{if
+									piece.shade
+									"rx-hit"
+								}}
+								style={{pieceStyle
+									piece
+								}}
+							>{{piece.text}}</span>
+						{{~/if~}}
+					{{~/each~}}
+				</MarkedEditor>
 			</div>
 		</div>
 	</template>

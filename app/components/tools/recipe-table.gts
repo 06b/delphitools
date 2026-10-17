@@ -21,7 +21,7 @@ import { EXAMPLES } from 'delphitools-v2/lib/recipe-examples';
 import { render, type Cell } from 'delphitools-v2/lib/recipe-layout';
 import type { Display } from 'delphitools-v2/lib/recipe-scale';
 import { toHtml, toPrintable, toText } from 'delphitools-v2/lib/recipe-export';
-import Editor from 'delphitools-v2/components/tools/recipe-table/editor';
+import MarkedEditor from 'delphitools-v2/components/tools/media/marked-editor';
 import Picture from 'delphitools-v2/components/tools/recipe-table/picture';
 import './recipe-table/recipe-table.css';
 
@@ -115,6 +115,18 @@ export default class RecipeTableTool extends Component {
 	@cached
 	get recipe() {
 		return parse(this.text);
+	}
+
+	@cached
+	get lines() {
+		const flagged = new Set(
+			this.recipe.problems.map((p) => p.line),
+		);
+		return this.text.split('\n').map((text, index) => ({
+			// an empty line keeps its height
+			text: text || ' ',
+			lit: flagged.has(index + 1),
+		}));
 	}
 
 	get baseline() {
@@ -338,12 +350,18 @@ export default class RecipeTableTool extends Component {
 							@onClick={{this.reset}}
 						/>
 					</div>
-					<Editor
+					<MarkedEditor
+						class="rt-editor"
 						@text={{this.text}}
-						@problems={{this.recipe.problems}}
+						@lines={{this.lines}}
 						@placeholder={{this.placeholder}}
+						@label="Recipe"
 						@onInput={{this.setText}}
-					/>
+					>
+						<:line
+							as |line|
+						>{{line.text}}</:line>
+					</MarkedEditor>
 					{{#each
 						this.recipe.problems
 						as |problem|

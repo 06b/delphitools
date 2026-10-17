@@ -1,11 +1,12 @@
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
-import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import CanonStatus from 'delphicanon/components/canon-status';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import MarkedEditor, {
+	reportHeight,
+} from 'delphitools-v2/components/tools/media/marked-editor';
 import type { JwtResult } from 'delphitools-v2/lib/jwt';
 import {
 	STATE_WORDS,
@@ -36,19 +37,6 @@ const stateColours = {
 	expired: 'var(--canon-destructive)',
 	early: 'var(--canon-muted-foreground)',
 };
-// .jwt-picture-head: 6 px over a 44 px head
-const headHeight = 50;
-
-const reportHeight = modifier(
-	(element: HTMLElement, [report]: [(height: number) => void]) => {
-		const observer = new ResizeObserver(() =>
-			report(headHeight + element.offsetHeight),
-		);
-		observer.observe(element);
-		return () => observer.disconnect();
-	},
-);
-
 const percent = (share: number) => `${(share * 100).toFixed(3)}%`;
 
 function markClass(mark: Mark, failed: boolean[]) {
@@ -170,9 +158,6 @@ export default class Picture extends Component<PictureSignature> {
 		return names;
 	}
 
-	input = (event: Event) =>
-		this.args.onInput((event.target as HTMLTextAreaElement).value);
-
 	paste = async () => {
 		const text = await navigator.clipboard
 			.readText()
@@ -229,36 +214,19 @@ export default class Picture extends Component<PictureSignature> {
 					class="jwt-picture-body"
 					{{reportHeight @onHeight}}
 				>
-					{{! the marks lie under a transparent textarea set in the same type }}
-					<div class="jwt-token">
-						<div
-							class="jwt-marks"
-							aria-hidden="true"
-						>
-							{{~#each
-								this.runs
-								as |run|
-							~}}
-								<span
-									class={{run.class}}
-								>{{run.text}}</span>
-							{{~/each~}}
-						</div>
-						<textarea
-							class="jwt-editor"
-							rows="1"
-							placeholder="Paste a JWT"
-							aria-label="Token"
-							autocomplete="off"
-							autocapitalize="off"
-							spellcheck="false"
-							value={{@text}}
-							{{on
-								"input"
-								this.input
-							}}
-						></textarea>
-					</div>
+					<MarkedEditor
+						class="jwt-token"
+						@text={{@text}}
+						@placeholder="Paste a JWT"
+						@label="Token"
+						@onInput={{@onInput}}
+					>
+						{{~#each this.runs as |run|~}}
+							<span
+								class={{run.class}}
+							>{{run.text}}</span>
+						{{~/each~}}
+					</MarkedEditor>
 					<div
 						class="jwt-parts"
 						aria-hidden="true"

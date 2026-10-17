@@ -4,6 +4,9 @@ import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import MarkedEditor, {
+	reportHeight,
+} from 'delphitools-v2/components/tools/media/marked-editor';
 import {
 	piecesOf,
 	type Piece,
@@ -26,22 +29,10 @@ interface EditorSignature {
 const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
 const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
 
-// .sh-picture-head: 6 px over a 44 px head
-const headHeight = 50;
 // a Shavian word may run this far into the space after its spelling
 const slack = 10;
 // narrower than this it overlaps its neighbour instead
 const leastFit = 0.75;
-
-const reportHeight = modifier(
-	(element: HTMLElement, [report]: [(height: number) => void]) => {
-		const observer = new ResizeObserver(() =>
-			report(headHeight + element.offsetHeight),
-		);
-		observer.observe(element);
-		return () => observer.disconnect();
-	},
-);
 
 function fit(text: HTMLElement) {
 	const words = [...text.querySelectorAll<HTMLElement>('.sh-word')];
@@ -89,9 +80,6 @@ export default class Editor extends Component<EditorSignature> {
 		return this.args.text.endsWith('\n');
 	}
 
-	input = (event: Event) =>
-		this.args.onInput((event.target as HTMLTextAreaElement).value);
-
 	paste = async () => {
 		const text = await navigator.clipboard
 			.readText()
@@ -126,87 +114,74 @@ export default class Editor extends Component<EditorSignature> {
 				</span>
 			</div>
 			<div class="sh-picture-scroll">
-				{{! the spelling lies under a transparent textarea set in the same type }}
-				<div
+				<MarkedEditor
 					class="sh-picture-text"
+					@text={{@text}}
+					@placeholder="Type or paste"
+					@label="English input"
+					@interactive={{true}}
+					@prose={{true}}
+					@onInput={{@onInput}}
 					{{reportHeight @onHeight}}
 					{{fitGlosses this.pieces}}
 				>
-					<textarea
-						class="sh-editor"
-						rows="1"
-						placeholder="Type or paste"
-						aria-label="English input"
-						autocomplete="off"
-						spellcheck="false"
-						value={{@text}}
-						{{on "input" this.input}}
-					></textarea>
-					<div class="sh-marks">
-						{{~#each
-							this.pieces
-							as |piece|
-						~}}
-							{{~#if (isWord piece)~}}
-								<span
-									class="sh-word
-										{{if
-											piece.guess
-											'sh-word--guess'
-										}}
-										{{if
-											(isLit
-												piece
-												@selected
-											)
-											'sh-word--lit'
-										}}"
+					{{~#each this.pieces as |piece|~}}
+						{{~#if (isWord piece)~}}
+							<span
+								class="sh-word
+									{{if
+										piece.guess
+										'sh-word--guess'
+									}}
+									{{if
+										(isLit
+											piece
+											@selected
+										)
+										'sh-word--lit'
+									}}"
+							><span
+									aria-hidden="true"
+								>{{piece.text}}</span><button
+									type="button"
+									class="sh-gloss"
+									aria-label={{piece.text}}
+									aria-pressed={{if
+										(isLit
+											piece
+											@selected
+										)
+										"true"
+										"false"
+									}}
+									{{on
+										"click"
+										(fn
+											@onWord
+											piece.index
+										)
+									}}
 								><span
-										aria-hidden="true"
-									>{{piece.text}}</span><button
-										type="button"
-										class="sh-gloss"
-										aria-label={{piece.text}}
-										aria-pressed={{if
-											(isLit
-												piece
-												@selected
-											)
-											"true"
-											"false"
-										}}
-										{{on
-											"click"
-											(fn
-												@onWord
-												piece.index
-											)
-										}}
-									><span
-											class="sh-gloss-marker"
-										>{{piece.marker}}</span>{{piece.shavian}}</button></span>
-							{{~else if
-								piece.shavian
-							~}}
-								<span
-									class="sh-word sh-word--mark"
-									aria-hidden="true"
-								>{{piece.text}}<span
-										class="sh-gloss"
-									>{{piece.shavian}}</span></span>
-							{{~else~}}
-								<span
-									aria-hidden="true"
-								>{{piece.text}}</span>
-							{{~/if~}}
-						{{~/each~}}
-						{{~#if this.trailingLine~}}
+										class="sh-gloss-marker"
+									>{{piece.marker}}</span>{{piece.shavian}}</button></span>
+						{{~else if piece.shavian~}}
+							<span
+								class="sh-word sh-word--mark"
+								aria-hidden="true"
+							>{{piece.text}}<span
+									class="sh-gloss"
+								>{{piece.shavian}}</span></span>
+						{{~else~}}
 							<span
 								aria-hidden="true"
-							> </span>
+							>{{piece.text}}</span>
 						{{~/if~}}
-					</div>
-				</div>
+					{{~/each~}}
+					{{~#if this.trailingLine~}}
+						<span aria-hidden="true">
+						</span>
+					{{~/if~}}
+				</MarkedEditor>
 			</div>
 		</div>
 	</template>

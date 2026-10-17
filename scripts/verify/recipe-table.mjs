@@ -30,7 +30,7 @@ const shell = await page.evaluate(() => {
 		picture: document
 			.querySelector('.canon-split-sidebar .rt-picture')
 			?.getAttribute('aria-label'),
-		editor: !!document.querySelector('.canon-split-main .rt-source'),
+		editor: !!document.querySelector('.canon-split-main .media-marked-source'),
 	};
 });
 check('the split fills the slot', shell.fills);
@@ -121,14 +121,14 @@ check(
 );
 
 const type = async (text) => {
-	await page.click('.rt-source');
+	await page.click('.media-marked-source');
 	await page.evaluate(() => {
-		const el = document.querySelector('.rt-source');
+		const el = document.querySelector('.media-marked-source');
 		el.focus();
 		el.setSelectionRange(0, el.value.length);
 	});
 	await page.keyboard.press('Backspace');
-	await page.type('.rt-source', text);
+	await page.type('.media-marked-source', text);
 	await sleep(250);
 };
 
@@ -138,7 +138,7 @@ check('a one-step recipe renders', simple.steps === 1, String(simple.steps));
 check(
 	'the caret survives typing',
 	await page.evaluate(
-		() => document.activeElement === document.querySelector('.rt-source'),
+		() => document.activeElement === document.querySelector('.media-marked-source'),
 	),
 );
 
@@ -155,7 +155,7 @@ check(
 	'the line a problem names is tinted in the editor',
 	await page.evaluate(
 		() =>
-			document.querySelector('.rt-line--problem .rt-gutter')
+			document.querySelector('.media-marked-line--lit .media-marked-gutter')
 				?.textContent === '2',
 	),
 );
@@ -176,7 +176,7 @@ check(
 	await page.$eval('.rt-amount', (el) => el.value),
 );
 const source = await page.evaluate(
-	() => document.querySelector('.rt-source').value,
+	() => document.querySelector('.media-marked-source').value,
 );
 await page.evaluate(() =>
 	document.querySelector('.rt-scale .canon-stepper-plus').click(),
@@ -196,7 +196,7 @@ check(
 check(
 	'and leaves the source alone',
 	(await page.evaluate(
-		() => document.querySelector('.rt-source').value,
+		() => document.querySelector('.media-marked-source').value,
 	)) === source,
 );
 
@@ -214,7 +214,7 @@ check(
 check(
 	'and still leave the source alone',
 	(await page.evaluate(
-		() => document.querySelector('.rt-source').value,
+		() => document.querySelector('.media-marked-source').value,
 	)) === source,
 );
 
@@ -683,10 +683,10 @@ check(
 await visit(page, '/tools/recipe-table?rtText=');
 const blank = await page.evaluate(() => ({
 	placeholder: document
-		.querySelector('.rt-source')
+		.querySelector('.media-marked-source')
 		?.matches(':placeholder-shown'),
 	dashed:
-		getComputedStyle(document.querySelector('.rt-source'))
+		getComputedStyle(document.querySelector('.media-marked-source'))
 			.borderTopStyle === 'dashed',
 	picture: !!document.querySelector('.rt-picture .rt-empty'),
 	exports: [

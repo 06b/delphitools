@@ -40,9 +40,7 @@
 	overflow-y: auto;
 }
 
-/* both in one cell, set alike, so the caret sits on the marks */
 .mw-text {
-	display: grid;
 	box-sizing: border-box;
 	min-block-size: 100%;
 	padding: 14px var(--canon-panel-padding) 32px;
@@ -51,13 +49,8 @@
 	line-height: 1.45;
 }
 
-.mw-marks,
-.mw-source {
-	grid-area: 1 / 1;
-	min-inline-size: 0;
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
-	tab-size: 8;
+.mw-text .media-marked-source {
+	caret-color: var(--canon-primary);
 }
 
 .mw-hit {
@@ -65,43 +58,6 @@
 	background: color-mix(in srgb, var(--canon-primary) 20%, transparent);
 	box-shadow: 0 0 0 1px
 		color-mix(in srgb, var(--canon-primary) 20%, transparent);
-}
-
-.mw-source {
-	box-sizing: border-box;
-	margin: 0;
-	padding: 0;
-	overflow: hidden;
-	border: 0;
-	background: transparent;
-	color: transparent;
-	caret-color: var(--canon-primary);
-	font: inherit;
-	line-height: inherit;
-	resize: none;
-	outline: none;
-}
-
-.mw-source::selection {
-	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
-	color: transparent;
-}
-
-.mw-source::placeholder {
-	color: var(--canon-muted-foreground);
-}
-
-/* empty: the dashed box iOS shows, now the place to type */
-.mw-source:placeholder-shown {
-	padding: 12px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
-}
-
-.mw-source:focus-visible:placeholder-shown {
-	border-style: solid;
-	border-color: var(--canon-primary);
 }
 
 /* find and replace: symbol, then the field to the row's end */

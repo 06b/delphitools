@@ -19,7 +19,7 @@ await client.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPa
 
 const settle = () => sleep(150);
 const side = (id) => `.td-side--${id}`;
-const area = (id) => `${side(id)} .td-source`;
+const area = (id) => `${side(id)} .media-marked-source`;
 const value = (id) => page.$eval(area(id), (el) => el.value);
 const setValue = (id, text) =>
 	page.$eval(
@@ -38,7 +38,7 @@ const listing = () =>
 		els.map((el) => el.querySelector('.td-marker').textContent + el.querySelector('.td-row-text').textContent),
 	);
 const lit = (id) =>
-	page.$$eval(`${side(id)} .td-mark-line--lit .td-mark-text`, (els) => els.map((el) => el.textContent));
+	page.$$eval(`${side(id)} .media-marked-line--lit .media-marked-text`, (els) => els.map((el) => el.textContent));
 const words = (id) => page.$$eval(`${side(id)} .td-word`, (els) => els.map((el) => el.textContent));
 const toastShown = () => page.$('.canon-toast').then(Boolean);
 
@@ -65,7 +65,7 @@ check(
 const editors = await page.evaluate(() => {
 	const split = document.querySelector('.text-diff').getBoundingClientRect();
 	const pane = document.querySelector('.canon-split-sidebar');
-	return [...document.querySelectorAll('.td-source')].map((el) => ({
+	return [...document.querySelectorAll('.media-marked-source')].map((el) => ({
 		inPicture: pane.contains(el),
 		named: el.getAttribute('aria-label'),
 		dashed: getComputedStyle(el).borderTopStyle,
@@ -121,8 +121,8 @@ check(
 check(
 	'the marks sit under the editor in the same type',
 	await page.evaluate(() => {
-		const text = document.querySelector('.td-side--old .td-mark-text');
-		const source = document.querySelector('.td-side--old .td-source');
+		const text = document.querySelector('.td-side--old .media-marked-text');
+		const source = document.querySelector('.td-side--old .media-marked-source');
 		const a = getComputedStyle(text);
 		const b = getComputedStyle(source);
 		const ra = text.getBoundingClientRect();

@@ -251,86 +251,18 @@
 	background: var(--canon-heading-background, var(--canon-card));
 }
 
-/* both in one cell, set alike, so the caret sits on the lines */
 .rt-editor {
-	display: grid;
 	padding: 8px var(--canon-panel-padding) var(--canon-panel-padding);
 	background: var(--canon-card);
 	color: var(--canon-foreground);
 	font-family: var(--canon-mono-font);
 	font-size: 15px;
 	line-height: 1.5;
-}
-
-.rt-lines,
-.rt-source {
-	grid-area: 1 / 1;
-	min-inline-size: 0;
-}
-
-.rt-line {
-	display: grid;
-	grid-template-columns: var(--rt-gutter) minmax(0, 1fr);
-}
-
-.rt-line--problem {
-	background: color-mix(
-		in srgb,
-		var(--canon-destructive) 14%,
-		transparent
-	);
-}
-
-.rt-gutter {
-	padding-inline-end: 10px;
-	color: var(--canon-muted-foreground);
-	font-size: 11px;
-	text-align: end;
-	user-select: none;
-}
-
-.rt-line-text,
-.rt-source {
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
 	tab-size: 2;
 }
 
-.rt-source {
-	box-sizing: border-box;
+.rt-editor .media-marked-source {
 	min-block-size: 240px;
-	margin: 0;
-	padding: 0 0 0 var(--rt-gutter);
-	overflow: hidden;
-	border: 0;
-	background: transparent;
-	color: transparent;
-	caret-color: var(--canon-foreground);
-	font: inherit;
-	line-height: inherit;
-	resize: none;
-	outline: none;
-}
-
-.rt-source::selection {
-	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
-}
-
-.rt-source::placeholder {
-	color: var(--canon-muted-foreground);
-}
-
-/* empty: the dashed box, the place to write */
-.rt-source:placeholder-shown {
-	padding: 12px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
-}
-
-.rt-source:focus-visible:placeholder-shown {
-	border-style: solid;
-	border-color: var(--canon-primary);
 }
 
 .rt-problem {

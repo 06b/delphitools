@@ -20,6 +20,7 @@ import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import MarkedEditor from 'delphitools-v2/components/tools/media/marked-editor';
 import { downloadText } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { TEXT_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
@@ -269,18 +270,15 @@ export default class MarkdownWriterTool extends Component {
 		return this.extracted?.slice(0, listed) ?? [];
 	}
 
-	editorElement = modifier((element: HTMLTextAreaElement) => {
-		this.#editor = element;
+	editorElement = modifier((element: HTMLElement) => {
+		this.#editor = element.querySelector('textarea') ?? undefined;
 	});
 
 	fileField = modifier((element: HTMLInputElement) => {
 		this.#file = element;
 	});
 
-	input = (event: Event) =>
-		this.#setText((event.target as HTMLTextAreaElement).value);
-
-	#setText(text: string) {
+	setText = (text: string) => {
 		this.text = text;
 		if (!this.#persists) return;
 		window.clearTimeout(this.#saveTimer);
@@ -289,7 +287,7 @@ export default class MarkdownWriterTool extends Component {
 			writeStore(this.text);
 			this.lastSaved = this.text ? new Date() : null;
 		}, saveDelay);
-	}
+	};
 
 	// insertText keeps the whole change as one step of the browser's undo
 	#write(next: string) {
@@ -308,7 +306,7 @@ export default class MarkdownWriterTool extends Component {
 		if (scroller) scroller.scrollTop = top;
 		if (back && back !== editor)
 			back.focus({ preventScroll: true });
-		this.#setText(editor.value);
+		this.setText(editor.value);
 	}
 
 	apply = (op: Transform) => {
@@ -438,39 +436,26 @@ export default class MarkdownWriterTool extends Component {
 							{{/if}}
 						</div>
 						<div class="mw-scroll">
-							{{! the marks lie under a transparent textarea set in the same type }}
-							<div class="mw-text">
-								<div
-									class="mw-marks"
-									aria-hidden="true"
-								>
-									{{~#each
-										this.pieces
-										as |piece|
-									~}}
-										<span
-											class={{if
-												piece.hit
-												"mw-hit"
-											}}
-										>{{piece.text}}</span>
-									{{~/each~}}
-								</div>
-								<textarea
-									class="mw-source"
-									placeholder="Paste or type text here…"
-									aria-label="Text"
-									autocomplete="off"
-									autocapitalize="off"
-									spellcheck="false"
-									value={{this.text}}
-									{{this.editorElement}}
-									{{on
-										"input"
-										this.input
-									}}
-								></textarea>
-							</div>
+							<MarkedEditor
+								class="mw-text"
+								@text={{this.text}}
+								@placeholder="Paste or type text here…"
+								@label="Text"
+								@onInput={{this.setText}}
+								{{this.editorElement}}
+							>
+								{{~#each
+									this.pieces
+									as |piece|
+								~}}
+									<span
+										class={{if
+											piece.hit
+											"mw-hit"
+										}}
+									>{{piece.text}}</span>
+								{{~/each~}}
+							</MarkedEditor>
 						</div>
 					</div>
 				</CanonCanvas>

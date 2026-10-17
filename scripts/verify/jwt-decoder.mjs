@@ -30,7 +30,7 @@ await page
 
 const setToken = async (value) => {
 	await page.evaluate((v) => {
-		const el = document.querySelector('.jwt-editor');
+		const el = document.querySelector('.media-marked-source');
 		const setter = Object.getOwnPropertyDescriptor(
 			HTMLTextAreaElement.prototype,
 			'value',
@@ -67,7 +67,7 @@ const snapshot = () =>
 				detail: text(el.querySelector('.jwt-part-detail')),
 				failed: el.classList.contains('jwt-part--failed'),
 			})),
-			marks: [...document.querySelectorAll('.jwt-marks > span')].map((el) => [
+			marks: [...document.querySelectorAll('.media-marked-marks > span')].map((el) => [
 				el.className,
 				el.textContent,
 			]),
@@ -87,7 +87,7 @@ check(
 let s = await snapshot();
 check('empty: the iOS wording, no blocks', s.empty === 'Paste a token here' && s.blocks.length === 0, s.empty);
 const editor = await page.evaluate(() => {
-	const area = document.querySelector('.jwt-editor');
+	const area = document.querySelector('.media-marked-source');
 	const picture = document.querySelector('.canon-split-sidebar');
 	return {
 		inPicture: picture.contains(area),
@@ -102,7 +102,7 @@ check(
 	JSON.stringify(editor),
 );
 
-await page.click('.jwt-editor');
+await page.click('.media-marked-source');
 await page.keyboard.type(SEG.alg);
 await sleep(50);
 s = await snapshot();
@@ -140,10 +140,10 @@ check(
 check(
 	'the marks sit under the editor in the same type',
 	await page.evaluate(() => {
-		const a = getComputedStyle(document.querySelector('.jwt-marks'));
-		const b = getComputedStyle(document.querySelector('.jwt-editor'));
-		const ra = document.querySelector('.jwt-marks').getBoundingClientRect();
-		const rb = document.querySelector('.jwt-editor').getBoundingClientRect();
+		const a = getComputedStyle(document.querySelector('.media-marked-marks'));
+		const b = getComputedStyle(document.querySelector('.media-marked-source'));
+		const ra = document.querySelector('.media-marked-marks').getBoundingClientRect();
+		const rb = document.querySelector('.media-marked-source').getBoundingClientRect();
 		return (
 			a.fontFamily === b.fontFamily &&
 			a.fontSize === b.fontSize &&
@@ -155,7 +155,7 @@ check(
 );
 check(
 	'the editor keeps focus while typing',
-	await page.evaluate(() => document.activeElement?.classList.contains('jwt-editor')),
+	await page.evaluate(() => document.activeElement?.classList.contains('media-marked-source')),
 );
 check(
 	'the parts carry their byte counts',
@@ -214,7 +214,7 @@ await sleep(100);
 s = await snapshot();
 check(
 	'Clear resets the tool',
-	(await page.$eval('.jwt-editor', (el) => el.value)) === '' && s.empty === 'Paste a token here',
+	(await page.$eval('.media-marked-source', (el) => el.value)) === '' && s.empty === 'Paste a token here',
 );
 await page.evaluate((t) => navigator.clipboard.writeText(t), TOKEN);
 await page.$$eval('.jwt-picture-tools .canon-button', (els) =>

@@ -21,7 +21,7 @@ const settle = () => sleep(150);
 
 const typing = (text) =>
 	page.$eval(
-		'.jf-source',
+		'.media-marked-source',
 		(el, value) => {
 			el.value = value;
 			el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -42,7 +42,7 @@ const listing = () =>
 			.map((el) => el.lastElementChild.textContent)
 			.join('\n'),
 	);
-const source = () => page.$eval('.jf-source', (el) => el.value);
+const source = () => page.$eval('.media-marked-source', (el) => el.value);
 const treeRows = () =>
 	page.$$eval('.jf-tree-row', (els) => els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()));
 const tiles = () =>
@@ -80,7 +80,7 @@ check(
 	),
 );
 const editor = await page.evaluate(() => {
-	const area = document.querySelector('.jf-source');
+	const area = document.querySelector('.media-marked-source');
 	const split = document.querySelector('.json-formatter').getBoundingClientRect();
 	return {
 		inPicture: document.querySelector('.canon-split-sidebar').contains(area),
@@ -117,7 +117,7 @@ check(
 		Object.values(await tiles()).every((v) => v === '—'),
 );
 
-await page.click('.jf-source');
+await page.click('.media-marked-source');
 await page.keyboard.type('{"a":1');
 await settle();
 check('live: a half-typed document is invalid at once', !!(await page.$('.jf-error')));
@@ -146,10 +146,10 @@ check(
 check(
 	'the marks sit under the editor in the same type',
 	await page.evaluate(() => {
-		const a = getComputedStyle(document.querySelector('.jf-mark-text'));
-		const b = getComputedStyle(document.querySelector('.jf-source'));
-		const ra = document.querySelector('.jf-mark-text').getBoundingClientRect();
-		const rb = document.querySelector('.jf-source').getBoundingClientRect();
+		const a = getComputedStyle(document.querySelector('.media-marked-text'));
+		const b = getComputedStyle(document.querySelector('.media-marked-source'));
+		const ra = document.querySelector('.media-marked-text').getBoundingClientRect();
+		const rb = document.querySelector('.media-marked-source').getBoundingClientRect();
 		return (
 			a.fontFamily === b.fontFamily &&
 			a.fontSize === b.fontSize &&
@@ -270,7 +270,7 @@ check(
 );
 check(
 	'the offending source line is tinted in the editor',
-	/"b": tru/.test(await page.$eval('.jf-mark-line--error', (el) => el.textContent)),
+	/"b": tru/.test(await page.$eval('.media-marked-line--lit', (el) => el.textContent)),
 );
 check(
 	'invalid: the Invalid box, the head status, copy and download off',
@@ -291,7 +291,7 @@ check(
 	(await page.$eval('.jf-editor-file', (el) => el.textContent.trim())) === 'rig-fixture.json',
 );
 
-await page.$eval('.jf-source', (el) => {
+await page.$eval('.media-marked-source', (el) => {
 	const transfer = new DataTransfer();
 	transfer.items.add(new File(['{"dropped":true}'], 'drop.json', { type: 'application/json' }));
 	el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));

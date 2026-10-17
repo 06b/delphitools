@@ -60,12 +60,11 @@
 	padding-block: 4px var(--canon-panel-padding);
 }
 
-/* both in one cell, set alike, so the caret sits on the marks */
 .jwt-token {
-	display: grid;
 	font-family: var(--canon-mono-font);
 	font-size: 15px;
 	line-height: 1.5;
+	word-break: break-all;
 }
 
 @container (min-width: 420px) {
@@ -74,49 +73,9 @@
 	}
 }
 
-.jwt-marks,
-.jwt-editor {
-	grid-area: 1 / 1;
-	min-inline-size: 0;
-	white-space: pre-wrap;
-	word-break: break-all;
-}
-
-.jwt-editor {
-	box-sizing: border-box;
-	margin: 0;
-	padding: 0;
-	overflow: hidden;
-	border: 0;
-	background: transparent;
-	color: transparent;
-	caret-color: var(--canon-foreground);
-	font: inherit;
-	line-height: inherit;
-	resize: none;
-	outline: none;
-}
-
-.jwt-editor::selection {
-	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
-}
-
-.jwt-editor::placeholder {
-	color: var(--canon-muted-foreground);
-}
-
-/* empty: the dashed box, the place to paste */
-.jwt-editor:placeholder-shown {
-	min-block-size: 96px;
-	padding: 12px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
-}
-
-.jwt-editor:focus-visible:placeholder-shown {
-	border-style: solid;
-	border-color: var(--canon-primary);
+/* the dashed box only while empty; a token is as tall as its lines */
+.jwt-token .media-marked-source:not(:placeholder-shown) {
+	min-block-size: 0;
 }
 
 .jwt-mark--0 {
@@ -285,4 +244,3 @@
 	block-size: 20px;
 	background: var(--jwt-state);
 }
-

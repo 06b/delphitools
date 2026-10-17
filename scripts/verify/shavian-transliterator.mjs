@@ -52,7 +52,7 @@ const tiles = () =>
 	);
 const setText = async (text) => {
 	await page.$eval(
-		'.sh-editor',
+		'.media-marked-source',
 		(el, value) => {
 			el.value = value;
 			el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -71,7 +71,7 @@ const pick = async (latin) => {
 };
 
 const editor = await page.evaluate(() => {
-	const area = document.querySelector('.sh-editor');
+	const area = document.querySelector('.media-marked-source');
 	return {
 		inPicture: !!area.closest('.canon-split-sidebar .canon-canvas'),
 		mainHasTextarea: !!document.querySelector('.canon-split-main textarea'),
@@ -90,8 +90,8 @@ const box = (sel) =>
 	});
 check(
 	'the editor sits exactly on the spelling',
-	JSON.stringify(await box('.sh-editor')) ===
-		JSON.stringify(await box('.sh-marks')),
+	JSON.stringify(await box('.media-marked-source')) ===
+		JSON.stringify(await box('.media-marked-marks')),
 );
 check(
 	'the Shavian face renders Shavian',
@@ -187,9 +187,9 @@ await sleep(150);
 check('Remove takes it out', (await letters()).startsWith('𐑓𐑦'), await letters());
 
 // typing keeps the edits of the words still in place, and closes the word
-await page.focus('.sh-editor');
+await page.focus('.media-marked-source');
 await page.keyboard.press('End');
-await page.type('.sh-editor', ' Shaw');
+await page.type('.media-marked-source', ' Shaw');
 await sleep(100);
 words = await glosses();
 check(
@@ -246,7 +246,7 @@ await setText('');
 check('an empty editor shows None', !!(await page.$('.tt-result .canon-empty-row')));
 check(
 	'and is the dashed place to type',
-	await page.$eval('.sh-editor', (el) => getComputedStyle(el).borderStyle === 'dashed'),
+	await page.$eval('.media-marked-source', (el) => getComputedStyle(el).borderStyle === 'dashed'),
 );
 check('the tiles go to dashes', (await tiles()) === '—,—,—,—');
 
@@ -255,7 +255,7 @@ await page.$$eval('.sh-picture-tools button', (els) =>
 	els.find((b) => b.getAttribute('aria-label') === 'Paste')?.click(),
 );
 await sleep(150);
-check('Paste fills the editor', (await page.$eval('.sh-editor', (el) => el.value)) === 'the cat');
+check('Paste fills the editor', (await page.$eval('.media-marked-source', (el) => el.value)) === 'the cat');
 check('and it transliterates', (await result(page)) === '𐑞 𐑒𐑨𐑑', await result(page));
 
 await visit(page, '/tools/shavian-transliterator?shavianText=Shaw%20wrote%20NATO&shavianWord=3&shavianMarker=3');

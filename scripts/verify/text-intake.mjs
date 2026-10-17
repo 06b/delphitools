@@ -21,7 +21,7 @@ const dropText = (selector) =>
 
 await visit(page, '/tools/markdown-writer');
 await page.evaluate(() => {
-	const area = document.querySelector('.mw-source');
+	const area = document.querySelector('.media-marked-source');
 	area.value = 'an old draft';
 	area.dispatchEvent(new Event('input', { bubbles: true }));
 });
@@ -29,7 +29,7 @@ await dropText('.markdown-writer');
 await sleep(300);
 check(
 	'Markdown Writer replaces its draft with the dropped file',
-	(await page.$eval('.mw-source', (a) => a.value)) === MD,
+	(await page.$eval('.media-marked-source', (a) => a.value)) === MD,
 );
 
 await visit(page, '/tools/text-editor');

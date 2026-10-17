@@ -65,9 +65,7 @@
 	overflow-y: auto;
 }
 
-/* both in one cell, set alike, so the caret sits on the marks */
 .td-side-text {
-	display: grid;
 	flex: 1 0 auto;
 	padding-block: 4px var(--canon-panel-padding);
 	font-family: var(--canon-mono-font);
@@ -75,23 +73,12 @@
 	line-height: 1.5;
 }
 
-.td-marks,
-.td-source {
-	grid-area: 1 / 1;
-	min-inline-size: 0;
+.td-side--old {
+	--media-marked-lit: var(--td-del-line);
 }
 
-.td-mark-line {
-	display: grid;
-	grid-template-columns: var(--td-gutter) minmax(0, 1fr);
-}
-
-.td-side--old .td-mark-line--lit {
-	background: var(--td-del-line);
-}
-
-.td-side--new .td-mark-line--lit {
-	background: var(--td-add-line);
+.td-side--new {
+	--media-marked-lit: var(--td-add-line);
 }
 
 .td-side--old .td-word {
@@ -100,58 +87,6 @@
 
 .td-side--new .td-word {
 	background: var(--td-add-word);
-}
-
-.td-gutter {
-	padding-inline-end: 10px;
-	color: var(--canon-muted-foreground);
-	font-size: 11px;
-	text-align: end;
-	user-select: none;
-}
-
-.td-mark-text,
-.td-source {
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
-	tab-size: 8;
-}
-
-.td-source {
-	box-sizing: border-box;
-	min-block-size: 96px;
-	margin: 0;
-	padding: 0 0 0 var(--td-gutter);
-	overflow: hidden;
-	border: 0;
-	background: transparent;
-	color: transparent;
-	caret-color: var(--canon-foreground);
-	font: inherit;
-	line-height: inherit;
-	resize: none;
-	outline: none;
-}
-
-.td-source::selection {
-	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
-}
-
-.td-source::placeholder {
-	color: var(--canon-muted-foreground);
-}
-
-/* empty: the dashed box, the place to type */
-.td-source:placeholder-shown {
-	padding: 12px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
-}
-
-.td-source:focus-visible:placeholder-shown {
-	border-style: solid;
-	border-color: var(--canon-primary);
 }
 
 /* the ribbon map (iOS DiffRibbons) */

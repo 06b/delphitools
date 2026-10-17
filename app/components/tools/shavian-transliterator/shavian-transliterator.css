@@ -66,15 +66,12 @@
  * line's upper leading: 4em lines, the Shavian 7/6 the spelling's size.
  */
 .sh-picture-text {
-	display: grid;
 	padding-block: 8px var(--canon-panel-padding);
 	color: var(--canon-foreground);
 	font-family: var(--canon-font);
 	font-size: 20px;
 	line-height: 3.6em;
 	word-spacing: 0.4em;
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
 }
 
 @container (min-width: 560px) {
@@ -83,54 +80,19 @@
 	}
 }
 
-/* both in one cell, set alike, so the caret sits on the spelling */
-.sh-marks,
-.sh-editor {
-	grid-area: 1 / 1;
-	min-inline-size: 0;
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
-}
-
-.sh-marks {
+/* the glosses are buttons over the spelling; the textarea lies between */
+.sh-picture-text .media-marked-marks {
 	pointer-events: none;
 }
 
-.sh-editor {
+.sh-picture-text .media-marked-source {
 	position: relative;
 	z-index: 1;
-	box-sizing: border-box;
-	min-block-size: 96px;
-	margin: 0;
-	padding: 0;
-	overflow: hidden;
-	border: 0;
-	background: transparent;
-	color: transparent;
-	caret-color: var(--canon-foreground);
-	font: inherit;
-	line-height: inherit;
-	resize: none;
-	outline: none;
 }
 
-.sh-editor::placeholder {
-	color: var(--canon-muted-foreground);
-}
-
-/* empty: the dashed box, the place to type */
-.sh-editor:placeholder-shown {
+.sh-picture-text .media-marked-source:placeholder-shown {
 	margin-block-start: 12px;
-	padding: 12px;
-	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-subheadline);
 	line-height: 1.4;
-}
-
-.sh-editor:focus-visible:placeholder-shown {
-	border-style: solid;
-	border-color: var(--canon-primary);
 }
 
 .sh-word {
