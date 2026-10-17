@@ -104,6 +104,9 @@ export default class PaletteGenny extends Component {
 	colours: TrackedArray<PaletteColour>;
 	@tracked strategy: PaletteStrategy = 'random-cohesive';
 	@tracked widened?: number;
+	/** A column narrowing back keeps its values until the container query hides them. */
+	@tracked closing?: number;
+	#closingTimer?: number;
 	/** The latest spin of each slot; a slot spun again renders afresh. */
 	spins = new TrackedArray<Spin | undefined>();
 	#token = 0;
@@ -207,33 +210,36 @@ export default class PaletteGenny extends Component {
 							),
 						}
 					: undefined,
-				info: wide
-					? {
-							lines: infoFormats.map(
-								(id) => ({
-									label:
-										COLOUR_NOTATIONS.find(
-											(
-												n,
-											) =>
-												n.id ===
-												id,
-										)
-											?.label ??
+				info:
+					wide || this.closing === index
+						? {
+								lines: infoFormats.map(
+									(
 										id,
-									value: formatColour(
+									) => ({
+										label:
+											COLOUR_NOTATIONS.find(
+												(
+													n,
+												) =>
+													n.id ===
+													id,
+											)
+												?.label ??
+											id,
+										value: formatColour(
+											colour.hex,
+											id,
+										),
+									}),
+								),
+								contrasts: contrastRows(
+									parseHex(
 										colour.hex,
-										id,
-									),
-								}),
-							),
-							contrasts: contrastRows(
-								parseHex(
-									colour.hex,
-								)!,
-							),
-						}
-					: undefined,
+									)!,
+								),
+							}
+						: undefined,
 				menu: [
 					{ title: 'Copy', icon: Copy },
 					{ title: 'Edit colour', icon: Pipette },
@@ -398,8 +404,25 @@ export default class PaletteGenny extends Component {
 	};
 
 	widen = (index: number) => {
-		this.widened = this.widened === index ? undefined : index;
+		window.clearTimeout(this.#closingTimer);
+		if (this.widened === index) {
+			this.widened = undefined;
+			this.closing = index;
+			// the .pg-col flex transition
+			this.#closingTimer = window.setTimeout(
+				() => (this.closing = undefined),
+				500,
+			);
+		} else {
+			this.widened = index;
+			this.closing = undefined;
+		}
 	};
+
+	willDestroy() {
+		super.willDestroy();
+		window.clearTimeout(this.#closingTimer);
+	}
 
 	menu = (index: number, item: CanonMenuItem) => {
 		const colour = this.colours[index];
@@ -652,8 +675,9 @@ export default class PaletteGenny extends Component {
 							</select>
 						</label>
 						<label class="pg-dev-field">
-							<span>Import Colors (one
-								per line, no #)</span>
+							<span>Import Colours
+								(one per line,
+								no #)</span>
 							<textarea
 								id="pg-dev-import"
 								rows="4"

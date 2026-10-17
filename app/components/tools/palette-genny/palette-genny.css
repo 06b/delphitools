@@ -20,6 +20,13 @@
 		background-color 300ms;
 }
 
+/* narrowing back plays the widening curve in reverse */
+.pg-reels:not(.pg-reels--widened) .pg-col {
+	transition-timing-function:
+		cubic-bezier(0.36, 0, 0.66, -0.2),
+		cubic-bezier(0.36, 0, 0.66, -0.2), ease;
+}
+
 /* PaletteReels.sliver: the others shrink to 18 px slivers */
 .pg-reels--widened .pg-col {
 	flex: 0 1 18px;
@@ -165,6 +172,13 @@
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+
+	/* a press between the lines narrows the column */
+	pointer-events: none;
+}
+
+.pg-info-line {
+	pointer-events: auto;
 }
 
 @container (max-width: 149.99px) {

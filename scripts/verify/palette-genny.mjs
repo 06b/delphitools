@@ -144,6 +144,64 @@ await page.mouse.click(top.x, top.y);
 await sleep(700);
 check('a second tap narrows it', (await state()).wide.every((w) => w === 'false'));
 
+// a press in the middle, between the info lines, narrows it too, animated
+const colWidths = () =>
+	page.$$eval('.pg-col', (cols) => cols.map((c) => c.getBoundingClientRect().width));
+await page.click('.pg-col:nth-child(2) .pg-col-widen');
+await sleep(700);
+const opened = await colWidths();
+const middle = await page.$eval('.pg-col:nth-child(2)', (el) => {
+	const r = el.getBoundingClientRect();
+	return { x: r.x + r.width / 2, y: r.y + r.height * 0.55 };
+});
+const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.className, middle);
+check('the middle of a widened column is the narrow target', hit === 'pg-col-widen', hit);
+await page.mouse.click(middle.x, middle.y);
+await sleep(250);
+const midway = await colWidths();
+await sleep(600);
+const closed = await colWidths();
+check('a press in the middle narrows it', (await state()).wide.every((w) => w === 'false'));
+check(
+	'narrowing animates back to equal columns',
+	midway[1] < opened[1] - 4 && midway[1] > closed[1] + 4 && Math.max(...closed) - Math.min(...closed) < 2,
+	`${Math.round(opened[1])} ${Math.round(midway[1])} ${Math.round(closed[1])}`,
+);
+await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+await page.click('.pg-col:nth-child(2) .pg-col-widen');
+await sleep(50);
+await page.mouse.click(middle.x, middle.y);
+await sleep(50);
+const still = await colWidths();
+check('reduced motion: narrows at once', Math.max(...still) - Math.min(...still) < 2, still.map(Math.round).join());
+await page.emulateMediaFeatures([]);
+
+// G2: the reels do not scroll, so the wheel over them scrolls the page
+const scrollers = ['.dt-main', '.palette-genny .canon-split-main', '.palette-genny .canon-split-body'];
+const scrolled = () =>
+	page.evaluate(
+		(qs) => qs.map((q) => document.querySelector(q)?.scrollTop ?? 0).reduce((a, b) => a + b, 0),
+		scrollers,
+	);
+const reelsAt = await page.$eval('.pg-reels', (el) => {
+	const r = el.getBoundingClientRect();
+	return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+});
+const scrollBefore = await scrolled();
+await page.mouse.move(reelsAt.x, reelsAt.y);
+await page.mouse.wheel({ deltaY: 300 });
+await sleep(400);
+const scrollAfter = await scrolled();
+check('the wheel over the reels scrolls the page', scrollAfter > scrollBefore, `${scrollBefore} -> ${scrollAfter}`);
+await page.evaluate(
+	(qs) =>
+		qs.forEach((q) => {
+			const e = document.querySelector(q);
+			if (e) e.scrollTop = 0;
+		}),
+	scrollers,
+);
+
 await page.evaluate(() => {
 	const input = document.querySelectorAll('.pg-col-picker')[2];
 	input.value = '#123456';
