@@ -71,20 +71,6 @@ export function resultLines(size: number, multiplier: number) {
 	];
 }
 
-/** The presets other than Custom and the active multiplier, drawn beside the lit paragraph. */
-export function comparisons(multiplier: number) {
-	return presets
-		.filter(
-			(preset, i) =>
-				i !== customIndex &&
-				preset.multiplier !== multiplier,
-		)
-		.map((preset) => ({
-			label: `×${format(preset.multiplier)}`,
-			ratio: preset.multiplier,
-		}));
-}
-
 /** Shrinks the picture so two line boxes fit in `room` px. */
 export function pictureScale(lineHeight: number, room: number): number {
 	return Math.min(1, room / (2 * lineHeight));

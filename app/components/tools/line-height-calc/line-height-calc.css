@@ -89,51 +89,6 @@
 	inset-block-end: 0;
 }
 
-/* columns that do not fit wrap onto a line below the band and are clipped */
-.line-height-calc-others {
-	position: absolute;
-	inset-block: var(--line-height-calc-pad) 0;
-	inset-inline: calc(var(--line-height-calc-bracket) + 52px)
-		var(--line-height-calc-pad);
-	display: flex;
-	flex-wrap: wrap;
-	gap: 100vh 32px;
-	overflow: hidden;
-}
-
-.line-height-calc-other {
-	display: flex;
-	flex: 1 1 150px;
-	flex-direction: column;
-	block-size: 100%;
-	min-inline-size: 150px;
-}
-
-.line-height-calc-caption {
-	flex: none;
-	block-size: 22px;
-	color: var(--canon-muted-foreground);
-	font-size: var(--canon-text-caption);
-	font-weight: var(--canon-weight-semibold);
-	font-variant-numeric: tabular-nums;
-	line-height: 1;
-}
-
-.line-height-calc-other p {
-	flex: 1;
-	overflow: hidden;
-	background: repeating-linear-gradient(
-		to bottom in srgb,
-		var(--canon-border) 0 var(--canon-hairline),
-		transparent 0 1lh
-	);
-	color: var(--canon-muted-foreground);
-	font-size: var(--line-height-calc-font);
-	line-height: calc(
-		var(--line-height-calc-font) * var(--line-height-calc-ratio)
-	);
-}
-
 .line-height-calc-figure {
 	position: absolute;
 	inset-block-end: calc(var(--line-height-calc-pad) - 4px);

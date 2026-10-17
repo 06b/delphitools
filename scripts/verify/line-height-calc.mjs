@@ -49,7 +49,7 @@ check(
 	s.values.join('|'),
 );
 check('the 16 px row is current', s.current === '16px, 24px, 8px');
-check('three comparisons beside Normal', s.others === 3, `${s.others}`);
+check('only the selected value, no comparison columns', s.others === 0, `${s.others}`);
 
 await page.click('.canon-big-number-field .canon-stepper-plus');
 await sleep(100);
@@ -75,7 +75,6 @@ check(
 	s.preset === 'Custom' && s.ratio === '1.5',
 	`${s.preset} ${s.ratio}`,
 );
-check('Custom at 1.5 still leaves Normal out', s.others === 3, `${s.others}`);
 
 const ratio = await page.$('.canon-decimal-field-input');
 await ratio.evaluate((el) => el.select());

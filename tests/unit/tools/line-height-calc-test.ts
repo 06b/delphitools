@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import {
 	activeMultiplier,
-	comparisons,
 	customIndex,
 	pangramRepeats,
 	parseSize,
@@ -61,14 +60,6 @@ module('Unit | Tool | line-height-calc', function () {
 		assert.strictEqual(steppedSize(12.4, 1), 13);
 		assert.strictEqual(steppedSize(1, -1), 1);
 		assert.strictEqual(steppedSize(200, 1), 200);
-	});
-
-	test('comparisons leave out Custom and the active ratio', function (assert) {
-		assert.deepEqual(
-			comparisons(1.5).map((other) => other.label),
-			['×1.2', '×1.75', '×2'],
-		);
-		assert.strictEqual(comparisons(1.618).length, 4);
 	});
 
 	test('the picture shrinks only when two boxes do not fit', function (assert) {

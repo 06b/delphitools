@@ -166,7 +166,6 @@ export default class LineHeightCalc extends Component {
 					<Picture
 						@size={{this.size}}
 						@lineHeight={{this.lineHeight}}
-						@multiplier={{this.multiplier}}
 						@figure={{this.figure}}
 						@text={{this.specimen}}
 					/>

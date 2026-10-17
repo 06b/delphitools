@@ -1,10 +1,8 @@
 import type { TOC } from '@ember/component/template-only';
-import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import { reducedMotion } from 'delphicanon/lib/motion';
 import {
-	comparisons,
 	pictureScale,
 	settleEased,
 	settleMs,
@@ -14,7 +12,6 @@ export interface PictureSignature {
 	Args: {
 		size: number;
 		lineHeight: number;
-		multiplier: number;
 		/** The line height as the figure shows it, without the unit. */
 		figure: string;
 		text: string;
@@ -92,13 +89,6 @@ const settle = modifier(
 	},
 );
 
-function others(multiplier: number) {
-	return comparisons(multiplier).map((other) => ({
-		...other,
-		style: htmlSafe(`--line-height-calc-ratio: ${other.ratio}`),
-	}));
-}
-
 // ponytail: shrinks past seven characters instead of measuring the text
 function figureSize(text: string) {
 	const length = text.length + 2;
@@ -107,7 +97,7 @@ function figureSize(text: string) {
 
 /**
  * Text in line boxes of the chosen height, as CSS lays them out, the content
- * area shaded and a bracket over the first box; other presets beside it.
+ * area shaded and a bracket over the first box.
  */
 const Picture: TOC<PictureSignature> = <template>
 	<div
@@ -123,19 +113,6 @@ const Picture: TOC<PictureSignature> = <template>
 			class="line-height-calc-bracket"
 			aria-hidden="true"
 		></span>
-		<div class="line-height-calc-others" aria-hidden="true">
-			{{#each (others @multiplier) key="ratio" as |other|}}
-				<div
-					class="line-height-calc-other"
-					style={{other.style}}
-				>
-					<span
-						class="line-height-calc-caption"
-					>{{other.label}}</span>
-					<p>{{@text}}</p>
-				</div>
-			{{/each}}
-		</div>
 		<output
 			class="line-height-calc-figure"
 			aria-label="Line Height"
