@@ -41,6 +41,21 @@
 	object-fit: cover;
 }
 
+.media-frame--blank {
+	box-sizing: border-box;
+	border-inline-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.media-strips--blank .media-wave::after {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-start: calc(50% - var(--canon-hairline) / 2);
+	block-size: var(--canon-hairline);
+	background: currentcolor;
+	content: "";
+	opacity: 0.5;
+}
+
 .media-wave {
 	position: relative;
 	min-block-size: 0;

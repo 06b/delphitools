@@ -46,11 +46,23 @@ check(
 	),
 );
 check(
-	'empty: Extract is off and the transport hidden',
+	'empty: Extract is off and the transport is there, off',
 	await page.evaluate(
 		() =>
 			document.querySelector('.media-job-run')?.disabled === true &&
-			!document.querySelector('.media-transport'),
+			document.querySelector('.media-play')?.disabled === true,
+	),
+);
+check(
+	'empty: the loaded layout in blank: frame cells, flat wave, dashed info',
+	await page.evaluate(
+		() =>
+			document.querySelectorAll('.media-frame--blank').length > 0 &&
+			!!document.querySelector('.media-strips--blank .media-wave') &&
+			document.querySelector('.media-sections .canon-heading')?.textContent.trim() === 'General' &&
+			[...document.querySelectorAll('.media-sections .canon-tiles-value')].every(
+				(v) => v.textContent.trim() === '\u2014',
+			),
 	),
 );
 check(

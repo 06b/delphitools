@@ -324,6 +324,24 @@ export function sections(tracks: Track[]): Section[] {
 	return out;
 }
 
+const BLANK_ROWS: Partial<Record<TrackType, string[]>> = {
+	General: ['Container', 'Size', 'Duration', 'Overall bitrate'],
+	Video: ['Codec', 'Frame size', 'Frame rate', 'Bit depth'],
+	Audio: ['Codec', 'Channels', 'Sample rate', 'Bitrate'],
+};
+
+/** The sections a file of these track types shows, every value a dash. */
+export function blankSections(types: TrackType[]): Section[] {
+	return types.map((type) => ({
+		type,
+		title: type === 'General' ? 'General' : `${type} #1`,
+		rows: (BLANK_ROWS[type] ?? []).map((label) => ({
+			label,
+			value: '\u2014',
+		})),
+	}));
+}
+
 export function reportText(tracks: Track[]): string {
 	return sections(tracks)
 		.map(

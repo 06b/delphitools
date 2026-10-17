@@ -13,6 +13,8 @@ export interface SlotSignature {
 		/** The dashed image slot; `fills` covers the positioned parent. */
 		dashed?: boolean;
 		fills?: boolean;
+		/** One row tall, icon beside the prompt: the Source row before a file. */
+		row?: boolean;
 		/** A file is dragged over the tool. */
 		over?: boolean;
 		onFile?: (file: File) => void;
@@ -49,6 +51,7 @@ export default class Slot extends Component<SlotSignature> {
 			class="media-slot
 				{{if @dashed 'media-slot--dashed'}}
 				{{if @fills 'media-slot--fills'}}
+				{{if @row 'media-slot--row'}}
 				{{if @over 'media-slot--over'}}"
 			{{on "click" this.choose}}
 			...attributes

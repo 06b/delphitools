@@ -4,9 +4,7 @@ import { on } from '@ember/modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
@@ -23,6 +21,7 @@ import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import { type WaveformPeaks } from 'delphitools-v2/lib/audio';
 import {
 	analyzeMedia,
+	blankSections,
 	sections,
 	type Section,
 } from 'delphitools-v2/lib/mediainfo';
@@ -38,7 +37,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import {
 	peaks,
@@ -50,8 +51,7 @@ import './media/media.css';
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const NO_AUDIO = 'No audio track detected';
 const EXTRACT_ERROR = "Couldn't extract, try WAV format";
-// filmstrip 40 + waveform 56 (iOS AVEditTrackStrips)
-const bandHeight = readoutBandHeight(96);
+const BLANK_INFO = blankSections(['General', 'Video', 'Audio']);
 const formatLabels = AUDIO_TARGETS.map((t) => t.label);
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -92,6 +92,10 @@ export default class AudioExtractor extends Component {
 		this.intake.release();
 		this.#releaseResult();
 		release(this.frames);
+	}
+
+	get shownInfo() {
+		return this.info.length ? this.info : BLANK_INFO;
 	}
 
 	get loaded() {
@@ -297,7 +301,6 @@ export default class AudioExtractor extends Component {
 			class="audio-extractor"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -314,36 +317,30 @@ export default class AudioExtractor extends Component {
 						}}
 						@readout="below"
 					>
-						{{#if this.loaded}}
-							<Strips
-								@thumbnails={{this.frames}}
-								@aspect={{this.aspect}}
-								@waveform={{true}}
-								@peaks={{this.peaks}}
-								@duration={{this.intake.duration}}
-								@playhead={{this.playback.playhead}}
-								@onScrub={{this.playback.scrub}}
-							/>
-						{{else}}
-							<Slot
-								class="ax-slot"
-								@prompt="Drop a video file"
-								@icon="film"
-								@accept={{ACCEPT}}
-								@over={{this.drop.over}}
-								@onFile={{this.intake.load}}
-							/>
-						{{/if}}
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@waveform={{true}}
+							@peaks={{this.peaks}}
+							@duration={{this.intake.duration}}
+							@playhead={{this.playback.playhead}}
+							@onScrub={{this.playback.scrub}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
+						/>
 					</CanonReadoutBand>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				<Sections @sections={{this.info}} />
+				<Sections @sections={{this.shownInfo}} />
 			</:sidebar>
 			<:main>
 				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
 					{{#if this.loaded}}
-						<CanonHeading @text="Source" />
 						<CanonRow
 							class="ax-source"
 							@title={{this.intake.fileName}}
@@ -357,6 +354,16 @@ export default class AudioExtractor extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
+					{{else}}
+						<Slot
+							class="ax-slot"
+							@prompt="Drop a video file"
+							@icon="film"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
 					{{/if}}
 					{{#if this.warning}}
 						<CanonStatus

@@ -3,10 +3,14 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
+import { readoutBandHeight } from 'delphicanon/components/canon-readout-band';
 import { drawWaveform, type WaveformPeaks } from 'delphitools-v2/lib/audio';
 import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import { spread } from 'delphitools-v2/components/tools/media/frames';
 import { share } from 'delphitools-v2/components/tools/media/trim-span';
+
+/** Every A/V band: filmstrip 40 + waveform 56 (iOS AVEditTrackStrips) and the readout row. */
+export const bandHeight = readoutBandHeight(96);
 
 export interface StripsSignature {
 	Args: {
@@ -24,6 +28,8 @@ export interface StripsSignature {
 		onScrub?: (seconds: number) => void;
 		/** In and out seconds; the frames outside are dimmed (iOS AVEditFilmstrip selection). */
 		selection?: [number, number] | null;
+		/** No file yet: blank frame cells and a flat waveform. */
+		blank?: boolean;
 	};
 	Element: HTMLDivElement;
 }
@@ -49,9 +55,15 @@ export default class Strips extends Component<StripsSignature> {
 		);
 	}
 
+	get blanks() {
+		return this.args.blank
+			? Array.from({ length: this.cells })
+			: [];
+	}
+
 	get framesStyle() {
 		return htmlSafe(
-			`grid-template-columns: repeat(${Math.max(1, this.frames.length)}, minmax(0, 1fr))`,
+			`grid-template-columns: repeat(${Math.max(1, this.frames.length || this.blanks.length)},minmax(0, 1fr))`,
 		);
 	}
 
@@ -208,6 +220,7 @@ export default class Strips extends Component<StripsSignature> {
 		<div
 			class="media-strips
 				{{if @waveform 'media-strips--waveform'}}
+				{{if @blank 'media-strips--blank'}}
 				{{if @audioRemoved 'media-strips--removed'}}
 				{{if this.scrubs 'media-strips--scrubs'}}"
 			{{this.scrubbing}}
@@ -218,6 +231,11 @@ export default class Strips extends Component<StripsSignature> {
 				style={{this.framesStyle}}
 				{{this.measure}}
 			>
+				{{#each this.blanks}}
+					<span
+						class="media-frame media-frame--blank"
+					></span>
+				{{/each}}
 				{{#each this.frames as |url|}}
 					<img
 						class="media-frame"

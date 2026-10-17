@@ -49,6 +49,18 @@
 	block-size: auto;
 }
 
+.media-slot--row {
+	flex-direction: row;
+	gap: 10px;
+	min-block-size: var(--canon-primary-height);
+	block-size: auto;
+}
+
+.media-slot--row .media-slot-icon svg {
+	inline-size: 20px;
+	block-size: 20px;
+}
+
 .media-slot--over {
 	background: var(--canon-accent-bg);
 	color: var(--canon-primary);
