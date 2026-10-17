@@ -339,6 +339,34 @@ check(
 	JSON.stringify(await names()),
 );
 
+const watermarkBox = () =>
+	page.evaluate(() => {
+		const box = (s) => document.querySelector(s)?.getBoundingClientRect();
+		const mark = box('.ppn-mark--watermark');
+		const paper = box('.ppn-paper');
+		if (!mark || !paper) return null;
+		return {
+			inside:
+				mark.left >= paper.left &&
+				mark.right <= paper.right &&
+				mark.top >= paper.top &&
+				mark.bottom <= paper.bottom,
+			fills: mark.width / paper.width,
+		};
+	});
+for (const font of ['Sans', 'Serif', 'Mono']) {
+	await visit(page, '/tools/pdf-page-numberer?ppnSample=1&ppnStamp=CONFIDENTIAL%20DRAFT%20COPY');
+	await page.waitForSelector('.ppn-mark--watermark', { timeout: 15000 });
+	await pick('ppn-fonts', font);
+	await sleep(100);
+	const wm = await watermarkBox();
+	check(
+		`${font}: a long watermark stays inside the page and fills most of it`,
+		wm?.inside && wm.fills > 0.7,
+		JSON.stringify(wm),
+	);
+}
+
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/pdf-page-numberer');
 check(

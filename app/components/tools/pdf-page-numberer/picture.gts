@@ -68,7 +68,7 @@ function placed(o: StampOptions, anchor: Anchor, page: Size) {
 }
 
 function watermark(o: StampOptions, text: string, page: Size) {
-	const size = watermarkSize(page.width, page.height, text.trim().length);
+	const size = watermarkSize(page.width, page.height, text, o.font);
 	return htmlSafe(
 		[
 			`font-family: ${FONT_CSS[o.font]}`,

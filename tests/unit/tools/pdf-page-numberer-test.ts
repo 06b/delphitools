@@ -11,7 +11,8 @@ import {
 import {
 	numberLines,
 	stampOf,
-	watermarkSize,
+	unitWidth,
+	watermarkAt,
 	type StampOptions,
 } from 'delphitools-v2/components/tools/pdf-page-numberer/stamp';
 
@@ -111,8 +112,50 @@ module('Unit | Tool | pdf-page-numberer', function () {
 		);
 	});
 
-	test('watermarkSize caps at 90 % of the short side', function (assert) {
-		assert.strictEqual(watermarkSize(600, 800, 1), 540);
-		assert.true(watermarkSize(600, 800, 20) < 100);
+	test('a long watermark on A4 stays inside the page', function (assert) {
+		const [w, h] = [595.28, 841.89];
+		const text = 'CONFIDENTIAL DRAFT COPY';
+		const k = Math.SQRT1_2;
+		for (const font of ['sans', 'serif', 'mono'] as const) {
+			const { x, y, size } = watermarkAt(w, h, text, font);
+			const run = unitWidth(text, font) * size;
+			// baseline frame: descender to ascender
+			const corners = [
+				[0, -0.25 * size],
+				[run, -0.25 * size],
+				[0, 0.75 * size],
+				[run, 0.75 * size],
+			].map(([u, v]) => [
+				x + (u! - v!) * k,
+				y + (u! + v!) * k,
+			]);
+			const inside = corners.every(
+				([cx, cy]) =>
+					cx! >= 0 &&
+					cx! <= w &&
+					cy! >= 0 &&
+					cy! <= h,
+			);
+			assert.true(
+				inside,
+				`${font}: ${JSON.stringify(corners)}`,
+			);
+			const spread =
+				Math.max(...corners.map((c) => c[0]!)) -
+				Math.min(...corners.map((c) => c[0]!));
+			assert.true(
+				spread > 0.7 * w,
+				`${font} fills: ${spread}`,
+			);
+		}
+	});
+
+	test('unitWidth reads the export font metrics', function (assert) {
+		assert.strictEqual(unitWidth('MMMM', 'mono'), 2.4);
+		assert.strictEqual(unitWidth('W', 'sans').toFixed(3), '0.944');
+		assert.strictEqual(
+			unitWidth('\u{1F600}', 'sans'),
+			unitWidth('?', 'sans'),
+		);
 	});
 });

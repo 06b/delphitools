@@ -1,4 +1,11 @@
 import {
+	StandardFontEmbedder,
+	StandardFonts,
+	degrees,
+	rgb,
+	PDFDocument,
+} from 'pdf-lib';
+import {
 	expandNumber,
 	placeText,
 	resolvePageNumbers,
@@ -32,12 +39,65 @@ export interface StampOptions {
 
 export const minFontSize = 4;
 
-// 80% diagonal; helvetica caps ~0.55em
-export function watermarkSize(pageW: number, pageH: number, textLen: number) {
-	const raw =
-		(0.8 * Math.hypot(pageW, pageH)) /
-		(0.55 * Math.max(1, textLen));
-	return Math.min(raw, Math.min(pageW, pageH) * 0.9);
+const FACES: Record<FontFamily, StandardFonts> = {
+	sans: StandardFonts.Helvetica,
+	serif: StandardFonts.TimesRoman,
+	mono: StandardFonts.Courier,
+};
+const embedders = new Map<FontFamily, StandardFontEmbedder>();
+
+// advance at size 1; unencodable as "?"
+export function unitWidth(text: string, font: FontFamily): number {
+	let face = embedders.get(font);
+	if (!face) {
+		face = StandardFontEmbedder.for(
+			// same strings, cast safe
+			FACES[font] as unknown as Parameters<
+				typeof StandardFontEmbedder.for
+			>[0],
+		);
+		embedders.set(font, face);
+	}
+	let width = 0;
+	for (const ch of text) {
+		try {
+			width += face.widthOfTextAtSize(ch, 1);
+		} catch {
+			width += face.widthOfTextAtSize('?', 1);
+		}
+	}
+	return width;
+}
+
+// 45° box, 1em tall, in 80% of the short side
+export function watermarkSize(
+	pageW: number,
+	pageH: number,
+	text: string,
+	font: FontFamily,
+) {
+	return (
+		(0.8 * Math.min(pageW, pageH)) /
+		((unitWidth(text, font) + 1) * Math.SQRT1_2)
+	);
+}
+
+// baseline 0.175em under the centre
+export function watermarkAt(
+	pageW: number,
+	pageH: number,
+	text: string,
+	font: FontFamily,
+) {
+	const size = watermarkSize(pageW, pageH, text, font);
+	const w = unitWidth(text, font) * size;
+	const k = Math.SQRT1_2;
+	const half = (size * 0.35) / 2;
+	return {
+		x: pageW / 2 - (w / 2) * k + half * k,
+		y: pageH / 2 - (w / 2) * k - half * k,
+		size,
+	};
 }
 
 /** The stamp drawn, or none when it is off or blank. */
@@ -59,16 +119,8 @@ export async function stampPdf(
 	bytes: ArrayBuffer,
 	o: StampOptions,
 ): Promise<Uint8Array> {
-	const { PDFDocument, StandardFonts, rgb, degrees } =
-		await import('pdf-lib');
 	const doc = await PDFDocument.load(bytes, { updateMetadata: false });
-	const font = await doc.embedFont(
-		o.font === 'serif'
-			? StandardFonts.TimesRoman
-			: o.font === 'mono'
-				? StandardFonts.Courier
-				: StandardFonts.Helvetica,
-	);
+	const font = await doc.embedFont(FACES[o.font]);
 	const size = Math.max(minFontSize, o.fontSize);
 	const pages = doc.getPages();
 	const lines = numberLines(o, pages.length);
@@ -96,18 +148,8 @@ export async function stampPdf(
 		}
 		if (stamp == null) return;
 		if (o.stampMode === 'watermark') {
-			const wmSize = watermarkSize(
-				width,
-				height,
-				stamp.length,
-			);
-			const w = font.widthOfTextAtSize(stamp, wmSize);
-			const k = Math.cos(Math.PI / 4);
-			const half = (wmSize * 0.35) / 2;
 			page.drawText(stamp, {
-				x: width / 2 - (w / 2) * k + half * k,
-				y: height / 2 - (w / 2) * k - half * k,
-				size: wmSize,
+				...watermarkAt(width, height, stamp, o.font),
 				font,
 				color: rgb(0, 0, 0),
 				opacity: o.opacity,
