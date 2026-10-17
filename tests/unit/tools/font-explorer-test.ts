@@ -11,7 +11,45 @@ import {
 	specimen,
 } from 'delphitools-v2/components/tools/font-explorer/sfnt';
 
+import {
+	blockName,
+	coveredCodes,
+	inView,
+	tableLayout,
+} from 'delphitools-v2/components/tools/font-explorer/table';
+
 module('Unit | Tool | font-explorer', function () {
+	test('the full table: covered codes, sections, rows', function (assert) {
+		const codes = coveredCodes([
+			[0x41, 0x43],
+			[0x0, 0x1f],
+			[0x42, 0x44],
+			[0x3b1, 0x3b2],
+			[0x10450, 0x10451],
+		]);
+		assert.deepEqual(
+			codes,
+			[
+				0x41, 0x42, 0x43, 0x44, 0x3b1, 0x3b2, 0x10450,
+				0x10451,
+			],
+			'controls out, overlaps once, sorted',
+		);
+		assert.strictEqual(blockName(0x41), 'Latin Basic');
+		assert.strictEqual(blockName(0x10450), 'U+10400–104FF');
+		const { items, height } = tableLayout(codes, 3, 48, 36);
+		assert.deepEqual(
+			items.map((item) => item.name ?? item.codes.length),
+			['Latin Basic', 3, 1, 'Greek', 2, 'U+10450–10451', 2],
+		);
+		assert.strictEqual(height, 3 * 36 + 4 * 48);
+		assert.deepEqual(
+			inView(items, 84, 140).map((item) => item.key),
+			[items[2]!.key, items[3]!.key],
+			'the second row and the next heading',
+		);
+	});
+
 	test('the specimen, as FontExplorerViewController.specimen', function (assert) {
 		assert.strictEqual(
 			specimen(() => true),

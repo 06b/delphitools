@@ -240,3 +240,102 @@
 	outline: 2px solid var(--canon-primary);
 	outline-offset: -2px;
 }
+
+/* the main pane: one column, two once there is room for the glyphs beside the specimens */
+.fx-columns {
+	container-type: inline-size;
+}
+
+.fx-columns-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.fx-column {
+	display: contents;
+}
+
+.fx-waterfall-rows {
+	order: 1;
+}
+
+.fx-sample-rows {
+	order: 2;
+}
+
+.fx-glyph-rows {
+	order: 3;
+}
+
+.fx-css-rows {
+	order: 4;
+}
+
+@container (width > 1100px) {
+	.fx-columns-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		align-items: start;
+	}
+
+	.fx-column {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+}
+
+/* the full table: a dialog the size of the window, the grid its own scroller */
+.fx-table-dialog {
+	--canon-dialog-width: 100%;
+
+	block-size: 100%;
+}
+
+.fx-table-dialog .canon-dialog-body::after {
+	display: none;
+}
+
+.fx-table-scroller {
+	flex: 1 1 0;
+	min-block-size: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: var(--canon-card);
+}
+
+.fx-table-stage {
+	position: relative;
+}
+
+.fx-table-block,
+.fx-table-row {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-start: 0;
+	box-sizing: border-box;
+	margin: 0;
+}
+
+.fx-table-block {
+	display: flex;
+	align-items: flex-end;
+	padding: 0 var(--canon-panel-padding) 6px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* hairlines drawn on the cells, so a short last row leaves no grey strip */
+.fx-table-row {
+	display: grid;
+	grid-template-columns: repeat(var(--fx-table-columns), minmax(0, 1fr));
+}
+
+.fx-table-row .fx-glyph {
+	aspect-ratio: auto;
+	box-shadow: inset calc(-1 * var(--canon-hairline))
+		calc(-1 * var(--canon-hairline)) 0 var(--canon-border);
+}

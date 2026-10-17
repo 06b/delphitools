@@ -17,6 +17,8 @@ export interface FontFacts {
 	tables: string[];
 	/** Code points the cmap maps to a glyph. */
 	covers: (code: number) => boolean;
+	/** The cmap's code point ranges, inclusive. */
+	ranges: [number, number][];
 }
 
 interface Table {
@@ -231,6 +233,7 @@ export function readFont(buffer: ArrayBuffer): FontFacts | undefined {
 			ranges.some(
 				([start, end]) => code >= start && code <= end,
 			),
+		ranges,
 	};
 }
 

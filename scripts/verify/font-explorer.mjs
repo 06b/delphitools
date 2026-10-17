@@ -175,6 +175,77 @@ await sleep(100);
 s = await state();
 check('a non-font dropped on the tool says so', s.error === 'Please upload a font file (.ttf, .otf, .woff, .woff2)', s.error);
 
+// the full table: a top-layer dialog, virtualised, a section per block
+const big = process.env.BIG_FONT ?? '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
+await visit(page, '/tools/font-explorer');
+await load(big);
+const openTable = () =>
+	page.evaluate(() =>
+		[...document.querySelectorAll('.fx-glyph-rows button')]
+			.find((b) => b.textContent.trim() === 'Show full table')
+			?.click(),
+	);
+await openTable();
+await sleep(600);
+const table = () =>
+	page.evaluate(() => {
+		const dialog = document.querySelector('dialog.fx-table-dialog');
+		const scroller = dialog?.querySelector('.fx-table-scroller');
+		return {
+			open: !!dialog?.open,
+			modal: !!dialog?.matches(':modal'),
+			cells: dialog?.querySelectorAll('.fx-glyph').length ?? 0,
+			blocks: [...(dialog?.querySelectorAll('.fx-table-block') ?? [])].map((b) => b.textContent.trim()),
+			height: scroller?.scrollHeight ?? 0,
+			view: scroller?.clientHeight ?? 0,
+			last: dialog?.querySelector('.fx-table-row:last-of-type .fx-glyph:last-child')?.getAttribute('aria-label'),
+		};
+	});
+let t = await table();
+check('Show full table opens a modal dialog', t.open && t.modal);
+check('the table is virtualised', t.cells > 50 && t.cells < 3000 && t.height > t.view * 20, `${t.cells} cells, ${t.height} px`);
+check('sections are named by block', t.blocks[0] === 'Latin Basic', t.blocks.join());
+await page.evaluate(() => {
+	const scroller = document.querySelector('.fx-table-scroller');
+	scroller.scrollTop = scroller.scrollHeight;
+});
+await sleep(300);
+t = await table();
+check('scrolling to the end draws the last rows', t.cells > 0 && t.cells < 3000 && /^U\+[0-9A-F]+$/.test(t.last ?? ''), `${t.cells} ${t.last}`);
+await page.evaluate(() => document.querySelector('.fx-table-dialog .fx-glyph').click());
+await sleep(300);
+check('a table cell copies its character', (await page.evaluate(() => navigator.clipboard.readText())).length > 0);
+await page.keyboard.press('Escape');
+await sleep(500);
+t = await table();
+check('Escape closes the table', !t.open);
+
+// expanded: the glyphs sit beside the waterfall
+await page.setViewport({ width: 2200, height: 1100 });
+await visit(page, '/tools/font-explorer');
+await load(fonts.ttf);
+await page.click('.dt-canon-edge.is-start');
+await sleep(500);
+const beside = await page.evaluate(() => {
+	const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+	const water = box('.fx-waterfall-rows');
+	const glyphs = box('.fx-glyph-rows');
+	return { same: Math.round(water.top) === Math.round(glyphs.top), right: glyphs.left > water.right };
+});
+check('expanded, the glyphs sit beside the waterfall', beside.same && beside.right, JSON.stringify(beside));
+await page.click('.dt-canon-edge.is-start');
+await sleep(400);
+await page.setViewport({ width: 1400, height: 1000 });
+await visit(page, '/tools/font-explorer');
+await load(fonts.ttf);
+const stacked = await page.evaluate(() => {
+	const order = ['.fx-waterfall-rows', '.fx-sample-rows', '.fx-glyph-rows', '.fx-css-rows'].map(
+		(selector) => document.querySelector(selector).getBoundingClientRect().top,
+	);
+	return order.every((top, i) => i === 0 || top > order[i - 1]);
+});
+check('in the column, waterfall, samples, glyphs and CSS stack in order', stacked);
+
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/font-explorer');
 check(

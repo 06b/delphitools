@@ -732,6 +732,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'file-type',
 				href: '/tools/font-explorer',
 				canon: true,
+				expands: true,
 				accepts: ['.ttf', '.otf', '.woff', '.woff2'],
 			},
 			{

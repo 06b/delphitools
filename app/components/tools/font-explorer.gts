@@ -19,6 +19,8 @@ import CanonTiles from 'delphicanon/components/canon-tiles';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import GlyphTable from 'delphitools-v2/components/tools/font-explorer/glyph-table';
+import { coveredCodes } from 'delphitools-v2/components/tools/font-explorer/table';
 import Picture, {
 	standIn,
 	type Shares,
@@ -127,6 +129,7 @@ export default class FontExplorerTool extends Component {
 	@tracked loaded?: Loaded;
 	@tracked error: string | null = null;
 	@tracked previewText = DEFAULT_PREVIEW;
+	@tracked tableOpen = false;
 
 	#objectUrl: string | null = null;
 	#fontFace: FontFace | null = null;
@@ -280,6 +283,16 @@ export default class FontExplorerTool extends Component {
 		};
 	}
 
+	get tableCodes() {
+		return this.tableOpen && this.facts
+			? coveredCodes(this.facts.ranges)
+			: [];
+	}
+
+	openTable = () => (this.tableOpen = true);
+
+	closeTable = () => (this.tableOpen = false);
+
 	get chartStyle() {
 		return htmlSafe(
 			`font-family: ${this.loaded?.family ?? 'inherit'}`,
@@ -397,6 +410,7 @@ export default class FontExplorerTool extends Component {
 		this.#release();
 		this.loaded = undefined;
 		this.error = null;
+		this.tableOpen = false;
 	};
 
 	<template>
@@ -531,87 +545,122 @@ export default class FontExplorerTool extends Component {
 			</:sidebar>
 			<:main>
 				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading
-							@text="Waterfall"
-						/>
-						<div
-							class="fx-waterfall"
-							role="img"
-							aria-label={{this.text}}
-						>
-							{{#each
-								this.waterfall
-								key="size"
-								as |row|
-							}}
-								<div
-									class="fx-step"
+					<div class="fx-columns">
+						<div class="fx-columns-grid">
+							<div class="fx-column">
+								<CanonRows
+									@framed={{true}}
+									class="fx-waterfall-rows"
 								>
-									<span
-										class="fx-step-size"
-										aria-hidden="true"
-									>{{row.size}}</span>
-									<span
-										class="fx-step-text"
-										style={{row.style}}
-										aria-hidden="true"
-									>{{this.text}}</span>
-								</div>
-							{{/each}}
-						</div>
-					</CanonRows>
-					<CanonRows @framed={{true}}>
-						{{! wording carried over from the Next app }}
-						<CanonHeading
-							@text="Sample Texts"
-						/>
-						{{#each
-							this.samples key="text"
-							as |row|
-						}}
-							<div
-								class="fx-sample"
-								style={{row.style}}
-							>{{row.text}}</div>
-						{{/each}}
-					</CanonRows>
-					{{#if this.chart}}
-						<CanonRows @framed={{true}}>
-							<CanonHeading
-								@text={{this.chart.title}}
-							/>
-							<div
-								class="fx-glyphs"
-								style={{this.chartStyle}}
-							>
-								{{#each
-									this.chart.cells
-									key="code"
-									as |cell|
-								}}
-									<button
-										type="button"
-										class="fx-glyph"
-										aria-label={{cell.label}}
-										{{on
-											"click"
-											(fn
-												this.copyGlyph
-												cell.char
-											)
+									<CanonHeading
+										@text="Waterfall"
+									/>
+									<div
+										class="fx-waterfall"
+										role="img"
+										aria-label={{this.text}}
+									>
+										{{#each
+											this.waterfall
+											key="size"
+											as |row|
 										}}
-									>{{cell.char}}</button>
-								{{/each}}
+											<div
+												class="fx-step"
+											>
+												<span
+													class="fx-step-size"
+													aria-hidden="true"
+												>{{row.size}}</span>
+												<span
+													class="fx-step-text"
+													style={{row.style}}
+													aria-hidden="true"
+												>{{this.text}}</span>
+											</div>
+										{{/each}}
+									</div>
+								</CanonRows>
+								<CanonRows
+									@framed={{true}}
+									class="fx-sample-rows"
+								>
+									{{! wording carried over from the Next app }}
+									<CanonHeading
+										@text="Sample Texts"
+									/>
+									{{#each
+										this.samples
+										key="text"
+										as |row|
+									}}
+										<div
+											class="fx-sample"
+											style={{row.style}}
+										>{{row.text}}</div>
+									{{/each}}
+								</CanonRows>
+								<CanonRows
+									@framed={{true}}
+									class="fx-css-rows"
+								>
+									<CanonCodeBlock
+										@code={{this.css}}
+										@language="CSS"
+									/>
+								</CanonRows>
 							</div>
-						</CanonRows>
-					{{/if}}
-					<CanonRows @framed={{true}}>
-						<CanonCodeBlock
-							@code={{this.css}}
-							@language="CSS"
-						/>
-					</CanonRows>
+							<div class="fx-column">
+								{{#if
+									this.chart
+								}}
+									<CanonRows
+										@framed={{true}}
+										class="fx-glyph-rows"
+									>
+										<CanonHeading
+											@text={{this.chart.title}}
+										/>
+										<div
+											class="fx-glyphs"
+											style={{this.chartStyle}}
+										>
+											{{#each
+												this.chart.cells
+												key="code"
+												as |cell|
+											}}
+												<button
+													type="button"
+													class="fx-glyph"
+													aria-label={{cell.label}}
+													{{on
+														"click"
+														(fn
+															this.copyGlyph
+															cell.char
+														)
+													}}
+												>{{cell.char}}</button>
+											{{/each}}
+										</div>
+										<CanonButton
+											@kind="cell"
+											@text="Show full table"
+											@onClick={{this.openTable}}
+										/>
+									</CanonRows>
+								{{/if}}
+							</div>
+						</div>
+					</div>
+					<GlyphTable
+						@open={{this.tableOpen}}
+						@codes={{this.tableCodes}}
+						@family={{this.pictureFamily}}
+						@onCopy={{this.copyGlyph}}
+						@onClose={{this.closeTable}}
+					/>
 				{{else}}
 					<CanonRows @framed={{true}}>
 						<CanonEmptyRow
