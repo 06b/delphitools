@@ -12,14 +12,19 @@ import type { GpsPoint } from 'delphitools-v2/components/tools/image-atlas/repor
 
 /** Where the photo was taken: the land faint, the point lit with its latitude and longitude lines (iOS PhotoLocationMap). */
 export default class LocationMap extends Component<{
-	Args: { gps: GpsPoint | null };
+	Args: { gps: GpsPoint | null; missing?: boolean };
 }> {
 	@tracked land = '';
 
 	viewBox = `0 0 360 ${height}`;
 	height = height;
 
-	constructor(owner: Owner, args: { gps: GpsPoint | null }) {
+	none = `M180 ${height / 2}m-4 -4l8 8m0 -8l-8 8`;
+
+	constructor(
+		owner: Owner,
+		args: { gps: GpsPoint | null; missing?: boolean },
+	) {
 		super(owner, args);
 		void loadLand().then((path) => {
 			if (!this.isDestroying) this.land = path;
@@ -73,6 +78,8 @@ export default class LocationMap extends Component<{
 						y1={{this.point.y}}
 						y2={{this.point.y}}
 					/>
+				{{else if @missing}}
+					<path class="ia-none" d={{this.none}} />
 				{{/if}}
 			</svg>
 			{{#if this.point}}

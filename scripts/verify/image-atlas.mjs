@@ -200,6 +200,7 @@ const empty = await page.evaluate(() => {
 		histogram: document.querySelector('.ia-scopes')?.getAttribute('aria-label'),
 		gps: document.querySelector('.ia-gps')?.textContent.replace(/\s+/g, ' ').trim(),
 		map: document.querySelector('.ia-map-label')?.getAttribute('aria-label'),
+		none: !!document.querySelector('.ia-none'),
 		blankPalette: document.querySelectorAll('.ia-palette-blank > span').length,
 		open: document.querySelectorAll('.ia-open--blank[inert] .dt-atlas-open [data-tool]').length,
 	};
@@ -221,6 +222,7 @@ check(
 check('empty: the histogram is named', empty.histogram === 'Histogram');
 check('empty: GPS reads a dash', empty.gps === 'GPS —', empty.gps);
 check('empty: the map is named', empty.map === 'Location', empty.map);
+check('empty: no no-location cross before a file', !empty.none);
 check('empty: the palette is six blank cells', empty.blankPalette === 6);
 check('empty: the open-in block shows, inert', empty.open > 0, String(empty.open));
 check(
@@ -326,11 +328,13 @@ const location = await page.evaluate(() => ({
 	gps: document.querySelector('.ia-gps')?.textContent.replace(/\s+/g, ' ').trim(),
 	map: document.querySelector('.ia-map-label')?.getAttribute('aria-label'),
 	pin: !!document.querySelector('.ia-pin'),
+	none: !!document.querySelector('.ia-none'),
 	osm: document.querySelector('.ia-osm')?.href ?? '',
 	labels: [...document.querySelectorAll('.ia-location .canon-tiles-label')].map((el) => el.textContent.trim()),
 }));
 check('GPS reads the fix', location.gps === 'GPS 51.500000, 0.126667', location.gps);
 check('the map places the pin and names it', location.pin && location.map === '51.5000° N, 0.1267° E', location.map);
+check('a fix draws no no-location cross', !location.none);
 check('the OpenStreetMap link carries the fix', location.osm.includes('mlat=51.5'), location.osm);
 check(
 	'location tiles drop the coordinates the GPS line shows',
@@ -424,6 +428,16 @@ const pasted = await page.evaluate(() => ({
 		?.textContent.trim(),
 	clean: document.querySelector('.ia-clean')?.textContent.trim(),
 	caption: document.querySelector('.ia-caption')?.textContent,
+	none: (() => {
+		const mark = document.querySelector('.ia-none');
+		const map = document.querySelector('.ia-map')?.getBoundingClientRect();
+		const box = mark?.getBoundingClientRect();
+		return box && map
+			? Math.abs(box.x + box.width / 2 - (map.x + map.width / 2)) < 2 &&
+					Math.abs(box.y + box.height / 2 - (map.y + map.height / 2)) < 2
+			: false;
+	})(),
+	pin: !!document.querySelector('.ia-pin'),
 }));
 const untagged = Object.fromEntries(await tiles('.ia-colour'));
 check(
@@ -443,6 +457,7 @@ check('a paste anywhere loads the image', pasted.title === 'clear.png', pasted.t
 check('a transparent image sits on checks', pasted.checks);
 check('Transparent reads half', pasted.transparent === '50 %', pasted.transparent);
 check('no metadata reads Clean', pasted.clean === 'No EXIF, XMP or IPTC metadata found', pasted.clean);
+check('no GPS: a cross in the centre of the map, no pin', pasted.none && !pasted.pin);
 check('a 2:1 caption', pasted.caption === '2:1  0.00 MP', pasted.caption);
 
 const open = await page.$$eval('.ia-open:not([inert]) .dt-atlas-open [data-tool]', (els) =>

@@ -268,6 +268,10 @@ export default class ImageAtlas extends Component {
 		return summary(file.type, file.size, fieldCount(this.exif));
 	}
 
+	get noLocation() {
+		return this.file !== null && !this.busy && !this.gps;
+	}
+
 	get gpsText() {
 		const { gps } = this;
 		return gps
@@ -718,7 +722,10 @@ export default class ImageAtlas extends Component {
 				</CanonRows>
 				<CanonRows class="ia-location" @framed={{true}}>
 					<CanonHeading @text="Location" />
-					<LocationMap @gps={{this.gps}} />
+					<LocationMap
+						@gps={{this.gps}}
+						@missing={{this.noLocation}}
+					/>
 					<CanonValueLine
 						class="ia-gps"
 						@label="GPS"

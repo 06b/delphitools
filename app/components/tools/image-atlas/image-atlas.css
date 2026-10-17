@@ -134,6 +134,14 @@
 	vector-effect: non-scaling-stroke;
 }
 
+.ia-none {
+	fill: none;
+	stroke: var(--canon-muted-foreground);
+	stroke-linecap: round;
+	stroke-width: 1.5;
+	vector-effect: non-scaling-stroke;
+}
+
 .ia-pin {
 	position: absolute;
 	box-sizing: border-box;
