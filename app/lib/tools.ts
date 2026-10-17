@@ -51,6 +51,7 @@ export interface Tool {
 	carryColour?: boolean;
 	// same vocabulary as accepts
 	produces?: string[];
+	keywords?: string[];
 }
 
 export interface ToolCategory {
@@ -773,6 +774,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'ruler',
 				href: '/tools/px-to-rem',
 				canon: true,
+				keywords: ['rem to px'],
 			},
 			{
 				id: 'text-diff',

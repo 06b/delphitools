@@ -55,6 +55,18 @@ module('Unit | Lib | tool-search', function () {
 		assert.true(hits('  MD to HTML ').includes('doc-converter'));
 	});
 
+	test('px2rem, rem2px and spelt-out variants find px-to-rem', function (assert) {
+		for (const query of [
+			'px2rem',
+			'rem2px',
+			'pxtorem',
+			'px-to-rem',
+			'rem to px',
+			'PX2REM',
+		])
+			assert.true(hits(query).includes('px-to-rem'), query);
+	});
+
 	test('does not match unknown types', function (assert) {
 		assert.deepEqual(hits('qqq'), []);
 		assert.deepEqual(hits('qqq to zzz'), []);

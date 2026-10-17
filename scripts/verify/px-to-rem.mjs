@@ -143,6 +143,29 @@ check(
 	await page.$eval('.px-to-rem-result', (o) => o.tagName === 'OUTPUT' && !!o.getAttribute('aria-label')),
 );
 
+const searchFor = (query) =>
+	page.$eval(
+		'.dt-search-input',
+		(input, q) => {
+			input.value = q;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		},
+		query,
+	);
+const found = () =>
+	page.evaluate(
+		() =>
+			!!document.querySelector('.canon-sidebar-rows a[href="/tools/px-to-rem"]'),
+	);
+await searchFor('qqq');
+await sleep(200);
+check('the drawer search drops the tool for an unrelated query', !(await found()));
+for (const query of ['px2rem', 'rem2px', 'px to rem', 'rem-to-px', 'PX2REM']) {
+	await searchFor(query);
+	await sleep(200);
+	check(`the drawer search finds the tool for "${query}"`, await found());
+}
+
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/px-to-rem');
 check(
