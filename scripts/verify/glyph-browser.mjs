@@ -142,4 +142,16 @@ check(
 	),
 );
 
+const tip = await page.evaluate(() => {
+	const box = (el) => el.getBoundingClientRect();
+	const hint = document.querySelector('.gb-tip');
+	const rows = box(hint.previousElementSibling);
+	const own = box(hint);
+	return {
+		inset: own.left === rows.left && own.right === rows.right,
+		centred: getComputedStyle(hint).textAlign === 'center',
+	};
+});
+check('the copy hint sits in the rows column, centred', tip.inset && tip.centred, JSON.stringify(tip));
+
 await finish(browser);

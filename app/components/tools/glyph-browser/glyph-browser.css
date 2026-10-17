@@ -190,8 +190,11 @@
 	outline-offset: -4px;
 }
 
+/* margin-inline auto keeps the kit page inset */
 .gb-tip {
-	margin: 0;
+	margin-block: 0;
+	margin-inline: auto;
+	text-align: center;
 	color: var(--canon-muted-foreground);
 	font-family: var(--canon-font);
 	font-size: var(--canon-text-footnote);
