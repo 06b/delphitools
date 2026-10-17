@@ -757,7 +757,7 @@ export function placeInCell(
 					frameH / size.height,
 				);
 	const [w, h] = [size.width * ratio, size.height * ratio];
-	// pdf-lib turns counterclockwise about (x, y)
+	// pdf-lib: ccw about (x, y)
 	const turn = (rotation * Math.PI) / 180;
 	const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
 	return {

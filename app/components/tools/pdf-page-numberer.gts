@@ -72,12 +72,12 @@ import './media/media.css';
 import './pdf-page-numberer/pdf-page-numberer.css';
 
 const ACCEPT = '.pdf,application/pdf';
-// iOS PDFStampRenderer.preview maxEdge
+// ios PDFStampRenderer maxEdge
 const previewEdge = 1200;
 const styleLabels = STYLES.map((s) => s.label);
 const fontLabels = ['Sans', 'Serif', 'Mono'];
 const modeLabels = ['Label', 'Watermark'];
-// iOS PageFormatTip
+// ios PageFormatTip
 const FORMAT_TIP = [
 	'{n} stands for the page number, {N} the page count.',
 	'Page {n} of {N} prints Page 3 of 12.',
@@ -115,7 +115,7 @@ async function render(pdf: PDFDocumentProxy, index: number) {
 	return blob ? URL.createObjectURL(blob) : '';
 }
 
-// the iOS -ppnSample launch argument, with a drawn document
+// ios -ppnSample, drawn
 async function drawnSample(count: number) {
 	const { PDFDocument, StandardFonts } = await import('pdf-lib');
 	const doc = await PDFDocument.create();
@@ -154,7 +154,7 @@ export default class PdfPageNumberer extends Component {
 	@tracked opacity = 15;
 	@tracked sections: Section[] = [section()];
 	@tracked sectionId = this.sections[0]!.id;
-	// remounts the From page field when a clamp keeps its value
+	// remount when clamp unchanged
 	@tracked fromKey = 0;
 
 	@tracked busy = false;
@@ -168,7 +168,7 @@ export default class PdfPageNumberer extends Component {
 	#shown = 0;
 	#queued?: Section[];
 
-	// ?ppnSample=<pages> ?ppnStamp=<text> ?ppnSections=2:roman-lower,4:arabic:5: the iOS launch arguments
+	// ?ppn* ios launch arguments
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
@@ -301,7 +301,7 @@ export default class PdfPageNumberer extends Component {
 		);
 	}
 
-	// remounts the section controls for another section, so a held pick does not carry over
+	// remount clears held pick
 	get currentKeys() {
 		return [`${this.current.id}:${this.fromKey}`];
 	}
@@ -398,7 +398,6 @@ export default class PdfPageNumberer extends Component {
 	back = () => this.selectPage(this.page - 1);
 	forward = () => this.selectPage(this.page + 1);
 
-	// a setting change drops the result
 	#changed() {
 		this.#job++;
 		this.busy = false;
@@ -449,7 +448,7 @@ export default class PdfPageNumberer extends Component {
 		else this.#edit({ fromPage: start });
 	};
 
-	/** Splits at the lit page, as iOS. */
+	/** splits at lit page */
 	addSection = () => {
 		const added = splitAt(this.sections, this.page + 1, this.count);
 		if (!added) return;

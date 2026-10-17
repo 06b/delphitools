@@ -1,4 +1,4 @@
-/* SubtitleStudioStrips: filmstrip 40 over the cue lane, which takes the rest of the shared band */
+/* ios SubtitleStudioStrips */
 .ss-strips {
 	display: grid;
 	grid-template-rows: 40px minmax(0, 1fr);

@@ -34,7 +34,7 @@ check(
 			document.querySelector('.video-muter').getBoundingClientRect().height,
 	),
 );
-// readoutBandHeight(96): the shared A/V band
+// media/strips readoutBandHeight(96)
 const BAND = 138;
 const bandHeight = () =>
 	page.evaluate(() => document.querySelector('.media-strips')?.closest('.canon-canvas')?.getBoundingClientRect().height);
@@ -53,7 +53,7 @@ const blankLayout = () =>
 			preview?.classList.contains('vm-preview--blank') &&
 			!preview.querySelector('video') &&
 			preview.textContent.trim() === '' &&
-			// 16:9 plus the frame, at most 340 tall
+			// 16:9, capped 340
 			Math.abs(box.height - Math.min((box.width * 9) / 16, 340)) < 3
 		);
 	});

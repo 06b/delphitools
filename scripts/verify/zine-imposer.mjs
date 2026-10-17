@@ -1,4 +1,4 @@
-// npm start first; BASE_URL=http://localhost:<port> for another server
+// needs dev server; BASE_URL
 
 import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,7 +26,6 @@ twoPages.addPage([300, 400]);
 twoPages.addPage([300, 400]);
 const pdfBase64 = Buffer.from(await twoPages.save()).toString('base64');
 
-// drawn pngs and the pdf, built in the page, handed to a target
 const rig = `
 window.__zi = {
 	async png(n) {
@@ -132,7 +131,7 @@ await sleep(2500);
 s = await state(page);
 check('a PDF places one page per slot', s.count === '5/8 filled', s.count);
 
-// drop on page 8 of the sheet (bottom row, third column)
+// page 8: row 2, col 3
 await page.evaluate(async () => {
 	const paper = document.querySelector('.zi-face .zi-paper');
 	const box = paper.getBoundingClientRect();
@@ -149,7 +148,6 @@ const eighth = await page.evaluate(() =>
 );
 check('a drop on a sheet panel places the file on that page and lights it', eighth && s.count === '6/8 filled' && s.lit === 'Page 8', `${s.count}, ${s.lit}`);
 
-// paste fills from the lit page, wrapping
 await page.evaluate(async () => {
 	const transfer = window.__zi.transfer([await window.__zi.png(9)]);
 	document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
@@ -158,7 +156,6 @@ await sleep(800);
 s = await state(page);
 check('paste fills an empty slot', s.count === '7/8 filled', s.count);
 
-// select, fit, remove
 await page.click('.zi-strip .canon-page-strip-cell:nth-child(2) .canon-page-strip-page');
 await sleep(200);
 s = await state(page);
@@ -177,7 +174,6 @@ await sleep(200);
 s = await state(page);
 check('Remove empties the page', s.count === '6/8 filled', s.count);
 
-// keyboard reorder moves page 1 to 2
 const firstSrc = () =>
 	page.evaluate((i) => document.querySelectorAll('.zi-strip .canon-page-strip-cell')[i]?.querySelector('img')?.src ?? null, 0);
 const src1 = await firstSrc();
@@ -189,7 +185,6 @@ await sleep(300);
 const moved = await page.evaluate(() => document.querySelectorAll('.zi-strip .canon-page-strip-cell')[1]?.querySelector('img')?.src ?? null);
 check('Alt+ArrowRight moves a page along the strip', src1 !== null && moved === src1);
 
-// export
 await page.click('.media-job-run');
 await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => null);
 await page.click('.media-job-save');
@@ -204,7 +199,6 @@ await page.click('#zine-bleed');
 await sleep(200);
 check('a setting change drops the result', (await page.$('.media-job-save')) === null);
 
-// accordion, double-sided
 await page.evaluate(() => [...document.querySelectorAll('.zi-folds button')].find((b) => b.textContent.includes('Accordion'))?.click());
 await sleep(200);
 await page.evaluate(() => [...document.querySelectorAll('.zi-panels button')].find((b) => b.textContent.trim() === '4')?.click());
@@ -231,13 +225,11 @@ if (duplex) {
 	check('two pages, 6mm larger', doc.getPageCount() === 2 && Math.abs(size.width - (841.89 + 17.008)) < 1, `${doc.getPageCount()} pages, ${size.width.toFixed(1)}`);
 }
 
-// paper
 await page.select('.zi-paper-menu select', await page.$eval('.zi-paper-menu select', (sel) => [...sel.options].find((o) => o.textContent.startsWith('A3'))?.value));
 await sleep(200);
 s = await state(page);
 check('a paper pick changes the sheet tile', s.tiles[0] === '420 × 297 mm', s.tiles[0]);
 
-// phone
 await page.setViewport({ width: 390, height: 844 });
 await sleep(400);
 check(

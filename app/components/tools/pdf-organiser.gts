@@ -48,7 +48,6 @@ import './pdf-organiser/organiser.css';
 
 const ACCEPT = '.pdf,application/pdf';
 const modes = ['By ranges', 'Every page'];
-// A4 portrait sheets in the empty strip
 const BLANKS = Array.from({ length: 12 }, (_, index) => index);
 const blankStyle = htmlSafe(
 	'--canon-page-ratio: 0.7071; --canon-page-room: 0px',
@@ -66,9 +65,9 @@ interface Source {
 	bytes: number;
 	// pdf.js detaches its input
 	lib: PDFDocument;
-	/** PDF points, as displayed. */
+	/** pdf points, displayed */
 	sizes: Size[];
-	/** Object URLs by page; empty until drawn. */
+	/** object urls, lazily drawn */
 	pictures: string[];
 }
 
@@ -76,7 +75,7 @@ interface Entry {
 	id: number;
 	source: number;
 	page: number;
-	/** Quarter turns in degrees on top of the page's own rotation. */
+	/** degrees, atop page rotation */
 	rotation: number;
 }
 
@@ -101,7 +100,7 @@ export default class PdfOrganiser extends Component {
 	@tracked entries: Entry[] = [];
 	@tracked reading = 0;
 	@tracked readFailure = '';
-	// ?orgMode=<0 ranges, 1 every page>&orgRanges=<spec>
+	// orgMode 1: every page
 	@tracked every = query('orgMode') === '1';
 	@tracked rangeSpec = query('orgRanges') ?? '';
 	@tracked merging = false;
@@ -216,8 +215,6 @@ export default class PdfOrganiser extends Component {
 		};
 	}
 
-	// files
-
 	#queue: Promise<void> = Promise.resolve();
 
 	add = (files: File[], at = Infinity) => {
@@ -227,13 +224,13 @@ export default class PdfOrganiser extends Component {
 		if (!pdfs.length || this.busy) return;
 		this.readFailure = '';
 		this.reading += pdfs.length;
-		// one read at a time keeps each file's pages together
+		// serial: pages stay grouped
 		this.#queue = this.#queue.then(() => this.#read(pdfs, at));
 	};
 
 	paste = (file: File) => this.add([file]);
 
-	// the strip takes drops between pages itself
+	// strip handles inner drops
 	dropped = (event: DragEvent) => {
 		this.drop.over = false;
 		if (event.defaultPrevented) return;
@@ -300,7 +297,7 @@ export default class PdfOrganiser extends Component {
 		);
 	};
 
-	// the merge is stale after any page change, as iOS job.reset
+	// stale merge, ios job.reset
 	#change(entries: Entry[]) {
 		this.entries = entries;
 		this.#job++;
@@ -308,8 +305,6 @@ export default class PdfOrganiser extends Component {
 		this.merging = false;
 		this.mergeFailed = false;
 	}
-
-	// pages
 
 	move = (from: number, to: number) => {
 		if (this.busy) return;
@@ -378,7 +373,7 @@ export default class PdfOrganiser extends Component {
 		);
 	}
 
-	// a press opens the page menu; the web tool showed rotate and delete on every page
+	// press opens page menu
 	select = (index: number) => {
 		this.#button(index)?.dispatchEvent(
 			new MouseEvent('contextmenu', {
@@ -415,8 +410,6 @@ export default class PdfOrganiser extends Component {
 		strip.addEventListener('keydown', onKey);
 		return () => strip.removeEventListener('keydown', onKey);
 	});
-
-	// split
 
 	pickMode = (index: number) => {
 		this.every = index === 1;
@@ -756,7 +749,7 @@ function release(source: Source) {
 	for (const url of source.pictures) if (url) URL.revokeObjectURL(url);
 }
 
-// pdf-lib ArrayBufferLike incompatible with BlobPart
+// ArrayBufferLike not BlobPart
 function pdfBlob(bytes: Uint8Array) {
 	return new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
 }

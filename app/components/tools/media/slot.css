@@ -64,7 +64,7 @@
 	flex-direction: row;
 	gap: 10px;
 
-	/* a CanonRow with title and detail: 10px padding, 1.3 lines, 2px gap */
+	/* two-line CanonRow height */
 	block-size: calc(
 		22px + 1.3 *
 			(var(--canon-text-body) + var(--canon-text-caption))

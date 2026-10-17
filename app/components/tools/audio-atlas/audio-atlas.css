@@ -177,7 +177,6 @@
 	display: none;
 }
 
-/* before a file: the sheet's waveform as a flat line */
 .aa-sheet--blank {
 	cursor: default;
 }

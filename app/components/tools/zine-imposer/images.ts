@@ -22,7 +22,6 @@ export const ACCEPT = 'image/*,.pdf,application/pdf';
 // 3mm uk/eu; us 1/8in
 export const BLEED_MM = 3;
 
-// pdf pages raster at 300 dpi of their own size
 const PDF_DPI = 300;
 // ponytail: raster cap, embed vector pages (crop box, /Rotate) if print quality needs it
 const PDF_EDGE = 2400;
@@ -88,7 +87,7 @@ async function pdfPages(file: File, max: number): Promise<ZineImage[]> {
 			canvas.width = Math.ceil(viewport.width);
 			canvas.height = Math.ceil(viewport.height);
 			await page.render({ canvas, viewport }).promise;
-			// png pages run to tens of MB
+			// png pages: tens MB
 			const blob = await canvasBlob(canvas, 'image/jpeg');
 			canvas.width = 0;
 			out.push(await decode(blob, `${base} p${n}`));
@@ -211,7 +210,7 @@ function cropToAspect(
 	return canvasBlob(canvas, type);
 }
 
-// pdf-lib embeds png and jpeg only
+// pdf-lib: png, jpeg only
 async function embeddable(image: ZineImage, aspect: number | null) {
 	if (aspect !== null)
 		return cropToAspect(
@@ -281,7 +280,7 @@ export async function zinePdf({
 			const image = images[spot.page - 1];
 			if (!image) continue;
 
-			// bleed only on sheet edges
+			// bleed: outer edges only
 			const out = {
 				left: spot.col === 0 ? bleedPt : 0,
 				right:
@@ -297,7 +296,7 @@ export async function zinePdf({
 			const boxWidthPt = cellWidthPt + out.left + out.right;
 			const boxHeightPt = cellHeightPt + out.top + out.bottom;
 
-			// fill crops; fit skips bleed
+			// fit skips bleed
 			const fills = image.fitMode === 'fill';
 			const blob = await embeddable(
 				image,
@@ -336,7 +335,7 @@ export async function zinePdf({
 				embedded,
 				spot.rotation === 180
 					? {
-							// 180 starts from far corner
+							// 180°: from far corner
 							x: drawX + drawWidth,
 							y: drawY + drawHeight,
 							width: drawWidth,

@@ -45,7 +45,7 @@
 	flex-basis: 168px;
 }
 
-/* the kit slider has no disabled state; fades mean nothing before a duration */
+/* kit slider lacks disabled */
 .at-fade--off .canon-slider {
 	cursor: default;
 	opacity: 0.4;

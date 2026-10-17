@@ -60,7 +60,7 @@ const frameLabel = (n: number) => (n === 1 ? '1 frame' : `${n} frames`);
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 const whole = (value: number) => String(Math.round(value));
 
-// iOS VideoToGIFViewController: editor 72
+// ios VideoToGIFViewController
 const editorHeight = 72;
 // height over width at most 1.25, at most 340 pt tall
 const tallest = 1.25;

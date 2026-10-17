@@ -1,4 +1,4 @@
-/* the sheet after iOS PrintSheetView: header 10 + 38 + 14, paper up to 560 tall, footer 16 */
+/* ios PrintSheetView geometry */
 .zi-sheet {
 	--zi-paper-max: 560px;
 
@@ -82,7 +82,7 @@ button.zi-turner {
 	transform: rotateY(180deg);
 }
 
-/* the hidden face takes no drops */
+/* hidden face: no drops */
 .zi-turner--back .zi-face:not(.zi-face--back),
 .zi-turner:not(.zi-turner--back) .zi-face--back {
 	pointer-events: none;
@@ -154,7 +154,7 @@ button.zi-turner {
 	line-height: 1.2;
 }
 
-/* ink on paper, which stays white in both themes */
+/* paper white both themes */
 .zi-number {
 	position: absolute;
 	inset: 0;

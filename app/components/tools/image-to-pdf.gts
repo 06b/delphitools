@@ -66,7 +66,6 @@ const marginLabels = MARGINS_MM.map((mm) => (mm === 0 ? 'None' : `${mm} mm`));
 const SCALES = [1, 2, 3];
 const scaleLabels = SCALES.map((s) => `${s * 72} DPI`);
 const sizeLabels = PAGE_SIZE_OPTIONS.map((o) => o.label);
-// pdf.js page size before a PDF loads
 const A4: PageSize = { width: 595.28, height: 841.89 };
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -102,7 +101,7 @@ function loadItem(file: File): Promise<Item> {
 		image.onload = () => {
 			const { naturalWidth: width, naturalHeight: height } =
 				image;
-			// a sizeless svg has no page
+			// sizeless svg reports zero
 			if (!width || !height) return fail();
 			resolve({
 				id: nextId++,
@@ -122,7 +121,7 @@ const isPdf = (file: File) => matchesAccept(file, PDF_ACCEPT);
 const isImage = (file: File) => matchesAccept(file, IMAGE_ACCEPT);
 const pages = (n: number) => (n === 1 ? '1 page' : `${n} pages`);
 
-// ?i2pSample: drawn images in place of the iOS -i2pImages folder
+// ?i2pSample: ios -i2pImages
 function drawnSamples(): Promise<File[]> {
 	const specs: [string, number, number, string][] = [
 		['page10.png', 1200, 800, '#c0392b'],
@@ -200,10 +199,10 @@ export default class ImageToPdf extends Component {
 	#pdf?: PDFDocumentProxy;
 	#token = 0;
 	#build = 0;
-	// keeps added images in the order they came
+	// serialises adds, keeps order
 	#adding: Promise<void> = Promise.resolve();
 
-	// ?i2pSize=<id|match> ?i2pOrientation= ?i2pFit= ?i2pMargin= ?i2pResolution= <index>, ?i2pDirection=1, ?i2pSample, ?i2pSort=<0 a to z, 1 z to a>, ?i2pRun: the iOS launch arguments
+	// ?i2p* ios launch arguments
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
@@ -325,7 +324,7 @@ export default class ImageToPdf extends Component {
 		);
 	}
 
-	/** Paste, drop and workflow input: images join the queue, a PDF opens in the other direction. */
+	/** images queue; pdf flips */
 	take = (files: File[]) => {
 		const pdf = files.find(isPdf);
 		const images = files.filter(isImage);
@@ -342,7 +341,7 @@ export default class ImageToPdf extends Component {
 
 	dropped = (event: DragEvent) => {
 		this.drop.over = false;
-		// the strip took it
+		// strip handled drop
 		if (event.defaultPrevented) return;
 		const files = [...(event.dataTransfer?.files ?? [])].filter(
 			(file) => isImage(file) || isPdf(file),
@@ -488,7 +487,6 @@ export default class ImageToPdf extends Component {
 		this.#changed();
 	};
 
-	// a change drops the built PDF
 	#changed() {
 		this.#build++;
 		this.building = false;

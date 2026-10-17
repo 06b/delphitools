@@ -1,6 +1,5 @@
 // usage: npm start, then node scripts/verify/image-to-pdf.mjs
-// no checked-in fixture: pdf-lib writes the pdf, a canvas draws the images
-// page sizes prove orientation, png headers prove render scale
+// no fixtures; generated in-run
 
 import {
 	mkdtempSync,
@@ -137,7 +136,6 @@ check(
 );
 await clickText('.i2p-orientation', 'Auto');
 
-// drop anywhere in the tool
 await page.evaluate(async () => {
 	const make = (width, height, colour, name) =>
 		new Promise((resolve) => {
@@ -380,7 +378,6 @@ if (zip) {
 	);
 }
 
-// paste anywhere: an image goes back to Image to PDF
 await page.evaluate(async () => {
 	const canvas = document.createElement('canvas');
 	canvas.width = canvas.height = 50;

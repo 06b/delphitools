@@ -1,5 +1,3 @@
-// the canon pdf-rotate-crop: blank layout, paste and drop, rotate, the crop
-// rect by drag and keys, margins, paper, all pages, the pager, the export
 // crop tolerance ±2pt
 
 import {
@@ -154,7 +152,6 @@ check(
 );
 const before = await layout();
 
-// paste on the settings pane loads
 await page.evaluate(
 	(b64, name) => {
 		const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -205,7 +202,6 @@ check(
 );
 check('whole page: Clear is off', s.clearOff);
 
-// drop on the picture replaces the file
 await page.evaluate((b64) => {
 	const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 	const data = new DataTransfer();
@@ -256,7 +252,6 @@ const rotatedName = await page.$eval('.prc-rotate-page button', (b) =>
 );
 check('icon cells are named', rotatedName === 'Rotate left', rotatedName);
 
-// drag the top-left corner in a quarter, then the bottom-right
 await page.waitForSelector('.prc-image', { timeout: 10000 });
 await sleep(400);
 const frame = await page.$eval('.prc-image', (e) => {
@@ -291,13 +286,11 @@ check(
 	s.names.join('|'),
 );
 
-// a press inside a crop moves it
 await dragFrom(0.5, 0.5, 0.55, 0.5);
 s = await state();
 const moved = /, (\d+), 74$/.exec(s.value)?.[1];
 check('a drag inside moves the crop', Number(moved) > 60, s.value);
 
-// keys: arrows move, Alt+arrow resizes
 await page.focus('.prc-crop');
 const keyed = s.value;
 await page.keyboard.press('ArrowLeft');
@@ -316,7 +309,6 @@ check(
 	`${keyed} → ${left} → ${taller}`,
 );
 
-// typed margins
 const setMargin = async (edge, text) => {
 	const input = await page.$(`.prc-margin--${edge} input`);
 	await input.evaluate((e) => {
@@ -342,7 +334,6 @@ check(
 	s.margins.join(),
 );
 
-// the pager and paper on page 2 (A4 turned 270: landscape)
 await page.click('.prc-pager-forward');
 await sleep(400);
 s = await state();
@@ -387,7 +378,6 @@ check(
 	s.names.join('|'),
 );
 
-// export
 clearDownloads();
 await page.click('.media-job-run');
 await page.waitForSelector('.media-job-save', { timeout: 15000 });
@@ -409,7 +399,7 @@ if (out) {
 		near(box1.width, A4[0]) && near(box1.height, A4[1]),
 		`${box1.width}×${box1.height}`,
 	);
-	// page 2 at 270: the top margin is the page's right in page space
+	// 270°: top is page-right
 	const box2 = pages[1].getCropBox();
 	check(
 		'page 2 keeps the paper crop with a 40 mm top in page space',
@@ -425,12 +415,10 @@ if (out) {
 	);
 }
 
-// an edit drops the result
 await rotateButton('.prc-rotate-page', 1);
 await sleep(200);
 check('an edit drops the export result', !(await page.$('.media-job-save')));
 
-// Clear empties the tool
 await page.click('.prc-source button');
 await sleep(300);
 s = await state();
@@ -439,7 +427,6 @@ check(
 	s.blankStrip && s.blank && s.slot === 'Drop PDF here' && s.exportOff,
 );
 
-// launch flags
 await visit(page, '/tools/pdf-rotate-crop?rcSample&rcPaper=a5&rcNudge=yes');
 await page.waitForSelector('.prc-image', { timeout: 15000 });
 await sleep(300);

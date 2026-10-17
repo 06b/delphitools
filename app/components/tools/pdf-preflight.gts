@@ -77,13 +77,13 @@ export default class PdfPreflight extends Component {
 	@tracked boxes: PageBoxMark[] = [];
 
 	#pdf: PDFDocumentProxy | null = null;
-	// a new file
+	// bumps per file
 	#token = 0;
-	// a new page preview
+	// bumps per preview
 	#shown = 0;
 	#startPage: number | null = null;
 
-	// ?pfSample: the iOS -pfSample launch argument, with a drawn PDF; ?pfPage=<index>: the iOS -pfPage
+	// ?pfSample, ?pfPage: ios flags
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);

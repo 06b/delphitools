@@ -1,4 +1,3 @@
-// the canon frame-extractor: blank layout, band with marks, grab, stills menu, zip, contact sheet, transport
 import {
 	launch,
 	visit,
@@ -64,7 +63,7 @@ check(
 			document.querySelector('.frame-extractor').getBoundingClientRect().height,
 	),
 );
-// media/strips bandHeight, the band of every A/V tool
+// media/strips readoutBandHeight(96)
 const bandHeight = 138;
 const band = () =>
 	page.evaluate(() =>

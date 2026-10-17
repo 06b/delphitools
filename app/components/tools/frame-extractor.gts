@@ -51,7 +51,7 @@ const GRAB_ERROR = "Couldn't save that frame.";
 const SHEET_ERROR = "Couldn't build the contact sheet.";
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 
-// iOS FrameExtractorViewController: preview at most 340 tall
+// ios FrameExtractorViewController preview cap
 const tallest = 1.25;
 const tallestPreview = 340;
 const lamps: CanonLamp[] = ['play', 'pause'];
@@ -555,7 +555,6 @@ export default class FrameExtractor extends Component {
 							}}
 						></video>
 					{{else}}
-						{{! the box the video takes, as object-fit: contain }}
 						<svg
 							class="fx-blank"
 							viewBox="0 0 16 9"

@@ -145,7 +145,6 @@ check(
 );
 const before = await layout();
 
-// a choice made before a file survives the load
 await pick('ppn-styles', 'i, ii, iii');
 
 const [chooser] = await Promise.all([
@@ -203,7 +202,6 @@ check(
 );
 await page.keyboard.press('Escape');
 
-// a press on the page moves the number, and the picker follows
 await pick('ppn-anchors', 'Top left');
 const topLeft = await page.$eval('.ppn-mark--number', (el) => el.style.top !== '' && el.style.left !== '');
 await page.click('.ppn-zone--row2.ppn-zone--column1');
@@ -298,7 +296,6 @@ if (out) {
 await pick('ppn-fonts', 'Serif');
 check('a new setting drops the result', !(await page.$('.media-job-result')));
 
-// paste anywhere replaces the file
 await page.evaluate((base64) => {
 	const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 	const data = new DataTransfer();
@@ -312,7 +309,6 @@ await page.waitForFunction(() => document.querySelector('.ppn-source .canon-row-
 }).catch(() => {});
 check('a paste anywhere loads the PDF', (await text('.ppn-source .canon-row-title')) === 'pasted.pdf');
 
-// drop anywhere replaces it again
 await page.evaluate((base64) => {
 	const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 	const data = new DataTransfer();

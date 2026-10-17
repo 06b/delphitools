@@ -1,4 +1,3 @@
-// the canon video-atlas: blank layout, filmstrip band, report, copy, preview, transport
 import {
 	launch,
 	visit,

@@ -69,7 +69,7 @@ const EDGES: { edge: Edge; title: string }[] = [
 	{ edge: 'bottom', title: 'Bottom' },
 ];
 
-// errata PaperMenu's list; that menu takes no disabled
+// PaperMenu lacks disabled option
 const PAPERS = paperSizeGroups
 	.filter((group) => group.id !== 'common')
 	.flatMap((group) => group.sizes);
@@ -87,7 +87,7 @@ const Back = <template><IconSvg @name="chevron-left" /></template>;
 const Forward = <template><IconSvg @name="chevron-right" /></template>;
 const Crop = <template><IconSvg @name="crop" /></template>;
 
-// ?rcSample ?rcRotate=<page index> ?rcCrop=<inset points> ?rcPaper=<paper id> ?rcNudge=yes: the iOS launch arguments
+// ?rc* ios launch arguments
 const query = () => new URLSearchParams(window.location.search);
 
 const sameSize = (a: Size, b: Size) =>
@@ -119,7 +119,7 @@ export default class PdfRotateCrop extends Component {
 	@tracked geometry: Geometry[] = [];
 	@tracked edits: Edit[] = [];
 	@tracked page = 0;
-	/** Paper id per page; an edit clears it. */
+	/** cleared on edit */
 	@tracked papers: Record<number, string> = {};
 	@tracked thumbs: string[] = [];
 	@tracked picture: {
@@ -127,9 +127,9 @@ export default class PdfRotateCrop extends Component {
 		page: number;
 		rotation: number;
 	} | null = null;
-	/** The crop under a drag, display points. */
+	/** drag crop, display points */
 	@tracked live: CropBox | null = null;
-	/** Bumped when the margins are refused, so the fields show the crop again. */
+	/** remounts fields after refusal */
 	@tracked refused = 0;
 	@tracked busy = false;
 	@tracked failed = false;
@@ -137,9 +137,9 @@ export default class PdfRotateCrop extends Component {
 
 	#bytes: ArrayBuffer | null = null;
 	#pdf?: PDFDocumentProxy;
-	// a new file
+	// bumps per file
 	#token = 0;
-	// a new picture
+	// bumps per picture
 	#run = 0;
 
 	constructor(owner: Owner, args: object) {
@@ -188,7 +188,7 @@ export default class PdfRotateCrop extends Component {
 		);
 	}
 
-	/** Display space, the whole page when uncropped. */
+	/** display space; uncropped: whole */
 	cropRect(index: number): CropBox {
 		const size = this.displaySize(index);
 		const whole = { x: 0, y: 0, ...size };
@@ -311,7 +311,6 @@ export default class PdfRotateCrop extends Component {
 			: null;
 	}
 
-	// an edit drops the export
 	#changed() {
 		this.exported = null;
 		this.failed = false;
@@ -398,7 +397,7 @@ export default class PdfRotateCrop extends Component {
 		this.setCrop(rect);
 	};
 
-	/** Paper turns for landscape. */
+	/** paper turns for landscape */
 	#paperCrop(index: number, id: string) {
 		const paper = findPaperSize(id);
 		if (!paper) return undefined;
@@ -423,7 +422,7 @@ export default class PdfRotateCrop extends Component {
 		this.#paper(this.page, id);
 	};
 
-	/** The same fraction on every page; a picked paper crops every page to that paper. */
+	/** same fraction or paper */
 	cropAll = () => {
 		if (!this.loaded) return;
 		const { page } = this;
@@ -529,7 +528,7 @@ export default class PdfRotateCrop extends Component {
 		}
 	}
 
-	// the iOS DEBUG launch arguments
+	// ios DEBUG launch arguments
 	#launch() {
 		const flags = query();
 		const turn = Number(flags.get('rcRotate') ?? NaN);

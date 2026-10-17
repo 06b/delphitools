@@ -1,6 +1,4 @@
-// The port of iOS PDFCropEngine. Display space: the page as viewed, rotation
-// applied, top-left origin, points. Page space: PDF user space, bottom-left
-// origin.
+// display top-left, page bottom-left
 
 export interface CropBox {
 	x: number;

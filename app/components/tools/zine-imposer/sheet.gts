@@ -9,7 +9,7 @@ import type { ZineImage } from './images';
 
 const pct = (share: number) => `${Math.round(share * 10000) / 100}%`;
 
-// iOS PrintSheet dash patterns
+// ios PrintSheet dash patterns
 const DASHES = { valley: '6 4', mountain: '8 3 1.5 3' };
 
 interface FaceSignature {
@@ -70,7 +70,7 @@ class Face extends Component<FaceSignature> {
 		});
 	}
 
-	// front only, like the pdf
+	// front only, as pdf
 	get cuts() {
 		if (this.back) return [];
 		return this.args.layout.cutLines.map((cut) => ({
@@ -254,7 +254,7 @@ export default class Sheet extends Component<SheetSignature> {
 		this.dropAt = undefined;
 		const files = [...(event.dataTransfer?.files ?? [])];
 		if (page === undefined || !files.length) return;
-		// the tool-wide drop skips a handled one
+		// tool-wide drop skips handled
 		event.preventDefault();
 		this.args.onDropAt(page - 1, files);
 	};

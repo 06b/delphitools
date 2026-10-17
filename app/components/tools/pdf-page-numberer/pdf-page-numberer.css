@@ -1,4 +1,4 @@
-/* blank sheets at the CanonPageStrip geometry: insets 14 16 8, gap 14, caption 34 */
+/* CanonPageStrip geometry */
 .ppn-blank-strip {
 	display: flex;
 	gap: 14px;
@@ -45,7 +45,7 @@
 	background: var(--canon-muted);
 }
 
-/* the page is paper in both themes */
+/* paper in both themes */
 .ppn-paper {
 	position: absolute;
 	inset: 0;
@@ -71,7 +71,7 @@
 	pointer-events: none;
 }
 
-/* the export's grey 0.4 */
+/* matches export grey 0.4 */
 .ppn-mark--stamp {
 	color: #666;
 }
@@ -96,7 +96,7 @@
 	cursor: pointer;
 }
 
-/* iOS anchors at 8, 50, 92 % across and 6, 50, 94 % down: 24 or 76 %, 18 or 82 % of a third */
+/* ios anchors, third-relative */
 .ppn-dot {
 	position: absolute;
 	inset-block-start: 50%;
@@ -160,7 +160,7 @@
 	inline-size: 52px;
 }
 
-/* fixed: the percentage is of the window */
+/* fixed: % of viewport */
 .ppn-tip {
 	inline-size: 320px;
 	max-inline-size: calc(100% - 2 * var(--canon-panel-padding));

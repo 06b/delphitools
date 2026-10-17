@@ -1,4 +1,4 @@
-// node scripts/verify/imposer.mjs (BASE_URL for another port)
+// BASE_URL overrides port
 
 import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { PDFDocument } from 'pdf-lib';
 import { launch, visit, check, finish, sleep } from './harness.mjs';
 
-// four A4 portrait pages
 const source = await PDFDocument.create();
 for (let n = 0; n < 4; n++) source.addPage([595.28, 841.89]);
 const bytes = await source.save();
@@ -54,7 +53,6 @@ const state = () =>
 		pages: document.querySelector('.imp-pages input')?.value,
 	}));
 
-// clicks the cell titled `text` in the segmented control `selector`
 const pick = (selector, text) =>
 	page.evaluate(
 		(s, t) => {
@@ -68,7 +66,7 @@ const pick = (selector, text) =>
 		text,
 	);
 
-// the strip redraws 0.12 s after a change
+// strip redraw: 0.12 s debounce
 const settle = () => sleep(400);
 
 await visit(page, '/tools/imposer');
@@ -195,7 +193,6 @@ check(
 		(await page.$eval('.imp-guide-toggle', (el) => el.getAttribute('aria-expanded'))) === 'true',
 );
 
-// drop a file anywhere in the tool
 await page.evaluate(async (data) => {
 	const file = new File([new Uint8Array(data)], 'dropped.pdf', { type: 'application/pdf' });
 	const transfer = new DataTransfer();
@@ -212,7 +209,6 @@ await page.click('.imp-source button');
 await sleep(200);
 check('Clear brings the slot back with the blank pages', (await state()).slot === 'Drop PDF here');
 
-// paste anywhere
 await page.evaluate(async (data) => {
 	const file = new File([new Uint8Array(data)], 'pasted.pdf', { type: 'application/pdf' });
 	const transfer = new DataTransfer();

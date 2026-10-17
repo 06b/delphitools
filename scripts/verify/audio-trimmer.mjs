@@ -1,4 +1,3 @@
-// the canon audio-trimmer: blank layout, band, trim editor, fades, zoom, export, transport
 import {
 	launch,
 	visit,

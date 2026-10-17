@@ -147,7 +147,7 @@ export default class Picture extends Component<PictureSignature> {
 		};
 	}
 
-	// the whole page keeps the pane scrolling
+	// uncropped: pane keeps scrolling
 	grabs = (point: Point) => {
 		if (!this.args.url) return false;
 		const shown = this.shownCrop;

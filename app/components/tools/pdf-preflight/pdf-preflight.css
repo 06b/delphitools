@@ -1,4 +1,3 @@
-/* blank pages before a file: muted sheets, no numbers */
 .pf-strip--blank .canon-page-strip-paper {
 	background: var(--canon-muted);
 	box-shadow: none;

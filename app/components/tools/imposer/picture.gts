@@ -30,7 +30,7 @@ const draw = modifier(
 		],
 	) => {
 		const redraw = () => {
-			// layout size: the flip transform does not change it
+			// transform-free layout size
 			const [width, height] = [
 				canvas.clientWidth,
 				canvas.clientHeight,

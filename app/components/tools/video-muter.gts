@@ -58,7 +58,6 @@ const MUTE_ERROR = "Couldn't remux. Try MP4, MOV or WEBM.";
 const tallest = 1.25;
 const tallestPreview = 340;
 const containerLabels = CONTAINERS.map((c) => c.label);
-// the muted file has no audio track
 const BLANK_INFO = blankSections(['General', 'Video']);
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -126,7 +125,7 @@ export default class VideoMuter extends Component {
 		return this.container || this.probe?.container || 'mp4';
 	}
 
-	// before a file with no pick: the source's container is unknown
+	// no pick: container unknown
 	get containerIndex() {
 		if (!this.container && !this.probe) return -1;
 		return CONTAINERS.findIndex(
@@ -214,7 +213,7 @@ export default class VideoMuter extends Component {
 		const support = await containerSupport(probe.codec);
 		if (token !== this.#token) return;
 		this.support = support;
-		// a pick made before the file that its codec cannot take
+		// pre-file pick, unsupported codec
 		if (this.container && !support[this.container])
 			this.container = '';
 	}

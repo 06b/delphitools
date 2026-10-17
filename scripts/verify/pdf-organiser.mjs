@@ -157,7 +157,6 @@ check(
 const emptyHeight = await bannerHeight();
 const emptyHeadings = await headings();
 
-// the slot input takes several files, picked order kept
 await (await page.$('.media-slot-bar:has(.porg-slot) ~ input[type="file"]')).uploadFile(
 	alpha,
 	beta,
@@ -227,7 +226,7 @@ check(
 	await names(),
 );
 
-// synthetic dragevents suffice; the kit places by clientX
+// kit places by clientX
 await page.evaluate(() => {
 	const list = document.querySelector('.porg-strip ol');
 	const cells = [...list.querySelectorAll('[data-page-index]')];
@@ -373,7 +372,6 @@ check(
 	rangeState.error.trim(),
 );
 
-// a drop on the tool, outside the strip, adds at the end
 await page.evaluate((b64) => {
 	const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 	const dataTransfer = new DataTransfer();

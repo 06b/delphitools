@@ -5,7 +5,7 @@ import Fresh, {
 } from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import { paperSizeGroups } from 'delphitools-v2/lib/paper-sizes';
 
-// common repeats sizes from the series groups
+// common duplicates series sizes
 const SIZES = paperSizeGroups
 	.filter((group) => group.id !== 'common')
 	.flatMap((group) => group.sizes);

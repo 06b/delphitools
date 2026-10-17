@@ -79,12 +79,12 @@ const footerClear = () =>
 		return { ok: last < top, last: Math.round(last), top: Math.round(top) };
 	});
 const videoTime = () => page.$eval('.vt-preview video', (v) => v.currentTime);
-// the floating footer covers the lowest rows at 1400 x 1000 until they scroll up
+// floating footer covers rows
 const tap = async (sel) => {
 	await page.$eval(sel, (el) => el.scrollIntoView({ block: 'center' }));
 	await page.click(sel);
 };
-// bandHeight in media/strips: readoutBandHeight(96)
+// media/strips readoutBandHeight(96)
 const BAND = 138;
 const layout = () =>
 	page.evaluate(() => {
@@ -137,7 +137,6 @@ check(
 			[...document.querySelectorAll('.vt-containers [role="radio"], .vt-modes [role="radio"]')].every(
 				(b) => !b.disabled,
 			) &&
-			// the source container is unknown, so none is picked
 			!document.querySelector('.vt-containers [aria-checked="true"]') &&
 			['.media-job-run', '.vt-start input', '.vt-end input', '.vt-set-in', '.vt-set-out', '.vt-back', '.vt-forward', '.media-play', '.media-loop'].every(
 				(sel) => document.querySelector(sel)?.disabled === true,
@@ -337,7 +336,6 @@ check(
 	!!(await page.$('.vt-slot')) && !(await page.$('.vt-preview video')) && !!(await page.$('.vt-preview')),
 );
 
-// paste anywhere loads, and ?vtrimCut sets the cut; a Container and Cut picked before the file hold
 await visit(page, '/tools/video-trimmer?vtrimCut=0.25,1');
 await pick('vt-containers', 'MKV');
 await pick('vt-modes', 'Exact');

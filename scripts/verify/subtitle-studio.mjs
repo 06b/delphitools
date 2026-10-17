@@ -98,7 +98,7 @@ check(
 	),
 );
 let s = await state();
-// media/strips bandHeight: readoutBandHeight(96)
+// media/strips readoutBandHeight(96)
 const BAND = 138;
 check(
 	'empty: the Source slot row and the subtitles drop zone, a blank picture, no canvas',
@@ -239,7 +239,7 @@ await sleep(100);
 const laneStyle = await page.$eval('.ss-lane .cue-timeline-cue:nth-child(2)', (el) =>
 	el.getAttribute('style'),
 );
-// the recorded clip runs a few ms short of 2 s
+// recording runs ms short
 const clipLength = await page.$eval('.subtitle-studio video', (v) => v.duration);
 const fieldValue = await page.$eval('.ss-cues .cue-row:nth-of-type(2) .cue-row-time', (el) => el.value);
 check(

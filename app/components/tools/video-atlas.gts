@@ -323,7 +323,6 @@ export default class VideoAtlas extends Component {
 						@self="video-atlas"
 					/>
 				{{else}}
-					{{! no file to hand off yet }}
 					<OpenIn
 						class="va-open media-open--blank"
 						@tools={{BLANK_OPEN}}

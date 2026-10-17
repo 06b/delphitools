@@ -33,7 +33,7 @@ export interface PictureSignature {
 
 const A4 = { width: 595.28, height: 841.89 };
 
-// the base-14 fonts the export embeds
+// export's base-14 fonts
 const FONT_CSS: Record<FontFamily, string> = {
 	sans: 'Helvetica, Arial, sans-serif',
 	serif: '"Times New Roman", Times, serif',
@@ -77,7 +77,7 @@ function watermark(o: StampOptions, text: string, page: Size) {
 			`opacity: ${o.opacity}`,
 			'left: 50%',
 			'top: 50%',
-			// the export centres 0.175 em above the baseline; the line box centres ~0.35 em above it
+			// export 0.175em, line 0.35em
 			'transform: translate(-50%, -50%) rotate(-45deg) translateY(-0.17em)',
 		].join('; '),
 	);

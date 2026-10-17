@@ -236,7 +236,7 @@ export default class WaveformGenny extends Component {
 		context.fillRect(0, 0, width, height);
 		context.fillStyle = this.waveHex;
 		if (!peaks) {
-			// a 1 px line vanishes once the image is scaled into the band
+			// 1px vanishes when scaled
 			const line = Math.max(1, Math.round(height / 100));
 			context.fillRect(0, (height - line) / 2, width, line);
 			return;

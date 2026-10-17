@@ -78,7 +78,7 @@ const footerClear = () =>
 		return { ok: last < top, last: Math.round(last), top: Math.round(top) };
 	});
 const videoTime = () => page.$eval('.vg-preview video', (v) => v.currentTime);
-// the floating footer covers the lowest rows at 1400 x 1000 until they scroll up
+// floating footer covers rows
 const tap = async (sel) => {
 	await page.$eval(sel, (el) => el.scrollIntoView({ block: 'center' }));
 	await page.click(sel);
@@ -92,7 +92,7 @@ check(
 			document.querySelector('.video-to-gif').getBoundingClientRect().height,
 	),
 );
-// bandHeight in media/strips: readoutBandHeight(96)
+// media/strips readoutBandHeight(96)
 const BAND = 138;
 const layout = () =>
 	page.evaluate(() => {
@@ -334,7 +334,6 @@ check(
 	!!(await page.$('.vg-slot')) && !(await page.$('.vg-preview video')) && !!(await page.$('.vg-preview')),
 );
 
-// paste anywhere loads; ?gifCut, ?gifFps and ?gifRun set up a state; a Width set before the file holds
 await visit(page, '/tools/video-to-gif?gifCut=0.5,1.5&gifFps=20&gifRun=yes');
 await typeInto('.vg-width input', '160');
 await makeClip(page, { ms: 2500, name: 'paste.webm' });

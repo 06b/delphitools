@@ -1,4 +1,3 @@
-// the canon audio-atlas: blank layout, band, MediaInfo and loudness tiles, sheet, zoom, transport, open-in
 import {
 	launch,
 	visit,
@@ -98,7 +97,7 @@ const bandTall = () =>
 	page.$eval('.audio-atlas .canon-canvas', (el) =>
 		Math.round(el.getBoundingClientRect().height),
 	);
-// the media/strips bandHeight: readoutBandHeight(96)
+// media/strips readoutBandHeight(96)
 const BAND = 138;
 const blankInfo = () =>
 	page.evaluate(() => {

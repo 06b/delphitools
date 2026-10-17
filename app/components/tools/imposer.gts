@@ -79,7 +79,7 @@ const FLIPS = ['long-edge', 'short-edge'] as const;
 const FLIP_LABELS = ['Long edge', 'Short edge'];
 const ORIENTATIONS = ['portrait', 'landscape'] as const;
 const ORIENTATION_LABELS = ['Portrait', 'Landscape'];
-// iOS ImpositionLayoutID.name
+// ios ImpositionLayoutID.name
 const NAMES: Record<string, string> = {
 	'saddle-stitch': '2-up Saddle Stitch',
 	'perfect-bind': '2-up Perfect Bind',
@@ -92,9 +92,9 @@ const LAYOUT_IDS = IMPOSITION_LAYOUTS.map((layout) => layout.id);
 const LAYOUT_LABELS = LAYOUT_IDS.map((id) => NAMES[id] ?? id);
 const FOLDED = new Set(['saddle-stitch', 'perfect-bind', 'step-and-repeat']);
 const FALLBACK_PAPER = PAPER_SIZES[0]!;
-/** Strip pictures, px tall (iOS renderStrip). */
+/** px, ios renderStrip */
 const STRIP_HEIGHT = 140;
-// iOS keeps one sheet's worth of sharp pictures
+// ios: one sheet's worth
 const SHARP_LIMIT = 32;
 
 const mm = (value: number) => `${Math.round(value)} mm`;
@@ -158,9 +158,9 @@ export default class Imposer extends Component {
 	@tracked output: Output | null = null;
 
 	@tracked stripPages: CanonPage[] = [];
-	/** Bumps when a page picture arrives. */
+	/** bumps per page picture */
 	@tracked version = 0;
-	/** Bumps when the strip should take new page pictures. */
+	/** bumps to redraw strip */
 	@tracked stripVersion = 0;
 
 	#bytes: Uint8Array | null = null;
@@ -174,7 +174,7 @@ export default class Imposer extends Component {
 	#stripTimer?: number;
 	#stripDrawn = false;
 
-	// ?impLayout=<0-5> ?impDuplex=<0|1> ?impOrientation=<0|1> ?impPages ?impCopies ?impCreep ?impPaper ?impSheet ?impBack ?impSample: the iOS launch arguments
+	// ?imp* ios launch arguments
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
@@ -220,8 +220,6 @@ export default class Imposer extends Component {
 			this.#close();
 		});
 	}
-
-	// --- settings ---
 
 	get paperSize(): PaperSize {
 		const inferred = this.inferredPaper;
@@ -328,8 +326,6 @@ export default class Imposer extends Component {
 		return COPIES.map(String);
 	}
 
-	// --- source ---
-
 	get loaded() {
 		return this.file !== null;
 	}
@@ -356,7 +352,7 @@ export default class Imposer extends Component {
 		this.clear();
 		const token = this.#token;
 		this.file = file;
-		// ?impSheet and ?impBack hold through the sample load
+		// keep ?impSheet, ?impBack
 		if (!reset) [this.activeSheet, this.isFlipped] = kept;
 		void this.#read(file, token);
 	}
@@ -389,7 +385,7 @@ export default class Imposer extends Component {
 			if (token !== this.#token) return;
 			if (picture) this.#thumbs.set(i + 1, picture);
 			if (this.activePages.includes(i + 1)) this.version++;
-			// per-batch redraw froze 400pp on iOS
+			// ios: redraw froze 400pp
 			if ((i + 1) % 32 === 0 || i === pdf.numPages - 1)
 				this.stripVersion++;
 		}
@@ -437,9 +433,7 @@ export default class Imposer extends Component {
 		this.#pageSizes.clear();
 	}
 
-	// --- changes ---
-
-	// a setting change drops the export, as iOS change {}
+	// ios change {}
 	#invalidate() {
 		this.#job++;
 		this.busy = false;
@@ -531,8 +525,6 @@ export default class Imposer extends Component {
 		this.#invalidate();
 	};
 
-	// --- sheets ---
-
 	get totalSheets() {
 		return this.result.totalSheets;
 	}
@@ -583,7 +575,7 @@ export default class Imposer extends Component {
 	}
 
 	get paintOptions() {
-		// consumed so a new picture repaints
+		// tracks version for repaint
 		void this.version;
 		const pictures = new Map<number, Picture>();
 		for (const page of this.activePages) {
@@ -598,7 +590,7 @@ export default class Imposer extends Component {
 		};
 	}
 
-	// web short-edge turns the backs a half turn: the sheet tumbles
+	// short-edge: sheet tumbles
 	get axis(): 'x' | 'y' {
 		return this.duplexAware && this.duplexFlip === 'short-edge'
 			? 'x'
@@ -695,7 +687,6 @@ export default class Imposer extends Component {
 		event.preventDefault();
 	}
 
-	// renders the visible sheet's pages at the big size, as iOS sharpen
 	sharpen = modifier((_element: Element, [pages]: [number[]]) => {
 		const pdf = this.#pdf;
 		if (!pdf) return;
@@ -727,11 +718,11 @@ export default class Imposer extends Component {
 		})();
 	});
 
-	// strip pictures redraw 0.12 s after a change, as iOS
+	// 0.12 s debounce, ios
 	strip = modifier(
 		(
 			_element: Element,
-			// unread args do not rerun a function modifier
+			// unread args: no rerun
 			[result, , version]: [
 				ImpositionResult,
 				ImpositionConfig,
@@ -778,8 +769,6 @@ export default class Imposer extends Component {
 		},
 	);
 
-	// --- export ---
-
 	get exportDisabled() {
 		return !this.loaded || this.pdfPageCount === 0;
 	}
@@ -825,8 +814,6 @@ export default class Imposer extends Component {
 		if (this.output)
 			downloadBlob(this.output.blob, this.output.name);
 	};
-
-	// --- print guide ---
 
 	toggleGuide = () => {
 		this.guideOpen = !this.guideOpen;

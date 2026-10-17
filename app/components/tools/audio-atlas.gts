@@ -66,7 +66,7 @@ const BLANK_OPEN = toolsForFile(sample('.wav')).filter(
 	(tool) => tool.id !== 'audio-atlas' && !tool.route,
 );
 
-// iOS AudioAtlasViewController: sheet 120 + 24 + 160
+// ios AudioAtlasViewController: 120+24+160
 const sheetHeight = 304;
 
 const flag = (name: string) =>

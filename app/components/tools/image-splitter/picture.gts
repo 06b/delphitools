@@ -101,7 +101,7 @@ export default class Picture extends Component<PictureSignature> {
 		return () => observer.disconnect();
 	});
 
-	// one menu for every tile, anchored to a point placed at the pointer
+	// shared menu, pointer-anchored
 	menu = modifier((panel: HTMLElement) => {
 		this.#panel = panel;
 		this.#point = panel.previousElementSibling as HTMLElement;
@@ -121,7 +121,7 @@ export default class Picture extends Component<PictureSignature> {
 		this.#tile = tile;
 		const frame = point.offsetParent!.getBoundingClientRect();
 		const box = tile.getBoundingClientRect();
-		// a keyboard click has detail 0 and no position: below the tile
+		// keyboard click: detail 0
 		const pointer = event.detail > 0;
 		const x = pointer
 			? event.clientX

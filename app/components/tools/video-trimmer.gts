@@ -61,7 +61,7 @@ const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const TRIM_ERROR = "Couldn't process. Try MP4, MOV or WEBM";
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 
-// iOS VideoTrimmerViewController: editor 72
+// ios VideoTrimmerViewController
 const editorHeight = 72;
 // height over width at most 1.25, at most 340 pt tall
 const tallest = 1.25;
@@ -171,7 +171,7 @@ export default class VideoTrimmer extends Component {
 		return this.container || this.intake.probe?.container || 'mp4';
 	}
 
-	// before a file with no pick: the source's container is unknown
+	// no pick: container unknown
 	get containerIndex() {
 		if (!this.container && !this.intake.probe) return -1;
 		return CONTAINERS.findIndex(
@@ -284,7 +284,7 @@ export default class VideoTrimmer extends Component {
 		const support = await containerSupport(probe.codec);
 		if (token !== this.#token) return;
 		this.support = support;
-		// a pick made before the file that its codec cannot take
+		// pre-file pick, unsupported codec
 		if (this.container && !support[this.container])
 			this.container = '';
 	}

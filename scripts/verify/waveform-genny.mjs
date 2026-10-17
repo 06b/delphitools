@@ -1,5 +1,5 @@
 // the canon waveform-genny: slot, picture as the export, sizes, detail, colours, PNG and SVG
-// SHOTS=<dir> also saves wg-<width>-<theme>.png and wg-empty-<width>-<theme>.png at 390, 1400 and 2200
+// SHOTS=<dir> saves screenshots
 import {
 	launch,
 	visit,

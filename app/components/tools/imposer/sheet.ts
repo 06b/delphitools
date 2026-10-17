@@ -39,7 +39,7 @@ export interface PaintOptions {
 	font?: string;
 }
 
-// iOS PrintSheet.ink: the paper keeps the light-mode tokens in either theme
+// ios PrintSheet.ink; light-only
 const INK = {
 	foreground: [20, 39, 15],
 	muted: [237, 232, 217],
@@ -229,7 +229,6 @@ export function paint(
 						dw,
 						dh,
 					);
-					// page tag in the cell's top-left corner
 					const tagSize = Math.min(
 						15,
 						Math.max(

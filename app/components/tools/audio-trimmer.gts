@@ -59,7 +59,7 @@ const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 const fixed = (seconds: number) => seconds.toFixed(2);
 const noFrames: string[] = [];
 
-// iOS AudioTrimmerViewController: editor 180
+// ios AudioTrimmerViewController
 const editorHeight = 180;
 
 const flag = (name: string) =>
@@ -679,7 +679,7 @@ export default class AudioTrimmer extends Component {
 						/>
 					{{/if}}
 				</CanonRows>
-				{{! last: a hidden first child keeps the kit from setting the editor flush under the band }}
+				{{! last: kit first-child spacing }}
 				{{#if this.loaded}}
 					{{! the transport is its control; user media lacks captions }}
 					{{! template-lint-disable require-media-caption }}
