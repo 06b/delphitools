@@ -12,6 +12,11 @@ import {
 	summary,
 	tileSplit,
 } from 'delphitools-v2/components/tools/image-atlas/report';
+import {
+	gamutOverSRGB,
+	profileName,
+	splitIcc,
+} from 'delphitools-v2/components/tools/image-atlas/icc';
 
 module('Unit | Tool | image-atlas', function () {
 	test('labels and values read as the web tool did', function (assert) {
@@ -134,6 +139,51 @@ module('Unit | Tool | image-atlas', function () {
 			peak([[5, 0, 0, 7]]),
 			7,
 			'end bins when nothing inside',
+		);
+	});
+
+	test('icc: split, name and gamut', function (assert) {
+		// s15Fixed16 XYZType, as exifr leaves it
+		const xyz = (...v: number[]) => {
+			const bytes = new Uint8Array(20);
+			const view = new DataView(bytes.buffer);
+			v.forEach((n, i) =>
+				view.setInt32(8 + i * 4, Math.round(n * 65536)),
+			);
+			return bytes;
+		};
+		// sRGB's D50-adapted matrix columns
+		const srgb = {
+			RedMatrixColumn: xyz(0.4361, 0.2225, 0.0139),
+			GreenMatrixColumn: xyz(0.3851, 0.7169, 0.0971),
+			BlueMatrixColumn: xyz(0.1431, 0.0606, 0.7141),
+		};
+		const { exif, icc } = splitIcc({
+			Make: 'Cam',
+			ProfileDescription: 'sRGB IEC61966-2.1',
+			ProfileClass: 'Monitor',
+			...srgb,
+		});
+		assert.deepEqual(Object.keys(exif), ['Make']);
+		assert.strictEqual(profileName(icc), 'sRGB IEC61966-2.1');
+		assert.strictEqual(gamutOverSRGB(icc)?.toFixed(2), '1.00');
+		assert.strictEqual(
+			profileName({
+				ProfileDescription: [
+					{ lang: 'de', text: 'Graustufen' },
+					{ lang: 'en', text: 'Gray' },
+				],
+			}),
+			'Gray',
+		);
+		assert.strictEqual(
+			profileName({ ProfileName: 'ICC Profile' }),
+			'ICC Profile',
+		);
+		assert.strictEqual(profileName({}), null);
+		assert.strictEqual(
+			gamutOverSRGB({ GrayTRC: new Uint8Array(14) }),
+			null,
 		);
 	});
 });

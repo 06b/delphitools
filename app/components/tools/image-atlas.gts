@@ -15,7 +15,6 @@ import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
-import CanonTiles from 'delphicanon/components/canon-tiles';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import { parseHex, type Rgb } from 'delphicanon/lib/colour';
 import type CanonToastService from 'delphicanon/services/canon-toast';
@@ -39,6 +38,12 @@ import Picture, {
 } from 'delphitools-v2/components/tools/image-atlas/picture';
 import Scopes from 'delphitools-v2/components/tools/image-atlas/scopes';
 import Tiles from 'delphitools-v2/components/tools/image-atlas/tiles';
+import {
+	gamutOverSRGB,
+	pngIcc,
+	profileName,
+	splitIcc,
+} from 'delphitools-v2/components/tools/image-atlas/icc';
 import {
 	atlasSections,
 	bannerHeight,
@@ -149,6 +154,7 @@ export default class ImageAtlas extends Component {
 	@tracked url: string | null = null;
 	@tracked dims: Dimensions | null = null;
 	@tracked exif: ExifData | null = null;
+	@tracked icc: ExifData | null = null;
 	@tracked gps: GpsPoint | null = null;
 	@tracked scan: Scan | null = null;
 	@tracked palette: Rgb[] = [];
@@ -240,8 +246,25 @@ export default class ImageAtlas extends Component {
 	}
 
 	get colourTiles() {
-		const { scan } = this;
+		const { scan, icc } = this;
+		// untagged pixels are sRGB to the browser
+		const gamut = icc
+			? Object.keys(icc).length
+				? gamutOverSRGB(icc)
+				: 1
+			: null;
 		return [
+			{
+				label: 'Colour Profile',
+				value: (icc && profileName(icc)) ?? '—',
+			},
+			{
+				label: 'Gamut',
+				value:
+					gamut === null
+						? '—'
+						: `${gamut.toFixed(2)} × sRGB`,
+			},
 			{
 				label: 'Transparent',
 				value: scan ? percent(scan.transparent) : '—',
@@ -323,6 +346,7 @@ export default class ImageAtlas extends Component {
 		this.error = '';
 		this.dims = null;
 		this.exif = null;
+		this.icc = null;
 		this.gps = null;
 		this.scan = null;
 		this.palette = [];
@@ -340,7 +364,7 @@ export default class ImageAtlas extends Component {
 				ifd1: true,
 				xmp: true,
 				iptc: true,
-				icc: false,
+				icc: true,
 				jfif: true,
 				ihdr: true,
 				makerNote: false,
@@ -375,10 +399,19 @@ export default class ImageAtlas extends Component {
 					);
 				}
 			}
+			const { exif, icc } = splitIcc(data ?? {});
+			if (
+				file.type === 'image/png' &&
+				!('ProfileDescription' in icc)
+			)
+				Object.assign(
+					icc,
+					await pngIcc(file).catch(() => null),
+				);
 			if (token !== this.#token) return;
 
-			this.exif =
-				data && Object.keys(data).length ? data : {};
+			this.exif = exif;
+			this.icc = icc;
 			this.gps = gps;
 		} catch (err) {
 			if (token !== this.#token) return;
@@ -430,6 +463,7 @@ export default class ImageAtlas extends Component {
 		this.file = null;
 		this.dims = null;
 		this.exif = null;
+		this.icc = null;
 		this.gps = null;
 		this.scan = null;
 		this.palette = [];
@@ -611,9 +645,7 @@ export default class ImageAtlas extends Component {
 							></span><span></span>
 						</div>
 					{{/if}}
-					<CanonTiles
-						@items={{this.colourTiles}}
-					/>
+					<Tiles @rows={{this.colourTiles}} />
 				</CanonRows>
 				<CanonRows class="ia-location" @framed={{true}}>
 					<CanonHeading @text="Location" />

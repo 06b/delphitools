@@ -1,7 +1,86 @@
 // the canon image-atlas: blank layout, picture, details, colour, location, copy, clear, paste
+import { existsSync, readFileSync } from 'node:fs';
 import { launch, visit, check, finish, sleep } from './harness.mjs';
 
 const { browser, page } = await launch();
+
+const PROFILES = '/System/Library/ColorSync/Profiles';
+const profileBytes = (name) => {
+	const file = `${PROFILES}/${name}`;
+	return existsSync(file) ? [...readFileSync(file)] : null;
+};
+
+// a 48 px canvas image carrying `profile`: JPEG in an APP2 ICC_PROFILE segment, PNG in an iCCP chunk
+async function profiledImage(page, kind, profile, name) {
+	await page.evaluate(
+		async ({ kind, profile, name }) => {
+			const asc = (s) => [...s].map((c) => c.charCodeAt(0));
+			const be32 = (n) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+			const canvas = document.createElement('canvas');
+			canvas.width = 48;
+			canvas.height = 48;
+			const ctx = canvas.getContext('2d');
+			ctx.fillStyle = '#e33';
+			ctx.fillRect(0, 0, 48, 24);
+			ctx.fillStyle = '#3a6';
+			ctx.fillRect(0, 24, 48, 24);
+			const type = kind === 'png' ? 'image/png' : 'image/jpeg';
+			const blob = await new Promise((r) => canvas.toBlob(r, type, 0.9));
+			const bytes = new Uint8Array(await blob.arrayBuffer());
+			let out;
+			if (kind === 'png') {
+				const packed = new Uint8Array(
+					await new Response(
+						new Blob([new Uint8Array(profile)]).stream().pipeThrough(new CompressionStream('deflate')),
+					).arrayBuffer(),
+				);
+				const body = [...asc('iCCP'), ...asc('ICC Profile'), 0, 0, ...packed];
+				let crc = -1;
+				for (const byte of body) {
+					crc ^= byte;
+					for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+				}
+				// signature 8 + IHDR 25
+				out = new Uint8Array([
+					...bytes.slice(0, 33),
+					...be32(body.length - 4),
+					...body,
+					...be32(~crc >>> 0),
+					...bytes.slice(33),
+				]);
+			} else {
+				const payload = [...asc('ICC_PROFILE\0'), 1, 1, ...profile];
+				out = new Uint8Array([
+					...bytes.slice(0, 2),
+					0xff,
+					0xe2,
+					(payload.length + 2) >> 8,
+					(payload.length + 2) & 0xff,
+					...payload,
+					...bytes.slice(2),
+				]);
+			}
+			const transfer = new DataTransfer();
+			transfer.items.add(new File([out], name, { type }));
+			document.querySelector('.image-atlas').dispatchEvent(
+				new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }),
+			);
+		},
+		{ kind, profile, name },
+	);
+	await page.waitForFunction(
+		(n) =>
+			document.querySelector('.ia-source .canon-row-title')?.textContent.trim() === n &&
+			!document.querySelector('.ia-source .canon-row-detail')?.textContent.includes('Reading'),
+		{ timeout: 10000 },
+		name,
+	);
+	await page.waitForSelector('.ia-palette', { timeout: 5000 });
+	await sleep(300);
+}
+
+// labels exifr gives an ICC profile's fields
+const ICC_LABEL = /Profile|Matrix Column|TRC|Rendering Intent|Color Space Data|Connection Space|White Point|Chromatic Adaptation|Primary Platform|Device (Mfg|Model|Manufacturer)/;
 
 // a 64 px JPEG with Make, Model, dates, a serial, a MakerNote and a GPS fix
 async function taggedJpeg(page, selector) {
@@ -160,6 +239,41 @@ check(
 	(await headings('.ia-colour')).join() === 'Colour' &&
 		(await headings('.ia-location')).join() === 'Location',
 );
+const blankColour = await tiles('.ia-colour');
+check(
+	'empty: Colour Profile, Gamut and Transparent read dashes',
+	JSON.stringify(blankColour) ===
+		JSON.stringify([
+			['Colour Profile', '—'],
+			['Gamut', '—'],
+			['Transparent', '—'],
+		]),
+	JSON.stringify(blankColour),
+);
+
+// the scopes plate sits in the same gutter and frame as the sections around it
+const edges = () =>
+	page.evaluate(() =>
+		['.ia-controls', '.ia-scopes-canvas', '.ia-colour'].map((sel) => {
+			const box = document.querySelector(sel).getBoundingClientRect();
+			const plate = document.querySelector(`${sel} > :first-child`).getBoundingClientRect();
+			return [box.left, box.right, plate.left, plate.right].map(Math.round);
+		}),
+	);
+const alignedAt = async (width) => {
+	const [controls, scopes, colour] = await edges();
+	check(
+		`${width} px: the scopes plate lines up with the sections`,
+		scopes[0] === controls[0] && scopes[1] === controls[1] && scopes[0] === colour[0] && scopes[1] === colour[1],
+		JSON.stringify({ controls, scopes, colour }),
+	);
+	check(
+		`${width} px: the dark plate sits inside a frame like theirs`,
+		scopes[2] - scopes[0] === colour[2] - colour[0] && scopes[1] - scopes[3] === colour[1] - colour[3],
+		JSON.stringify({ scopes, colour }),
+	);
+};
+await alignedAt(1400);
 
 await taggedJpeg(page, '.image-atlas');
 await page.waitForFunction(
@@ -195,12 +309,12 @@ check('the dimension lines read 64 px', picture.figures.every((f) => f.includes(
 check('the caption reads aspect and megapixels', picture.caption === '1:1  0.00 MP', picture.caption);
 check('an opaque image has no checks', !picture.checks);
 
-const colour = await page.evaluate(() => ({
-	swatches: document.querySelectorAll('.ia-palette .canon-swatch').length,
-	transparent: document.querySelector('.ia-colour .canon-tiles-value')?.textContent.trim(),
-}));
-check('the palette shows swatches', colour.swatches >= 2, String(colour.swatches));
-check('Transparent reads 0 %', colour.transparent === '0 %', colour.transparent);
+const swatches = await page.evaluate(() => document.querySelectorAll('.ia-palette .canon-swatch').length);
+check('the palette shows swatches', swatches >= 2, String(swatches));
+const colour = Object.fromEntries(await tiles('.ia-colour'));
+check('Transparent reads 0 %', colour.Transparent === '0 %', colour.Transparent);
+// chrome's jpeg encoder embeds its own sRGB profile
+check('the canvas JPEG reads an sRGB gamut', colour.Gamut === '1.00 × sRGB', JSON.stringify(colour));
 
 const location = await page.evaluate(() => ({
 	gps: document.querySelector('.ia-gps')?.textContent.replace(/\s+/g, ' ').trim(),
@@ -282,10 +396,19 @@ await sleep(300);
 const pasted = await page.evaluate(() => ({
 	title: document.querySelector('.ia-source .canon-row-title')?.textContent.trim(),
 	checks: !!document.querySelector('.ia-checks'),
-	transparent: document.querySelector('.ia-colour .canon-tiles-value')?.textContent.trim(),
+	transparent: [...document.querySelectorAll('.ia-colour .canon-tiles-tile')]
+		.find((el) => el.querySelector('.canon-tiles-label')?.textContent.trim() === 'Transparent')
+		?.querySelector('.canon-tiles-value')
+		?.textContent.trim(),
 	clean: document.querySelector('.ia-clean')?.textContent.trim(),
 	caption: document.querySelector('.ia-caption')?.textContent,
 }));
+const untagged = Object.fromEntries(await tiles('.ia-colour'));
+check(
+	'untagged PNG: no profile, sRGB gamut',
+	untagged['Colour Profile'] === '—' && untagged.Gamut === '1.00 × sRGB',
+	JSON.stringify(untagged),
+);
 check('a paste anywhere loads the image', pasted.title === 'clear.png', pasted.title);
 check('a transparent image sits on checks', pasted.checks);
 check('Transparent reads half', pasted.transparent === '50 %', pasted.transparent);
@@ -296,6 +419,46 @@ const open = await page.$$eval('.ia-open:not([inert]) .dt-atlas-open [data-tool]
 	els.map((el) => el.dataset.tool),
 );
 check('open-in lists image tools, not itself', open.includes('metadata-stripper') && !open.includes('image-atlas'));
+
+// [kind, system profile, expected name, expected gamut]
+const profiled = [
+	['jpeg', 'Display P3.icc', 'Display P3', '1.36 × sRGB'],
+	['png', 'AdobeRGB1998.icc', 'Adobe RGB (1998)', '1.35 × sRGB'],
+	['png', 'Generic Gray Profile.icc', 'Generic Gray Profile', '—'],
+];
+for (const [kind, file, name, gamut] of profiled) {
+	const profile = profileBytes(file);
+	if (!profile) {
+		console.log(` skip  ${PROFILES}/${file} absent, no ${kind} ICC check`);
+		continue;
+	}
+	await profiledImage(page, kind, profile, `profiled.${kind === 'png' ? 'png' : 'jpg'}`);
+	const read = Object.fromEntries(await tiles('.ia-colour'));
+	const lines = await page.$$eval('.ia-colour .canon-value-line', (els) =>
+		els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+	);
+	const shown = read['Colour Profile'] ?? lines.find((l) => l.startsWith('Colour Profile'))?.slice(15);
+	check(`${kind} ${file}: Colour Profile reads ${name}`, shown === name, JSON.stringify({ read, lines }));
+	check(`${kind} ${file}: Gamut reads ${gamut}`, read.Gamut === gamut, read.Gamut);
+	const other = await page.$('.ia-other button');
+	if (other && (await page.$eval('.ia-other button', (b) => b.getAttribute('aria-expanded'))) !== 'true')
+		await other.click();
+	await sleep(100);
+	const labels = await page.$$eval(
+		'.ia-details .canon-tiles-label, .ia-details .canon-value-line-label',
+		(els) => els.map((el) => el.textContent.trim()),
+	);
+	const leaked = labels.filter((l) => ICC_LABEL.test(l));
+	check(`${kind} ${file}: no ICC fields in the details`, leaked.length === 0, leaked.join());
+}
+if (profileBytes('Display P3.icc')) {
+	await page.setViewport({ width: 390, height: 844 });
+	await sleep(500);
+	await alignedAt(390);
+	await page.setViewport({ width: 1400, height: 1000 });
+	await sleep(500);
+	await alignedAt('1400 loaded');
+}
 
 await page.setViewport({ width: 390, height: 844 });
 await sleep(500);

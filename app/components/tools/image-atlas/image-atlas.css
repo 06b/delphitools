@@ -76,6 +76,17 @@
 	font-family: var(--canon-mono-font);
 }
 
+/* the kit's wide split runs it edge to edge beside the sidebar */
+.image-atlas
+	.canon-split-pane.canon-split-main
+	> .ia-scopes-canvas.canon-canvas--unless-wide {
+	inline-size: min(
+		100% - 2 * var(--canon-panel-padding),
+		var(--canon-page-max-width, 100000px)
+	);
+	padding-inline: var(--canon-frame);
+}
+
 .ia-palette-blank {
 	display: flex;
 	gap: var(--canon-hairline);
