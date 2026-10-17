@@ -7,9 +7,6 @@
 @use "sticker-wall";
 @use "suites";
 @use "nds-loader";
-@use "language-combobox";
-
-
 @use "substrata/canvas";
 @use "substrata/shared";
 @use "substrata/shell";
@@ -3692,114 +3689,6 @@ body {
 .dt-popover-anchor {
 	display: flex;
 	min-width: 0;
-}
-
-.dt-command {
-	display: flex;
-	height: 100%;
-	width: 100%;
-	flex-direction: column;
-	overflow: hidden;
-	background: var(--popover);
-	color: var(--popover-foreground);
-}
-
-.dt-command-search-icon {
-	width: crayon.size(4);
-	height: crayon.size(4);
-	flex-shrink: 0;
-	opacity: 0.5;
-}
-
-.dt-command-search {
-	@include crayon.hstack(2);
-
-	align-items: center;
-	height: crayon.size(9);
-	padding-inline: crayon.size(3);
-	border-bottom: 1px solid var(--border);
-
-	.dt-icon {
-		width: crayon.size(4);
-		height: crayon.size(4);
-		flex-shrink: 0;
-		color: var(--muted-foreground);
-	}
-}
-
-.dt-command-input {
-	width: 100%;
-	height: crayon.size(10);
-	border: 0;
-	background: transparent;
-	color: inherit;
-	font: inherit;
-	font-size: crayon.font-size("sm");
-	outline: none;
-
-	&::placeholder {
-		color: var(--muted-foreground);
-	}
-}
-
-.dt-command-list {
-	max-height: 300px;
-	overflow: hidden auto;
-	scroll-padding-block: crayon.size(1);
-}
-
-.dt-command-empty {
-	padding-block: crayon.size(6);
-	font-size: crayon.font-size("sm");
-	text-align: center;
-	color: var(--muted-foreground);
-}
-
-.dt-command-group {
-	overflow: hidden;
-	padding: crayon.size(1);
-
-	[data-cmdk-group-heading] {
-		padding: crayon.size(1.5) crayon.size(2);
-		font-size: crayon.font-size("xs");
-		font-weight: crayon.font-weight("medium");
-		color: var(--muted-foreground);
-	}
-}
-
-.dt-command-item {
-	@include crayon.hstack(2);
-
-	position: relative;
-	align-items: flex-start;
-	padding: crayon.size(1.5) crayon.size(2);
-	font-size: crayon.font-size("sm");
-	cursor: default;
-	outline: none;
-	user-select: none;
-
-	&[data-selected="true"] {
-		background: var(--accent);
-		color: var(--accent-foreground);
-	}
-
-	&[data-disabled="true"] {
-		pointer-events: none;
-		opacity: 0.5;
-	}
-}
-
-.dt-command-separator {
-	height: 1px;
-	margin-inline: crayon.size(-1);
-	background: var(--border);
-}
-
-.dt-command-shortcut {
-	margin-left: auto;
-	font-size: crayon.font-size("xs");
-	letter-spacing: crayon.tracking("widest");
-	color: var(--muted-foreground);
 }
 
 // animationend unmounts popover

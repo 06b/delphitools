@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import type { PDFDocument } from 'pdf-lib';
 import CanonButton from 'delphicanon/components/canon-button';

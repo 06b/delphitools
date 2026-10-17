@@ -3,16 +3,11 @@
 import { launch, visit, check, sleep, finish } from './harness.mjs';
 
 const { browser, page } = await launch();
-// hosted on time-calc's unit select; values are read, not assumed
-await visit(page, '/tools/time-calc');
-await page.evaluate(() =>
-	[...document.querySelectorAll('.dt-tc [role="tab"]')]
-		.find((el) => el.textContent.trim() === 'Date Math')
-		?.click(),
-);
-await sleep(200);
+// hosted on the custom workflow row; values are read, not assumed
+await visit(page, '/workflows');
+await page.waitForSelector('.dt-wf-custom .dt-select-trigger', { timeout: 15000 });
 
-const trigger = '.dt-tc-unit .dt-select-trigger';
+const trigger = '.dt-wf-custom .dt-select-trigger';
 const openContent = () => page.$('.dt-select-content');
 const shown = () => page.$eval(trigger, (el) => el.textContent.trim());
 const items = () =>
@@ -43,8 +38,10 @@ const selected = await page.$$eval('.dt-select-item', (els) =>
 		.map((el) => el.textContent.trim()),
 );
 check(
-	'the current value is marked selected',
-	selected.length === 1 && selected[0] === before,
+	'the current value is marked selected, none under a placeholder',
+	list.includes(before)
+		? selected.length === 1 && selected[0] === before
+		: selected.length === 0,
 	`${selected} vs ${before}`,
 );
 check('enough items to walk', list.length >= 4, String(list.length));
