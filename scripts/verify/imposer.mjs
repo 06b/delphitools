@@ -46,6 +46,9 @@ const state = () =>
 		axis: document.querySelector('.imp-faces')?.classList.contains('imp-faces--x') ? 'x' : 'y',
 		pager: document.querySelector('.media-pager-text')?.textContent.trim(),
 		block: document.querySelector('.imp-block')?.getAttribute('aria-label') ?? null,
+		litSignature: document.querySelector('.imp-block-signature--lit')?.getAttribute('aria-label') ?? null,
+		glued: !!document.querySelector('.imp-block-glue'),
+		signaturePages: document.querySelector('.imp-signature-pages input')?.value ?? null,
 		tiles: document.querySelector('.imp-tiles')?.textContent.replace(/\s+/g, ' ').trim(),
 		run: document.querySelector('.media-job-run')?.disabled,
 		slot: document.querySelector('.imp-slot')?.textContent.trim() ?? null,
@@ -140,6 +143,39 @@ check(
 );
 
 check('saddle stitch has creep', !!(await page.$('.imp-creep [role="slider"]')));
+check('saddle stitch: no pages per signature, no glue', (await state()).signaturePages === null && !(await state()).glued);
+
+await pick('.imp-layouts', '2-up Perfect Bind');
+await settle();
+s = await state();
+check(
+	'perfect bind: 16 pages per signature, one glued signature of 4 sheets, creep',
+	s.signaturePages === '16' && s.block === '1–16' && s.glued && s.sides === 8 && !!(await page.$('.imp-creep')) && !!(await page.$('.imp-duplex')),
+	JSON.stringify(s),
+);
+await page.click('.imp-signature-pages .canon-stepper-minus');
+await settle();
+s = await state();
+check(
+	'12 pages per signature: blanks fill the second signature',
+	s.signaturePages === '12' && s.block === '1–12, 13–24' && s.detail === '16 pages · 8 blanks added' && s.sides === 12,
+	JSON.stringify(s),
+);
+await page.click('.imp-signature-pages .canon-stepper-minus');
+await settle();
+s = await state();
+check('8 pages per signature: two signatures of two sheets', s.block === '1–8, 9–16' && s.sides === 8 && s.litSignature === '1–8', JSON.stringify(s));
+await page.click('.imp-block-signature:nth-of-type(2)');
+await sleep(100);
+s = await state();
+check('a signature click goes to its first sheet', s.legend === 'Sheet 3 — Front' && s.litSignature === '9–16', JSON.stringify(s));
+check('perfect bind long edge on landscape turns top over bottom', s.axis === 'x', JSON.stringify(s));
+await pick('.imp-duplex', 'Short edge');
+await sleep(100);
+check('short edge on landscape turns like a book page', (await state()).axis === 'y');
+await pick('.imp-duplex', 'Long edge');
+await pick('.imp-layouts', '2-up Saddle Stitch');
+await settle();
 await pick('.imp-layouts', '4-up Booklet');
 await settle();
 s = await state();
@@ -148,10 +184,15 @@ check(
 	s.sides === 4 && s.block === null && !!(await page.$('.imp-duplex')) && !(await page.$('.imp-creep')),
 	JSON.stringify(s),
 );
+check('4-up long edge on landscape turns top over bottom', (await state()).axis === 'x');
 await pick('.imp-duplex', 'Short edge');
 await page.click('.imp-paper-press');
 await sleep(100);
-check('short edge turns the sheet top over bottom', (await state()).axis === 'x');
+check('4-up short edge on landscape turns like a book page', (await state()).axis === 'y');
+await pick('.imp-orientation', 'Portrait');
+await sleep(100);
+check('4-up short edge on portrait turns top over bottom', (await state()).axis === 'x');
+await pick('.imp-orientation', 'Landscape');
 
 await pick('.imp-layouts', 'N-up Gang Run');
 await settle();
@@ -249,6 +290,23 @@ check('Download saves it: front and back of one A3 sheet', pages === 2, saved?.n
 await page.click('.imp-marks [role="switch"]');
 await sleep(100);
 check('a setting change drops the export', !(await page.$('.media-job-result')));
+
+await pick('.imp-layouts', '2-up Perfect Bind');
+await settle();
+check('perfect bind, 4 pages, 8 per signature: one signature, blanks added', (await state()).block === '1–8' && (await state()).detail === '4 pages · 4 blanks added');
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => {});
+const bound = await page.$eval('.media-job-result', (el) => el.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
+check('perfect bind exports both sheets of the signature', /imposed-perfect-bind-a3\.pdf 4 pages · /.test(bound), bound);
+
+await visit(page, '/tools/imposer?impLayout=1&impSignature=8&impPages=38');
+await settle();
+s = await state();
+check(
+	'?impSignature=8 with 38 pages: five signatures',
+	s.signaturePages === '8' && s.block === '1–8, 9–16, 17–24, 25–32, 33–40' && s.detail === '38 pages · 2 blanks added',
+	JSON.stringify(s),
+);
 
 await page.setViewport({ width: 390, height: 844 });
 await sleep(500);

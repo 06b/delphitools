@@ -2,6 +2,7 @@ import {
 	MM_TO_POINTS,
 	getOuterEdges,
 	type PagePlacement,
+	type SheetDefinition,
 } from 'delphitools-v2/lib/imposition';
 
 /** Millimetres, top-left origin. */
@@ -119,9 +120,27 @@ export function printSheet(
 	};
 }
 
-/** Pages of a saddle-stitched run: one signature of every sheet. */
-export function signature(sheets: number) {
-	return { sheets, from: 1, to: sheets * 4 };
+export interface Signature {
+	sheets: number;
+	/** First and last page. */
+	from: number;
+	to: number;
+}
+
+/** Sheets grouped by signature, four pages a sheet, as iOS. */
+export function signatures(sheets: SheetDefinition[]): Signature[] {
+	const groups: Signature[] = [];
+	for (const sheet of sheets) {
+		const index = sheet.signature ?? 0;
+		let group = groups[index];
+		if (group) group.sheets++;
+		else {
+			const from = (groups.at(-1)?.to ?? 0) + 1;
+			group = groups[index] = { sheets: 1, from, to: from };
+		}
+		group.to = group.from + group.sheets * 4 - 1;
+	}
+	return groups;
 }
 
 function turned(

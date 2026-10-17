@@ -138,9 +138,47 @@
 
 /* ios SignatureBlockView */
 .imp-block {
-	display: block;
 	inline-size: 100%;
 	block-size: 100%;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.imp-block-track {
+	position: relative;
+	display: flex;
+	gap: 14px;
+	inline-size: max-content;
+	block-size: 100%;
+	margin-inline: auto;
+	padding-inline: 16px;
+}
+
+.imp-block-signature {
+	display: block;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.imp-block-signature:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.imp-block-signature svg {
+	display: block;
+	overflow: visible;
+}
+
+.imp-block-glue {
+	position: absolute;
+	inset-block-start: 89px;
+	inset-inline: 12px;
+	block-size: 3px;
+	background: var(--canon-foreground);
+	pointer-events: none;
 }
 
 .imp-block-sheet {
@@ -157,12 +195,16 @@
 }
 
 .imp-block-label {
-	fill: var(--canon-primary);
+	fill: var(--canon-muted-foreground);
 	font-family: var(--canon-mono-font);
 	font-size: 11px;
 	font-weight: var(--canon-weight-semibold);
 	text-anchor: middle;
 	dominant-baseline: hanging;
+}
+
+.imp-block-signature--lit .imp-block-label {
+	fill: var(--canon-primary);
 }
 
 .imp-paper-menu {

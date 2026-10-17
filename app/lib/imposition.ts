@@ -39,6 +39,8 @@ export interface SheetDefinition {
 	sheetNumber: number;
 	front: PagePlacement[];
 	back: PagePlacement[];
+	/** 0-based; folded layouts. */
+	signature?: number;
 }
 
 export interface ImpositionConfig {
@@ -56,8 +58,10 @@ export interface ImpositionConfig {
 	cropMarks: boolean;
 	nUp?: number;
 	customGrid?: [number, number];
-	/** short-edge adds 180 degrees. */
+	/** top-over-bottom flips half-turn the backs. */
 	duplexFlip?: 'long-edge' | 'short-edge';
+	/** perfect bind; a multiple of 4. */
+	signaturePages?: number;
 }
 
 export interface ImpositionResult {
@@ -211,6 +215,26 @@ function calculateSaddleStitch(
 	config: ImpositionConfig,
 ): ImpositionResult {
 	const totalPages = padToMultiple(Math.max(totalSourcePages, 4), 4);
+	const sheets = nestedSheets(
+		totalPages,
+		0,
+		1,
+		0,
+		totalSourcePages,
+		config,
+	);
+	return makeResult(sheets, totalSourcePages, totalPages);
+}
+
+/** One saddle-stitched signature of `totalPages` (a multiple of 4) after page `base`. */
+function nestedSheets(
+	totalPages: number,
+	base: number,
+	firstSheet: number,
+	signature: number,
+	totalSourcePages: number,
+	config: ImpositionConfig,
+): SheetDefinition[] {
 	const numSheets = totalPages / 4;
 
 	const { sheetW, sheetH } = sheetDimensions(
@@ -227,10 +251,10 @@ function calculateSaddleStitch(
 		// clamp at margin
 		const creepOffset = Math.min(rawCreep, marginMm);
 
-		const frontLeft = totalPages - 2 * s;
-		const frontRight = 2 * s + 1;
-		const backLeft = 2 * s + 2;
-		const backRight = totalPages - 2 * s - 1;
+		const frontLeft = base + totalPages - 2 * s;
+		const frontRight = base + 2 * s + 1;
+		const backLeft = base + 2 * s + 2;
+		const backRight = base + totalPages - 2 * s - 1;
 
 		const pageOrBlank = (p: number) =>
 			p <= totalSourcePages ? p : 0;
@@ -282,68 +306,41 @@ function calculateSaddleStitch(
 		];
 
 		sheets.push({
-			sheetNumber: s + 1,
+			sheetNumber: firstSheet + s,
 			front: frontPlacements,
 			back: backPlacements,
+			signature,
 		});
 	}
 
-	return makeResult(sheets, totalSourcePages, totalPages);
+	return sheets;
 }
 
+/** ios ImpositionConfig.signaturePages */
+export const DEFAULT_SIGNATURE_PAGES = 16;
+
+/** Signatures of `signaturePages`, each nested like a saddle stitch, stacked; blanks pad the last. */
 function calculatePerfectBind(
 	totalSourcePages: number,
 	config: ImpositionConfig,
 ): ImpositionResult {
-	const totalPages = padToMultiple(Math.max(totalSourcePages, 4), 4);
-	const numSheets = totalPages / 4;
-
-	const { sheetW, sheetH } = sheetDimensions(
-		config.paperSize,
-		config.orientation,
+	const size = padToMultiple(
+		Math.max(4, config.signaturePages ?? DEFAULT_SIGNATURE_PAGES),
+		4,
 	);
-
+	const totalPages = padToMultiple(Math.max(totalSourcePages, 1), size);
 	const sheets: SheetDefinition[] = [];
-	const pageOrBlank = (p: number) => (p <= totalSourcePages ? p : 0);
-
-	for (let s = 0; s < numSheets; s++) {
-		const base = s * 4;
-		// odd front pages
-		const frontPages = [
-			pageOrBlank(base + 1),
-			pageOrBlank(base + 3),
-		];
-		// even back pages
-		const backPages = [
-			pageOrBlank(base + 2),
-			pageOrBlank(base + 4),
-		];
-
-		sheets.push({
-			sheetNumber: s + 1,
-			front: buildGrid(
-				frontPages,
-				1,
-				2,
-				sheetW,
-				sheetH,
-				config.marginMm,
-				config.gutterMm,
-				'front',
+	for (let base = 0; base < totalPages; base += size)
+		sheets.push(
+			...nestedSheets(
+				size,
+				base,
+				sheets.length + 1,
+				base / size,
+				totalSourcePages,
+				config,
 			),
-			back: buildGrid(
-				backPages,
-				1,
-				2,
-				sheetW,
-				sheetH,
-				config.marginMm,
-				config.gutterMm,
-				'back',
-			),
-		});
-	}
-
+		);
 	return makeResult(sheets, totalSourcePages, totalPages);
 }
 
@@ -584,37 +581,63 @@ function calculateCustomNUp(
 	return makeResult(sheets, totalSourcePages, totalPadded);
 }
 
-function applyTumbleRotation(result: ImpositionResult): ImpositionResult {
-	for (const sheet of result.sheets) {
-		for (const p of sheet.back) {
-			p.rotation = (p.rotation + 180) % 360;
-		}
-	}
-	return result;
-}
-
 export const DUPLEX_AWARE_LAYOUTS = new Set([
 	'saddle-stitch',
 	'perfect-bind',
 	'four-up-booklet',
 ]);
 
+/** Long edge on a landscape sheet, or short edge on a portrait one. */
+export function turnsTopOverBottom(
+	config: Pick<
+		ImpositionConfig,
+		'paperSize' | 'orientation' | 'duplexFlip'
+	>,
+): boolean {
+	const { sheetW, sheetH } = sheetDimensions(
+		config.paperSize,
+		config.orientation,
+	);
+	return config.duplexFlip === 'short-edge'
+		? sheetW <= sheetH
+		: sheetW > sheetH;
+}
+
+/** Half-turns each back so it registers behind its front. */
+function turnBacks(
+	result: ImpositionResult,
+	config: ImpositionConfig,
+): ImpositionResult {
+	const { sheetW, sheetH } = sheetDimensions(
+		config.paperSize,
+		config.orientation,
+	);
+	return {
+		...result,
+		sheets: result.sheets.map((sheet) => ({
+			...sheet,
+			back: sheet.back.map((p) => ({
+				...p,
+				x: sheetW - p.x - p.width,
+				y: sheetH - p.y - p.height,
+				rotation: (p.rotation + 180) % 360,
+			})),
+		})),
+	};
+}
+
+// layouts assume a book turn
 function withDuplexPostProcess(
 	calculateFn: (
 		totalSourcePages: number,
 		config: ImpositionConfig,
 	) => ImpositionResult,
-	layoutId: string,
 ): (totalSourcePages: number, config: ImpositionConfig) => ImpositionResult {
 	return (totalSourcePages, config) => {
 		const result = calculateFn(totalSourcePages, config);
-		if (
-			config.duplexFlip === 'short-edge' &&
-			DUPLEX_AWARE_LAYOUTS.has(layoutId)
-		) {
-			return applyTumbleRotation(result);
-		}
-		return result;
+		return turnsTopOverBottom(config)
+			? turnBacks(result, config)
+			: result;
 	};
 }
 
@@ -627,23 +650,17 @@ export const IMPOSITION_LAYOUTS: ImpositionLayout[] = [
 			'The outermost sheet carries the cover (page 1) and back cover (page N).',
 		useCase: 'Booklets, magazines, zines, programmes',
 		pagesPerSheet: 4,
-		calculate: withDuplexPostProcess(
-			calculateSaddleStitch,
-			'saddle-stitch',
-		),
+		calculate: withDuplexPostProcess(calculateSaddleStitch),
 	},
 	{
 		id: 'perfect-bind',
 		name: '2-up Perfect Bind',
 		description:
-			'Pages in sequential pairs, front then back. Sheets are stacked, trimmed, ' +
-			'and glued at the spine. No page reordering is required.',
+			'Pages folded into signatures of config.signaturePages, each nested like a ' +
+			'saddle stitch. Signatures are stacked, trimmed, and glued at the spine.',
 		useCase: 'Paperback books, catalogues, perfect-bound booklets',
 		pagesPerSheet: 4,
-		calculate: withDuplexPostProcess(
-			calculatePerfectBind,
-			'perfect-bind',
-		),
+		calculate: withDuplexPostProcess(calculatePerfectBind),
 	},
 	{
 		id: 'step-and-repeat',
@@ -663,10 +680,7 @@ export const IMPOSITION_LAYOUTS: ImpositionLayout[] = [
 			'folded long-edge then short-edge to produce a small booklet.',
 		useCase: 'Pocket booklets, pamphlets, menus',
 		pagesPerSheet: 8,
-		calculate: withDuplexPostProcess(
-			calculateFourUpBooklet,
-			'four-up-booklet',
-		),
+		calculate: withDuplexPostProcess(calculateFourUpBooklet),
 	},
 	{
 		id: 'gang-run',

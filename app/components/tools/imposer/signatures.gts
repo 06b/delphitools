@@ -1,95 +1,168 @@
 import Component from '@glimmer/component';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { modifier } from 'ember-modifier';
+import type { Signature } from 'delphitools-v2/components/tools/imposer/sheet';
 
 /** Height of the canvas holding the block, as iOS SignatureBlockView. */
 export const blockHeight = 128;
 
-const padding = 16;
 const top = 14;
-const spine = blockHeight - 14 - 18 - 8;
+const label = 18;
+const spine = blockHeight - 14 - label - 8;
+
+const range = (signature: Signature) => `${signature.from}–${signature.to}`;
+
+// ios scrollRectToVisible, 24 px slack
+const reveal = modifier((element: HTMLElement, [lit]: [number]) => {
+	void lit;
+	const button = element.querySelector<HTMLElement>(
+		'.imp-block-signature--lit',
+	);
+	if (!button) return;
+	const start = button.offsetLeft - 24;
+	const end = button.offsetLeft + button.offsetWidth + 24;
+	if (start < element.scrollLeft) element.scrollLeft = start;
+	else if (end > element.scrollLeft + element.clientWidth)
+		element.scrollLeft = end - element.clientWidth;
+});
 
 export interface SignatureBlockSignature {
 	Args: {
-		sheets: number;
-		/** First and last page of the signature. */
-		from: number;
-		to: number;
-		/** 0-based lit sheet. */
+		signatures: Signature[];
+		/** 0-based lit sheet, across signatures. */
 		lit: number;
+		/** perfect bind: a glue bar under the spines. */
+		glued: boolean;
+		/** 0-based first sheet of the picked signature. */
+		onSelect: (sheet: number) => void;
 	};
-	Element: SVGSVGElement;
+	Element: HTMLDivElement;
 }
 
-/** The iOS SignatureBlockView for one nested signature: a U per sheet, the lit one bold. */
+/** The iOS SignatureBlockView: a U per sheet in each signature, the lit sheet bold. */
 export default class SignatureBlock extends Component<SignatureBlockSignature> {
-	get width() {
-		return Math.min(120, Math.max(44, 20 + this.args.sheets * 7));
-	}
-
-	get viewBox() {
-		return `0 0 ${this.width + padding * 2} ${blockHeight}`;
-	}
-
 	get label() {
-		return `${this.args.from}–${this.args.to}`;
-	}
-
-	get centre() {
-		return padding + this.width / 2;
+		return this.args.signatures.map(range).join(', ');
 	}
 
 	get labelY() {
-		return spine + 8;
+		return spine + 8 + (this.args.glued ? 3 : 0);
 	}
 
-	get folds() {
-		const count = Math.max(this.args.sheets, 1);
-		const width = this.width;
-		const step = Math.min(
-			4,
-			(width / 2 - 6) / count,
-			(spine - top - 8) / count,
-		);
-		return Array.from({ length: this.args.sheets }, (_, inner) => {
-			const inset = inner * step;
-			const left = padding + inset;
-			const right = padding + width - inset;
-			const bottom = spine - inset;
-			const r = Math.min(8, (right - left) / 2);
-			return {
-				d:
-					`M${left} ${top}L${left} ${bottom - r}` +
-					`Q${left} ${bottom} ${left + r} ${bottom}` +
-					`L${right - r} ${bottom}` +
-					`Q${right} ${bottom} ${right} ${bottom - r}` +
-					`L${right} ${top}`,
-				lit: inner === this.args.lit,
+	get items() {
+		const { lit } = this.args;
+		let first = 0;
+		return this.args.signatures.map((signature) => {
+			const width = Math.min(
+				120,
+				Math.max(44, 20 + signature.sheets * 7),
+			);
+			const count = Math.max(signature.sheets, 1);
+			const step = Math.min(
+				4,
+				(width / 2 - 6) / count,
+				(spine - top - 8) / count,
+			);
+			const folds = Array.from(
+				{ length: signature.sheets },
+				(_, inner) => {
+					const inset = inner * step;
+					const left = inset;
+					const right = width - inset;
+					const bottom = spine - inset;
+					const r = Math.min(
+						8,
+						(right - left) / 2,
+					);
+					return {
+						d:
+							`M${left} ${top}L${left} ${bottom - r}` +
+							`Q${left} ${bottom} ${left + r} ${bottom}` +
+							`L${right - r} ${bottom}` +
+							`Q${right} ${bottom} ${right} ${bottom - r}` +
+							`L${right} ${top}`,
+						lit: first + inner === lit,
+					};
+				},
+			);
+			const item = {
+				first,
+				width,
+				viewBox: `0 0 ${width} ${blockHeight}`,
+				centre: width / 2,
+				label: range(signature),
+				lit:
+					lit >= first &&
+					lit < first + signature.sheets,
+				folds,
 			};
+			first += signature.sheets;
+			return item;
 		});
 	}
 
 	<template>
-		<svg
+		<div
 			class="imp-block"
-			viewBox={{this.viewBox}}
-			role="img"
+			role="group"
 			aria-label={{this.label}}
+			{{reveal @lit}}
 			...attributes
 		>
-			{{#each this.folds as |fold|}}
-				<path
-					class="imp-block-sheet
-						{{if
-							fold.lit
-							'imp-block-sheet--lit'
-						}}"
-					d={{fold.d}}
-				/>
-			{{/each}}
-			<text
-				class="imp-block-label"
-				x={{this.centre}}
-				y={{this.labelY}}
-			>{{this.label}}</text>
-		</svg>
+			<div class="imp-block-track">
+				{{#each this.items as |item|}}
+					<button
+						type="button"
+						class="imp-block-signature
+							{{if
+								item.lit
+								'imp-block-signature--lit'
+							}}"
+						aria-label={{item.label}}
+						aria-current={{if
+							item.lit
+							"true"
+						}}
+						{{on
+							"click"
+							(fn
+								@onSelect
+								item.first
+							)
+						}}
+					>
+						<svg
+							viewBox={{item.viewBox}}
+							width={{item.width}}
+							height={{blockHeight}}
+							aria-hidden="true"
+						>
+							{{#each
+								item.folds
+								as |fold|
+							}}
+								<path
+									class="imp-block-sheet
+										{{if
+											fold.lit
+											'imp-block-sheet--lit'
+										}}"
+									d={{fold.d}}
+								/>
+							{{/each}}
+							<text
+								class="imp-block-label"
+								x={{item.centre}}
+								y={{this.labelY}}
+							>{{item.label}}</text>
+						</svg>
+					</button>
+				{{/each}}
+				{{#if @glued}}
+					<span class="imp-block-glue"></span>
+				{{/if}}
+			</div>
+		</div>
 	</template>
 }

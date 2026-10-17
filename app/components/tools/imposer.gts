@@ -27,6 +27,7 @@ import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import {
 	DEFAULT_IMPOSITION_CONFIG,
+	DEFAULT_SIGNATURE_PAGES,
 	DUPLEX_AWARE_LAYOUTS,
 	IMPOSITION_LAYOUTS,
 	MM_TO_POINTS,
@@ -35,6 +36,7 @@ import {
 	effectiveSheetW,
 	getLayoutById,
 	imposePdf,
+	turnsTopOverBottom,
 	type ImpositionConfig,
 	type ImpositionResult,
 	type PaperSize,
@@ -60,7 +62,7 @@ import {
 	millimetres,
 	printSheet,
 	sideImage,
-	signature,
+	signatures,
 	type Fit,
 	type Picture,
 	type PrintSheet,
@@ -139,6 +141,7 @@ export default class Imposer extends Component {
 	@tracked nUp = 4;
 	@tracked customRows = 2;
 	@tracked customCols = 2;
+	@tracked signaturePages = DEFAULT_SIGNATURE_PAGES;
 	@tracked duplexFlip: 'long-edge' | 'short-edge' = 'long-edge';
 	@tracked customPaperW = 320;
 	@tracked customPaperH = 450;
@@ -198,6 +201,12 @@ export default class Imposer extends Component {
 		const creep = number('impCreep');
 		if (creep !== undefined)
 			this.creepMm = Math.min(2, Math.max(0, creep));
+		const pagesPerSignature = number('impSignature');
+		if (pagesPerSignature)
+			this.signaturePages = Math.min(
+				128,
+				Math.max(4, Math.trunc(pagesPerSignature)),
+			);
 		const paper = query.get('impPaper');
 		if (paper) this.paperSizeId = paper.toLowerCase();
 		const sheet = number('impSheet');
@@ -256,6 +265,10 @@ export default class Imposer extends Component {
 			duplexFlip: this.duplexAware
 				? this.duplexFlip
 				: undefined,
+			signaturePages:
+				this.layoutId === 'perfect-bind'
+					? this.signaturePages
+					: undefined,
 		};
 	}
 
@@ -293,8 +306,16 @@ export default class Imposer extends Component {
 		return this.layoutId === 'custom-nup';
 	}
 
+	get isPerfectBind() {
+		return this.layoutId === 'perfect-bind';
+	}
+
+	// ios supportsCreep
 	get hasCreep() {
-		return this.layoutId === 'saddle-stitch';
+		return (
+			this.layoutId === 'saddle-stitch' ||
+			this.layoutId === 'perfect-bind'
+		);
 	}
 
 	get isCustomPaper() {
@@ -490,6 +511,11 @@ export default class Imposer extends Component {
 		this.#invalidate();
 	};
 
+	setSignaturePages = (value: number) => {
+		this.signaturePages = value;
+		this.#invalidate();
+	};
+
 	setRows = (value: number) => {
 		this.customRows = value;
 		this.#invalidate();
@@ -585,9 +611,8 @@ export default class Imposer extends Component {
 		};
 	}
 
-	// short-edge: sheet tumbles
 	get axis(): 'x' | 'y' {
-		return this.duplexAware && this.duplexFlip === 'short-edge'
+		return this.duplexAware && turnsTopOverBottom(this.config)
 			? 'x'
 			: 'y';
 	}
@@ -618,11 +643,11 @@ export default class Imposer extends Component {
 	}
 
 	get showsBlock() {
-		return this.layoutId === 'saddle-stitch';
+		return this.hasCreep;
 	}
 
-	get block() {
-		return signature(this.totalSheets);
+	get signatures() {
+		return signatures(this.result.sheets);
 	}
 
 	get tiles() {
@@ -646,6 +671,8 @@ export default class Imposer extends Component {
 		this.activeSheet = sheet;
 		this.isFlipped = back;
 	}
+
+	pickSignature = (sheet: number) => this.show(sheet, false);
 
 	pickSide = (index: number) =>
 		this.show(Math.floor(index / 2), index % 2 === 1);
@@ -922,6 +949,23 @@ export default class Imposer extends Component {
 						@tone="muted"
 						@row={{true}}
 					/>
+					{{#if this.isPerfectBind}}
+						<CanonRow
+							class="imp-signature-pages"
+							@title="Pages per signature"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.signaturePages}}
+								@min={{4}}
+								@max={{128}}
+								@step={{4}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setSignaturePages}}
+							/>
+						</CanonRow>
+					{{/if}}
 					{{#if this.duplexAware}}
 						<CanonHeading
 							@text="Duplex flip"
@@ -1143,10 +1187,10 @@ export default class Imposer extends Component {
 						@background="var(--canon-muted)"
 					>
 						<SignatureBlock
-							@sheets={{this.block.sheets}}
-							@from={{this.block.from}}
-							@to={{this.block.to}}
+							@signatures={{this.signatures}}
 							@lit={{this.sheetIndex}}
+							@glued={{this.isPerfectBind}}
+							@onSelect={{this.pickSignature}}
 						/>
 					</CanonCanvas>
 				{{/if}}

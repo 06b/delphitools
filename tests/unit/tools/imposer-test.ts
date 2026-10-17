@@ -9,7 +9,7 @@ import {
 	marks,
 	millimetres,
 	printSheet,
-	signature,
+	signatures,
 } from 'delphitools-v2/components/tools/imposer/sheet';
 
 const config: ImpositionConfig = {
@@ -93,8 +93,27 @@ module('Unit | Tool | imposer', function () {
 		assert.strictEqual(lines.length, 24);
 	});
 
-	test('one signature counts four pages a sheet', function (assert) {
-		assert.deepEqual(signature(3), { sheets: 3, from: 1, to: 12 });
+	test('a saddle stitch is one signature, four pages a sheet', function (assert) {
+		const result = getLayoutById('saddle-stitch')!.calculate(
+			12,
+			config,
+		);
+		assert.deepEqual(signatures(result.sheets), [
+			{ sheets: 3, from: 1, to: 12 },
+		]);
+	});
+
+	test('perfect-bind signatures group the sheets, iOS selfCheck', function (assert) {
+		const result = getLayoutById('perfect-bind')!.calculate(38, {
+			...config,
+			layoutId: 'perfect-bind',
+			signaturePages: 16,
+		});
+		assert.deepEqual(signatures(result.sheets), [
+			{ sheets: 4, from: 1, to: 16 },
+			{ sheets: 4, from: 17, to: 32 },
+			{ sheets: 4, from: 33, to: 48 },
+		]);
 	});
 
 	test('sizes read in millimetres, one decimal at most', function (assert) {
