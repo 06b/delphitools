@@ -895,6 +895,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/zine-imposer',
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
+				canon: true,
 			},
 		],
 	},

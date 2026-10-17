@@ -133,11 +133,11 @@ if (loaded) {
 // empty masks missed bleed
 await visit(page, '/tools/zine-imposer');
 await (
-	await page.$('.dt-zine-bulk input[type="file"]')
+	await page.$('.zi-bulk')
 ).uploadFile(...Array(8).fill(IMAGE));
 await sleep(1200);
 
-const generate = await page.$('.dt-zine-generate');
+const generate = await page.$('.zine-imposer .media-job-run');
 const ready = await page.evaluate((el) => el && !el.disabled, generate);
 check(
 	'zine-imposer accepts images',
@@ -147,6 +147,11 @@ check(
 
 if (ready) {
 	await generate.click();
+	await (
+		await page.waitForSelector('.zine-imposer .media-job-save', {
+			timeout: 30000,
+		})
+	).click();
 	const wrote = await waitForDownload(downloads, 30000);
 	check(
 		'and writes a PDF',
@@ -179,7 +184,12 @@ if (ready) {
 
 	await page.click('#zine-bleed');
 	await sleep(200);
-	await (await page.$('.dt-zine-generate')).click();
+	await (await page.$('.zine-imposer .media-job-run')).click();
+	await (
+		await page.waitForSelector('.zine-imposer .media-job-save', {
+			timeout: 30000,
+		})
+	).click();
 	const bled = await waitForDownload(downloads, 30000, /-bleed\.pdf$/);
 	check(
 		'zine-imposer writes a bleed PDF',
