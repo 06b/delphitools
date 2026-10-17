@@ -1120,6 +1120,7 @@ export const toolCategories: ToolCategory[] = [
 					'Unix timestamps, date arithmetic, timezone conversion',
 				icon: 'clock',
 				href: '/tools/time-calc',
+				canon: true,
 			},
 			{
 				id: 'unit-converter',

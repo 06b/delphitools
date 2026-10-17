@@ -1,852 +1,802 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
-import Icon from 'delphitools-v2/components/icon';
+import { modifier } from 'ember-modifier';
+import CanonBigNumberField from 'delphicanon/components/canon-big-number-field';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Picture from 'delphitools-v2/components/tools/time-calc/picture';
+import ZoneCell from 'delphitools-v2/components/tools/time-calc/zone-cell';
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
+	bandHeight,
+	type Scene,
+} from 'delphitools-v2/components/tools/time-calc/draw';
 import {
-	Tabs,
-	TabsList,
-	TabsTrigger,
-	TabsContent,
-} from 'delphitools-v2/components/ui/tabs';
+	breakdown,
+	city,
+	detail,
+	difference,
+	formatNames,
+	formats,
+	full,
+	knownZone,
+	localZone,
+	medium,
+	offsets,
+	pickerValue,
+	read,
+	relativeTime,
+	rewrite,
+	shift,
+	title,
+	units,
+	type Unit,
+} from 'delphitools-v2/components/tools/time-calc/time';
+import './time-calc/time-calc.css';
 
-export type TimeFormat = 'unix' | 'unixMs' | 'iso' | 'rfc822' | 'human';
-export type TimeUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
-export type ArithmeticMode = 'add' | 'subtract';
+type Mode = 'timestamp' | 'arithmetic' | 'timezone';
 
-export interface FormatValues {
-	unix: string;
-	unixMs: string;
-	iso: string;
-	rfc822: string;
-	human: string;
+const modes: Mode[] = ['timestamp', 'arithmetic', 'timezone'];
+const modeNames = ['Timestamp', 'Arithmetic', 'Timezone'];
+const operations = ['Add', 'Subtract'];
+const unitNames = units.map((u) => u.label);
+const dash = '—';
+const maxZones = 6;
+const addZonePlaceholder = 'Add timezone...';
+
+const ClockIcon = <template><IconSvg @name="clock" /></template>;
+const PasteIcon = <template><IconSvg @name="clipboard-paste" /></template>;
+const CalendarIcon = <template><IconSvg @name="calendar-clock" /></template>;
+const SwapIcon = <template><IconSvg @name="arrow-up-down" /></template>;
+const RemoveIcon = <template><IconSvg @name="x" /></template>;
+
+// a click places the caret after focus, so select on the next frame
+function selectAll(event: FocusEvent) {
+	const field = event.target;
+	if (field instanceof HTMLInputElement)
+		requestAnimationFrame(() => field.select());
 }
 
-export const TIMEZONES: { value: string; label: string }[] = [
-	{ value: 'UTC', label: 'UTC' },
-	{ value: 'America/New_York', label: 'New York' },
-	{ value: 'America/Los_Angeles', label: 'Los Angeles' },
-	{ value: 'America/Chicago', label: 'Chicago' },
-	{ value: 'Europe/London', label: 'London' },
-	{ value: 'Europe/Paris', label: 'Paris' },
-	{ value: 'Europe/Berlin', label: 'Berlin' },
-	{ value: 'Asia/Tokyo', label: 'Tokyo' },
-	{ value: 'Asia/Shanghai', label: 'Shanghai' },
-	{ value: 'Asia/Kolkata', label: 'Mumbai' },
-	{ value: 'Asia/Singapore', label: 'Singapore' },
-	{ value: 'Australia/Sydney', label: 'Sydney' },
-	{ value: 'Pacific/Auckland', label: 'Auckland' },
-];
+let measureContext: CanvasRenderingContext2D | null | undefined;
 
-export const FORMAT_INFO: Record<
-	TimeFormat,
-	{ name: string; placeholder: string }
-> = {
-	unix: { name: 'Unix (seconds)', placeholder: '1704067200' },
-	unixMs: { name: 'Unix (milliseconds)', placeholder: '1704067200000' },
-	iso: { name: 'ISO 8601', placeholder: '2024-01-01T00:00:00.000Z' },
-	rfc822: {
-		name: 'RFC 822',
-		placeholder: 'Mon, 01 Jan 2024 00:00:00 GMT',
-	},
-	human: { name: 'Date & Time', placeholder: '2024-01-01 00:00:00' },
-};
-
-export const FORMATS: TimeFormat[] = [
-	'unix',
-	'unixMs',
-	'iso',
-	'rfc822',
-	'human',
-];
-
-export const UNITS: { value: TimeUnit; label: string }[] = [
-	{ value: 'minutes', label: 'Minutes' },
-	{ value: 'hours', label: 'Hours' },
-	{ value: 'days', label: 'Days' },
-	{ value: 'weeks', label: 'Weeks' },
-	{ value: 'months', label: 'Months' },
-];
-
-const MINUTE_MS = 60 * 1000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-
-// flat 30-day month
-export const MS_PER_UNIT: Record<TimeUnit, number> = {
-	minutes: MINUTE_MS,
-	hours: HOUR_MS,
-	days: DAY_MS,
-	weeks: 7 * DAY_MS,
-	months: 30 * DAY_MS,
-};
-
-const MAX_ZONES = 6;
-const TICK_MS = 1000;
-const COPIED_MS = 1500;
-
-const EMPTY_VALUES: FormatValues = {
-	unix: '',
-	unixMs: '',
-	iso: '',
-	rfc822: '',
-	human: '',
-};
-
-const ARITHMETIC_PLACEHOLDER = '2024-01-01 00:00:00';
-
-const ADD_TIMEZONE_PLACEHOLDER = 'Add timezone...';
-
-function pad(value: number): string {
-	return value.toString().padStart(2, '0');
-}
-
-// local time
-export function toHumanDate(date: Date): string {
-	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
-// out-of-range parseInt: invalid date
-export function parseToDate(value: string, format: TimeFormat): Date | null {
-	const trimmed = value.trim();
-	if (!trimmed) return null;
-
-	let date: Date;
-	switch (format) {
-		case 'unix':
-		case 'unixMs': {
-			const parsed = Number.parseInt(trimmed, 10);
-			if (Number.isNaN(parsed)) return null;
-			date = new Date(
-				format === 'unix' ? parsed * 1000 : parsed,
-			);
-			break;
-		}
-		// browsers accept non-ecma-262 rfc 822
-		case 'iso':
-		case 'rfc822':
-			date = new Date(trimmed);
-			break;
-		case 'human':
-			date = new Date(trimmed.replace(' ', 'T'));
-			break;
-	}
-
-	return Number.isNaN(date.getTime()) ? null : date;
-}
-
-export function dateToFormats(date: Date): FormatValues {
-	return {
-		unix: Math.floor(date.getTime() / 1000).toString(),
-		unixMs: date.getTime().toString(),
-		iso: date.toISOString(),
-		// ecma-262 fixes rfc 822 shape
-		rfc822: date.toUTCString(),
-		human: toHumanDate(date),
+/** The field's type shrinks to fit a long date, down to 14 px (iOS adjustsFontSizeToFitWidth). */
+const fit = modifier((element: HTMLElement, [text]: [string]) => {
+	const input = element.querySelector('input');
+	if (!input) return;
+	const place = () => {
+		input.style.fontSize = '';
+		const style = getComputedStyle(input);
+		measureContext ??= document
+			.createElement('canvas')
+			.getContext('2d');
+		if (!measureContext) return;
+		measureContext.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+		const width = measureContext.measureText(
+			text || input.placeholder,
+		).width;
+		const room = input.clientWidth - 4;
+		const base = parseFloat(style.fontSize);
+		if (width > room && room > 0)
+			input.style.fontSize = `${Math.max(14, Math.floor((base * room) / width))}px`;
 	};
-}
+	place();
+	void document.fonts?.ready.then(place);
+	const observer = new ResizeObserver(place);
+	observer.observe(input);
+	return () => observer.disconnect();
+});
 
-export function formatInTimezone(date: Date, timeZone: string): string {
+const capture = modifier<{
+	Element: HTMLInputElement;
+	Args: { Positional: [(node: HTMLInputElement) => void] };
+}>((node, [keep]) => {
+	keep(node);
+});
+
+function openPicker(input?: HTMLInputElement) {
+	if (!input) return;
 	try {
-		return date.toLocaleString('en-GB', {
-			timeZone,
-			weekday: 'short',
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit',
-			second: '2-digit',
-			hour12: false,
-		});
+		input.showPicker();
 	} catch {
-		return date.toLocaleString();
+		input.focus();
 	}
 }
 
-export function timezoneOffset(date: Date, timeZone: string): string {
-	try {
-		const parts = new Intl.DateTimeFormat('en', {
-			timeZone,
-			timeZoneName: 'shortOffset',
-		}).formatToParts(date);
-		return (
-			parts.find((part) => part.type === 'timeZoneName')
-				?.value ?? ''
-		);
-	} catch {
-		return '';
-	}
+/** "2026-10-17T09:30" or with seconds, as the field's wall-clock text. */
+function fromPicker(value: string) {
+	const text = value.replace('T', ' ');
+	return text.length === 16 ? `${text}:00` : text;
 }
 
-export function relativeTime(date: Date, now: Date): string {
-	const difference = date.getTime() - now.getTime();
-	const distance = Math.abs(difference);
+const decimal = (value: number, places: number) =>
+	value.toLocaleString(undefined, { maximumFractionDigits: places });
 
-	const minutes = Math.floor(distance / MINUTE_MS);
-	const hours = Math.floor(distance / HOUR_MS);
-	const days = Math.floor(distance / DAY_MS);
-	const weeks = Math.floor(days / 7);
-	const months = Math.floor(days / 30);
-	const years = Math.floor(days / 365);
-
-	let value: string;
-	if (years > 0) value = `${years} year${years > 1 ? 's' : ''}`;
-	else if (months > 0) value = `${months} month${months > 1 ? 's' : ''}`;
-	else if (weeks > 0) value = `${weeks} week${weeks > 1 ? 's' : ''}`;
-	else if (days > 0) value = `${days} day${days > 1 ? 's' : ''}`;
-	else if (hours > 0) value = `${hours} hour${hours > 1 ? 's' : ''}`;
-	else if (minutes > 0)
-		value = `${minutes} minute${minutes > 1 ? 's' : ''}`;
-	else return 'just now';
-
-	return difference < 0 ? `${value} ago` : `in ${value}`;
-}
-
-export function shiftDate(
-	base: Date,
-	amount: number,
-	unit: TimeUnit,
-	mode: ArithmeticMode,
-): Date {
-	const direction = mode === 'add' ? 1 : -1;
-	return new Date(
-		base.getTime() + direction * amount * MS_PER_UNIT[unit],
-	);
-}
-
-export default class TimeCalcTool extends Component {
-	@tracked values: FormatValues = EMPTY_VALUES;
-	@tracked activeFormat: TimeFormat | null = null;
-	@tracked error: string | null = null;
-	@tracked copied: string | null = null;
-
-	@tracked zones: string[] = [
-		'UTC',
-		'America/New_York',
-		'Europe/London',
-		'Asia/Tokyo',
-	];
-
-	@tracked baseDateTime = '';
-	@tracked amountInput = '1';
-	@tracked unit: TimeUnit = 'days';
-	@tracked mode: ArithmeticMode = 'add';
-
+/** The port of TimeCalcViewController. */
+export default class TimeCalc extends Component {
+	@tracked mode: Mode = 'timestamp';
+	/** The field follows the clock until it is typed in, stepped or focused. */
+	@tracked live = true;
+	@tracked text = '';
 	@tracked now = new Date();
+	@tracked fromZone = localZone;
+	@tracked toZone = 'UTC';
+	@tracked zones = ['America/New_York', 'Europe/London', 'Asia/Tokyo'];
+	@tracked amount = 1;
+	@tracked unit: Unit = 'weeks';
+	@tracked subtracts = false;
+	/** An End picked on its own; unset, End is the start moved by the amount. */
+	@tracked endPicked?: Date;
+	@tracked width = 0;
+	fieldPicker?: HTMLInputElement;
+	endPicker?: HTMLInputElement;
+	#clock?: ReturnType<typeof setInterval>;
 
-	#tick: ReturnType<typeof setInterval>;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
+	// ?timeMode=timestamp|arithmetic|timezone ?timeEpoch= ?timeStart= ?timeZoneDate= (the field) ?timeEnd=
+	// ?timeFrom= ?timeTo= (zone ids) ?timeNow=<date> (a stopped clock): the iOS launch arguments
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
-		this.#tick = setInterval(
-			() => (this.now = new Date()),
-			TICK_MS,
-		);
+		const query = new URLSearchParams(window.location.search);
+		const mode = query.get('timeMode')?.toLowerCase() as Mode;
+		if (modes.includes(mode)) this.mode = mode;
+		const zone = (key: string) => {
+			const value = query.get(key);
+			return value && knownZone(value) ? value : undefined;
+		};
+		this.fromZone = zone('timeFrom') ?? localZone;
+		this.toZone = zone('timeTo') ?? 'UTC';
+		const typed =
+			query.get('timeEpoch') ??
+			query.get('timeStart') ??
+			query.get('timeZoneDate');
+		if (typed !== null) {
+			this.text = typed;
+			this.live = false;
+		}
+		const end = query.get('timeEnd');
+		if (end) this.endPicked = read(end)?.date;
+		const stopped = read(query.get('timeNow') ?? '')?.date;
+		if (stopped) this.now = stopped;
+		else
+			this.#clock = setInterval(
+				() => (this.now = new Date()),
+				1000,
+			);
 	}
 
 	willDestroy() {
 		super.willDestroy();
-		clearInterval(this.#tick);
-		clearTimeout(this.#copiedTimer);
+		clearInterval(this.#clock);
 	}
 
-	get nowUtc() {
-		return formatInTimezone(this.now, 'UTC');
+	get modeNames() {
+		return modeNames;
 	}
 
-	get nowUnix() {
-		return Math.floor(this.now.getTime() / 1000);
+	get modeIndex() {
+		return modes.indexOf(this.mode);
 	}
 
-	get hasValue() {
-		return this.values.unix !== '';
+	get isTimestamp() {
+		return this.mode === 'timestamp';
 	}
 
-	get formatRows() {
-		return FORMATS.map((format) => {
-			const value = this.values[format];
-			return {
-				id: format,
-				name: FORMAT_INFO[format].name,
-				placeholder: FORMAT_INFO[format].placeholder,
-				value,
-				isEmpty: value === '',
-				isActive:
-					this.activeFormat === format &&
-					this.hasValue,
-				isCopied: this.copied === format,
-			};
-		});
+	get isArithmetic() {
+		return this.mode === 'arithmetic';
 	}
 
-	get currentDate() {
-		if (!this.hasValue) return null;
-		const ms = Number.parseInt(this.values.unixMs, 10);
-		return Number.isNaN(ms) ? null : new Date(ms);
+	get isTimezone() {
+		return this.mode === 'timezone';
 	}
 
-	get relative() {
-		const date = this.currentDate;
-		return date ? relativeTime(date, this.now) : '';
+	/** Zone a typed date with no zone is read in: From for Timezone, else local. */
+	get readZone() {
+		return this.isTimezone ? this.fromZone : localZone;
 	}
 
-	get zoneRows() {
-		return this.zones.map((zone) => ({
-			zone,
-			label:
-				TIMEZONES.find((entry) => entry.value === zone)
-					?.label ?? zone,
-			offset: timezoneOffset(this.now, zone),
-			time: formatInTimezone(this.now, zone),
-		}));
+	get fieldText() {
+		return this.live
+			? String(Math.floor(this.now.getTime() / 1000))
+			: this.text;
 	}
 
-	get canRemoveZone() {
-		return this.zones.length > 1;
+	get reading() {
+		return read(this.fieldText, this.readZone);
 	}
 
-	get availableZones() {
-		return TIMEZONES.filter((tz) => !this.zones.includes(tz.value));
+	get instant() {
+		return this.reading?.date;
 	}
 
-	get addZonePlaceholder() {
-		return ADD_TIMEZONE_PLACEHOLDER;
+	get invalid() {
+		return !this.reading && this.fieldText.trim() !== '';
 	}
 
-	get units() {
-		return UNITS;
+	get fieldLabel() {
+		return this.isArithmetic
+			? 'Start Date'
+			: this.isTimezone
+				? 'Date & Time'
+				: 'Timestamp';
 	}
 
-	get unitLabel() {
-		return (
-			UNITS.find((entry) => entry.value === this.unit)
-				?.label ?? ''
+	get fieldUnit() {
+		const { reading } = this;
+		if (!reading) return this.isArithmetic ? 'Start Date' : '';
+		const name = formatNames[reading.format];
+		if (this.isArithmetic) return `Start Date · ${name}`;
+		if (this.isTimezone && reading.floating)
+			return `${name} · ${city(this.fromZone)}`;
+		return name;
+	}
+
+	get fieldPickerValue() {
+		return pickerValue(this.instant ?? this.now, this.readZone);
+	}
+
+	get end() {
+		const { instant } = this;
+		if (this.endPicked) return this.endPicked;
+		if (!instant) return undefined;
+		return shift(
+			instant,
+			this.subtracts ? -this.amount : this.amount,
+			this.unit,
 		);
 	}
 
-	get isAdding() {
-		return this.mode === 'add';
+	get endText() {
+		return this.end ? medium(this.end) : dash;
 	}
 
-	get basePlaceholder() {
-		return ARITHMETIC_PLACEHOLDER;
+	get endPickerValue() {
+		return pickerValue(this.end ?? this.now);
 	}
 
-	get arithmeticResult() {
-		if (!this.baseDateTime) return null;
-		const base = parseToDate(this.baseDateTime, 'human');
-		if (!base) return null;
-
-		const amount = Number.parseInt(this.amountInput, 10) || 0;
-		if (amount === 0) return base;
-
-		const shifted = shiftDate(base, amount, this.unit, this.mode);
-		return Number.isNaN(shifted.getTime()) ? null : shifted;
+	get scene(): Scene {
+		const { instant, now } = this;
+		if (this.isArithmetic)
+			return {
+				kind: 'span',
+				a: instant ?? now,
+				b: this.end ?? now,
+				blank: !instant,
+			};
+		if (this.isTimezone)
+			return {
+				kind: 'zones',
+				instant: instant ?? now,
+				from: this.fromZone,
+				to: this.toZone,
+			};
+		return { kind: 'epoch', date: instant };
 	}
 
-	get resultRows() {
-		const result = this.arithmeticResult;
-		if (!result) return [];
-		const formats = dateToFormats(result);
+	get bandHeight() {
+		return bandHeight(
+			this.scene.kind,
+			this.width,
+			window.innerHeight,
+		);
+	}
+
+	get stampLines() {
+		const { instant, now } = this;
+		const values = instant ? formats(instant) : undefined;
 		return [
 			{
-				key: 'utc',
+				label: 'Local Time',
+				value: instant && full(instant),
+			},
+			{
 				label: 'UTC',
-				value: formatInTimezone(result, 'UTC'),
+				value: instant && full(instant, 'UTC'),
 			},
+			{ label: formatNames.iso, value: values?.iso },
+			{ label: formatNames.rfc822, value: values?.rfc822 },
+			{ label: formatNames.unix, value: values?.unix },
+			{ label: formatNames.unixMs, value: values?.unixMs },
+			{ label: formatNames.human, value: values?.human },
 			{
-				key: 'iso',
-				label: FORMAT_INFO.iso.name,
-				value: formats.iso,
-			},
-			{
-				key: 'rfc822',
-				label: FORMAT_INFO.rfc822.name,
-				value: formats.rfc822,
-			},
-			{
-				key: 'unix',
-				label: 'Unix',
-				value: formats.unix,
-			},
-			{
-				key: 'relative',
 				label: 'Relative',
-				value: relativeTime(result, this.now),
+				value: instant && relativeTime(instant, now),
 			},
 		];
 	}
 
-	setFormatValue = (format: TimeFormat, event: Event) => {
-		const value = (event.target as HTMLInputElement).value;
-		this.activeFormat = format;
-		this.error = null;
+	get spanTiles() {
+		const { instant, end } = this;
+		if (!instant || !end)
+			return ['Difference', 'Total Days', 'Total Hours'].map(
+				(label) => ({ label, value: dash }),
+			);
+		const seconds =
+			Math.abs(end.getTime() - instant.getTime()) / 1000;
+		return [
+			{
+				label: 'Difference',
+				value: breakdown(difference(instant, end)),
+			},
+			{
+				label: 'Total Days',
+				value: decimal(seconds / 86_400, 2),
+			},
+			{
+				label: 'Total Hours',
+				value: decimal(seconds / 3600, 1),
+			},
+		];
+	}
 
-		if (!value.trim()) {
-			this.values = EMPTY_VALUES;
-			return;
-		}
+	get endLines() {
+		const { end, now } = this;
+		const values = end ? formats(end) : undefined;
+		return [
+			{ label: 'UTC', value: end && full(end, 'UTC') },
+			{ label: formatNames.iso, value: values?.iso },
+			{ label: formatNames.rfc822, value: values?.rfc822 },
+			{ label: 'Unix', value: values?.unix },
+			{
+				label: 'Relative',
+				value: end && relativeTime(end, now),
+			},
+		];
+	}
 
-		const date = parseToDate(value, format);
-		if (!date) {
-			this.error = `Invalid ${FORMAT_INFO[format].name.toLowerCase()}`;
-			this.values = { ...this.values, [format]: value };
-			return;
-		}
+	get shownInstant() {
+		return this.instant ?? this.now;
+	}
 
-		// overwriting mangles typed input
-		this.values = { ...dateToFormats(date), [format]: value };
+	get fromDetail() {
+		return detail(this.fromZone, this.shownInstant);
+	}
+
+	get toDetail() {
+		return detail(this.toZone, this.shownInstant);
+	}
+
+	get zoneLines() {
+		const { instant } = this;
+		return [this.fromZone, this.toZone].map((zone) => ({
+			label: title(zone, this.shownInstant),
+			value: instant && full(instant, zone),
+		}));
+	}
+
+	get extraZones() {
+		const { instant } = this;
+		return this.zones.map((zone) => ({
+			zone,
+			label: title(zone, this.shownInstant),
+			value: instant && full(instant, zone),
+			remove: `Remove ${city(zone)}`,
+		}));
+	}
+
+	get zonesFull() {
+		return this.zones.length >= maxZones;
+	}
+
+	get addZonePlaceholder() {
+		return addZonePlaceholder;
+	}
+
+	get unitNames() {
+		return unitNames;
+	}
+
+	get unitIndex() {
+		return units.findIndex((u) => u.value === this.unit);
+	}
+
+	get operations() {
+		return operations;
+	}
+
+	get offsets() {
+		return offsets;
+	}
+
+	setWidth = (width: number) => {
+		if (width !== this.width) this.width = width;
 	};
 
-	setNow = () => {
-		this.values = dateToFormats(new Date());
+	pickMode = (index: number) => (this.mode = modes[index] ?? 'timestamp');
+
+	/** Focus stops the clock so the selection holds what is shown. */
+	focusField = (event: FocusEvent) => {
+		if (this.live) {
+			this.text = this.fieldText;
+			this.live = false;
+		}
+		selectAll(event);
+	};
+
+	type = (text: string) => {
+		this.text = text;
+		this.live = false;
+	};
+
+	/** One second either way, written the way it was typed. */
+	step = (direction: -1 | 1) => {
+		const { reading } = this;
+		const base = reading
+			? reading.format === 'unix'
+				? Math.floor(reading.date.getTime() / 1000) *
+					1000
+				: reading.date.getTime()
+			: Math.floor(this.now.getTime() / 1000) * 1000;
+		const date = new Date(base + direction * 1000);
+		this.text = reading
+			? rewrite(date, reading, this.readZone)
+			: String(date.getTime() / 1000);
+		this.live = false;
+	};
+
+	fillNow = () => (this.live = true);
+
+	paste = async () => {
+		try {
+			const text = (
+				await navigator.clipboard.readText()
+			).trim();
+			if (text) this.type(text);
+		} catch {
+			// clipboard refused: nothing to paste
+		}
+	};
+
+	keepFieldPicker = (input: HTMLInputElement) =>
+		(this.fieldPicker = input);
+	keepEndPicker = (input: HTMLInputElement) => (this.endPicker = input);
+	openFieldPicker = () => openPicker(this.fieldPicker);
+	openEndPicker = () => openPicker(this.endPicker);
+
+	pickField = (event: Event) => {
+		const { value } = event.target as HTMLInputElement;
+		if (value) this.type(fromPicker(value));
+	};
+
+	pickEnd = (event: Event) => {
+		const { value } = event.target as HTMLInputElement;
+		const date = value ? read(fromPicker(value))?.date : undefined;
+		if (date) this.endPicked = date;
+	};
+
+	endNow = () => (this.endPicked = new Date(this.now.getTime()));
+
+	applyOffset = (offset: { unit: Unit; amount: number }) => {
+		this.unit = offset.unit;
+		this.amount = Math.abs(offset.amount);
+		this.subtracts = offset.amount < 0;
+		this.endPicked = undefined;
+	};
+
+	pickOperation = (index: number) => {
+		this.subtracts = index === 1;
+		this.endPicked = undefined;
+	};
+
+	setAmount = (value: number) => {
+		this.amount = value;
+		this.endPicked = undefined;
+	};
+
+	pickUnit = (index: number) => {
+		this.unit = units[index]?.value ?? 'days';
+		this.endPicked = undefined;
+	};
+
+	pickFrom = (zone: string) => (this.fromZone = zone);
+	pickTo = (zone: string) => (this.toZone = zone);
+
+	swap = () => {
+		[this.fromZone, this.toZone] = [this.toZone, this.fromZone];
 	};
 
 	addZone = (zone: string) => {
-		if (this.zones.includes(zone) || this.zones.length >= MAX_ZONES)
-			return;
+		if (this.zonesFull || this.zones.includes(zone)) return;
 		this.zones = [...this.zones, zone];
 	};
 
 	removeZone = (zone: string) => {
-		if (!this.canRemoveZone) return;
 		this.zones = this.zones.filter((entry) => entry !== zone);
 	};
 
-	setBaseDateTime = (event: Event) => {
-		this.baseDateTime = (event.target as HTMLInputElement).value;
-	};
-
-	setBaseToNow = () => {
-		this.baseDateTime = toHumanDate(new Date());
-	};
-
-	setAmount = (event: Event) => {
-		this.amountInput = (event.target as HTMLInputElement).value;
-	};
-
-	setUnit = (value: string) => {
-		this.unit = value as TimeUnit;
-	};
-
-	setMode = (mode: ArithmeticMode) => {
-		this.mode = mode;
-	};
-
-	copyValue = (value: string, key: string) => void this.copy(value, key);
-
-	async copy(value: string, key: string) {
-		if (!value) return;
-		await navigator.clipboard.writeText(value);
-		this.copied = key;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	}
-
 	<template>
-		<div class="dt-tc">
-			<div class="dt-tc-now">
-				<div class="dt-tc-now-head">
-					<span class="dt-tc-label">Current Time</span>
-				</div>
-				<div class="dt-tc-now-body">
-					<p
-						class="dt-tc-clock"
-					>{{this.nowUtc}}<span
-							class="dt-tc-zone"
-						>UTC</span></p>
-					<p
-						class="dt-tc-epoch"
-					>{{this.nowUnix}}</p>
-				</div>
-			</div>
-
-			<Tabs @defaultValue="convert">
-				<TabsList class="dt-tc-tabs">
-					<TabsTrigger
-						class="dt-tc-tab"
-						@value="convert"
-					>Convert</TabsTrigger>
-					<TabsTrigger
-						class="dt-tc-tab"
-						@value="timezones"
-					>Timezones</TabsTrigger>
-					<TabsTrigger
-						class="dt-tc-tab"
-						@value="arithmetic"
-					>Date Math</TabsTrigger>
-				</TabsList>
-
-				<div class="dt-tc-frame">
-					<TabsContent
-						class="dt-tc-panel"
-						@value="convert"
-					>
-						<div class="dt-tc-table">
-							{{#each
-								this.formatRows
-								key="id"
-								as |row|
-							}}
-								<div
-									class="dt-tc-row
-										{{if
-											row.isActive
-											'is-active'
-										}}"
-								>
-									<label
-										class="dt-tc-row-name"
-										for="dt-tc-{{row.id}}"
-									>{{row.name}}</label>
-									<input
-										id="dt-tc-{{row.id}}"
-										type="text"
-										class="dt-tc-input"
-										placeholder={{row.placeholder}}
-										value={{row.value}}
-										{{on
-											"input"
-											(fn
-												this.setFormatValue
-												row.id
-											)
-										}}
-									/>
-									<button
-										type="button"
-										class="dt-tc-copy"
-										disabled={{row.isEmpty}}
-										aria-label="Copy
-											{{row.name}}"
-										{{on
-											"click"
-											(fn
-												this.copyValue
-												row.value
-												row.id
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												row.isCopied
-												"check"
-												"copy"
-											}}
-										/>
-									</button>
-								</div>
-							{{/each}}
-						</div>
-
-						{{#if this.error}}
-							<p
-								class="dt-tc-error"
-							>{{this.error}}</p>
-						{{/if}}
-
-						<button
-							type="button"
-							class="dt-tc-wide"
-							{{on
-								"click"
-								this.setNow
-							}}
-						>Use Current Time</button>
-
-						{{#if this.currentDate}}
-							<div
-								class="dt-tc-relative"
-							>
-								<span
-									class="dt-tc-label"
-								>Relative</span>
-								<p
-									class="dt-tc-relative-value"
-								>{{this.relative}}</p>
-							</div>
-						{{/if}}
-					</TabsContent>
-
-					<TabsContent
-						class="dt-tc-panel"
-						@value="timezones"
-					>
-						<div class="dt-tc-section">
-							<span
-								class="dt-tc-label"
-							>Add Timezone</span>
-							<div
-								class="dt-tc-select"
-							>
-								<Select
-									@value=""
-									@onValueChange={{this.addZone}}
-								>
-									<SelectTrigger
-									>
-										<SelectValue
-											@placeholder={{this.addZonePlaceholder}}
-										/>
-									</SelectTrigger>
-									<SelectContent
-									>
-										{{#each
-											this.availableZones
-											key="value"
-											as |tz|
-										}}
-											<SelectItem
-												@value={{tz.value}}
-											>{{tz.label}}</SelectItem>
-										{{/each}}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-
-						<div class="dt-tc-table">
-							{{#each
-								this.zoneRows
-								key="zone"
-								as |row|
-							}}
-								<div
-									class="dt-tc-row"
-								>
-									<span
-										class="dt-tc-zone-cell"
-									>
-										<span
-											class="dt-tc-zone-head"
-										>
-											<span
-												class="dt-tc-zone-name"
-											>{{row.label}}</span>
-											<span
-												class="dt-tc-zone-offset"
-											>{{row.offset}}</span>
-										</span>
-										<span
-											class="dt-tc-zone-time"
-										>{{row.time}}</span>
-									</span>
-									{{#if
-										this.canRemoveZone
-									}}
-										<button
-											type="button"
-											class="dt-tc-copy"
-											aria-label="Remove
-												{{row.label}}"
-											{{on
-												"click"
-												(fn
-													this.removeZone
-													row.zone
-												)
-											}}
-										>
-											<Icon
-												@name="x"
-											/>
-										</button>
-									{{/if}}
-								</div>
-							{{/each}}
-						</div>
-
-						<p class="dt-tc-note">Times
-							update live. Add up to 6
-							timezones.</p>
-					</TabsContent>
-
-					<TabsContent
-						class="dt-tc-panel"
-						@value="arithmetic"
-					>
-						<div class="dt-tc-section">
-							<label
-								class="dt-tc-label"
-								for="dt-tc-base"
-							>Starting Date & Time</label>
-							<div
-								class="dt-tc-combo"
-							>
-								<input
-									id="dt-tc-base"
-									type="text"
-									class="dt-tc-input"
-									placeholder={{this.basePlaceholder}}
-									value={{this.baseDateTime}}
-									{{on
-										"input"
-										this.setBaseDateTime
-									}}
-								/>
-								<button
-									type="button"
-									class="dt-tc-now-btn"
-									{{on
-										"click"
-										this.setBaseToNow
-									}}
-								>Now</button>
-							</div>
-						</div>
-
-						<div class="dt-tc-section">
-							<span
-								class="dt-tc-label"
-							>Operation</span>
-							<div
-								class="segmented dt-tc-modes"
-							>
-								<button
-									type="button"
-									class="dt-tc-mode
-										{{if
-											this.isAdding
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setMode
-											"add"
-										)
-									}}
-								>
-									<Icon
-										@name="plus"
-									/>
-									Add
-								</button>
-								<button
-									type="button"
-									class="dt-tc-mode
-										{{unless
-											this.isAdding
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setMode
-											"subtract"
-										)
-									}}
-								>
-									<Icon
-										@name="minus"
-									/>
-									Subtract
-								</button>
-							</div>
-						</div>
-
-						<div class="dt-tc-section">
-							<label
-								class="dt-tc-label"
-								for="dt-tc-amount"
-							>Amount</label>
-							<div
-								class="dt-tc-combo"
-							>
-								<input
-									id="dt-tc-amount"
-									type="number"
-									min="0"
-									class="dt-tc-input is-amount"
-									value={{this.amountInput}}
-									{{on
-										"input"
-										this.setAmount
-									}}
-								/>
-								<div
-									class="dt-tc-unit"
-								>
-									<Select
-										@value={{this.unit}}
-										@onValueChange={{this.setUnit}}
-									>
-										<SelectTrigger
-										>
-											<SelectValue
-											>{{this.unitLabel}}</SelectValue>
-										</SelectTrigger>
-										<SelectContent
-										>
-											{{#each
-												this.units
-												key="value"
-												as |option|
-											}}
-												<SelectItem
-													@value={{option.value}}
-												>{{option.label}}</SelectItem>
-											{{/each}}
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-						</div>
-
-						{{#if this.resultRows}}
-							<div
-								class="dt-tc-results"
-							>
-								<div
-									class="dt-tc-results-head"
-								>
-									<span
-										class="dt-tc-label"
-									>Result</span>
-								</div>
-								{{#each
-									this.resultRows
-									key="key"
-									as |row|
+		<CanonSplit class="time-calc">
+			<:banner>
+				<CanonCanvas @height={{this.bandHeight}}>
+					<Picture
+						@scene={{this.scene}}
+						@now={{this.now}}
+						@onWidth={{this.setWidth}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows class="tc-source" @framed={{true}}>
+					<CanonBigNumberField
+						class="tc-field"
+						@value={{this.fieldText}}
+						@placeholder="1700000000"
+						@unit={{this.fieldUnit}}
+						@label={{this.fieldLabel}}
+						@onStep={{this.step}}
+						@onInput={{this.type}}
+						{{on "focusin" this.focusField}}
+						{{fit this.fieldText}}
+					/>
+					{{#if this.invalid}}
+						<CanonStatus
+							@text="Invalid date"
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonGrid @columns={{3}}>
+						<CanonButton
+							@text="Now"
+							@icon={{ClockIcon}}
+							@onClick={{this.fillNow}}
+						/>
+						<CanonButton
+							@text="Paste"
+							@icon={{PasteIcon}}
+							@onClick={{this.paste}}
+						/>
+						<CanonButton
+							@label="Date & Time"
+							@icon={{CalendarIcon}}
+							@onClick={{this.openFieldPicker}}
+						/>
+					</CanonGrid>
+					<input
+						class="tc-picker"
+						type="datetime-local"
+						step="1"
+						tabindex="-1"
+						aria-hidden="true"
+						aria-label="Date & Time"
+						value={{this.fieldPickerValue}}
+						{{capture this.keepFieldPicker}}
+						{{on "change" this.pickField}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonSegmented
+						aria-label="Mode"
+						@items={{this.modeNames}}
+						@selected={{this.modeIndex}}
+						@onChange={{this.pickMode}}
+					/>
+					{{#if this.isArithmetic}}
+						<CanonHeading
+							@text="End Date"
+						/>
+						<div class="tc-date">
+							<CanonButton
+								class="tc-date-pick"
+								@text={{this.endText}}
+								@icon={{CalendarIcon}}
+								@kind="cell"
+								@label="End Date"
+								@onClick={{this.openEndPicker}}
+							/>
+							<CanonButton
+								@text="Now"
+								@kind="cell"
+								@onClick={{this.endNow}}
+							/>
+							<input
+								class="tc-picker"
+								type="datetime-local"
+								step="1"
+								tabindex="-1"
+								aria-hidden="true"
+								aria-label="End Date"
+								value={{this.endPickerValue}}
+								{{capture
+									this.keepEndPicker
 								}}
-									<div
-										class="dt-tc-row"
-									>
-										<span
-											class="dt-tc-result-name"
-										>{{row.label}}</span>
-										<span
-											class="dt-tc-result-value
-												{{unless
-													(eq
-														row.key
-														'relative'
-													)
-													'is-mono'
-												}}"
-										>{{row.value}}</span>
-									</div>
-								{{/each}}
+								{{on
+									"change"
+									this.pickEnd
+								}}
+							/>
+						</div>
+						<CanonHeading
+							@text="Quick Offsets"
+						/>
+						<CanonGrid
+							class="tc-offsets"
+							@columns={{4}}
+						>
+							{{#each
+								this.offsets
+								as |offset|
+							}}
+								<CanonButton
+									@text={{offset.title}}
+									@kind="cell"
+									@onClick={{fn
+										this.applyOffset
+										offset
+									}}
+								/>
+							{{/each}}
+						</CanonGrid>
+						<CanonHeading
+							@text="Operation"
+						/>
+						<CanonSegmented
+							aria-label="Operation"
+							@items={{this.operations}}
+							@selected={{if
+								this.subtracts
+								1
+								0
+							}}
+							@onChange={{this.pickOperation}}
+						/>
+						<CanonHeading @text="Amount" />
+						<CanonGrid @columns={{2}}>
+							<CanonNumberField
+								@value={{this.amount}}
+								@min={{0}}
+								@label="Amount"
+								@onChange={{this.setAmount}}
+							/>
+							<CanonMenuCell
+								@items={{this.unitNames}}
+								@selected={{this.unitIndex}}
+								@label="Unit"
+								@onChange={{this.pickUnit}}
+							/>
+						</CanonGrid>
+					{{/if}}
+					{{#if this.isTimezone}}
+						<CanonRow
+							@title="From"
+							@detail={{this.fromDetail}}
+							@form="flush"
+							as |titleId|
+						>
+							<ZoneCell
+								@zone={{this.fromZone}}
+								@date={{this.shownInstant}}
+								@labelledBy={{titleId}}
+								@onPick={{this.pickFrom}}
+							/>
+						</CanonRow>
+						<CanonRow
+							@title="To"
+							@detail={{this.toDetail}}
+							@form="flush"
+							as |titleId|
+						>
+							<ZoneCell
+								@zone={{this.toZone}}
+								@date={{this.shownInstant}}
+								@labelledBy={{titleId}}
+								@onPick={{this.pickTo}}
+							/>
+						</CanonRow>
+						<CanonGrid>
+							<CanonButton
+								@text="Swap"
+								@icon={{SwapIcon}}
+								@onClick={{this.swap}}
+							/>
+						</CanonGrid>
+					{{/if}}
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Result" />
+					{{#if this.isTimestamp}}
+						{{#each
+							this.stampLines
+							as |row|
+						}}
+							<CanonValueLine
+								@label={{row.label}}
+								@value={{row.value}}
+								@layout="above"
+							/>
+						{{/each}}
+					{{/if}}
+					{{#if this.isArithmetic}}
+						<CanonTiles
+							@items={{this.spanTiles}}
+						/>
+					{{/if}}
+					{{#if this.isTimezone}}
+						{{#each
+							this.zoneLines
+							as |row|
+						}}
+							<CanonValueLine
+								@label={{row.label}}
+								@value={{row.value}}
+								@layout="above"
+							/>
+						{{/each}}
+					{{/if}}
+				</CanonRows>
+				{{#if this.isArithmetic}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="End Date"
+						/>
+						{{#each this.endLines as |row|}}
+							<CanonValueLine
+								@label={{row.label}}
+								@value={{row.value}}
+								@layout="above"
+							/>
+						{{/each}}
+					</CanonRows>
+				{{/if}}
+				{{#if this.isTimezone}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Timezones"
+						/>
+						{{#each
+							this.extraZones
+							key="zone"
+							as |row|
+						}}
+							<div
+								class="tc-zone-row"
+							>
+								<CanonValueLine
+									@label={{row.label}}
+									@value={{row.value}}
+									@layout="above"
+								/>
+								<CanonButton
+									@icon={{RemoveIcon}}
+									@kind="cell"
+									@label={{row.remove}}
+									@onClick={{fn
+										this.removeZone
+										row.zone
+									}}
+								/>
 							</div>
-						{{/if}}
-					</TabsContent>
-				</div>
-			</Tabs>
-		</div>
+						{{/each}}
+						<CanonRow
+							@title="Add Timezone"
+							@form="flush"
+							as |titleId|
+						>
+							<ZoneCell
+								@date={{this.shownInstant}}
+								@placeholder={{this.addZonePlaceholder}}
+								@labelledBy={{titleId}}
+								@disabled={{this.zonesFull}}
+								@onPick={{this.addZone}}
+							/>
+						</CanonRow>
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }
