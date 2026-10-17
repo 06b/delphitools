@@ -97,3 +97,18 @@
 	pointer-events: none;
 	user-select: none;
 }
+
+// iOS's ToolStickerView: 32 above, the caption 16 below in footnote muted
+.dt-canon-tool .canon-split-end:not(:empty) {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding-block: 32px 16px;
+}
+
+.dt-sticker-caption {
+	margin-top: 16px;
+	text-align: center;
+	font-size: var(--canon-text-footnote);
+	color: var(--canon-muted-foreground);
+}

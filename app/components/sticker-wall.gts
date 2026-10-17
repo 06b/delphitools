@@ -2,6 +2,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
+import { concat, hash } from '@ember/helper';
+import { and } from 'ember-truth-helpers';
 import type { TOC } from '@ember/component/template-only';
 
 interface Sticker {
@@ -50,10 +52,18 @@ const WALL_STICKERS: Sticker[] = [
 	},
 ];
 
+// iOS's ToolStickerView: -2.5 deg, at most 360 pt, padded by its column
+const LOUSY_STICKER = {
+	rot: -2.5,
+	width: 'min(100%, 360px)',
+	align: 'center',
+} as const;
+
 function downloadSticker(file: string) {
+	const base = file.split('/').pop() ?? file;
 	const a = document.createElement('a');
 	a.href = `/stickers/${file}@2x.png`;
-	a.download = `delphitools-${file}-sticker.png`;
+	a.download = `delphitools-${base}-sticker.png`;
 	a.setAttribute('aria-hidden', 'true');
 	document.body.appendChild(a);
 	a.click();
@@ -64,6 +74,7 @@ interface StickerButtonSignature {
 	Element: HTMLButtonElement;
 	Args: {
 		sticker: Sticker;
+		caption?: string;
 	};
 }
 
@@ -115,6 +126,7 @@ class StickerButton extends Component<StickerButtonSignature> {
 				style={{this.style}}
 				aria-label="Peel off and download the {{@sticker.label}} sticker"
 				title="Peel me off!"
+				...attributes
 				{{on "click" this.handleClick}}
 			>
 				<span
@@ -140,9 +152,38 @@ class StickerButton extends Component<StickerButtonSignature> {
 					/>
 				</span>
 			</button>
+			{{#if (and this.loaded @caption)}}
+				<p class="dt-sticker-caption">{{@caption}}</p>
+			{{/if}}
 		{{/unless}}
 	</template>
 }
+
+interface PeelStickerSignature {
+	Args: {
+		tool: string;
+		label: string;
+	};
+}
+
+const TOOL_STICKER_CAPTION = 'Have a sticker! Peel it off to download.';
+
+// named as on iOS: "Sticker", valued with the tool's name
+const PeelSticker: TOC<PeelStickerSignature> = <template>
+	<StickerButton
+		@sticker={{hash
+			file=(concat "lousy/" @tool)
+			label=@label
+			rot=LOUSY_STICKER.rot
+			width=LOUSY_STICKER.width
+			align=LOUSY_STICKER.align
+		}}
+		@caption={{TOOL_STICKER_CAPTION}}
+		aria-label="Sticker"
+		{{! @glint-expect-error: ARIA 1.3, not in glint's attribute list }}
+		aria-description={{@label}}
+	/>
+</template>;
 
 const WALL_HEADING = 'Stickers';
 
@@ -161,4 +202,4 @@ const StickerWall: TOC<{ Element: HTMLElement }> = <template>
 	</section>
 </template>;
 
-export { StickerWall };
+export { StickerWall, PeelSticker };
