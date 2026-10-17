@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import type { GpsFix } from 'delphitools-v2/lib/metadata';
 import {
 	loadLand,
@@ -34,7 +35,7 @@ const parallels = [-30, 0, 30, 60].map((lat) => north - lat);
 /**
  * The iOS MetadataDossier: a world map with the photo's location, struck
  * when stripping removes it, beside lamps for each metadata block, lit
- * where found and struck where removed.
+ * where found, struck and ticked where removed.
  */
 export default class Dossier extends Component<DossierSignature> {
 	@tracked land = '';
@@ -180,7 +181,9 @@ export default class Dossier extends Component<DossierSignature> {
 						>
 							<span
 								class="ms-lamp-light"
-							></span>
+							><IconSvg
+									@name="check"
+								/></span>
 							<span
 								class="ms-lamp-name"
 							>{{lamp.name}}</span>

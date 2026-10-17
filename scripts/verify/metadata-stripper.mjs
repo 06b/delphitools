@@ -175,8 +175,26 @@ check(
 		lamps.includes('C2PA:off'),
 	lamps.join(' '),
 );
+// the last strike lands 700 ms + 7 x 120 ms after the strip, then fades 300 ms
+await sleep(2000);
+const ticks = await page.$$eval('.ms-lamp', (els) =>
+	els.map((el) => {
+		const tick = el.querySelector('.ms-lamp-light svg');
+		const box = tick?.getBoundingClientRect();
+		const shown = !!box && box.width > 0 && getComputedStyle(tick).opacity === '1';
+		return `${el.textContent.trim()}:${shown}`;
+	}),
+);
+check(
+	'a tick shows beside each struck lamp only',
+	ticks.includes('GPS:true') &&
+		ticks.includes('EXIF:true') &&
+		ticks.includes('ICC:false') &&
+		ticks.includes('C2PA:false'),
+	ticks.join(' '),
+);
 
-const removed = await page.$eval('.ms-removed .canon-row-detail', (el) => el.textContent.trim());
+const removed =await page.$eval('.ms-removed .canon-row-detail', (el) => el.textContent.trim());
 check('removed row names the dropped segments', removed.includes('EXIF (APP1)'), removed);
 
 const after = await tiles('.ms-after');
