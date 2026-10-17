@@ -108,3 +108,10 @@
 	clip-path: inset(50%);
 	white-space: nowrap;
 }
+
+/* expanded, the picture meets the folder tab; the shell reads --dt-tab-fill */
+@container (width > 1300px) {
+	.dt-sheet:has(.dt-canon-tool.is-expanded > .colour-atlas) {
+		--dt-tab-fill: var(--canon-muted);
+	}
+}

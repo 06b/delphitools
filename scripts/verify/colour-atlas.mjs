@@ -262,4 +262,45 @@ await sleep(300);
 const typed = await page.$eval('.colour-atlas-input input', (el) => el.value);
 check('a click selects the value, so typing replaces it', typed === '#4cb86a', typed);
 
+
+// G4: the solid starts in RGB with the orbit hint, and drifts after 4 s idle
+await visit(page, '/tools/colour-atlas');
+const axes = () =>
+	page.$$eval('.colour-atlas .canon-colour-solid-axis', (labels) =>
+		labels.map((l) => l.style.translate).join(),
+	);
+const start = await page.evaluate(() => ({
+	space: document
+		.querySelector('.canon-colour-controls [role="radio"][aria-checked="true"]')
+		?.textContent.trim(),
+	hint: document.querySelector('.colour-atlas .canon-colour-solid-hint')?.textContent.trim(),
+}));
+check('the solid starts in RGB', start.space === 'RGB', start.space);
+check('with the orbit hint', start.hint === 'Drag to orbit', start.hint);
+const still = await axes();
+await sleep(5500);
+check('and drifts after 4 s idle', still !== '' && (await axes()) !== still);
+
+// expanded, the folder tab takes the picture's colour
+const tabFill = () =>
+	page.evaluate(() => ({
+		tab: getComputedStyle(document.querySelector('.dt-tab')).backgroundColor,
+		picture: getComputedStyle(
+			document.querySelector('.colour-atlas .canon-canvas-content'),
+		).backgroundColor,
+		sheet: getComputedStyle(document.querySelector('.dt-sheet')).backgroundColor,
+	}));
+await page.setViewport({ width: 2200, height: 1100 });
+await page.evaluate(() =>
+	localStorage.setItem('dt-canon-expanded', JSON.stringify(['colour-atlas'])),
+);
+await visit(page, '/tools/colour-atlas');
+let fill = await tabFill();
+check('expanded, the tab matches the picture', fill.tab === fill.picture, `${fill.tab} ${fill.picture}`);
+await page.evaluate(() => localStorage.setItem('dt-canon-expanded', '[]'));
+await visit(page, '/tools/colour-atlas');
+fill = await tabFill();
+check('in the column, the tab matches the sheet', fill.tab === fill.sheet, `${fill.tab} ${fill.sheet}`);
+await page.setViewport({ width: 1400, height: 1000 });
+
 await finish(browser);

@@ -719,7 +719,7 @@ body {
 	border-inline-end: 0;
 	border-start-start-radius: 16px;
 	border-end-start-radius: 16px;
-	background: var(--canon-background);
+	background: var(--dt-tab-fill, var(--canon-background));
 	color: var(--canon-foreground);
 	font: inherit;
 	font-size: var(--canon-text-body);
@@ -733,7 +733,7 @@ body {
 		--dt-fillet:
 			transparent 11.75px, var(--dt-rule) 12.25px,
 			var(--dt-rule) calc(11.75px + var(--dt-rule-width)),
-			var(--canon-background)
+			var(--dt-tab-fill, var(--canon-background))
 				calc(12.25px + var(--dt-rule-width));
 
 		content: "";
