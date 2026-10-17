@@ -168,12 +168,22 @@ export default class MarkdownWriterTool extends Component {
 		const kind = query.get('padExtract');
 		if (kind && extractOps.some((op) => op.kind === kind))
 			this.runExtract(kind as ExtractKind);
+		window.addEventListener('pagehide', this.#flush);
 	}
 
 	willDestroy() {
 		super.willDestroy();
-		window.clearTimeout(this.#saveTimer);
+		window.removeEventListener('pagehide', this.#flush);
+		this.#flush();
 	}
+
+	// a pending save is written, not dropped
+	#flush = () => {
+		if (this.#saveTimer === undefined) return;
+		window.clearTimeout(this.#saveTimer);
+		this.#saveTimer = undefined;
+		writeStore(this.text);
+	};
 
 	get caseOps() {
 		return caseOps;
@@ -275,6 +285,7 @@ export default class MarkdownWriterTool extends Component {
 		if (!this.#persists) return;
 		window.clearTimeout(this.#saveTimer);
 		this.#saveTimer = window.setTimeout(() => {
+			this.#saveTimer = undefined;
 			writeStore(this.text);
 			this.lastSaved = this.text ? new Date() : null;
 		}, saveDelay);

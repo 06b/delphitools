@@ -386,6 +386,9 @@ export default class DocConverterTool extends Component {
 		this.file = null;
 		this.fileError = null;
 		this.notice = null;
+		// text cannot be a binary format
+		if (getFormat(this.from)?.kind === 'binary')
+			this.from = AUTO_DETECT;
 		this.#changed();
 	}
 
@@ -428,8 +431,6 @@ export default class DocConverterTool extends Component {
 
 	clear = () => {
 		this.#loadText('', null);
-		if (getFormat(this.from)?.kind === 'binary')
-			this.from = AUTO_DETECT;
 	};
 
 	loadScratchpad = () => {

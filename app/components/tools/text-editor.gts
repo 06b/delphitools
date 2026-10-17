@@ -676,7 +676,15 @@ export default class TextEditorTool extends Component {
 	clear = () => {
 		const v = this.view;
 		if (this.settings.codeMode) {
-			this.source = '';
+			const area =
+				document.querySelector<HTMLTextAreaElement>(
+					'.text-editor .te-source',
+				);
+			// execCommand keeps it undoable
+			area?.focus();
+			area?.select();
+			document.execCommand('delete');
+			if (this.source) this.source = '';
 			return;
 		}
 		const paragraph = v?.state.schema.nodes.paragraph;

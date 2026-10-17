@@ -47,11 +47,18 @@ const sample = {
 };
 
 /** The port of TextDiffViewController, with both texts typed in the picture. */
+// characters, both sides
+const LARGE = 20_000;
+const SETTLE_MS = 150;
+
 export default class TextDiffTool extends Component {
 	@service('canon-toast') declare toast: CanonToastService;
 
 	@tracked oldText = '';
 	@tracked newText = '';
+	// the texts last diffed
+	@tracked diffed: [string, string] = ['', ''];
+	#settleTimer?: ReturnType<typeof setTimeout>;
 	@tracked wrap = true;
 	@tracked pictureHeight?: number;
 
@@ -66,12 +73,27 @@ export default class TextDiffTool extends Component {
 			query.get('diffNew') ?? (sampled ? sample.new : '');
 		if (query.has('diffWrap'))
 			this.wrap = query.get('diffWrap') !== '0';
+		this.diffed = [this.oldText, this.newText];
 	}
 
-	// ponytail: diffed on every keystroke, as the web tool showed raw text at once; a worker if multi-megabyte typing stalls
+	willDestroy() {
+		super.willDestroy();
+		clearTimeout(this.#settleTimer);
+	}
+
+	// large texts wait for a typing pause; the web tool waited 120 ms always
+	#settle() {
+		clearTimeout(this.#settleTimer);
+		const run = () => (this.diffed = [this.oldText, this.newText]);
+		if (this.oldText.length + this.newText.length > LARGE)
+			this.#settleTimer = setTimeout(run, SETTLE_MS);
+		else run();
+	}
+
+	// ponytail: main thread; a worker if multi-megabyte diffs stall
 	@cached
 	get diff() {
-		return diffLines(this.oldText, this.newText);
+		return diffLines(...this.diffed);
 	}
 
 	@cached
@@ -81,6 +103,10 @@ export default class TextDiffTool extends Component {
 
 	@cached
 	get marks() {
+		const [old, next] = this.diffed;
+		// marks only for the text on screen
+		if (old !== this.oldText || next !== this.newText)
+			return { old: [], new: [] };
 		return sideMarks(this.diff, this.spans);
 	}
 
@@ -141,6 +167,7 @@ export default class TextDiffTool extends Component {
 	setText = (side: SideId, text: string) => {
 		if (side === 'old') this.oldText = text;
 		else this.newText = text;
+		this.#settle();
 	};
 
 	readFile = (side: SideId, file: File) => void this.#load(side, file);
@@ -169,6 +196,7 @@ export default class TextDiffTool extends Component {
 
 	swap = () => {
 		[this.oldText, this.newText] = [this.newText, this.oldText];
+		this.#settle();
 	};
 
 	setWrap = (on: boolean) => {

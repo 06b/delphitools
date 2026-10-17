@@ -58,6 +58,12 @@ module('Unit | Tool | time-calc', function () {
 		assert.strictEqual(ms?.date.getTime(), INSTANT.getTime());
 	});
 
+	test('a day past the month end is refused', function (assert) {
+		assert.strictEqual(read('2023-02-29'), null);
+		assert.strictEqual(read('2023-04-31'), null);
+		assert.ok(read('2024-02-29'));
+	});
+
 	test('a date with no zone is a wall clock in the zone given', function (assert) {
 		const tokyo = read('2024-01-01 09:00', 'Asia/Tokyo');
 		assert.strictEqual(tokyo?.date.getTime(), INSTANT.getTime());

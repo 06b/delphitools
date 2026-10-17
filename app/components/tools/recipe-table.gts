@@ -89,6 +89,8 @@ export default class RecipeTableTool extends Component {
 	@tracked copyFailed = false;
 	@tracked pictureHeight?: number;
 	#failedTimer?: ReturnType<typeof setTimeout>;
+	// query text never overwrites the draft
+	#persists = true;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
@@ -97,7 +99,9 @@ export default class RecipeTableTool extends Component {
 		const sample = EXAMPLES.find(
 			(e) => e.id === query.get('rtSample'),
 		);
-		this.text = query.get('rtText') ?? sample?.text ?? load();
+		const given = query.get('rtText') ?? sample?.text;
+		this.#persists = given === undefined;
+		this.text = given ?? load();
 		const units = DISPLAYS.indexOf(query.get('rtUnits') as Display);
 		if (units > 0) this.display = DISPLAYS[units]!;
 		this.amountRaw = query.get('rtScale');
@@ -194,7 +198,7 @@ export default class RecipeTableTool extends Component {
 
 	setText = (text: string) => {
 		this.text = text;
-		save(text);
+		if (this.#persists) save(text);
 	};
 
 	setAmount = (event: Event) => {

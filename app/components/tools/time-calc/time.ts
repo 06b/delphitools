@@ -127,7 +127,10 @@ export function read(text: string, zone = localZone): Reading | null {
 		const [, y, mo, d, sep, h, mi, s, frac] = wall;
 		const month = Number(mo) - 1;
 		const date = Number(d);
-		if (month > 11 || date < 1 || date > 31) return null;
+		const days = new Date(
+			Date.UTC(Number(y), month + 1, 0),
+		).getUTCDate();
+		if (month > 11 || date < 1 || date > days) return null;
 		return valid({
 			date: wallInZone(
 				zone,
