@@ -333,6 +333,14 @@ await page.evaluate(() => {
 await page.waitForSelector('.conv-load-error', { timeout: 5000 }).catch(() => {});
 s = await state();
 check('an unreadable file is named, not added', s.loadError === 'Failed to load image: broken.png' && s.files.length === 4, s.loadError);
+await page.evaluate(() => {
+	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="red"/></svg>';
+	const transfer = new DataTransfer();
+	transfer.items.add(new File([svg], 'logo.svg', { type: 'image/svg+xml' }));
+	document.querySelector('.conv-picture').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }));
+});
+await page.waitForFunction(() => document.querySelectorAll('.conv-file').length === 5, { timeout: 5000 }).catch(() => {});
+check('an svg loads', (await state()).files.length === 5);
 await page.click('.conv-clear-all');
 await sleep(100);
 s = await state();

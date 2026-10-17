@@ -26,6 +26,7 @@ import type { Rgb } from 'delphicanon/lib/colour';
 import { stem } from 'delphicanon/lib/files';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadText } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
@@ -230,16 +231,6 @@ interface Trace {
 	palette: Rgb[];
 }
 
-async function decode(file: File): Promise<ImageBitmap> {
-	try {
-		return await createImageBitmap(file, {
-			imageOrientation: 'from-image',
-		});
-	} catch {
-		return createImageBitmap(file);
-	}
-}
-
 function pixelsOf(bitmap: ImageBitmap) {
 	const canvas = document.createElement('canvas');
 	canvas.width = bitmap.width;
@@ -397,7 +388,7 @@ export default class ImageTracer extends Component {
 		this.failure = '';
 		let bitmap: ImageBitmap;
 		try {
-			bitmap = await decode(file);
+			bitmap = await decodeImage(file);
 		} catch {
 			if (run !== this.#run) return;
 			this.tracing = false;

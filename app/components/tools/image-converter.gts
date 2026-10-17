@@ -24,6 +24,7 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
@@ -100,8 +101,26 @@ interface Source {
 	alpha: boolean;
 }
 
-function decode(file: Blob): Promise<ImageBitmap> {
-	return createImageBitmap(file, { imageOrientation: 'from-image' });
+async function readSource(file: File): Promise<Source | string> {
+	const name = file.name || 'image';
+	try {
+		const image = await decodeImage(file);
+		const natural = {
+			width: image.width,
+			height: image.height,
+		};
+		const alpha = hasAlpha(image, natural);
+		image.close();
+		return {
+			file,
+			url: URL.createObjectURL(file),
+			name,
+			natural,
+			alpha,
+		};
+	} catch {
+		return `Failed to load image: ${name}`;
+	}
 }
 
 function divisor(a: number, b: number): number {
@@ -358,29 +377,9 @@ export default class ImageConverter extends Component {
 	add = async (files: File[]) => {
 		const images = files.filter((f) => matchesAccept(f, ACCEPT));
 		if (!images.length) return;
-		const loaded = await Promise.all(
-			images.map(async (file): Promise<Source | string> => {
-				const name = file.name || 'image';
-				try {
-					const image = await decode(file);
-					const natural = {
-						width: image.width,
-						height: image.height,
-					};
-					const alpha = hasAlpha(image, natural);
-					image.close();
-					return {
-						file,
-						url: URL.createObjectURL(file),
-						name,
-						natural,
-						alpha,
-					};
-				} catch {
-					return `Failed to load image: ${name}`;
-				}
-			}),
-		);
+		// sequential; bounds memory
+		const loaded: (Source | string)[] = [];
+		for (const file of images) loaded.push(await readSource(file));
 		if (isDestroying(this)) {
 			loaded.forEach(
 				(s) =>
@@ -525,14 +524,30 @@ export default class ImageConverter extends Component {
 		try {
 			const { default: JSZip } = await import('jszip');
 			const zip = new JSZip();
+			const taken = new Map<string, number>();
+			// jszip overwrites a repeated name
+			const unique = (name: string) => {
+				const n = (taken.get(name) ?? 0) + 1;
+				taken.set(name, n);
+				return n === 1
+					? name
+					: name.replace(
+							/(\.[^.]*)?$/,
+							`-${n}$1`,
+						);
+			};
 			for (const source of this.sources) {
 				try {
-					const image = await decode(source.file);
+					const image = await decodeImage(
+						source.file,
+					);
 					try {
 						zip.file(
-							outputName(
-								source.name,
-								settings.format,
+							unique(
+								outputName(
+									source.name,
+									settings.format,
+								),
 							),
 							await convert(
 								image,
@@ -567,7 +582,7 @@ export default class ImageConverter extends Component {
 		if (this.#bitmap?.source === source) return this.#bitmap.image;
 		this.#bitmap?.image.close();
 		this.#bitmap = undefined;
-		const image = await decode(source.file);
+		const image = await decodeImage(source.file);
 		this.#bitmap = { source, image };
 		return image;
 	}
