@@ -1022,6 +1022,7 @@ export const toolCategories: ToolCategory[] = [
 					'Decode classical ciphers manually or auto-detect the cipher',
 				icon: 'key-round',
 				href: '/tools/decoder',
+				canon: true,
 			},
 			{
 				id: 'password-genny',
