@@ -805,6 +805,7 @@ export const toolCategories: ToolCategory[] = [
 					'Analyse PDFs for print-readiness issues',
 				icon: 'file-search',
 				href: '/tools/pdf-preflight',
+				canon: true,
 				accepts: ['.pdf'],
 			},
 			{

@@ -64,9 +64,9 @@ await (await page.$('input[type="file"]')).uploadFile(fixture);
 const analysed = await page
 	.waitForFunction(
 		() =>
-			!!document.querySelector(
-				'.dt-preflight-badges, .dt-preflight-group',
-			) || !!document.querySelector('.dt-preflight-error'),
+			!!document.querySelector('.pf-source .canon-row-detail')
+				?.textContent.includes('PDF') ||
+			!!document.querySelector('.pf-error'),
 		{ timeout: 30000 },
 	)
 	.then(() => true)
@@ -74,7 +74,7 @@ const analysed = await page
 
 const preflight = await page.evaluate(() => ({
 	error: document
-		.querySelector('.dt-preflight-error')
+		.querySelector('.pf-error')
 		?.textContent?.trim()
 		?.slice(0, 80),
 	body: document.body.textContent ?? '',

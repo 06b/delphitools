@@ -1,339 +1,270 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
+import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
-	CATEGORIES,
-	SEVERITY_ICON,
-	badges,
 	formatSize,
-	groupByPage,
-	plural,
-	ptsToMm,
 	runPreflight,
 	type FontInfo,
-	type PageBox,
-	type PageInfo,
-	type PreflightIssue,
 	type PreflightReport,
 } from 'delphitools-v2/lib/pdf-preflight';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import {
+	comparison,
+	sizes,
+	thumbnails,
+} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import {
+	boxMarks,
+	samplePdf,
+	type PageBoxMark,
+} from 'delphitools-v2/components/tools/pdf-preflight/pages';
+import {
+	DASH,
+	checkTiles,
+	isError,
+	dimensionTiles,
+	groups,
+	onPage,
+	pageMarks,
+	propertyTiles,
+	resultTiles,
+	verdict,
+} from 'delphitools-v2/components/tools/pdf-preflight/report';
+import './pdf-preflight/pdf-preflight.css';
 
 const ACCEPT = '.pdf,application/pdf';
+const A4 = { width: 595, height: 842 };
+const BLANK: CanonPage[] = [{ size: A4 }, { size: A4 }, { size: A4 }];
 
-/** in css px */
-const PREVIEW_WIDTH = 600;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Cross = <template><IconSvg @name="x" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-interface PdfFile {
-	name: string;
-	size: number;
-	buffer: ArrayBuffer;
-}
+/** The port of PDFPreflightViewController, on the web tool's pdf-lib and pdf.js checks. */
+export default class PdfPreflight extends Component {
+	drop = new Drop(ACCEPT, (file) => this.load(file));
 
-interface DisplayIssue extends PreflightIssue {
-	key: string;
-	icon: string;
-}
-
-const BOX_COLOURS = {
-	trim: '#3b82f6',
-	bleed: '#ef4444',
-	crop: '#22c55e',
-};
-
-async function drawPage(
-	canvas: HTMLCanvasElement,
-	doc: PDFDocumentProxy,
-	info: PageInfo,
-	pageNumber: number,
-	cancelled: () => boolean,
-): Promise<void> {
-	const page = await doc.getPage(pageNumber);
-	try {
-		const scale =
-			PREVIEW_WIDTH / page.getViewport({ scale: 1 }).width;
-		const viewport = page.getViewport({ scale });
-
-		canvas.width = viewport.width;
-		canvas.height = viewport.height;
-
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
-
-		await page.render({ canvas, viewport }).promise;
-		if (cancelled()) return;
-
-		ctx.save();
-		ctx.lineWidth = 1.5;
-		ctx.setLineDash([6, 4]);
-		for (const [box, colour] of [
-			[info.trimBox, BOX_COLOURS.trim],
-			[info.bleedBox, BOX_COLOURS.bleed],
-			[info.cropBox, BOX_COLOURS.crop],
-		] as const) {
-			if (!box) continue;
-			ctx.strokeStyle = colour;
-			// pdf y-up, canvas y-down
-			ctx.strokeRect(
-				(box.x - info.mediaBox.x) * scale,
-				canvas.height -
-					(box.y + box.height - info.mediaBox.y) *
-						scale,
-				box.width * scale,
-				box.height * scale,
-			);
-		}
-		ctx.restore();
-	} finally {
-		page.cleanup();
-	}
-}
-
-export default class PdfPreflightTool extends Component {
-	@tracked file: PdfFile | null = null;
+	@tracked file: File | null = null;
 	@tracked error: string | null = null;
-	@tracked dragActive = false;
 	@tracked analysing = false;
 	@tracked report: PreflightReport | null = null;
-	@tracked pdfDoc: PDFDocumentProxy | null = null;
-	@tracked currentPage = 1;
+	@tracked pages: CanonPage[] = [];
+	/** null: all pages */
+	@tracked page: number | null = null;
+	@tracked preview = '';
+	@tracked boxes: PageBoxMark[] = [];
 
-	/** latest-wins analysis runs */
-	#runId = 0;
+	#pdf: PDFDocumentProxy | null = null;
+	// a new file
+	#token = 0;
+	// a new page preview
+	#shown = 0;
+	#startPage: number | null = null;
+
+	// ?pfSample: the iOS -pfSample launch argument, with a drawn PDF; ?pfPage=<index>: the iOS -pfPage
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const start = Number(query.get('pfPage') ?? NaN);
+		if (Number.isInteger(start) && start >= 0)
+			this.#startPage = start;
+		if (query.has('pfSample'))
+			void samplePdf().then((file) => this.load(file));
+	}
 
 	willDestroy() {
 		super.willDestroy();
-		this.#destroyDoc();
+		this.#token++;
+		this.#close();
 	}
 
-	#destroyDoc() {
-		if (!this.pdfDoc) return;
-		void this.pdfDoc.destroy();
-		this.pdfDoc = null;
+	get loaded() {
+		return this.file !== null;
 	}
 
-	get fileSizeLabel() {
-		return formatSize(this.file?.size ?? 0);
-	}
-
-	get showReport() {
-		return this.report !== null && !this.analysing;
-	}
-
-	get pageCount() {
-		return this.report?.pageCount ?? 0;
-	}
-
-	get displayIssues(): DisplayIssue[] {
-		return (this.report?.issues ?? []).map((issue, index) => ({
-			...issue,
-			key: String(index),
-			icon: SEVERITY_ICON[issue.severity],
+	get stripPages(): CanonPage[] {
+		const names = pageMarks(
+			this.report?.issues ?? [],
+			this.pages.length,
+		);
+		return this.pages.map((page, index) => ({
+			...page,
+			name: names[index] || undefined,
 		}));
 	}
 
-	get errorCount() {
-		return this.displayIssues.filter((i) => i.severity === 'error')
-			.length;
-	}
-
-	get isReady() {
-		return this.errorCount === 0;
-	}
-
-	get verdictDetail() {
-		return this.isReady
-			? 'No critical issues found'
-			: `${this.errorCount} error${plural(this.errorCount)} must be resolved before printing`;
-	}
-
-	get badges() {
-		return badges(this.displayIssues);
-	}
-
-	get summaryRows() {
+	get detail() {
 		const report = this.report;
-		if (!report) return [];
-		const embedded = report.fonts.filter((f) => f.embedded).length;
-		return [
-			{ label: 'PDF Version', value: report.pdfVersion },
-			{ label: 'Pages', value: String(report.pageCount) },
-			{
-				label: 'File Size',
-				value: formatSize(report.fileSize),
-			},
-			{
-				label: 'Encrypted',
-				value: report.encrypted ? 'Yes' : 'No',
-			},
-			{
-				label: 'Fonts',
-				value: `${report.fonts.length} (${embedded} embedded)`,
-			},
-		];
+		if (!report) return this.file ? formatSize(this.file.size) : '';
+		const n = report.pageCount;
+		return `${n === 1 ? '1 page' : `${n} pages`} · ${formatSize(report.fileSize)} · PDF ${report.pdfVersion}`;
 	}
 
-	get fontRows() {
+	get visible() {
+		const { page } = this;
+		return (this.report?.issues ?? []).filter((issue) =>
+			onPage(issue, page),
+		);
+	}
+
+	get results() {
+		return resultTiles(this.report?.issues ?? null);
+	}
+
+	get verdict() {
+		return this.report ? verdict(this.report.issues) : DASH;
+	}
+
+	get tone() {
+		if (!this.report) return 'muted';
+		return this.report.issues.some(isError) ? 'warn' : 'ok';
+	}
+
+	get checks() {
+		return checkTiles(this.report ? this.visible : null);
+	}
+
+	get groups() {
+		return groups(this.visible);
+	}
+
+	get properties() {
+		return propertyTiles(this.report);
+	}
+
+	get fonts() {
 		return (this.report?.fonts ?? []).map((font, index) => ({
 			font,
 			key: String(index),
-			state: font.embedded ? 'Embedded' : 'Not embedded',
-			downloadTitle: `Download ${font.name}${font.extension ?? ''}`,
+			detail: [
+				font.type,
+				font.embedded ? 'Embedded' : 'Not embedded',
+			]
+				.filter(Boolean)
+				.join(' · '),
+			download: `Download ${font.name}${font.extension ?? ''}`,
 		}));
 	}
 
-	get issueCategories() {
-		const issues = this.displayIssues;
-		return CATEGORIES.map((category) => ({
-			...category,
-			issues: issues.filter(
-				(i) => i.category === category.id,
-			),
-		})).filter((group) => group.issues.length > 0);
+	get selected() {
+		return this.page ?? undefined;
 	}
 
-	get issuePages() {
-		return groupByPage(
-			this.displayIssues,
-			this.report?.pageCount ?? 0,
-		);
+	get pageInfo() {
+		return this.page === null
+			? undefined
+			: this.report?.pages[this.page];
 	}
 
-	get currentPageIssues() {
-		return this.displayIssues.filter(
-			(i) => i.page === this.currentPage,
-		);
+	get pageTitle() {
+		return this.page === null ? '' : `Page ${this.page + 1}`;
 	}
 
-	get currentPageInfo(): PageInfo | undefined {
-		return this.report?.pages[this.currentPage - 1];
+	get dimensions() {
+		return this.pageInfo ? dimensionTiles(this.pageInfo) : [];
 	}
 
-	get pageDimensions() {
-		const info = this.currentPageInfo;
-		if (!info) return null;
-		const box = (b: PageBox) =>
-			`${b.width.toFixed(0)} x ${b.height.toFixed(0)}pt`;
-		return {
-			size: `${info.width.toFixed(0)} x ${info.height.toFixed(0)}pt (${ptsToMm(info.width).toFixed(0)} x ${ptsToMm(info.height).toFixed(0)}mm)`,
-			trim: info.trimBox ? box(info.trimBox) : null,
-			bleed: info.bleedBox ? box(info.bleedBox) : null,
-		};
+	get paperStyle() {
+		const size =
+			this.page === null ? A4 : this.pages[this.page]?.size;
+		const ratio =
+			(size?.width ?? 1) / Math.max(size?.height ?? 1, 1);
+		return htmlSafe(`--pf-ratio: ${ratio}`);
 	}
 
-	get atFirstPage() {
-		return this.currentPage <= 1;
-	}
-
-	get atLastPage() {
-		return this.currentPage >= this.pageCount;
-	}
-
-	readFile = (candidate: File) => {
+	load = (file: File) => {
 		this.error = null;
-
-		if (candidate.type && candidate.type !== 'application/pdf') {
+		if (file.type && file.type !== 'application/pdf') {
 			this.error = 'Please upload a PDF file.';
 			return;
 		}
-
-		if (!candidate.name.toLowerCase().endsWith('.pdf')) {
+		if (!file.name.toLowerCase().endsWith('.pdf')) {
 			this.error =
 				'Please upload a file with a .pdf extension.';
 			return;
 		}
+		void this.#read(file);
+	};
 
-		const reader = new FileReader();
-		reader.onload = () => {
-			const buffer = reader.result as ArrayBuffer;
-			const magic = String.fromCharCode(
-				...new Uint8Array(buffer.slice(0, 5)),
-			);
-			if (!magic.startsWith('%PDF')) {
-				this.error =
-					'The file does not appear to be a valid PDF.';
-				return;
-			}
-
-			const file = {
-				name: candidate.name,
-				size: candidate.size,
-				buffer,
-			};
-			this.file = file;
-			void this.analyse(file);
-		};
-		reader.onerror = () => {
+	async #read(file: File) {
+		let buffer: ArrayBuffer;
+		try {
+			buffer = await file.arrayBuffer();
+		} catch {
 			this.error =
 				'Failed to read the file. Please try again.';
-		};
-		reader.readAsArrayBuffer(candidate);
-	};
+			return;
+		}
+		const magic = String.fromCharCode(
+			...new Uint8Array(buffer.slice(0, 5)),
+		);
+		if (!magic.startsWith('%PDF')) {
+			this.error =
+				'The file does not appear to be a valid PDF.';
+			return;
+		}
+		this.clear();
+		this.file = file;
+		await this.#analyse(file, buffer);
+	}
 
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// allow re-picking same file
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		this.dragActive = false;
-		const file = event.dataTransfer?.files[0];
-		if (file) this.readFile(file);
-	};
-
-	// default navigates; dragover refires
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-		if (!this.dragActive) this.dragActive = true;
-	};
-
-	endDrag = (event: DragEvent) => {
-		event.preventDefault();
-		this.dragActive = false;
-	};
-
-	clear = () => {
-		this.#runId++;
-		this.#destroyDoc();
-		this.file = null;
-		this.error = null;
-		this.report = null;
-		this.analysing = false;
-		this.currentPage = 1;
-	};
-
-	analyse = async (file: PdfFile) => {
-		const runId = ++this.#runId;
+	async #analyse(file: File, buffer: ArrayBuffer) {
+		const token = this.#token;
+		const live = () => token === this.#token;
 		this.analysing = true;
-		this.error = null;
-		this.report = null;
-		this.currentPage = 1;
-		this.#destroyDoc();
-
 		try {
 			const { report, pdfDoc } = await runPreflight(
-				file.buffer,
+				buffer,
 				file.name,
 				file.size,
+				() => !live(),
 			);
-			if (runId !== this.#runId) {
-				void pdfDoc?.destroy();
-				return;
-			}
-			this.pdfDoc = pdfDoc;
+			if (!live()) return void pdfDoc?.destroy();
 			this.report = report;
+			this.#pdf = pdfDoc;
+			this.analysing = false;
+			this.pages = pdfDoc
+				? (await sizes(pdfDoc)).map((size) => ({
+						size,
+					}))
+				: report.pages.map(({ width, height }) => ({
+						size: { width, height },
+					}));
+			if (!live()) return;
+			const start = this.#startPage;
+			this.#startPage = null;
+			if (start !== null && start < this.pages.length)
+				this.select(start);
+			if (!pdfDoc) return;
+			await thumbnails(pdfDoc, live, (index, picture) => {
+				const pages = [...this.pages];
+				pages[index] = { ...pages[index]!, picture };
+				this.pages = pages;
+			});
 		} catch (e) {
-			if (runId !== this.#runId) return;
+			if (!live()) return;
 			// import failure = parse error
 			console.error('pdf-preflight analysis failed:', e);
 			const message = e instanceof Error ? e.message : '';
@@ -343,38 +274,45 @@ export default class PdfPreflightTool extends Component {
 					? 'This PDF is encrypted or password-protected and cannot be analysed.'
 					: 'Could not parse this PDF file.';
 		} finally {
-			if (runId === this.#runId) this.analysing = false;
+			if (live()) this.analysing = false;
 		}
+	}
+
+	select = (index: number | null) => {
+		const page = index === this.page ? null : index;
+		this.page = page;
+		void this.#showPage(page);
 	};
 
-	goToPage = (page: number) => {
-		this.currentPage = Math.max(
-			1,
-			Math.min(this.pageCount || 1, page),
-		);
+	selectStrip = (index: number) => this.select(index);
+	allPages = () => this.select(null);
+
+	showIssue = (page: number | undefined) => {
+		if (page && page - 1 !== this.page) this.select(page - 1);
 	};
 
-	previousPage = () => this.goToPage(this.currentPage - 1);
-	nextPage = () => this.goToPage(this.currentPage + 1);
-
-	/** page-less issues inert */
-	goToIssuePage = (issue: PreflightIssue) => {
-		if (issue.page) this.goToPage(issue.page);
-	};
-
-	// autotracked: no dependency list
-	renderPreview = modifier((canvas: HTMLCanvasElement) => {
-		const doc = this.pdfDoc;
-		const info = this.currentPageInfo;
-		const pageNumber = this.currentPage;
-		if (!doc || !info) return;
-
-		let cancelled = false;
-		void drawPage(canvas, doc, info, pageNumber, () => cancelled);
-		return () => {
-			cancelled = true;
-		};
-	});
+	async #showPage(page: number | null) {
+		const shown = ++this.#shown;
+		const pdf = this.#pdf;
+		const info =
+			page === null ? undefined : this.report?.pages[page];
+		const [preview, boxes] =
+			pdf && info && page !== null
+				? await Promise.all([
+						comparison(pdf, page),
+						boxMarks(pdf, info).catch(
+							() => [],
+						),
+					])
+				: ['', []];
+		if (shown !== this.#shown) {
+			if (preview) URL.revokeObjectURL(preview);
+			return;
+		}
+		if (this.preview) URL.revokeObjectURL(this.preview);
+		this.preview = preview;
+		this.boxes = boxes;
+	}
 
 	downloadFont = (font: FontInfo) => {
 		const bytes = font.data;
@@ -392,529 +330,100 @@ export default class PdfPreflightTool extends Component {
 		);
 	};
 
+	clear = () => {
+		this.#token++;
+		this.#shown++;
+		this.#close();
+		this.file = null;
+		this.error = null;
+		this.report = null;
+		this.analysing = false;
+		this.page = null;
+	};
+
+	#close() {
+		for (const page of this.pages)
+			if (page.picture) URL.revokeObjectURL(page.picture);
+		if (this.preview) URL.revokeObjectURL(this.preview);
+		this.pages = [];
+		this.preview = '';
+		this.boxes = [];
+		void this.#pdf?.destroy();
+		this.#pdf = null;
+	}
+
 	<template>
-		<div
-			class="dt-preflight"
-			{{filePaste this.readFile accept=ACCEPT}}
+		<CanonSplit
+			class="pdf-preflight"
+			@collapsesTo={{120}}
+			{{filePaste this.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div class="dt-preflight-frame">
-				{{#if this.file}}
-					<div class="dt-preflight-file">
-						<Icon
-							@name="file-text"
-							class="dt-preflight-file-icon"
+			<:banner>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.pages.length}}
+						<CanonPageStrip
+							class="pf-strip"
+							@pages={{this.stripPages}}
+							@selected={{this.selected}}
+							@onSelect={{this.selectStrip}}
 						/>
-						<span
-							class="dt-preflight-file-meta"
-						>
-							<span
-								class="dt-preflight-file-name"
-							>{{this.file.name}}</span>
-							<span
-								class="dt-preflight-file-size"
-							>{{this.fileSizeLabel}}</span>
-						</span>
-						<button
-							type="button"
-							class="dt-preflight-file-clear"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="x" />
-							<span
-								class="dt-sr-only"
-							>Remove file</span>
-						</button>
-					</div>
-				{{else}}
-					<label
-						class="dt-preflight-drop
-							{{if
-								this.dragActive
-								'is-active'
-							}}"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-						{{on "dragleave" this.endDrag}}
-					>
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+					{{else}}
+						<CanonPageStrip
+							class="pf-strip pf-strip--blank"
+							@pages={{BLANK}}
+							aria-hidden="true"
+							inert
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-preflight-drop-title"
-						>Drop a PDF here</span>
-						<span
-							class="dt-preflight-drop-hint"
-						>or click to select a file, or
-							paste</span>
-					</label>
-				{{/if}}
-
-				{{#if this.analysing}}
-					<div class="dt-preflight-busy">
-						<NdsLoader class="is-stage" />
-						<span>Analysing PDF...</span>
-					</div>
-				{{/if}}
-			</div>
-
-			{{#if this.error}}
-				<p class="dt-preflight-error">{{this.error}}</p>
-			{{/if}}
-
-			{{#if this.showReport}}
-				<div class="dt-preflight-report">
-					<div class="dt-preflight-panel">
-						<h3
-							class="dt-preflight-panel-title"
-						>Page Preview</h3>
-
-						{{#if this.pdfDoc}}
-							<div
-								class="dt-preflight-stage"
-							>
-								<canvas
-									{{this.renderPreview}}
-								></canvas>
-							</div>
-
-							<div
-								class="dt-preflight-nav"
-							>
-								<button
-									type="button"
-									class="dt-preflight-nav-btn"
-									disabled={{this.atFirstPage}}
-									{{on
-										"click"
-										this.previousPage
-									}}
-								>
-									<Icon
-										@name="chevron-left"
-									/>
-									<span
-										class="dt-sr-only"
-									>Previous
-										page</span>
-								</button>
-								<span
-									class="dt-preflight-nav-label"
-								>Page
-									{{this.currentPage}}
-									of
-									{{this.pageCount}}</span>
-								<button
-									type="button"
-									class="dt-preflight-nav-btn"
-									disabled={{this.atLastPage}}
-									{{on
-										"click"
-										this.nextPage
-									}}
-								>
-									<Icon
-										@name="chevron-right"
-									/>
-									<span
-										class="dt-sr-only"
-									>Next
-										page</span>
-								</button>
-							</div>
-
-							<div
-								class="dt-preflight-legend"
-							>
-								<span
-									class="dt-preflight-legend-item"
-								>
-									<span
-										class="dt-preflight-rule is-trim"
-									></span>
-									Trim
-								</span>
-								<span
-									class="dt-preflight-legend-item"
-								>
-									<span
-										class="dt-preflight-rule is-bleed"
-									></span>
-									Bleed
-								</span>
-								<span
-									class="dt-preflight-legend-item"
-								>
-									<span
-										class="dt-preflight-rule is-crop"
-									></span>
-									Crop
-								</span>
-							</div>
-						{{else}}
-							<p
-								class="dt-preflight-empty"
-							>Page preview
-								unavailable</p>
-						{{/if}}
-
-						{{#if this.pageDimensions}}
-							<div
-								class="dt-preflight-dims"
-							>
-								<p><span>Page
-										size:</span>
-									{{this.pageDimensions.size}}</p>
-								{{#if
-									this.pageDimensions.trim
-								}}
-									<p><span
-										>Trim:</span>
-										{{this.pageDimensions.trim}}</p>
-								{{/if}}
-								{{#if
-									this.pageDimensions.bleed
-								}}
-									<p><span
-										>Bleed:</span>
-										{{this.pageDimensions.bleed}}</p>
-								{{/if}}
-							</div>
-						{{/if}}
-
-						{{#if
-							this.currentPageIssues.length
-						}}
-							<div
-								class="dt-preflight-section"
-							>
-								<h4
-									class="dt-preflight-subhead"
-								>Page
-									{{this.currentPage}}
-									issues</h4>
-								<div
-									class="dt-preflight-list is-flush"
-								>
-									{{#each
-										this.currentPageIssues
-										key="key"
-										as |issue|
-									}}
-										<div
-											class="dt-preflight-issue"
-										>
-											<Icon
-												@name={{issue.icon}}
-												class="dt-preflight-sev is-{{issue.severity}}"
-											/>
-											<span
-												class="dt-preflight-issue-body"
-											>
-												<span
-													class="dt-preflight-issue-message"
-												>{{issue.message}}</span>
-												{{#if
-													issue.details
-												}}
-													<span
-														class="dt-preflight-issue-details"
-													>{{issue.details}}</span>
-												{{/if}}
-											</span>
-										</div>
-									{{/each}}
-								</div>
-							</div>
-						{{/if}}
-					</div>
-
-					<div class="dt-preflight-panel">
-						<div
-							class="dt-preflight-verdict
-								{{if
-									this.isReady
-									'is-pass'
-									'is-fail'
-								}}"
+					{{/if}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.file}}
+						<CanonRow
+							class="pf-source"
+							@title={{this.file.name}}
+							@detail={{this.detail}}
+							@form="flush"
 						>
-							<Icon
-								@name={{if
-									this.isReady
-									"circle-check"
-									"circle-x"
-								}}
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							<span
-								class="dt-preflight-verdict-body"
-							>
-								<span
-									class="dt-preflight-verdict-title"
-								>{{if
-										this.isReady
-										"Ready for print"
-										"Issues found"
-									}}</span>
-								<span
-									class="dt-preflight-verdict-detail"
-								>{{this.verdictDetail}}</span>
-							</span>
-						</div>
-
-						<div
-							class="dt-preflight-badges"
-						>
-							{{#each
-								this.badges
-								key="severity"
-								as |badge|
-							}}
-								<span
-									class="dt-preflight-badge is-{{badge.severity}}"
-								>{{badge.label}}</span>
-							{{/each}}
-						</div>
-
-						<div
-							class="dt-preflight-summary"
-						>
-							{{#each
-								this.summaryRows
-								key="label"
-								as |row|
-							}}
-								<div
-									class="dt-preflight-summary-row"
-								>
-									<span
-										class="dt-preflight-summary-label"
-									>{{row.label}}</span>
-									<span
-										class="dt-preflight-summary-value"
-									>{{row.value}}</span>
-								</div>
-							{{/each}}
-						</div>
-
-						{{#if this.fontRows.length}}
-							<div
-								class="dt-preflight-section"
-							>
-								<h4
-									class="dt-preflight-head"
-								>Fonts</h4>
-								<div
-									class="dt-preflight-list is-flush"
-								>
-									{{#each
-										this.fontRows
-										key="key"
-										as |row|
-									}}
-										<div
-											class="dt-preflight-font"
-										>
-											<span
-												class="dt-preflight-font-name"
-											>
-												{{row.font.name}}
-												{{#if
-													row.font.type
-												}}
-													<span
-														class="dt-preflight-font-type"
-													>({{row.font.type}})</span>
-												{{/if}}
-											</span>
-											<span
-												class="dt-preflight-font-state
-													{{if
-														row.font.embedded
-														'is-embedded'
-														'is-missing'
-													}}"
-											>{{row.state}}</span>
-											{{#if
-												row.font.data
-											}}
-												<button
-													type="button"
-													class="dt-preflight-font-download"
-													title={{row.downloadTitle}}
-													aria-label={{passAlong
-														row.downloadTitle
-													}}
-													{{on
-														"click"
-														(fn
-															this.downloadFont
-															row.font
-														)
-													}}
-												>
-													<Icon
-														@name={{(downloadIcon
-														)}}
-													/>
-												</button>
-											{{/if}}
-										</div>
-									{{/each}}
-								</div>
-							</div>
-						{{/if}}
-
-						{{#if
-							this.issueCategories.length
-						}}
-							<div
-								class="dt-preflight-section"
-							>
-								<h4
-									class="dt-preflight-head"
-								>Issues by
-									Category</h4>
-								{{#each
-									this.issueCategories
-									key="id"
-									as |group|
-								}}
-									<div
-										class="dt-preflight-group"
-									>
-										<h5
-											class="dt-preflight-subhead"
-										>{{group.label}}</h5>
-										<div
-											class="dt-preflight-list"
-										>
-											{{#each
-												group.issues
-												key="key"
-												as |issue|
-											}}
-												<button
-													type="button"
-													class="dt-preflight-issue is-row
-														{{unless
-															issue.page
-															'is-static'
-														}}"
-													{{on
-														"click"
-														(fn
-															this.goToIssuePage
-															issue
-														)
-													}}
-												>
-													<Icon
-														@name={{issue.icon}}
-														class="dt-preflight-sev is-{{issue.severity}}"
-													/>
-													<span
-														class="dt-preflight-issue-body"
-													>
-														<span
-															class="dt-preflight-issue-message"
-														>{{issue.message}}
-															{{#if
-																issue.page
-															}}
-																<span
-																	class="dt-preflight-issue-page"
-																>p.{{issue.page}}</span>
-															{{/if}}
-														</span>
-														{{#if
-															issue.details
-														}}
-															<span
-																class="dt-preflight-issue-details"
-															>{{issue.details}}</span>
-														{{/if}}
-													</span>
-												</button>
-											{{/each}}
-										</div>
-									</div>
-								{{/each}}
-							</div>
-						{{/if}}
-
-						{{#if this.issuePages.length}}
-							<div
-								class="dt-preflight-section"
-							>
-								<h4
-									class="dt-preflight-head"
-								>Issues by Page</h4>
-								{{#each
-									this.issuePages
-									key="page"
-									as |entry|
-								}}
-									<div
-										class="dt-preflight-group"
-									>
-										<button
-											type="button"
-											class="dt-preflight-page-btn"
-											{{on
-												"click"
-												(fn
-													this.goToPage
-													entry.page
-												)
-											}}
-										>Page
-											{{entry.page}}</button>
-										<div
-											class="dt-preflight-list"
-										>
-											{{#each
-												entry.issues
-												key="key"
-												as |issue|
-											}}
-												<button
-													type="button"
-													class="dt-preflight-issue is-row is-compact"
-													{{on
-														"click"
-														(fn
-															this.goToPage
-															entry.page
-														)
-													}}
-												>
-													<Icon
-														@name={{issue.icon}}
-														class="dt-preflight-sev is-{{issue.severity}}"
-													/>
-													<span
-														class="dt-preflight-issue-message"
-													>{{issue.message}}</span>
-												</button>
-											{{/each}}
-										</div>
-									</div>
-								{{/each}}
-							</div>
-						{{/if}}
-					</div>
-
+						</CanonRow>
+					{{else}}
+						<Slot
+							class="pf-slot"
+							@prompt="Drop PDF here"
+							@icon="file-search"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.load}}
+						/>
+					{{/if}}
+				</CanonRows>
+				<CanonRows
+					class="pf-properties"
+					@framed={{true}}
+				>
+					<CanonHeading
+						@text="Document Properties"
+					/>
+					<CanonTiles
+						@items={{this.properties}}
+					/>
 					<a
-						class="dt-preflight-taxiway"
+						class="pf-taxiway"
 						href="https://rmv.fyi/projects/taxiway"
 						target="_blank"
 						rel="noopener noreferrer"
@@ -927,8 +436,205 @@ export default class PdfPreflightTool extends Component {
 							full PDF inspection.</span>
 						<Icon @name="external-link" />
 					</a>
-				</div>
-			{{/if}}
-		</div>
+				</CanonRows>
+				{{#if this.pageInfo}}
+					<CanonRows
+						class="pf-page"
+						@framed={{true}}
+					>
+						<CanonHeading @text="Page" />
+						<CanonRow
+							class="pf-page-row"
+							@title={{this.pageTitle}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="All pages"
+								@icon={{Cross}}
+								@onClick={{this.allPages}}
+							/>
+						</CanonRow>
+						<div class="pf-preview">
+							<div
+								class="pf-paper"
+								style={{this.paperStyle}}
+							>
+								{{#if
+									this.preview
+								}}
+									<img
+										class="pf-picture"
+										src={{this.preview}}
+										alt={{this.pageTitle}}
+									/>
+								{{/if}}
+								{{#each
+									this.boxes
+									as |box|
+								}}
+									<span
+										class="pf-box pf-box--{{box.kind}}"
+										style={{box.style}}
+									></span>
+								{{/each}}
+							</div>
+						</div>
+						<div class="pf-legend">
+							<span
+								class="pf-legend-item pf-box--trim"
+							>Trim</span>
+							<span
+								class="pf-legend-item pf-box--bleed"
+							>Bleed</span>
+							<span
+								class="pf-legend-item pf-box--crop"
+							>Crop</span>
+						</div>
+						<CanonTiles
+							@items={{this.dimensions}}
+						/>
+					</CanonRows>
+				{{/if}}
+			</:sidebar>
+			<:main>
+				<CanonRows class="pf-result" @framed={{true}}>
+					<CanonHeading @text="Result" />
+					{{#if this.analysing}}
+						<CanonRow
+							class="pf-busy"
+							@title="Analysing…"
+						>
+							<CanonLoader
+								@cell={{5}}
+								@gap={{1}}
+							/>
+						</CanonRow>
+					{{/if}}
+					{{#if this.error}}
+						<CanonStatus
+							class="pf-error"
+							@text={{this.error}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonTiles
+						class="pf-tiles"
+						@items={{this.results}}
+					/>
+					<CanonStatus
+						class="pf-verdict"
+						@text={{this.verdict}}
+						@tone={{this.tone}}
+						@row={{true}}
+					/>
+				</CanonRows>
+				<CanonRows class="pf-checks" @framed={{true}}>
+					<CanonHeading @text="Checks" />
+					<CanonTiles @items={{this.checks}} />
+				</CanonRows>
+				{{#each this.groups key="id" as |group|}}
+					<CanonRows
+						class="pf-group"
+						data-category={{group.id}}
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text={{group.label}}
+						/>
+						{{#each
+							group.issues key="key"
+							as |issue|
+						}}
+							<button
+								type="button"
+								class="pf-issue"
+								disabled={{if
+									issue.page
+									false
+									true
+								}}
+								{{on
+									"click"
+									(fn
+										this.showIssue
+										issue.page
+									)
+								}}
+							>
+								<Icon
+									@name={{issue.icon}}
+									class="pf-sev pf-sev--{{issue.severity}}"
+								/>
+								<span
+									class="pf-issue-text"
+								>
+									<span
+										class="pf-issue-message"
+									>{{issue.message}}</span>
+									{{#if
+										issue.details
+									}}
+										<span
+											class="pf-issue-detail"
+										>{{issue.details}}</span>
+									{{/if}}
+								</span>
+								{{#if
+									issue.page
+								}}
+									<span
+										class="pf-issue-page"
+									>p.{{issue.page}}</span>
+								{{/if}}
+							</button>
+						{{/each}}
+					</CanonRows>
+				{{/each}}
+				{{#if this.fonts.length}}
+					<CanonRows
+						class="pf-fonts"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Font Inventory"
+						/>
+						{{#each
+							this.fonts key="key"
+							as |row|
+						}}
+							<CanonRow
+								class="pf-font
+									{{unless
+										row.font.embedded
+										'pf-font--missing'
+									}}"
+								@title={{row.font.name}}
+								@detail={{row.detail}}
+								@form="flush"
+							>
+								{{#if
+									row.font.data
+								}}
+									<CanonButton
+										class="pf-font-save"
+										@kind="cell"
+										@icon={{Save}}
+										@label={{passAlong
+											row.download
+										}}
+										@onClick={{fn
+											this.downloadFont
+											row.font
+										}}
+									/>
+								{{/if}}
+							</CanonRow>
+						{{/each}}
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }
