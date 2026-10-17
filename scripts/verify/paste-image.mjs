@@ -19,7 +19,7 @@ check(
 
 const state = () =>
 	page.evaluate(() => {
-		const crop = document.querySelector('.pi-crop');
+		const crop = document.querySelector('.media-crop-rect');
 		return {
 			slot: document.querySelector('.canon-split-sidebar .pi-slot')?.innerText.trim(),
 			slotTag: document.querySelector('.pi-slot')?.tagName,
@@ -82,7 +82,7 @@ const pasteAt = (selector, name) =>
 // paste on the settings pane, not the picture
 await makeImage(1000, 500);
 await pasteAt('.pi-credit', 'shot.png');
-await page.waitForSelector('.pi-image', { timeout: 5000 });
+await page.waitForSelector('.media-crop-image', { timeout: 5000 });
 await sleep(300);
 s = await state();
 check(
@@ -101,14 +101,14 @@ check(
 	'the size figure reads under the image',
 	await page.evaluate(() => {
 		const figure = document.querySelector('.pi-figure').getBoundingClientRect();
-		const image = document.querySelector('.pi-image').getBoundingClientRect();
+		const image = document.querySelector('.media-crop-image').getBoundingClientRect();
 		return figure.top >= image.bottom && /1000×500/.test(document.querySelector('.pi-figure').textContent.replace(/\s+/g, ''));
 	}),
 );
 
 // a press inside the whole crop does not grab (the page keeps scrolling)
 const geo = await page.evaluate(() => {
-	const image = document.querySelector('.pi-image').getBoundingClientRect();
+	const image = document.querySelector('.media-crop-image').getBoundingClientRect();
 	return { left: image.left, top: image.top, right: image.right, bottom: image.bottom, scale: 1000 / image.width };
 });
 await page.mouse.move((geo.left + geo.right) / 2, (geo.top + geo.bottom) / 2);
@@ -140,7 +140,7 @@ check('cropped: Reset on', !s.reset);
 
 // inside drag moves
 const crop = await page.evaluate(() => {
-	const box = document.querySelector('.pi-crop').getBoundingClientRect();
+	const box = document.querySelector('.media-crop-rect').getBoundingClientRect();
 	return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 });
 await page.mouse.move(crop.x, crop.y);
@@ -158,7 +158,7 @@ await page.evaluate(() =>
 await sleep(100);
 s = await state();
 check('Reset returns the whole image', s.tiles.join('|') === '1000 × 500 px|0, 0' && s.reset, s.tiles.join('|'));
-await page.focus('.pi-crop');
+await page.focus('.media-crop-rect');
 await page.keyboard.down('Alt');
 await page.keyboard.press('ArrowLeft');
 await page.keyboard.up('Alt');
@@ -286,7 +286,7 @@ check('Clear brings the slot back', !!s.slot && !s.title && s.save);
 
 // launch flags
 await visit(page, '/tools/paste-image?pasteSample&pasteCrop=100,50,400,300');
-await page.waitForSelector('.pi-image', { timeout: 5000 });
+await page.waitForSelector('.media-crop-image', { timeout: 5000 });
 await sleep(300);
 s = await state();
 check(
@@ -305,7 +305,7 @@ check('1400: halves side by side', wide.top && Math.abs(wide.side - wide.main) <
 // phone: picture first, collapses, no sideways scroll
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/paste-image?pasteSample');
-await page.waitForSelector('.pi-image', { timeout: 5000 });
+await page.waitForSelector('.media-crop-image', { timeout: 5000 });
 const phone = await page.evaluate(async () => {
 	const body = document.querySelector('.paste-image .canon-split-body');
 	const canvas = () => document.querySelector('.paste-image .canon-canvas').getBoundingClientRect().height;

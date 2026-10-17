@@ -1,16 +1,13 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
+import { AnchorZones } from 'delphitools-v2/components/tools/media/anchors';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	family,
 	paint,
-	zones,
-	type Position,
 	type Size,
 	type WatermarkSpec,
 } from 'delphitools-v2/components/tools/watermarker/watermark';
@@ -20,10 +17,12 @@ export interface PictureSignature {
 		/** The decoded source; none shows the slot that takes a file. */
 		base?: ImageBitmap;
 		spec: WatermarkSpec;
+		/** The anchor in use, -1 for random. */
+		zone: number;
 		/** A file is dragged over the tool. */
 		over: boolean;
 		onChoose: () => void;
-		onPosition: (position: Position) => void;
+		onZone: (index: number) => void;
 	};
 }
 
@@ -72,16 +71,6 @@ export default class Picture extends Component<PictureSignature> {
 			.then(() => this.fonts++);
 	}
 
-	get zones() {
-		const { position } = this.args.spec;
-		return zones.map((zone, index) => ({
-			...zone,
-			row: Math.floor(index / 3),
-			column: index % 3,
-			current: zone.id === position,
-		}));
-	}
-
 	<template>
 		<div class="wm-picture">
 			<div class="wm-area">
@@ -101,33 +90,11 @@ export default class Picture extends Component<PictureSignature> {
 							}}
 						></canvas>
 						{{#unless @spec.tiling}}
-							<div class="wm-zones">
-								{{#each
-									this.zones
-									as |zone|
-								}}
-									<button
-										type="button"
-										tabindex="-1"
-										class="wm-zone wm-zone--row{{zone.row}}
-											wm-zone--column{{zone.column}}
-											{{if
-												zone.current
-												'wm-zone--current'
-											}}"
-										aria-label={{zone.name}}
-										{{on
-											"click"
-											(fn
-												@onPosition
-												zone.id
-											)
-										}}
-									><span
-											class="wm-mark"
-										></span></button>
-								{{/each}}
-							</div>
+							<AnchorZones
+								class="wm-zones"
+								@current={{@zone}}
+								@onPick={{@onZone}}
+							/>
 						{{/unless}}
 					</div>
 				{{else}}

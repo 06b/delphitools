@@ -44,8 +44,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { open, thumbnails } from 'delphitools-v2/lib/pdfjs';
-import { integral } from 'delphitools-v2/components/tools/paste-image/crop';
+import { integral } from 'delphitools-v2/lib/crop-rect';
 import Picture from 'delphitools-v2/components/tools/pdf-rotate-crop/picture';
+import Pager from 'delphitools-v2/components/tools/media/pager';
 import {
 	geometry,
 	picture,
@@ -58,7 +59,6 @@ import './pdf-rotate-crop/pdf-rotate-crop.css';
 
 const ACCEPT = '.pdf,application/pdf';
 const A4_ASPECT = 210 / 297;
-const DASH = '—';
 type Edge = keyof Insets;
 const EDGES: { edge: Edge; title: string }[] = [
 	{ edge: 'left', title: 'Left' },
@@ -81,8 +81,6 @@ const Left = <template><IconSvg @name="rotate-ccw" /></template>;
 const Right = <template><IconSvg @name="rotate-cw" /></template>;
 const Copy = <template><IconSvg @name="copy" /></template>;
 const Cross = <template><IconSvg @name="x" /></template>;
-const Back = <template><IconSvg @name="chevron-left" /></template>;
-const Forward = <template><IconSvg @name="chevron-right" /></template>;
 const Crop = <template><IconSvg @name="crop" /></template>;
 
 // ?rc* ios launch arguments
@@ -276,20 +274,6 @@ export default class PdfRotateCrop extends Component {
 		const size = PAPERS[index];
 		if (size) this.pickPaper(size.id);
 	};
-
-	get pagerText() {
-		return this.loaded
-			? `${this.page + 1} / ${this.edits.length}`
-			: DASH;
-	}
-
-	get atFirst() {
-		return !this.loaded || this.page === 0;
-	}
-
-	get atLast() {
-		return !this.loaded || this.page >= this.edits.length - 1;
-	}
 
 	get noFile() {
 		return !this.loaded;
@@ -899,34 +883,11 @@ export default class PdfRotateCrop extends Component {
 						@onSettle={{this.settled}}
 					/>
 				</CanonCanvas>
-				<CanonRows @framed={{true}}>
-					<CanonGrid class="prc-pager">
-						<CanonButton
-							class="prc-pager-back"
-							@icon={{Back}}
-							@label="Previous page"
-							@disabled={{this.atFirst}}
-							@onClick={{fn
-								this.step
-								-1
-							}}
-						/>
-						<span
-							class="prc-pager-text"
-							role="status"
-						>{{this.pagerText}}</span>
-						<CanonButton
-							class="prc-pager-forward"
-							@icon={{Forward}}
-							@label="Next page"
-							@disabled={{this.atLast}}
-							@onClick={{fn
-								this.step
-								1
-							}}
-						/>
-					</CanonGrid>
-				</CanonRows>
+				<Pager
+					@page={{this.page}}
+					@count={{this.edits.length}}
+					@onStep={{this.step}}
+				/>
 			</:main>
 		</CanonSplit>
 	</template>

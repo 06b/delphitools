@@ -25,6 +25,7 @@ import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import Drop from 'delphitools-v2/components/tools/media/drop';
+import { AnchorPicker } from 'delphitools-v2/components/tools/media/anchors';
 import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
 import Picture from 'delphitools-v2/components/tools/watermarker/picture';
 import {
@@ -43,22 +44,10 @@ const loadFailed = 'Image could not be read. Try another file?';
 
 const kinds = ['Text', 'Image'];
 const blendNames = blends.map((blend) => blend.name);
-const zoneNames = zones.map((zone) => zone.name);
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Shuffle = <template><IconSvg @name="shuffle" /></template>;
-const zoneIcons = [
-	<template><IconSvg @name="arrow-up-left" /></template>,
-	<template><IconSvg @name="arrow-up" /></template>,
-	<template><IconSvg @name="arrow-up-right" /></template>,
-	<template><IconSvg @name="arrow-left" /></template>,
-	<template><IconSvg @name="dot" /></template>,
-	<template><IconSvg @name="arrow-right" /></template>,
-	<template><IconSvg @name="arrow-down-left" /></template>,
-	<template><IconSvg @name="arrow-down" /></template>,
-	<template><IconSvg @name="arrow-down-right" /></template>,
-];
 
 const points = (value: number) => `${value} pt`;
 const percent = (value: number) => `${value}%`;
@@ -119,7 +108,7 @@ export default class Watermarker extends Component {
 		const query = new URLSearchParams(window.location.search);
 		this.tiling = query.has('wmTile');
 		const tap = zones[Number(query.get('wmTap') ?? NaN)];
-		if (tap) this.position = tap.id;
+		if (tap) this.position = tap;
 		if (query.has('wmSample'))
 			void drawnSample().then((file) =>
 				this.loadSource(file),
@@ -166,7 +155,7 @@ export default class Watermarker extends Component {
 	}
 
 	get zoneIndex() {
-		return zones.findIndex((zone) => zone.id === this.position);
+		return zones.indexOf(this.position);
 	}
 
 	get isRandom() {
@@ -275,9 +264,7 @@ export default class Watermarker extends Component {
 
 	pickBlend = (index: number) => (this.blend = blends[index]!.id);
 
-	pickZone = (index: number) => (this.position = zones[index]!.id);
-
-	place = (position: Position) => (this.position = position);
+	pickZone = (index: number) => (this.position = zones[index]!);
 
 	randomise = () => {
 		this.position = 'random';
@@ -332,7 +319,8 @@ export default class Watermarker extends Component {
 						@spec={{this.spec}}
 						@over={{this.drop.over}}
 						@onChoose={{this.choose}}
-						@onPosition={{this.place}}
+						@zone={{this.zoneIndex}}
+						@onZone={{this.pickZone}}
 					/>
 				</CanonCanvas>
 			</:sidebar>
@@ -473,11 +461,8 @@ export default class Watermarker extends Component {
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Position" />
-					<CanonSegmented
+					<AnchorPicker
 						class="wm-zones-picker"
-						@items={{zoneNames}}
-						@icons={{zoneIcons}}
-						@columns={{3}}
 						@selected={{this.zoneIndex}}
 						@disabled={{this.tiling}}
 						@onChange={{this.pickZone}}

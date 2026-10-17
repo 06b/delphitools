@@ -34,55 +34,6 @@
 	block-size: 100%;
 }
 
-.wm-zones {
-	position: absolute;
-	inset: 0;
-	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	grid-template-rows: repeat(3, 1fr);
-}
-
-.wm-zone {
-	position: relative;
-	padding: 0;
-	border: 0;
-	background: none;
-	cursor: pointer;
-}
-
-/* the iOS anchors sit at 10, 50 and 90 % of the image: 30, 50, 70 % of a third */
-.wm-mark {
-	position: absolute;
-	inset-block-start: 50%;
-	inset-inline-start: 50%;
-	box-sizing: border-box;
-	inline-size: 7px;
-	block-size: 7px;
-	border: 1.5px solid var(--canon-primary);
-	background: color-mix(in srgb, var(--canon-card) 85%, transparent);
-	translate: -50% -50%;
-}
-
-.wm-zone--column0 .wm-mark {
-	inset-inline-start: 30%;
-}
-
-.wm-zone--column2 .wm-mark {
-	inset-inline-start: 70%;
-}
-
-.wm-zone--row0 .wm-mark {
-	inset-block-start: 30%;
-}
-
-.wm-zone--row2 .wm-mark {
-	inset-block-start: 70%;
-}
-
-.wm-zone--current .wm-mark {
-	display: none;
-}
-
 .wm-box--empty {
 	outline: none;
 	background: none;

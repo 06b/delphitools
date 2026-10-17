@@ -61,74 +61,17 @@
 	color: #000;
 }
 
-.ppn-zones {
-	position: absolute;
-	inset: 0;
-	display: grid;
-	grid-template-columns: repeat(3, 1fr);
-	grid-template-rows: repeat(3, 1fr);
-}
-
-.ppn-zone {
-	position: relative;
-	padding: 0;
-	border: 0;
-	background: none;
-	cursor: pointer;
-}
-
 /* ios anchors, third-relative */
-.ppn-dot {
-	position: absolute;
-	inset-block-start: 50%;
-	inset-inline-start: 50%;
+.ppn-zones {
+	--media-anchor-x: 24%;
+	--media-anchor-y: 18%;
+}
+
+.ppn-zones .media-anchor-mark {
 	inline-size: 6px;
 	block-size: 6px;
+	border: 0;
 	background: color-mix(in srgb, var(--canon-primary) 35%, transparent);
-	translate: -50% -50%;
-}
-
-.ppn-zone--column0 .ppn-dot {
-	inset-inline-start: 24%;
-}
-
-.ppn-zone--column2 .ppn-dot {
-	inset-inline-start: 76%;
-}
-
-.ppn-zone--row0 .ppn-dot {
-	inset-block-start: 18%;
-}
-
-.ppn-zone--row2 .ppn-dot {
-	inset-block-start: 82%;
-}
-
-.ppn-zone--current .ppn-dot {
-	display: none;
-}
-
-.ppn-pager-bar {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	gap: var(--canon-hairline);
-	min-block-size: var(--canon-row-height);
-	background: var(--canon-border);
-}
-
-.ppn-pager-bar > .canon-button {
-	inline-size: 56px;
-}
-
-.ppn-pager-text {
-	display: grid;
-	place-items: center;
-	background: var(--canon-card);
-	color: var(--canon-foreground);
-	font-family: var(--canon-font);
-	font-size: var(--canon-text-body);
-	font-variant-numeric: tabular-nums;
-	font-weight: 600;
 }
 
 .ppn-format > .canon-row-control {

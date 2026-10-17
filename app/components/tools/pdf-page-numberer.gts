@@ -44,10 +44,8 @@ import {
 	thumbnails,
 	type PageSize,
 } from 'delphitools-v2/lib/pdfjs';
-import {
-	ANCHOR_ICONS,
-	ANCHOR_NAMES,
-} from 'delphitools-v2/components/tools/pdf-page-numberer/anchors';
+import { AnchorPicker } from 'delphitools-v2/components/tools/media/anchors';
+import Pager from 'delphitools-v2/components/tools/media/pager';
 import Picture from 'delphitools-v2/components/tools/pdf-page-numberer/picture';
 import {
 	STYLES,
@@ -91,8 +89,6 @@ const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Info = <template><IconSvg @name="info" /></template>;
 const Plus = <template><IconSvg @name="plus" /></template>;
 const Minus = <template><IconSvg @name="minus" /></template>;
-const Back = <template><IconSvg @name="chevron-left" /></template>;
-const Forward = <template><IconSvg @name="chevron-right" /></template>;
 const Hash = <template><IconSvg @name="hash" /></template>;
 
 interface Stamped {
@@ -244,18 +240,6 @@ export default class PdfPageNumberer extends Component {
 		return this.loaded ? stampOf(this.options) : null;
 	}
 
-	get pagerText() {
-		return this.loaded ? `${this.page + 1} / ${this.count}` : '—';
-	}
-
-	get atFirst() {
-		return this.page <= 0;
-	}
-
-	get atLast() {
-		return this.page >= this.count - 1;
-	}
-
 	get anchorIndex() {
 		return ANCHORS.indexOf(this.numberAnchor);
 	}
@@ -381,8 +365,7 @@ export default class PdfPageNumberer extends Component {
 		this.#select(index);
 	};
 
-	back = () => this.selectPage(this.page - 1);
-	forward = () => this.selectPage(this.page + 1);
+	step = (delta: number) => this.selectPage(this.page + delta);
 
 	#changed() {
 		this.#job++;
@@ -400,7 +383,6 @@ export default class PdfPageNumberer extends Component {
 	setTemplate = (text: string) => this.#put('template', text);
 	pickAnchor = (index: number) =>
 		this.#put('numberAnchor', ANCHORS[index]!);
-	pressAnchor = (anchor: Anchor) => this.#put('numberAnchor', anchor);
 	setStampOn = (on: boolean) => this.#put('stampOn', on);
 	setStampText = (text: string) => this.#put('stampText', text);
 	pickMode = (index: number) => this.#put('stampMode', MODES[index]!);
@@ -656,12 +638,9 @@ export default class PdfPageNumberer extends Component {
 							@value={{this.anchorIndex}}
 							as |mine|
 						>
-							<CanonSegmented
+							<AnchorPicker
 								class="ppn-anchors"
 								aria-label="Position"
-								@items={{ANCHOR_NAMES}}
-								@icons={{ANCHOR_ICONS}}
-								@columns={{3}}
 								@selected={{this.anchorIndex}}
 								@onChange={{both
 									mine
@@ -792,12 +771,9 @@ export default class PdfPageNumberer extends Component {
 							<CanonHeading
 								@text="Position"
 							/>
-							<CanonSegmented
+							<AnchorPicker
 								class="ppn-stamp-anchors"
 								aria-label="Position"
-								@items={{ANCHOR_NAMES}}
-								@icons={{ANCHOR_ICONS}}
-								@columns={{3}}
 								@selected={{this.stampAnchorIndex}}
 								@onChange={{this.pickStampAnchor}}
 							/>
@@ -900,33 +876,14 @@ export default class PdfPageNumberer extends Component {
 							this.loaded
 							false
 						}}
-						@onAnchor={{this.pressAnchor}}
+						@onAnchor={{this.pickAnchor}}
 					/>
 				</CanonCanvas>
-				<CanonRows class="ppn-pager" @framed={{true}}>
-					<div class="ppn-pager-bar">
-						<CanonButton
-							class="ppn-back"
-							@kind="cell"
-							@label="Previous page"
-							@icon={{Back}}
-							@disabled={{this.atFirst}}
-							@onClick={{this.back}}
-						/>
-						<output
-							class="ppn-pager-text"
-							aria-live="polite"
-						>{{this.pagerText}}</output>
-						<CanonButton
-							class="ppn-forward"
-							@kind="cell"
-							@label="Next page"
-							@icon={{Forward}}
-							@disabled={{this.atLast}}
-							@onClick={{this.forward}}
-						/>
-					</div>
-				</CanonRows>
+				<Pager
+					@page={{this.page}}
+					@count={{this.count}}
+					@onStep={{this.step}}
+				/>
 			</:main>
 		</CanonSplit>
 	</template>

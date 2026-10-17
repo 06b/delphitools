@@ -102,13 +102,13 @@ check(
 
 check('Bottom right is the default', (await checked('.wm-zones-picker')) === 8);
 const before = await picture();
-await page.click('.wm-zone[aria-label="Top left"]');
+await page.click('.wm-zones [aria-label="Top left"]');
 await sleep(50);
 check('a press on the picture places the watermark', (await checked('.wm-zones-picker')) === 0);
 check('and the picture redraws', before !== (await picture()));
 check(
 	'marks show the other eight anchors',
-	(await page.$$eval('.wm-mark', (marks) =>
+	(await page.$$eval('.wm-zones .media-anchor-mark', (marks) =>
 		marks.filter((mark) => getComputedStyle(mark).display !== 'none').length,
 	)) === 8,
 );

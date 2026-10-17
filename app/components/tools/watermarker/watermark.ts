@@ -13,17 +13,17 @@ export interface Rect extends Size {
 	y: number;
 }
 
-/** The nine anchors in reading order, as the iOS WatermarkPosition. */
-export const zones: { id: Position; name: string }[] = [
-	{ id: 'tl', name: 'Top left' },
-	{ id: 'tc', name: 'Top centre' },
-	{ id: 'tr', name: 'Top right' },
-	{ id: 'ml', name: 'Middle left' },
-	{ id: 'mc', name: 'Centre' },
-	{ id: 'mr', name: 'Middle right' },
-	{ id: 'bl', name: 'Bottom left' },
-	{ id: 'bc', name: 'Bottom centre' },
-	{ id: 'br', name: 'Bottom right' },
+/** The nine anchors in reading order (media/anchors ANCHOR_NAMES), as the iOS WatermarkPosition. */
+export const zones: Position[] = [
+	'tl',
+	'tc',
+	'tr',
+	'ml',
+	'mc',
+	'mr',
+	'bl',
+	'bc',
+	'br',
 ];
 
 export const blends: { id: BlendMode; name: string }[] = [

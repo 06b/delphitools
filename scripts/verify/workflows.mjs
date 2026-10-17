@@ -141,7 +141,7 @@ await page.evaluate(async () => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await page.waitForSelector('.pi-image', { timeout: 10000 });
+await page.waitForSelector('.media-crop-image', { timeout: 10000 });
 check(
 	'the tool control reads Pass along inside a flow',
 	(await buttonText('.pi-save')) === 'Pass along',
@@ -206,7 +206,7 @@ await other.evaluate(async () => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await other.waitForSelector('.pi-image', { timeout: 10000 });
+await other.waitForSelector('.media-crop-image', { timeout: 10000 });
 await other.click('.pi-save');
 await other.waitForFunction(() => location.pathname === '/tools/metadata-stripper', {
 	timeout: 15000,

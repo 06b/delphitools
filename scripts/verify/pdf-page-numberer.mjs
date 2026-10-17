@@ -119,9 +119,9 @@ const empty = await page.evaluate(() => ({
 	add: document.querySelector('.ppn-add')?.disabled,
 	from: document.querySelector('.ppn-from input')?.disabled,
 	start: document.querySelector('.ppn-start input')?.disabled,
-	pager: document.querySelector('.ppn-pager-text')?.textContent.trim(),
-	back: document.querySelector('.ppn-back')?.disabled,
-	next: document.querySelector('.ppn-forward')?.disabled,
+	pager: document.querySelector('.media-pager-text')?.textContent.trim(),
+	back: document.querySelector('.media-pager-back')?.disabled,
+	next: document.querySelector('.media-pager-forward')?.disabled,
 }));
 check(
 	'empty: the Source row is the slot with a Files cell; blank sheets and a blank page, no text',
@@ -204,7 +204,7 @@ await page.keyboard.press('Escape');
 
 await pick('ppn-anchors', 'Top left');
 const topLeft = await page.$eval('.ppn-mark--number', (el) => el.style.top !== '' && el.style.left !== '');
-await page.click('.ppn-zone--row2.ppn-zone--column1');
+await page.click('.media-anchor-zone--row2.media-anchor-zone--column1');
 check(
 	'a press on a third of the page moves the number there; the picker follows',
 	topLeft &&
@@ -213,14 +213,14 @@ check(
 );
 check(
 	'the anchor marks skip the current one',
-	(await page.$$eval('.ppn-zone .ppn-dot', (els) => els.filter((el) => el.offsetParent).length)) === 8,
+	(await page.$$eval('.ppn-zones .media-anchor-mark', (els) => els.filter((el) => el.offsetParent).length)) === 8,
 );
 
-await page.click('.ppn-forward');
+await page.click('.media-pager-forward');
 await sleep(100);
 check(
 	'Next goes to page 2: pager, strip and number follow',
-	(await text('.ppn-pager-text')) === '2 / 3' &&
+	(await text('.media-pager-text')) === '2 / 3' &&
 		(await page.$$eval('.ppn-strip .canon-page-strip-page', (els) =>
 			els.map((el) => el.getAttribute('aria-current')),
 		)).join() === ',true,' &&

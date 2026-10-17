@@ -1,15 +1,13 @@
 import Component from '@glimmer/component';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { ANCHORS, type Anchor } from 'delphitools-v2/lib/pdf-stamp';
+import { AnchorZones } from 'delphitools-v2/components/tools/media/anchors';
 import {
 	minFontSize,
 	watermarkSize,
 	type FontFamily,
 	type StampOptions,
 } from 'delphitools-v2/components/tools/pdf-page-numberer/stamp';
-import { ANCHOR_NAMES } from 'delphitools-v2/components/tools/pdf-page-numberer/anchors';
 
 export interface Size {
 	width: number;
@@ -27,7 +25,8 @@ export interface PictureSignature {
 		options: StampOptions;
 		/** Presses on a third of the page move the number there. */
 		zones: boolean;
-		onAnchor: (anchor: Anchor) => void;
+		/** Index into ANCHORS. */
+		onAnchor: (index: number) => void;
 	};
 }
 
@@ -113,15 +112,8 @@ export default class Picture extends Component<PictureSignature> {
 			: placed(options, options.stampAnchor, this.page);
 	}
 
-	get zones() {
-		const current = this.args.options.numberAnchor;
-		return ANCHORS.map((id, index) => ({
-			id,
-			name: ANCHOR_NAMES[index],
-			row: Math.floor(index / 3),
-			column: index % 3,
-			current: id === current,
-		}));
+	get anchorIndex() {
+		return ANCHORS.indexOf(this.args.options.numberAnchor);
 	}
 
 	<template>
@@ -168,33 +160,11 @@ export default class Picture extends Component<PictureSignature> {
 							{{/if}}
 						</figure>
 						{{#if @zones}}
-							<div class="ppn-zones">
-								{{#each
-									this.zones
-									as |zone|
-								}}
-									<button
-										type="button"
-										tabindex="-1"
-										class="ppn-zone ppn-zone--row{{zone.row}}
-											ppn-zone--column{{zone.column}}
-											{{if
-												zone.current
-												'ppn-zone--current'
-											}}"
-										aria-label={{zone.name}}
-										{{on
-											"click"
-											(fn
-												@onAnchor
-												zone.id
-											)
-										}}
-									><span
-											class="ppn-dot"
-										></span></button>
-								{{/each}}
-							</div>
+							<AnchorZones
+								class="ppn-zones"
+								@current={{this.anchorIndex}}
+								@onPick={{@onAnchor}}
+							/>
 						{{/if}}
 					{{/if}}
 				</div>

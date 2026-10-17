@@ -43,6 +43,7 @@ import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import { formatBytes } from 'delphitools-v2/lib/pdf-compress';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
+import Pager from 'delphitools-v2/components/tools/media/pager';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { open, sizes, thumbEdge } from 'delphitools-v2/lib/pdfjs';
 import PaperMenu from 'delphitools-v2/components/tools/imposer/paper';
@@ -98,8 +99,6 @@ const tenths = (value: number) => `${value.toFixed(1)} mm`;
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Printer = <template><IconSvg @name="printer" /></template>;
-const Back = <template><IconSvg @name="chevron-left" /></template>;
-const Forward = <template><IconSvg @name="chevron-right" /></template>;
 const Guide = <template><IconSvg @name="scissors-line-dashed" /></template>;
 
 interface Output {
@@ -618,20 +617,6 @@ export default class Imposer extends Component {
 		return this.sheetIndex * 2 + (this.isFlipped ? 1 : 0);
 	}
 
-	get pagerText() {
-		return this.totalSheets
-			? `${this.sheetIndex + 1} / ${this.totalSheets}`
-			: '';
-	}
-
-	get isFirstSheet() {
-		return this.sheetIndex === 0;
-	}
-
-	get isLastSheet() {
-		return this.sheetIndex >= this.totalSheets - 1;
-	}
-
 	get showsBlock() {
 		return this.layoutId === 'saddle-stitch';
 	}
@@ -669,15 +654,13 @@ export default class Imposer extends Component {
 		this.isFlipped = !this.isFlipped;
 	};
 
-	previous = () => this.show(this.sheetIndex - 1, false);
-
-	next = () => this.show(this.sheetIndex + 1, false);
+	step = (delta: number) => this.show(this.sheetIndex + delta, false);
 
 	#key(event: KeyboardEvent) {
 		if (typing(event.target) || event.metaKey || event.ctrlKey)
 			return;
-		if (event.key === 'ArrowLeft') this.previous();
-		else if (event.key === 'ArrowRight') this.next();
+		if (event.key === 'ArrowLeft') this.step(-1);
+		else if (event.key === 'ArrowRight') this.step(1);
 		else if (event.key === ' ') this.flip();
 		else return;
 		event.preventDefault();
@@ -1167,30 +1150,13 @@ export default class Imposer extends Component {
 						/>
 					</CanonCanvas>
 				{{/if}}
-				<CanonRows @framed={{true}}>
-					<div class="imp-pager">
-						<CanonButton
-							class="imp-previous"
-							@kind="cell"
-							@icon={{Back}}
-							@label="Previous sheet"
-							@disabled={{this.isFirstSheet}}
-							@onClick={{this.previous}}
-						/>
-						<output
-							class="imp-pager-text"
-							aria-live="polite"
-						>{{this.pagerText}}</output>
-						<CanonButton
-							class="imp-next"
-							@kind="cell"
-							@icon={{Forward}}
-							@label="Next sheet"
-							@disabled={{this.isLastSheet}}
-							@onClick={{this.next}}
-						/>
-					</div>
-				</CanonRows>
+				<Pager
+					@page={{this.sheetIndex}}
+					@count={{this.totalSheets}}
+					@previous="Previous sheet"
+					@next="Next sheet"
+					@onStep={{this.step}}
+				/>
 				<CanonRows @framed={{true}}>
 					<CanonTiles
 						class="imp-tiles"

@@ -1,0 +1,48 @@
+.media-anchor-zones {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	grid-template-rows: repeat(3, 1fr);
+}
+
+.media-anchor-zone {
+	position: relative;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+/* default 30 %: the iOS watermark anchors at 10 and 90 % of the image */
+.media-anchor-mark {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	box-sizing: border-box;
+	inline-size: 7px;
+	block-size: 7px;
+	border: 1.5px solid var(--canon-primary);
+	background: color-mix(in srgb, var(--canon-card) 85%, transparent);
+	translate: -50% -50%;
+}
+
+.media-anchor-zone--column0 .media-anchor-mark {
+	inset-inline-start: var(--media-anchor-x, 30%);
+}
+
+.media-anchor-zone--column2 .media-anchor-mark {
+	inset-inline-start: calc(100% - var(--media-anchor-x, 30%));
+}
+
+.media-anchor-zone--row0 .media-anchor-mark {
+	inset-block-start: var(--media-anchor-y, 30%);
+}
+
+.media-anchor-zone--row2 .media-anchor-mark {
+	inset-block-start: calc(100% - var(--media-anchor-y, 30%));
+}
+
+.media-anchor-zone--current .media-anchor-mark {
+	display: none;
+}

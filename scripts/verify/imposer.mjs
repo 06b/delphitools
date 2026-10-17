@@ -44,7 +44,7 @@ const state = () =>
 		),
 		back: !!document.querySelector('.imp-faces--back'),
 		axis: document.querySelector('.imp-faces')?.classList.contains('imp-faces--x') ? 'x' : 'y',
-		pager: document.querySelector('.imp-pager-text')?.textContent.trim(),
+		pager: document.querySelector('.media-pager-text')?.textContent.trim(),
 		block: document.querySelector('.imp-block')?.getAttribute('aria-label') ?? null,
 		tiles: document.querySelector('.imp-tiles')?.textContent.replace(/\s+/g, ' ').trim(),
 		run: document.querySelector('.media-job-run')?.disabled,
@@ -124,7 +124,7 @@ await sleep(100);
 s = await state();
 check('a strip side shows that sheet and side', s.legend === 'Sheet 3 — Back' && s.lit === 5, JSON.stringify(s));
 
-await page.click('.imp-previous');
+await page.click('.media-pager-back');
 await sleep(100);
 check('the pager steps back to the front of the sheet before', (await state()).legend === 'Sheet 2 — Front');
 

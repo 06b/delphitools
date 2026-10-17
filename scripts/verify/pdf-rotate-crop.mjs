@@ -74,7 +74,7 @@ check(
 const state = () =>
 	page.evaluate(() => {
 		const q = (s) => document.querySelector(s);
-		const crop = q('.prc-crop');
+		const crop = q('.media-crop-rect');
 		return {
 			strip: document.querySelectorAll('.canon-page-strip:not(.media-blank-strip) .canon-page-strip-cell').length,
 			blankStrip: !!q('.media-blank-strip .canon-page-strip-cell'),
@@ -97,9 +97,9 @@ const state = () =>
 			allOff: q('.prc-crop-all').disabled,
 			clearOff: q('.prc-crop-clear').disabled,
 			exportOff: q('.media-job-run').disabled,
-			pager: q('.prc-pager-text').textContent.trim(),
-			backOff: q('.prc-pager-back').disabled,
-			forwardOff: q('.prc-pager-forward').disabled,
+			pager: q('.media-pager-text').textContent.trim(),
+			backOff: q('.media-pager-back').disabled,
+			forwardOff: q('.media-pager-forward').disabled,
 			names: [...document.querySelectorAll('.canon-page-strip-page')].map(
 				(b) => b.getAttribute('aria-label'),
 			),
@@ -172,7 +172,7 @@ const loaded = await page
 	.waitForFunction(
 		() =>
 			document.querySelectorAll('.canon-page-strip-cell').length === 3 &&
-			document.querySelector('.prc-image'),
+			document.querySelector('.media-crop-image'),
 		{ timeout: 30000 },
 	)
 	.then(() => true)
@@ -216,7 +216,7 @@ const dropped = await page
 			document
 				.querySelector('.prc-source .canon-row-title')
 				?.textContent.trim() === 'three.pdf' &&
-			document.querySelector('.prc-image'),
+			document.querySelector('.media-crop-image'),
 		{ timeout: 30000 },
 	)
 	.then(() => true)
@@ -252,9 +252,9 @@ const rotatedName = await page.$eval('.prc-rotate-page button', (b) =>
 );
 check('icon cells are named', rotatedName === 'Rotate left', rotatedName);
 
-await page.waitForSelector('.prc-image', { timeout: 10000 });
+await page.waitForSelector('.media-crop-image', { timeout: 10000 });
 await sleep(400);
-const frame = await page.$eval('.prc-image', (e) => {
+const frame = await page.$eval('.media-crop-image', (e) => {
 	const b = e.getBoundingClientRect();
 	return { x: b.left, y: b.top, w: b.width, h: b.height };
 });
@@ -291,7 +291,7 @@ s = await state();
 const moved = /, (\d+), 74$/.exec(s.value)?.[1];
 check('a drag inside moves the crop', Number(moved) > 60, s.value);
 
-await page.focus('.prc-crop');
+await page.focus('.media-crop-rect');
 const keyed = s.value;
 await page.keyboard.press('ArrowLeft');
 await sleep(150);
@@ -334,7 +334,7 @@ check(
 	s.margins.join(),
 );
 
-await page.click('.prc-pager-forward');
+await page.click('.media-pager-forward');
 await sleep(400);
 s = await state();
 check(
@@ -367,7 +367,7 @@ await setMargin('top', '40');
 s = await state();
 check('a margin edit drops the paper', s.paper === 'None', s.paper);
 
-await page.click('.prc-pager-back');
+await page.click('.media-pager-back');
 await sleep(300);
 await page.click('.prc-crop-clear');
 await sleep(300);
@@ -428,7 +428,7 @@ check(
 );
 
 await visit(page, '/tools/pdf-rotate-crop?rcSample&rcPaper=a5&rcNudge=yes');
-await page.waitForSelector('.prc-image', { timeout: 15000 });
+await page.waitForSelector('.media-crop-image', { timeout: 15000 });
 await sleep(300);
 s = await state();
 check(

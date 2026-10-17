@@ -21,14 +21,16 @@ import filePaste from 'delphitools-v2/modifiers/file-paste';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
 import {
-	downloadName,
-	extensionFor,
 	integral,
 	isWhole,
 	whole,
 	type Rect,
 	type Size,
-} from 'delphitools-v2/components/tools/paste-image/crop';
+} from 'delphitools-v2/lib/crop-rect';
+import {
+	downloadName,
+	extensionFor,
+} from 'delphitools-v2/components/tools/paste-image/file-name';
 import Picture from 'delphitools-v2/components/tools/paste-image/picture';
 import './paste-image/paste-image.css';
 
