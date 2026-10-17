@@ -855,6 +855,7 @@ export const toolCategories: ToolCategory[] = [
 					'Add page numbers or stamps to documents',
 				icon: 'file-digit',
 				href: '/tools/pdf-page-numberer',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},
