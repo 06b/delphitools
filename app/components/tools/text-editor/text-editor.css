@@ -124,17 +124,51 @@ img.ProseMirror-separator {
 	pointer-events: none;
 }
 
+.text-editor {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	block-size: 100%;
+	min-block-size: 0;
+	background: var(--canon-card);
+}
+
+.te-bar {
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.te-bar > .canon-button.canon-button {
+	min-block-size: var(--canon-control-height);
+}
+
+.te-figures {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 4px 16px;
+	padding: 6px var(--canon-panel-padding);
+	border-block-start: var(--canon-hairline) solid var(--canon-border);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+}
+
+.te-figure-value {
+	color: var(--canon-foreground);
+	font-variant-numeric: tabular-nums;
+}
+
 /* the picture: iOS ManuscriptView */
 .te-pane {
 	/* gutter: lead 12, labels 48, rule 8, text 12 */
 	--te-rule: 68px;
 	--te-text: 80px;
+	--te-lead: var(--canon-panel-padding);
 	--te-size: var(--canon-text-body);
 
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	block-size: 100%;
+	min-block-size: 0;
 	background: var(--canon-card);
 	color: var(--canon-foreground);
 	font-family: var(--canon-font);
@@ -155,6 +189,11 @@ img.ProseMirror-separator {
 	flex-direction: column;
 	box-sizing: border-box;
 	inline-size: 100%;
+
+	/* iOS full screen: a 680 px measure */
+	max-inline-size: calc(
+		680px + var(--te-lead) + var(--canon-panel-padding)
+	);
 	margin-inline: auto;
 }
 
@@ -166,11 +205,11 @@ img.ProseMirror-separator {
 	display: flex;
 	flex: 1 0 auto;
 	flex-direction: column;
-	padding-inline-start: var(--canon-panel-padding);
+	padding-inline-start: var(--te-lead);
 }
 
-.te-pane--pad .te-host {
-	padding-inline-start: var(--te-text);
+.te-pane--pad {
+	--te-lead: var(--te-text);
 }
 
 .te-pane .dt-editor {
@@ -309,8 +348,10 @@ img.ProseMirror-separator {
 .te-source {
 	flex: 1 0 auto;
 	box-sizing: border-box;
+	inline-size: 100%;
+	max-inline-size: calc(680px + 2 * var(--canon-panel-padding));
 	min-block-size: 100%;
-	margin: 0;
+	margin: 0 auto;
 	padding: 16px var(--canon-panel-padding) 32px;
 	border: 0;
 	background: transparent;
@@ -374,15 +415,12 @@ img.ProseMirror-separator {
 	outline-offset: -2px;
 }
 
-/* full screen: iOS ManuscriptFullScreenViewController, 680 px measure at 20 px */
+/* full screen: iOS ManuscriptFullScreenViewController, 20 px */
 .te-pane--zen {
 	--te-size: 20px;
 }
 
 .te-pane--zen .te-page {
-	max-inline-size: calc(
-		680px + var(--te-text) + var(--canon-panel-padding)
-	);
 	padding-block-start: 44px;
 }
 
@@ -437,4 +475,10 @@ img.ProseMirror-separator {
 .te-pane .pm-para-active,
 .te-pane .pm-sentence-active {
 	border-radius: 0;
+}
+
+/* the bundle orders canon-dialog.css after canon-sheet.css, so the dialog's centring and height cap win */
+.te-settings.canon-sheet {
+	max-block-size: none;
+	margin: 0;
 }

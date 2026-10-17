@@ -7,7 +7,6 @@ import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import type Owner from '@ember/owner';
 import CanonButton from 'delphicanon/components/canon-button';
-import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonMenu, {
@@ -17,11 +16,9 @@ import CanonMenu, {
 	type CanonMenuItem,
 } from 'delphicanon/components/canon-menu';
 import CanonRow from 'delphicanon/components/canon-row';
-import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
-import CanonSplit from 'delphicanon/components/canon-split';
+import CanonSheet from 'delphicanon/components/canon-sheet';
 import CanonSwitch from 'delphicanon/components/canon-switch';
-import CanonTiles from 'delphicanon/components/canon-tiles';
 import { attach } from 'delphicanon/lib/popover';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
@@ -85,6 +82,7 @@ const ExitIcon = <template><IconSvg @name="minimize-2" /></template>;
 const SourceIcon = <template><IconSvg @name="code-2" /></template>;
 const ExportIcon = <template><IconSvg @name="download" /></template>;
 const CopyIcon = <template><IconSvg @name="copy" /></template>;
+const SettingsIcon = <template><IconSvg @name="settings-2" /></template>;
 
 interface Bubble {
 	top: number;
@@ -147,6 +145,7 @@ export default class TextEditorTool extends Component {
 	// in the browser's full screen, not the overlay
 	@tracked native = false;
 	@tracked overlay = false;
+	@tracked settingsOpen = false;
 
 	ed: EditorCore | null = null;
 	view: EditorView | null = null;
@@ -163,6 +162,7 @@ export default class TextEditorTool extends Component {
 	#menuPoint?: HTMLElement;
 	#menuTrigger?: HTMLElement;
 	#menuPos = 0;
+	#settingsCell?: HTMLElement;
 
 	constructor(owner: Owner, args: Record<string, never>) {
 		super(owner, args);
@@ -321,7 +321,7 @@ export default class TextEditorTool extends Component {
 		);
 	}
 
-	get tiles() {
+	get figures() {
 		const { stats } = this;
 		return [
 			{ label: 'Words', value: stats.words.toLocaleString() },
@@ -428,6 +428,18 @@ export default class TextEditorTool extends Component {
 	keepPicker = modifier((input: HTMLInputElement) => {
 		this.#picker = input;
 	});
+
+	keepSettingsCell = modifier((cell: HTMLElement) => {
+		this.#settingsCell = cell;
+	});
+
+	openSettings = () => (this.settingsOpen = true);
+
+	// Safari leaves a clicked button unfocused, so the dialog has no invoker
+	closeSettings = () => {
+		this.settingsOpen = false;
+		this.#settingsCell?.focus();
+	};
 
 	// one menu for every gutter row, anchored to a point moved to the row
 	keepMenu = modifier((panel: HTMLElement) => {
@@ -927,393 +939,385 @@ export default class TextEditorTool extends Component {
 	}
 
 	<template>
-		<CanonSplit
+		<div
 			class="text-editor"
-			@halves={{true}}
-			@collapsesTo={{180}}
 			{{filePaste this.readFile accept=ACCEPT}}
 			{{on "drop" this.drop}}
 			{{on "dragover" this.dragOver}}
 		>
-			<:sidebar>
-				<CanonCanvas @height={{2000}}>
-					<div
-						class={{this.paneClass}}
-						{{this.keepPane}}
-					>
-						{{#if this.zen}}
-							<div class="te-zen-bar">
-								<CanonButton
-									@kind="cell"
-									@text="Exit"
-									@icon={{ExitIcon}}
-									title="Exit focus mode"
-									@onClick={{this.toggleZen}}
-								/>
-							</div>
-						{{/if}}
-						<div
-							class="te-scroll"
-							{{on
-								"scroll"
-								this.rescroll
-							}}
-						>
-							{{#if
-								this.settings.codeMode
-							}}
-								<textarea
-									class="te-source"
-									spellcheck="false"
-									aria-label="Markdown source"
-									value={{this.source}}
-									{{on
-										"input"
-										this.setSource
-									}}
-								></textarea>
-							{{/if}}
-							<div
-								class="te-page
-									{{if
-										this.settings.codeMode
-										'te-page--hidden'
-									}}
-									{{if
-										this.empty
-										'te-page--empty'
-									}}"
-							>
-								{{#if
-									this.settings.showGutter
-								}}
-									<div
-										class="te-gutter"
-									>
-										{{#each
-											this.gutterRows
-											key="key"
-											as |r|
-										}}
-											<div
-												class="te-gutter-row
-													{{if
-														r.active
-														'te-gutter-row--lit'
-													}}"
-												style={{r.style}}
-											>
-												<button
-													type="button"
-													class="te-block-trigger"
-													title="Change block type"
-													aria-label={{r.name}}
-													aria-haspopup="menu"
-													{{on
-														"click"
-														(fn
-															this.openBlockMenu
-															r.row
-														)
-													}}
-												>{{r.mark}}</button>
-												{{#each
-													r.row.fields
-													key="id"
-													as |f|
-												}}
-													<span
-														class="te-gutter-field"
-														aria-hidden="true"
-													>{{f.value}}
-														{{f.label}}</span>
-												{{/each}}
-											</div>
-										{{/each}}
-									</div>
-								{{/if}}
-								{{#if
-									this.settings.showMarginLine
-								}}
-									<div
-										class="te-margin"
-										aria-hidden="true"
-									></div>
-								{{/if}}
-								<div
-									class="te-host"
-									{{this.mount}}
-								></div>
-								<span
-									class="te-menu-point"
-									aria-hidden="true"
-								></span>
-								<CanonMenuList
-									@items={{this.menuItems}}
-									@onSelect={{this.pickBlock}}
-									{{this.keepMenu}}
-								/>
-							</div>
-						</div>
-
-						{{#if this.bubble}}
-							{{! mousedown moves selection }}
-							{{! template-lint-disable no-pointer-down-event-binding no-invalid-interactive }}
-							<div
-								class="te-bubble
-									{{if
-										this.bubble.below
-										'te-bubble--below'
-									}}"
-								role="toolbar"
-								aria-label="Format"
-								style={{this.bubbleStyle}}
-								{{on
-									"mousedown"
-									this.eatMousedown
-								}}
-							>
-								<button
-									type="button"
-									class="te-bubble-btn"
-									title="Bold"
-									aria-label="Bold"
-									aria-pressed={{if
-										this.bubble.strong
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyMark
-											"strong"
-										)
-									}}
-								><IconSvg
-										@name="bold"
-									/></button>
-								<button
-									type="button"
-									class="te-bubble-btn"
-									title="Italic"
-									aria-label="Italic"
-									aria-pressed={{if
-										this.bubble.em
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyMark
-											"em"
-										)
-									}}
-								><IconSvg
-										@name="italic"
-									/></button>
-								<button
-									type="button"
-									class="te-bubble-btn"
-									title="Strikethrough"
-									aria-label="Strikethrough"
-									aria-pressed={{if
-										this.bubble.strikethrough
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyMark
-											"strikethrough"
-										)
-									}}
-								><IconSvg
-										@name="strikethrough"
-									/></button>
-								<button
-									type="button"
-									class="te-bubble-btn"
-									title="Code"
-									aria-label="Code"
-									aria-pressed={{if
-										this.bubble.code
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										(fn
-											this.applyMark
-											"code"
-										)
-									}}
-								><IconSvg
-										@name="code"
-									/></button>
-								<button
-									type="button"
-									class="te-bubble-btn"
-									title="Link"
-									aria-label="Link"
-									aria-pressed={{if
-										this.bubble.link
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										this.addLink
-									}}
-								><IconSvg
-										@name="link"
-									/></button>
-							</div>
-						{{/if}}
-
-						{{#if this.zen}}
-							<output
-								class="te-count"
-							>{{this.wordCountLabel}}</output>
-						{{/if}}
-					</div>
-				</CanonCanvas>
-			</:sidebar>
-			<:main>
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Document" />
-					<input
-						type="file"
-						class="dt-sr-only"
-						accept={{ACCEPT}}
-						tabindex="-1"
-						aria-hidden="true"
-						aria-label="Files"
-						{{this.keepPicker}}
-						{{on "change" this.chooseFile}}
+			<input
+				type="file"
+				class="dt-sr-only"
+				accept={{ACCEPT}}
+				tabindex="-1"
+				aria-hidden="true"
+				aria-label="Files"
+				{{this.keepPicker}}
+				{{on "change" this.chooseFile}}
+			/>
+			<CanonGrid class="te-bar">
+				<CanonButton
+					class="te-files"
+					@text="Files"
+					@icon={{FolderIcon}}
+					@onClick={{this.openFile}}
+				/>
+				<CanonButton
+					class="te-clear"
+					@text="Clear"
+					@icon={{ClearIcon}}
+					@disabled={{this.isEmpty}}
+					@onClick={{this.clear}}
+				/>
+				<CanonButton
+					class="te-source-toggle"
+					@text="Source"
+					@icon={{SourceIcon}}
+					@selected={{this.settings.codeMode}}
+					title="Toggle raw Markdown source"
+					aria-pressed={{if
+						this.settings.codeMode
+						"true"
+						"false"
+					}}
+					@onClick={{this.toggleCodeMode}}
+				/>
+				<CanonButton
+					class="te-full"
+					@text="Full Screen"
+					@icon={{FullIcon}}
+					title="Distraction-free focus mode"
+					@onClick={{this.toggleZen}}
+				/>
+				<CanonMenu
+					@items={{this.exportItems}}
+					@onSelect={{this.doExport}}
+					as |menu|
+				>
+					<CanonButton
+						class="te-export"
+						@text="Export"
+						@icon={{ExportIcon}}
+						@disabled={{this.isEmpty}}
+						{{menu.trigger}}
 					/>
-					<CanonGrid @columns={{2}}>
+				</CanonMenu>
+				<CanonButton
+					class="te-copy"
+					@kind="primary"
+					@text="Copy"
+					@icon={{CopyIcon}}
+					@disabled={{this.isEmpty}}
+					@onClick={{this.copy}}
+				/>
+				<CanonButton
+					class="te-settings-cell"
+					@text="Settings"
+					@icon={{SettingsIcon}}
+					aria-haspopup="dialog"
+					aria-expanded={{if
+						this.settingsOpen
+						"true"
+						"false"
+					}}
+					@onClick={{this.openSettings}}
+					{{this.keepSettingsCell}}
+				/>
+			</CanonGrid>
+			<div class={{this.paneClass}} {{this.keepPane}}>
+				{{#if this.zen}}
+					<div class="te-zen-bar">
 						<CanonButton
-							class="te-files"
-							@text="Files"
-							@icon={{FolderIcon}}
-							@onClick={{this.openFile}}
-						/>
-						<CanonButton
-							class="te-clear"
-							@text="Clear"
-							@icon={{ClearIcon}}
-							@disabled={{this.isEmpty}}
-							@onClick={{this.clear}}
-						/>
-						<CanonButton
-							class="te-full"
-							@text="Full Screen"
-							@icon={{FullIcon}}
-							title="Distraction-free focus mode"
+							@kind="cell"
+							@text="Exit"
+							@icon={{ExitIcon}}
+							title="Exit focus mode"
 							@onClick={{this.toggleZen}}
 						/>
-						<CanonButton
-							class="te-source-toggle"
-							@text="Source"
-							@icon={{SourceIcon}}
-							@selected={{this.settings.codeMode}}
-							title="Toggle raw Markdown source"
-							aria-pressed={{if
+					</div>
+				{{/if}}
+				<div
+					class="te-scroll"
+					{{on "scroll" this.rescroll}}
+				>
+					{{#if this.settings.codeMode}}
+						<textarea
+							class="te-source"
+							spellcheck="false"
+							aria-label="Markdown source"
+							value={{this.source}}
+							{{on
+								"input"
+								this.setSource
+							}}
+						></textarea>
+					{{/if}}
+					<div
+						class="te-page
+							{{if
 								this.settings.codeMode
+								'te-page--hidden'
+							}}
+							{{if
+								this.empty
+								'te-page--empty'
+							}}"
+					>
+						{{#if this.settings.showGutter}}
+							<div class="te-gutter">
+								{{#each
+									this.gutterRows
+									key="key"
+									as |r|
+								}}
+									<div
+										class="te-gutter-row
+											{{if
+												r.active
+												'te-gutter-row--lit'
+											}}"
+										style={{r.style}}
+									>
+										<button
+											type="button"
+											class="te-block-trigger"
+											title="Change block type"
+											aria-label={{r.name}}
+											aria-haspopup="menu"
+											{{on
+												"click"
+												(fn
+													this.openBlockMenu
+													r.row
+												)
+											}}
+										>{{r.mark}}</button>
+										{{#each
+											r.row.fields
+											key="id"
+											as |f|
+										}}
+											<span
+												class="te-gutter-field"
+												aria-hidden="true"
+											>{{f.value}}
+												{{f.label}}</span>
+										{{/each}}
+									</div>
+								{{/each}}
+							</div>
+						{{/if}}
+						{{#if
+							this.settings.showMarginLine
+						}}
+							<div
+								class="te-margin"
+								aria-hidden="true"
+							></div>
+						{{/if}}
+						<div
+							class="te-host"
+							{{this.mount}}
+						></div>
+						<span
+							class="te-menu-point"
+							aria-hidden="true"
+						></span>
+						<CanonMenuList
+							@items={{this.menuItems}}
+							@onSelect={{this.pickBlock}}
+							{{this.keepMenu}}
+						/>
+					</div>
+				</div>
+
+				{{#if this.bubble}}
+					{{! mousedown moves selection }}
+					{{! template-lint-disable no-pointer-down-event-binding no-invalid-interactive }}
+					<div
+						class="te-bubble
+							{{if
+								this.bubble.below
+								'te-bubble--below'
+							}}"
+						role="toolbar"
+						aria-label="Format"
+						style={{this.bubbleStyle}}
+						{{on
+							"mousedown"
+							this.eatMousedown
+						}}
+					>
+						<button
+							type="button"
+							class="te-bubble-btn"
+							title="Bold"
+							aria-label="Bold"
+							aria-pressed={{if
+								this.bubble.strong
 								"true"
 								"false"
 							}}
-							@onClick={{this.toggleCodeMode}}
-						/>
-					</CanonGrid>
-					<CanonGrid>
-						<CanonMenu
-							@items={{this.exportItems}}
-							@placement="top-start"
-							@onSelect={{this.doExport}}
-							as |menu|
-						>
-							<CanonButton
-								class="te-export"
-								@text="Export"
-								@icon={{ExportIcon}}
-								@disabled={{this.isEmpty}}
-								{{menu.trigger}}
-							/>
-						</CanonMenu>
-						<CanonButton
-							class="te-copy"
-							@kind="primary"
-							@text="Copy"
-							@icon={{CopyIcon}}
-							@iconStyle="oversized"
-							@disabled={{this.isEmpty}}
-							@onClick={{this.copy}}
-						/>
-					</CanonGrid>
-				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonTiles @items={{this.tiles}} />
-				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Editor Settings" />
-					<CanonRow @title="Font" @form="flush">
-						<CanonSegmented
-							aria-label="Font"
-							@items={{this.fonts}}
-							@selected={{this.font}}
-							@onChange={{this.setFont}}
+							{{on
+								"click"
+								(fn
+									this.applyMark
+									"strong"
+								)
+							}}
+						><IconSvg
+								@name="bold"
+							/></button>
+						<button
+							type="button"
+							class="te-bubble-btn"
+							title="Italic"
+							aria-label="Italic"
+							aria-pressed={{if
+								this.bubble.em
+								"true"
+								"false"
+							}}
+							{{on
+								"click"
+								(fn
+									this.applyMark
+									"em"
+								)
+							}}
+						><IconSvg
+								@name="italic"
+							/></button>
+						<button
+							type="button"
+							class="te-bubble-btn"
+							title="Strikethrough"
+							aria-label="Strikethrough"
+							aria-pressed={{if
+								this.bubble.strikethrough
+								"true"
+								"false"
+							}}
+							{{on
+								"click"
+								(fn
+									this.applyMark
+									"strikethrough"
+								)
+							}}
+						><IconSvg
+								@name="strikethrough"
+							/></button>
+						<button
+							type="button"
+							class="te-bubble-btn"
+							title="Code"
+							aria-label="Code"
+							aria-pressed={{if
+								this.bubble.code
+								"true"
+								"false"
+							}}
+							{{on
+								"click"
+								(fn
+									this.applyMark
+									"code"
+								)
+							}}
+						><IconSvg
+								@name="code"
+							/></button>
+						<button
+							type="button"
+							class="te-bubble-btn"
+							title="Link"
+							aria-label="Link"
+							aria-pressed={{if
+								this.bubble.link
+								"true"
+								"false"
+							}}
+							{{on
+								"click"
+								this.addLink
+							}}
+						><IconSvg
+								@name="link"
+							/></button>
+					</div>
+				{{/if}}
+
+				{{#if this.zen}}
+					<output
+						class="te-count"
+					>{{this.wordCountLabel}}</output>
+				{{/if}}
+			</div>
+			<output class="te-figures">
+				{{#each this.figures as |figure|}}
+					<span class="te-figure"><span
+							class="te-figure-value"
+						>{{figure.value}}</span>
+						<span
+							class="te-figure-label"
+						>{{figure.label}}</span></span>
+				{{/each}}
+			</output>
+			<CanonSheet
+				class="te-settings"
+				@edge="end"
+				@title="Editor Settings"
+				@open={{this.settingsOpen}}
+				@onClose={{this.closeSettings}}
+			>
+				<CanonRow @title="Font" @form="flush">
+					<CanonSegmented
+						aria-label="Font"
+						@items={{this.fonts}}
+						@selected={{this.font}}
+						@onChange={{this.setFont}}
+					/>
+				</CanonRow>
+				{{#each this.switchRows key="key" as |row|}}
+					<CanonRow
+						@title={{row.title}}
+						as |titleId|
+					>
+						<CanonSwitch
+							class="te-switch-{{row.key}}"
+							aria-labelledby={{titleId}}
+							@on={{row.on}}
+							@onChange={{fn
+								this.setBool
+								row.key
+							}}
 						/>
 					</CanonRow>
-					{{#each
-						this.switchRows key="key"
-						as |row|
-					}}
-						<CanonRow
-							@title={{row.title}}
-							as |titleId|
-						>
-							<CanonSwitch
-								class="te-switch-{{row.key}}"
-								aria-labelledby={{titleId}}
-								@on={{row.on}}
-								@onChange={{fn
-									this.setBool
-									row.key
-								}}
-							/>
-						</CanonRow>
-					{{/each}}
-					<CanonHeading @text="Gutter fields" />
-					{{#each
-						this.fieldRows key="field.id"
-						as |row|
-					}}
-						<CanonRow
-							@title={{row.title}}
-							as |titleId|
-						>
-							<CanonSwitch
-								class="te-field-{{row.field.id}}"
-								aria-labelledby={{titleId}}
-								@on={{row.enabled}}
-								@disabled={{if
-									this.settings.showGutter
-									false
-									true
-								}}
-								@onChange={{fn
-									this.setField
-									row.field.id
-								}}
-							/>
-						</CanonRow>
-					{{/each}}
-				</CanonRows>
-			</:main>
-		</CanonSplit>
+				{{/each}}
+				<CanonHeading @text="Gutter fields" />
+				{{#each this.fieldRows key="field.id" as |row|}}
+					<CanonRow
+						@title={{row.title}}
+						as |titleId|
+					>
+						<CanonSwitch
+							class="te-field-{{row.field.id}}"
+							aria-labelledby={{titleId}}
+							@on={{row.enabled}}
+							@disabled={{if
+								this.settings.showGutter
+								false
+								true
+							}}
+							@onChange={{fn
+								this.setField
+								row.field.id
+							}}
+						/>
+					</CanonRow>
+				{{/each}}
+			</CanonSheet>
+		</div>
 	</template>
 }

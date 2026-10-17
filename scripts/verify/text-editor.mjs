@@ -1,6 +1,6 @@
 // what unit tests cannot see
 // usage: npm start, then node scripts/verify/text-editor.mjs
-//   SHOTS=<dir> also saves 390, 1400 and 2200 wide, light and dark, empty and loaded
+//   SHOTS=<dir> also saves 390, 1400 and 2200 wide, light and dark, empty, loaded and settings
 
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,14 +27,16 @@ const open = async (query = '') => {
 	await sleep(300);
 };
 const tiles = () =>
-	page.$$eval('.text-editor .canon-tiles-tile', (els) =>
+	page.$$eval('.text-editor .te-figure', (els) =>
 		Object.fromEntries(
 			els.map((el) => [
-				el.querySelector('.canon-tiles-label').textContent.trim(),
-				el.querySelector('.canon-tiles-value').textContent.trim(),
+				el.querySelector('.te-figure-label').textContent.trim(),
+				el.querySelector('.te-figure-value').textContent.trim(),
 			]),
 		),
 	);
+const sheetOpen = () => page.evaluate(() => !!document.querySelector('.te-settings[open]'));
+const focused = () => page.evaluate(() => document.activeElement?.className ?? '');
 const disabled = (sel) => page.$eval(sel, (el) => el.disabled);
 const click = (sel) => page.$eval(sel, (el) => el.click());
 const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
@@ -52,21 +54,32 @@ async function waitForDownload(match, timeout = 15000) {
 await open();
 
 check(
-	'the split fills the slot',
+	'the tool fills the slot',
 	await page.evaluate(
 		() =>
 			document.querySelector('.dt-canon-tool').getBoundingClientRect().height ===
 			document.querySelector('.text-editor').getBoundingClientRect().height,
 	),
 );
+const span = await page.evaluate(() => {
+	const tool = document.querySelector('.text-editor').getBoundingClientRect();
+	const pane = document.querySelector('.te-pane').getBoundingClientRect();
+	const bar = document.querySelector('.te-bar').getBoundingClientRect();
+	const foot = document.querySelector('.te-figures').getBoundingClientRect();
+	const sheet = document.querySelector('.te-page').getBoundingClientRect();
+	return {
+		width: pane.width === tool.width,
+		height: Math.round(pane.height + bar.height + foot.height) === Math.round(tool.height),
+		bar: Math.round(bar.height),
+		page: Math.round(sheet.width),
+		centred: Math.abs(sheet.left - pane.left - (pane.right - sheet.right)) <= 1,
+		settings: document.querySelectorAll('.te-switch-typewriter').length,
+	};
+});
 check(
-	'1400: the editor is the big pane, beside the settings',
-	await page.evaluate(() => {
-		const pane = document.querySelector('.text-editor .canon-split-sidebar').getBoundingClientRect();
-		const main = document.querySelector('.text-editor .canon-split-main').getBoundingClientRect();
-		const editor = document.querySelector('.text-editor .dt-editor').getBoundingClientRect();
-		return pane.right <= main.left + 1 && editor.height > 600 && pane.width > 400;
-	}),
+	'1400: the editor spans the tool under a slim bar, the page centred at a 680 px measure',
+	span.width && span.height && span.bar <= 45 && span.page === 680 + 80 + 16 && span.centred && span.settings === 0,
+	JSON.stringify(span),
 );
 check(
 	'empty: the dashed placeholder box',
@@ -159,11 +172,11 @@ check('undo brings the cleared text back', (await tiles()).Words === '6');
 await page.evaluate((text) => {
 	const transfer = new DataTransfer();
 	transfer.items.add(new File([text], 'notes.md', { type: 'text/markdown' }));
-	document.querySelector('.text-editor .canon-split-main').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true }));
+	document.querySelector('.te-bar').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true }));
 }, DOC);
 await sleep(400);
 check(
-	'a file dropped on the settings pane loads into the editor',
+	'a file dropped on the bar loads into the editor',
 	(await page.$eval('.text-editor .dt-editor h1', (h) => h.textContent.trim()).catch(() => null)) === 'Field notes',
 );
 const loaded = await tiles();
@@ -219,24 +232,84 @@ await page.evaluate(() =>
 const html = await waitForDownload(/\.html$/);
 check('HTML (.html) downloads the document', html?.text.includes('<h2>Edited</h2>'), html?.name);
 
-// settings
+// settings: the sheet from the Settings cell, by keyboard
+await page.focus('.te-settings-cell');
+await page.keyboard.press('Enter');
+await sleep(400);
+const sheet = await page.evaluate(() => {
+	const el = document.querySelector('.te-settings[open]');
+	const box = el?.getBoundingClientRect();
+	return (
+		el && {
+			right: Math.round(box.right),
+			top: Math.round(box.top),
+			h: Math.round(box.height),
+			modal: el.matches(':modal'),
+			focusInside: el.contains(document.activeElement),
+		}
+	);
+});
+check(
+	'Enter on Settings opens the full-height sheet at the end edge, modal, focus inside',
+	sheet?.modal && sheet.right === 1400 && sheet.top === 0 && sheet.h === 1000 && sheet.focusInside,
+	JSON.stringify(sheet),
+);
+check('the Settings cell reports the open sheet', (await page.$eval('.te-settings-cell', (el) => el.getAttribute('aria-expanded'))) === 'true');
+const reached = new Set();
+for (let i = 0; i < 20; i += 1) {
+	await page.keyboard.press('Tab');
+	// a modal dialog wraps through the browser's own UI, which reads as body
+	reached.add(
+		await page.evaluate(() => {
+			const el = document.activeElement;
+			if (el === document.body) return 'body';
+			return el.closest('.te-settings') ? el.className : 'outside';
+		}),
+	);
+}
+check(
+	'Tab stays in the sheet and reaches the font, the switches and the field switches',
+	!reached.has('outside') &&
+		[...reached].some((c) => /te-switch-typewriter/.test(c)) &&
+		[...reached].some((c) => /te-field-words/.test(c)) &&
+		[...reached].some((c) => /canon-button--segment/.test(c)),
+	JSON.stringify([...reached]),
+);
 await click('.te-switch-highlightParagraph');
-await page.click('.text-editor .dt-editor p');
-await sleep(150);
-check('Highlight current paragraph lights the caret block', await page.evaluate(() => !!document.querySelector('.pm-para-active')));
 await click('.te-switch-dimInactive');
-await sleep(150);
-check('Dim inactive paragraphs dims the others', await page.evaluate(() => !!document.querySelector('.pm-dim')));
 await click('.te-switch-showGutter');
 await sleep(150);
-check(
-	'Show gutter off hides the marks and disables the field switches',
-	(await page.$('.te-gutter')) === null && (await disabled('.te-field-words')),
-);
-await page.$$eval('.text-editor .canon-segmented[aria-label="Font"] button', (els) =>
+check('Show gutter off disables the field switches', await disabled('.te-field-words'));
+await page.$$eval('.te-settings .canon-segmented[aria-label="Font"] button', (els) =>
 	els.find((el) => el.textContent.trim() === 'Serif')?.click(),
 );
 await sleep(100);
+const unnamedInSheet = await page.evaluate(() =>
+	[...document.querySelectorAll('.te-settings button, .te-settings input')]
+		.filter((el) => !(el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.textContent.trim()))
+		.map((el) => el.className),
+);
+check('every sheet control has a name', unnamedInSheet.length === 0, JSON.stringify(unnamedInSheet));
+await page.keyboard.press('Escape');
+await sleep(400);
+check('Escape closes the sheet', !(await sheetOpen()));
+check('and focus returns to the Settings cell', /te-settings-cell/.test(await focused()), await focused());
+await page.click('.te-settings-cell');
+await sleep(400);
+check('a click on Settings opens it again', await sheetOpen());
+await page.mouse.click(100, 500);
+await sleep(400);
+check(
+	'a click on the backdrop closes it, focus on the cell',
+	!(await sheetOpen()) && /te-settings-cell/.test(await focused()),
+	await focused(),
+);
+
+await page.click('.text-editor .dt-editor p');
+await sleep(150);
+check('Highlight current paragraph lights the caret block', await page.evaluate(() => !!document.querySelector('.pm-para-active')));
+check('Dim inactive paragraphs dims the others', await page.evaluate(() => !!document.querySelector('.pm-dim')));
+check('Show gutter off hides the marks', (await page.$('.te-gutter')) === null);
 check(
 	'Font Serif sets the editor in a serif',
 	await page.$eval('.text-editor .dt-editor', (el) => /Georgia|Iowan|serif/.test(getComputedStyle(el).fontFamily)),
@@ -287,25 +360,36 @@ check('Exit closes the overlay', (await page.$('.te-pane--zen')) === null);
 // phone
 await page.setViewport({ width: 390, height: 844 });
 await open(`?teText=${encodeURIComponent(DOC.repeat(4))}`);
-const phone = await page.evaluate(async () => {
-	const split = document.querySelector('.text-editor');
-	const body = split.querySelector('.canon-split-body');
-	const canvas = () => split.querySelector('.canon-split-sidebar .canon-canvas').getBoundingClientRect().height;
-	const before = canvas();
-	body.scrollTop = 400;
-	await new Promise((r) => setTimeout(r, 300));
+const phone = await page.evaluate(() => {
+	const tool = document.querySelector('.text-editor').getBoundingClientRect();
+	const pane = document.querySelector('.te-pane').getBoundingClientRect();
+	const scroll = document.querySelector('.te-scroll');
 	return {
-		collapsing: split.hasAttribute('data-collapsing'),
-		before,
-		after: canvas(),
+		width: pane.width === tool.width,
+		tall: pane.height > 600,
+		scrolls: scroll.scrollHeight > scroll.clientHeight,
+		symbols: document.querySelector('.te-bar').hasAttribute('data-symbol-only'),
 		overflow: document.documentElement.scrollWidth > window.innerWidth,
 	};
 });
 check(
-	'390: stacked, the editor collapses to 180 on scroll, no sideways scroll',
-	phone.collapsing && phone.after === 180 && phone.before > phone.after && !phone.overflow,
+	'390: the editor spans the tool and scrolls inside, the bar shows symbols, no sideways scroll',
+	phone.width && phone.tall && phone.scrolls && phone.symbols && !phone.overflow,
 	JSON.stringify(phone),
 );
+await click('.te-settings-cell');
+await sleep(400);
+const phoneSheet = await page.evaluate(() => {
+	const box = document.querySelector('.te-settings[open]')?.getBoundingClientRect();
+	return box && { left: Math.round(box.left), right: Math.round(box.right), h: Math.round(box.height) };
+});
+check(
+	'390: the sheet fits the window',
+	phoneSheet?.left >= 24 && phoneSheet.right === 390 && phoneSheet.h === 844,
+	JSON.stringify(phoneSheet),
+);
+await page.keyboard.press('Escape');
+await sleep(400);
 
 if (shots) {
 	const sizes = [
@@ -327,6 +411,12 @@ if (shots) {
 				}, theme);
 				await sleep(500);
 				await page.screenshot({ path: `${shots}/text-editor-${width}-${theme}-${state}.png` });
+				if (state !== 'loaded') continue;
+				await click('.te-settings-cell');
+				await sleep(500);
+				await page.screenshot({ path: `${shots}/text-editor-${width}-${theme}-settings.png` });
+				await page.keyboard.press('Escape');
+				await sleep(400);
 			}
 	await page.setViewport({ width: 1400, height: 1000 });
 	await open(`?teText=${encodeURIComponent(DOC)}`);
