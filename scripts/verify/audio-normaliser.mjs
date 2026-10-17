@@ -42,13 +42,30 @@ check(
 			document.querySelector('.audio-normaliser').getBoundingClientRect().height,
 	),
 );
+const band = () => page.evaluate(() => document.querySelector('.audio-normaliser .canon-canvas').getBoundingClientRect().height);
+check('empty: the band is the shared A/V height', (await band()) === 138, String(await band()));
 check(
-	'empty: the picture is the drop slot with the web wording, Normalise off',
+	'empty: the Source row is the drop slot with the web wording, Normalise off, Target on',
 	await page.evaluate(
 		() =>
-			document.querySelector('.an-slot')?.textContent.trim() === 'Drop an audio file' &&
-			document.querySelector('.media-job-run')?.disabled === true,
+			document.querySelector('.an-slot.media-slot--row')?.textContent.trim() === 'Drop an audio file' &&
+			[...document.querySelectorAll('.audio-normaliser .canon-heading')].some((h) => h.textContent.trim() === 'Source') &&
+			document.querySelector('.media-job-run')?.disabled === true &&
+			[...document.querySelectorAll('.an-targets [role="radio"]')].every((b) => !b.disabled),
 	),
+);
+check(
+	'empty: the loaded layout in blank: empty picture, hyphen figure, dashed tiles, empty meters',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.an-picture canvas.an-wave') &&
+			document.querySelector('.an-figure')?.textContent.replace(/\s+/g, '') === '-.-dB-.-dB' &&
+			[...document.querySelectorAll('.an-readings .canon-tiles-label')].map((l) => l.textContent.trim()).join() ===
+				'Loudness,Peak,Gain,Output peak' &&
+			[...document.querySelectorAll('.an-readings .canon-tiles-value')].every((v) => v.textContent.trim() === '\u2014') &&
+			document.querySelectorAll('.an-readings .canon-tiles-level').length === 3,
+	),
+	await figure(),
 );
 
 await captureObjectUrl(page);
@@ -71,6 +88,7 @@ check(
 	(await page.$eval('.an-source .canon-row-detail', (el) => el.textContent.trim())) ===
 		'3.00 s · 48000 Hz · 2 ch',
 );
+check('loaded: the band is the shared A/V height', (await band()) === 138, String(await band()));
 check('the picture shows the gain as a figure', /^\+[56]\.\ddB/.test(await figure()), await figure());
 check(
 	'loudness tiles carry level bars',
@@ -139,8 +157,10 @@ await page.evaluate(() =>
 );
 await sleep(200);
 check(
-	'Clear returns to the slot',
-	!!(await page.$('.an-slot')) && !(await page.$('.an-readings')) && !(await page.$('.media-job-result')),
+	'Clear returns to the slot and the blank tiles',
+	!!(await page.$('.an-slot')) &&
+		!(await page.$('.media-job-result')) &&
+		(await tiles()).Gain === '\u2014',
 );
 
 await page.setViewport({ width: 390, height: 844 });

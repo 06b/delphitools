@@ -10,6 +10,8 @@ export interface PictureSignature {
 		/** The planned gain; none draws the source alone, without a figure. */
 		gainDb: number | null;
 		limited: boolean;
+		/** No file yet: the empty picture and the figure as hyphens. */
+		blank?: boolean;
 	};
 }
 
@@ -112,11 +114,13 @@ function paint(
 /** The iOS AudioNormaliserPicture: the waveform before and after the gain, the -1 dBFS ceiling, the gain as a figure. */
 export default class Picture extends Component<PictureSignature> {
 	get figure() {
-		const { gainDb } = this.args;
+		const { gainDb, blank } = this.args;
+		if (blank) return '-.-';
 		return gainDb === null ? '' : gainText(gainDb);
 	}
 
 	get colour() {
+		if (this.args.blank) return 'var(--canon-muted-foreground)';
 		return this.args.limited
 			? 'var(--canon-destructive)'
 			: 'var(--canon-primary)';

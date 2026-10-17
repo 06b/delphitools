@@ -30,6 +30,7 @@ import { AUDIO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Slot from 'delphitools-v2/components/tools/media/slot';
+import { bandHeight } from 'delphitools-v2/components/tools/media/strips';
 import { peakBuckets } from 'delphitools-v2/components/tools/media/frames';
 import Picture from 'delphitools-v2/components/tools/audio-normaliser/picture';
 import './media/media.css';
@@ -55,6 +56,11 @@ const level = (value: number) =>
 		: undefined;
 const db = (value: number, unit: string) =>
 	Number.isFinite(value) ? `${value.toFixed(1)} ${unit}` : '–';
+const blankTiles = ['Loudness', 'Peak', 'Gain', 'Output peak'].map((label) => ({
+	label,
+	value: '\u2014',
+	level: label === 'Gain' ? undefined : 0,
+}));
 const signed = (value: number) =>
 	`${value >= 0 ? '+' : ''}${value.toFixed(1)} dB`;
 
@@ -108,6 +114,10 @@ export default class AudioNormaliser extends Component {
 		return TARGETS[this.targetIndex]?.hint ?? '';
 	}
 
+	get unreadable() {
+		return this.loaded && !!this.intake.error;
+	}
+
 	get measuring() {
 		return this.loaded && !this.intake.error && !this.measured;
 	}
@@ -122,6 +132,7 @@ export default class AudioNormaliser extends Component {
 	get tiles() {
 		const m = this.measured;
 		const plan = this.plan;
+		if (!this.loaded) return blankTiles;
 		if (!m || !plan) return [];
 		return [
 			{
@@ -248,43 +259,37 @@ export default class AudioNormaliser extends Component {
 		>
 			<:banner>
 				<CanonCanvas
-					@height={{180}}
+					@height={{bandHeight}}
 					@background="var(--canon-muted)"
 				>
-					{{#if this.loaded}}
-						<Picture
-							@peaks={{if
-								this.measured
-								this.measured.peaks
-								null
-							}}
-							@gainDb={{if
-								this.plan
-								this.plan.gainDb
-								null
-							}}
-							@limited={{if
-								this.plan.limited
-								true
-								false
-							}}
-						/>
-					{{else}}
-						<Slot
-							class="an-slot"
-							@prompt="Drop an audio file"
-							@icon="gauge"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					{{/if}}
+					<Picture
+						@peaks={{if
+							this.measured
+							this.measured.peaks
+							null
+						}}
+						@gainDb={{if
+							this.plan
+							this.plan.gainDb
+							null
+						}}
+						@limited={{if
+							this.plan.limited
+							true
+							false
+						}}
+						@blank={{if
+							this.loaded
+							false
+							true
+						}}
+					/>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
 				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
 					{{#if this.loaded}}
-						<CanonHeading @text="Source" />
 						<CanonRow
 							class="an-source"
 							@title={{this.intake.fileName}}
@@ -298,12 +303,23 @@ export default class AudioNormaliser extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-					{{else if this.intake.error}}
-						<CanonStatus
-							@text={{this.intake.error}}
-							@tone="warn"
+					{{else}}
+						<Slot
+							class="an-slot"
+							@prompt="Drop an audio file"
+							@icon="gauge"
 							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
 						/>
+						{{#if this.intake.error}}
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
 					{{/if}}
 					<CanonRow
 						class="an-target"
@@ -346,40 +362,38 @@ export default class AudioNormaliser extends Component {
 				</CanonRows>
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					{{#unless this.intake.error}}
-						<CanonRows
-							class="an-readings"
-							@framed={{true}}
-						>
-							{{#if this.measuring}}
-								<CanonRow
-									class="an-measuring"
-									@title="Measuring…"
-								>
-									<CanonLoader
-										@cell={{5}}
-										@gap={{1}}
-									/>
-								</CanonRow>
-							{{else}}
-								<CanonHeading
-									@text="Loudness"
+				{{#unless this.unreadable}}
+					<CanonRows
+						class="an-readings"
+						@framed={{true}}
+					>
+						{{#if this.measuring}}
+							<CanonRow
+								class="an-measuring"
+								@title="Measuring…"
+							>
+								<CanonLoader
+									@cell={{5}}
+									@gap={{1}}
 								/>
-								<CanonTiles
-									@items={{this.tiles}}
+							</CanonRow>
+						{{else}}
+							<CanonHeading
+								@text="Loudness"
+							/>
+							<CanonTiles
+								@items={{this.tiles}}
+							/>
+							{{#if
+								this.plan.limited
+							}}
+								<CanonEmptyRow
+									@text={{LIMITED_NOTE}}
 								/>
-								{{#if
-									this.plan.limited
-								}}
-									<CanonEmptyRow
-										@text={{LIMITED_NOTE}}
-									/>
-								{{/if}}
 							{{/if}}
-						</CanonRows>
-					{{/unless}}
-				{{/if}}
+						{{/if}}
+					</CanonRows>
+				{{/unless}}
 			</:main>
 		</CanonSplit>
 	</template>
