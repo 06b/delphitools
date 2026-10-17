@@ -827,6 +827,7 @@ export const toolCategories: ToolCategory[] = [
 					'Turn images into a PDF, or pages into PNGs',
 				icon: 'file-image',
 				href: '/tools/image-to-pdf',
+				canon: true,
 				produces: [
 					'application/pdf',
 					'image/png',

@@ -1,1018 +1,882 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq, not } from 'ember-truth-helpers';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
-import {
-	Tabs,
-	TabsList,
-	TabsTrigger,
-	TabsContent,
-} from 'delphitools-v2/components/ui/tabs';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { downloadBlob, downloadUrl } from 'delphitools-v2/lib/download';
+import type Owner from '@ember/owner';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+	type CanonPageMenuItem,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
-import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
+import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import {
-	fitPlacement,
 	MATCH_IMAGE_SIZE,
 	PAGE_SIZE_OPTIONS,
-	pageSetupPt,
 	type FitMode,
 	type PageOrientation,
 } from 'delphitools-v2/lib/pdf-pages';
-import { loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
-
-type Direction = 'to-pdf' | 'to-png';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import {
+	open,
+	sizes,
+	thumbnails,
+	type PageSize,
+} from 'delphitools-v2/components/tools/pdf-compressor/pages';
+import {
+	blankPage,
+	layout,
+	sortedByName,
+	type Options,
+} from 'delphitools-v2/components/tools/image-to-pdf/layout';
+import {
+	buildPdf,
+	pagePng,
+} from 'delphitools-v2/components/tools/image-to-pdf/export';
+import './media/media.css';
+import './image-to-pdf/image-to-pdf.css';
 
 const IMAGE_ACCEPT = 'image/*';
 const PDF_ACCEPT = '.pdf,application/pdf';
+const ACCEPT = `${IMAGE_ACCEPT},${PDF_ACCEPT}`;
 
+const directions = ['Image to PDF', 'PDF to Image'];
 const ORIENTATIONS: PageOrientation[] = ['auto', 'portrait', 'landscape'];
-const FIT_MODES: { value: FitMode; label: string }[] = [
-	{ value: 'contain', label: 'Fit' },
-	{ value: 'cover', label: 'Fill' },
-	{ value: 'stretch', label: 'Stretch' },
-];
+const orientationLabels = ['Auto', 'Portrait', 'Landscape'];
+const FITS: FitMode[] = ['contain', 'cover', 'stretch'];
+const fitLabels = ['Fit', 'Fill', 'Stretch'];
 const MARGINS_MM = [0, 5, 10, 20];
+const marginLabels = MARGINS_MM.map((mm) => (mm === 0 ? 'None' : `${mm} mm`));
+const SCALES = [1, 2, 3];
+const scaleLabels = SCALES.map((s) => `${s * 72} DPI`);
+const sizeLabels = PAGE_SIZE_OPTIONS.map((o) => o.label);
+// pdf.js page size before a PDF loads
+const A4: PageSize = { width: 595.28, height: 841.89 };
 
-const SCALES: { value: number; label: string }[] = [
-	{ value: 1, label: '72 DPI' },
-	{ value: 2, label: '144 DPI' },
-	{ value: 3, label: '216 DPI' },
-];
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const SortUp = <template><IconSvg @name="arrow-down" /></template>;
+const SortDown = <template><IconSvg @name="arrow-up" /></template>;
+const ExportIcon = <template><IconSvg @name="file-text" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-interface QueuedImage {
+interface Item {
 	id: number;
 	file: File;
+	name: string;
 	url: string;
 	width: number;
 	height: number;
 }
 
-interface RenderedPage {
-	page: number;
-	name: string;
-	url: string;
+interface Built {
 	blob: Blob;
+	pages: number;
 }
 
 let nextId = 1;
 
-function loadImageSize(
-	file: File,
-): Promise<{ url: string; width: number; height: number }> {
+function loadItem(file: File): Promise<Item> {
 	return new Promise((resolve, reject) => {
 		const image = new Image();
 		const url = URL.createObjectURL(file);
-		image.onload = () =>
-			resolve({
-				url,
-				width: image.naturalWidth,
-				height: image.naturalHeight,
-			});
-		image.onerror = () => {
+		const fail = () => {
 			URL.revokeObjectURL(url);
 			reject(new Error(`Could not read ${file.name}`));
 		};
+		image.onload = () => {
+			const { naturalWidth: width, naturalHeight: height } =
+				image;
+			// a sizeless svg has no page
+			if (!width || !height) return fail();
+			resolve({
+				id: nextId++,
+				file,
+				name: file.name,
+				url,
+				width,
+				height,
+			});
+		};
+		image.onerror = fail;
 		image.src = url;
 	});
 }
 
-async function pngBytes(file: File): Promise<ArrayBuffer> {
-	const bitmap = await createImageBitmap(file);
-	const canvas = document.createElement('canvas');
-	canvas.width = bitmap.width;
-	canvas.height = bitmap.height;
-	canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
-	bitmap.close();
-	const blob = await new Promise<Blob>((resolve, reject) =>
-		canvas.toBlob(
-			(result) =>
-				result
-					? resolve(result)
-					: reject(new Error('encode failed')),
-			'image/png',
+const isPdf = (file: File) => matchesAccept(file, PDF_ACCEPT);
+const isImage = (file: File) => matchesAccept(file, IMAGE_ACCEPT);
+const pages = (n: number) => (n === 1 ? '1 page' : `${n} pages`);
+
+// ?i2pSample: drawn images in place of the iOS -i2pImages folder
+function drawnSamples(): Promise<File[]> {
+	const specs: [string, number, number, string][] = [
+		['page10.png', 1200, 800, '#c0392b'],
+		['cover.png', 800, 1100, '#2b5fc0'],
+		['page2.png', 900, 900, '#2b9c5f'],
+	];
+	return Promise.all(
+		specs.map(
+			([name, width, height, colour]) =>
+				new Promise<File>((resolve) => {
+					const canvas =
+						document.createElement(
+							'canvas',
+						);
+					canvas.width = width;
+					canvas.height = height;
+					const ctx = canvas.getContext('2d')!;
+					ctx.fillStyle = colour;
+					ctx.fillRect(0, 0, width, height);
+					ctx.fillStyle = '#fff';
+					ctx.fillRect(
+						width * 0.1,
+						height * 0.1,
+						width * 0.3,
+						height * 0.3,
+					);
+					canvas.toBlob((blob) =>
+						resolve(
+							new File(
+								[blob!],
+								name,
+								{
+									type: 'image/png',
+								},
+							),
+						),
+					);
+				}),
 		),
 	);
-	return blob.arrayBuffer();
 }
 
-export default class ImageToPdfTool extends Component {
-	@tracked direction: Direction = 'to-pdf';
+function index(query: URLSearchParams, key: string, count: number) {
+	const value = Number(query.get(key));
+	return query.has(key) &&
+		Number.isInteger(value) &&
+		value >= 0 &&
+		value < count
+		? value
+		: undefined;
+}
 
-	@tracked images: QueuedImage[] = [];
-	@tracked pageSizeId = 'a4';
+/** The port of ImageToPDFViewController: images into one PDF, or a PDF's pages into PNGs. */
+export default class ImageToPdf extends Component {
+	drop = new Drop(ACCEPT, (file) => this.take([file]));
+
+	@tracked toPdf = true;
+	@tracked items: Item[] = [];
+	@tracked sizeId = 'a4';
 	@tracked orientation: PageOrientation = 'auto';
-	@tracked fitMode: FitMode = 'contain';
+	@tracked fit: FitMode = 'contain';
 	@tracked marginMm = 0;
 	@tracked building = false;
+	@tracked progress = 0;
+	@tracked buildFailed = false;
+	@tracked built: Built | null = null;
+	@tracked readError = '';
 
-	@tracked pdfName: string | null = null;
-	@tracked pdfBytes: ArrayBuffer | null = null;
-	@tracked renders: RenderedPage[] = [];
-	@tracked rendering = false;
+	@tracked pdfFile: File | null = null;
+	@tracked pdfPages: CanonPage[] = [];
 	@tracked scale = 2;
+	@tracked rendering = false;
+	@tracked renderFailed = false;
 
-	@tracked error: string | null = null;
-	@tracked draggedId: number | null = null;
-	@tracked dragOverId: number | null = null;
+	#pdf?: PDFDocumentProxy;
+	#token = 0;
+	#build = 0;
+	// keeps added images in the order they came
+	#adding: Promise<void> = Promise.resolve();
 
-	// cancel stale renders
-	#renderRun = 0;
+	// ?i2pSize=<id|match> ?i2pOrientation= ?i2pFit= ?i2pMargin= ?i2pResolution= <index>, ?i2pDirection=1, ?i2pSample, ?i2pSort=<0 a to z, 1 z to a>, ?i2pRun: the iOS launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const size = query.get('i2pSize');
+		if (size && PAGE_SIZE_OPTIONS.some((o) => o.id === size))
+			this.sizeId = size;
+		this.orientation =
+			ORIENTATIONS[index(query, 'i2pOrientation', 3) ?? 0]!;
+		this.fit = FITS[index(query, 'i2pFit', 3) ?? 0]!;
+		this.marginMm = MARGINS_MM[index(query, 'i2pMargin', 4) ?? 0]!;
+		this.scale = SCALES[index(query, 'i2pResolution', 3) ?? 1]!;
+		if (query.get('i2pDirection') === '1') this.toPdf = false;
+		if (query.has('i2pSample'))
+			void drawnSamples().then(async (files) => {
+				await this.add(files, 0);
+				const sort = index(query, 'i2pSort', 2);
+				if (sort !== undefined) this.sort(sort === 0);
+				if (query.has('i2pRun')) this.export();
+			});
+	}
 
 	willDestroy() {
 		super.willDestroy();
-		this.#releaseImages();
-		this.#releaseRenders();
+		this.#token++;
+		this.#build++;
+		for (const item of this.items) URL.revokeObjectURL(item.url);
+		this.#closePdf();
 	}
 
-	get imageCountLabel() {
-		const count = this.images.length;
-		return `${count} image${count === 1 ? '' : 's'}`;
+	get options(): Options {
+		return {
+			sizeId: this.sizeId,
+			orientation: this.orientation,
+			fit: this.fit,
+			marginMm: this.marginMm,
+		};
 	}
 
-	get pdfInfoLabel() {
-		const count = this.renders.length;
-		return `${this.pdfName} · ${count} page${count === 1 ? '' : 's'}`;
+	get directionIndex() {
+		return this.toPdf ? 0 : 1;
 	}
 
-	get canBuild() {
-		return !this.building && this.images.length > 0;
+	get sizeIndex() {
+		return PAGE_SIZE_OPTIONS.findIndex((o) => o.id === this.sizeId);
+	}
+
+	get orientationIndex() {
+		return ORIENTATIONS.indexOf(this.orientation);
+	}
+
+	get fitIndex() {
+		return FITS.indexOf(this.fit);
+	}
+
+	get marginIndex() {
+		return MARGINS_MM.indexOf(this.marginMm);
+	}
+
+	get scaleIndex() {
+		return SCALES.indexOf(this.scale);
+	}
+
+	get matches() {
+		return this.sizeId === MATCH_IMAGE_SIZE;
+	}
+
+	get blank() {
+		return this.toPdf ? !this.items.length : !this.pdfFile;
+	}
+
+	get stripPages(): CanonPage[] {
+		if (!this.toPdf)
+			return this.pdfFile ? this.pdfPages : [{ size: A4 }];
+		const { options } = this;
+		if (!this.items.length) return [blankPage(options)];
+		return this.items.map((item) => {
+			const { page, area, placement } = layout(
+				item.width,
+				item.height,
+				options,
+			);
+			return {
+				size: page,
+				area,
+				placement,
+				picture: item.url,
+				name: item.name,
+			};
+		});
+	}
+
+	get reorders() {
+		return this.toPdf && !this.building && this.items.length > 0;
+	}
+
+	get resultRow() {
+		const { built } = this;
+		if (!built) return null;
+		return {
+			name: 'images.pdf',
+			detail: `${formatBytes(built.blob.size)} · ${pages(built.pages)}`,
+		};
+	}
+
+	get pdfDetail() {
+		const { pdfFile } = this;
+		if (!pdfFile) return '';
+		const parts = [formatBytes(pdfFile.size)];
+		if (this.pdfPages.length)
+			parts.push(pages(this.pdfPages.length));
+		return parts.join(' · ');
 	}
 
 	get canZip() {
-		return !this.rendering && this.renders.length > 0;
-	}
-
-	get matchSize() {
-		return this.pageSizeId === MATCH_IMAGE_SIZE;
-	}
-
-	#releaseImages() {
-		for (const image of this.images) URL.revokeObjectURL(image.url);
-	}
-
-	#releaseRenders() {
-		for (const render of this.renders)
-			URL.revokeObjectURL(render.url);
-	}
-
-	setDirection = (direction: string) => {
-		this.direction = direction as Direction;
-		this.error = null;
-	};
-
-	readImage = (file: File) => this.#addImages([file]);
-
-	chooseImages = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		this.#addImages([...(input.files ?? [])]);
-		input.value = '';
-	};
-
-	dropImages = (event: DragEvent) => {
-		event.preventDefault();
-		this.#addImages([...(event.dataTransfer?.files ?? [])]);
-	};
-
-	// prevent file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	#addImages(files: File[]) {
-		const images = files.filter((file) =>
-			file.type.startsWith('image/'),
+		return (
+			!this.rendering &&
+			this.pdfPages.length > 0 &&
+			!!this.#pdf
 		);
-		if (images.length === 0) return;
-		this.error = null;
-		for (const file of images) {
-			void loadImageSize(file)
-				.then(({ url, width, height }) => {
-					if (this.isDestroyed) {
-						URL.revokeObjectURL(url);
-						return;
-					}
-					this.images = [
-						...this.images,
-						{
-							id: nextId++,
-							file,
-							url,
-							width,
-							height,
-						},
-					];
-				})
-				.catch(
-					(error: Error) =>
-						(this.error = error.message),
-				);
+	}
+
+	/** Paste, drop and workflow input: images join the queue, a PDF opens in the other direction. */
+	take = (files: File[]) => {
+		const pdf = files.find(isPdf);
+		const images = files.filter(isImage);
+		if (images.length) {
+			this.toPdf = true;
+			void this.add(images, this.items.length);
+		} else if (pdf) {
+			this.toPdf = false;
+			void this.loadPdf(pdf);
 		}
+	};
+
+	paste = (file: File) => this.take([file]);
+
+	dropped = (event: DragEvent) => {
+		this.drop.over = false;
+		// the strip took it
+		if (event.defaultPrevented) return;
+		const files = [...(event.dataTransfer?.files ?? [])].filter(
+			(file) => isImage(file) || isPdf(file),
+		);
+		if (!files.length) return;
+		event.preventDefault();
+		this.take(files);
+	};
+
+	pickDirection = (index: number) => {
+		this.toPdf = index === 0;
+	};
+
+	chooseImages = (files: File[]) =>
+		void this.add(files.filter(isImage), this.items.length);
+
+	dropInStrip = (at: number, files: File[]) => void this.add(files, at);
+
+	add(files: File[], at: number) {
+		this.#adding = this.#adding.then(async () => {
+			const results = await Promise.allSettled(
+				files.map(loadItem),
+			);
+			if (this.isDestroyed) {
+				for (const r of results)
+					if (r.status === 'fulfilled')
+						URL.revokeObjectURL(
+							r.value.url,
+						);
+				return;
+			}
+			const loaded = results.flatMap((r) =>
+				r.status === 'fulfilled' ? [r.value] : [],
+			);
+			const failed = results.find(
+				(r): r is PromiseRejectedResult =>
+					r.status === 'rejected',
+			);
+			this.readError = failed
+				? (failed.reason as Error).message
+				: '';
+			if (!loaded.length) return;
+			const next = [...this.items];
+			next.splice(Math.min(at, next.length), 0, ...loaded);
+			this.#setItems(next);
+		});
+		return this.#adding;
 	}
 
-	removeImage = (image: QueuedImage) => {
-		URL.revokeObjectURL(image.url);
-		this.images = this.images.filter(
-			(entry) => entry.id !== image.id,
-		);
+	#setItems(next: Item[]) {
+		const kept = new Set(next.map((item) => item.id));
+		for (const item of this.items)
+			if (!kept.has(item.id)) URL.revokeObjectURL(item.url);
+		this.items = next;
+		this.#changed();
+	}
+
+	move = (from: number, to: number) => {
+		const next = [...this.items];
+		const [item] = next.splice(from, 1);
+		if (!item) return;
+		next.splice(to, 0, item);
+		this.#setItems(next);
 	};
+
+	#moveTo(id: number, start: boolean) {
+		const from = this.items.findIndex((item) => item.id === id);
+		if (from >= 0)
+			this.move(from, start ? 0 : this.items.length - 1);
+	}
+
+	sort = (ascending: boolean) =>
+		this.#setItems(sortedByName(this.items, ascending));
+	sortUp = () => this.sort(true);
+	sortDown = () => this.sort(false);
 
 	clearImages = () => {
-		this.#releaseImages();
-		this.images = [];
-		this.error = null;
+		this.readError = '';
+		this.#setItems([]);
 	};
 
-	dragStart = (id: number, event: DragEvent) => {
-		this.draggedId = id;
-		if (event.dataTransfer) {
-			event.dataTransfer.effectAllowed = 'move';
-			event.dataTransfer.setData('text/plain', String(id));
-		}
+	menu = (at: number): CanonPageMenuItem[] | undefined => {
+		if (this.building) return undefined;
+		if (!this.toPdf)
+			return this.pdfFile
+				? [
+						{
+							title: passAlong(
+								'Download',
+							),
+							action: () =>
+								void this.savePage(
+									at,
+								),
+						},
+					]
+				: undefined;
+		const item = this.items[at];
+		if (!item) return undefined;
+		return [
+			{
+				title: 'Move to start',
+				action: () => this.#moveTo(item.id, true),
+			},
+			{
+				title: 'Move to end',
+				action: () => this.#moveTo(item.id, false),
+			},
+			{
+				title: 'Remove',
+				destructive: true,
+				action: () =>
+					this.#setItems(
+						this.items.filter(
+							(entry) =>
+								entry.id !==
+								item.id,
+						),
+					),
+			},
+		];
 	};
 
-	dragOver = (id: number, event: DragEvent) => {
-		event.preventDefault();
-		this.dragOverId = id === this.draggedId ? null : id;
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect =
-				this.draggedId === null ? 'copy' : 'move';
-		}
+	pickSize = (at: number) => {
+		const id = PAGE_SIZE_OPTIONS[at]?.id;
+		if (!id || id === this.sizeId) return;
+		this.sizeId = id;
+		this.#changed();
 	};
 
-	dragEnd = () => {
-		this.draggedId = null;
-		this.dragOverId = null;
+	pickOrientation = (at: number) => {
+		this.orientation = ORIENTATIONS[at] ?? this.orientation;
+		this.#changed();
 	};
 
-	dropOnCell = (id: number, event: DragEvent) => {
-		event.preventDefault();
-		this.dragOverId = null;
-
-		if (event.dataTransfer?.files.length) {
-			this.draggedId = null;
-			this.#addImages([...event.dataTransfer.files]);
-			return;
-		}
-
-		const from = this.images.findIndex(
-			(image) => image.id === this.draggedId,
-		);
-		this.draggedId = null;
-		const to = this.images.findIndex((image) => image.id === id);
-		if (from < 0 || to < 0 || from === to) return;
-
-		const next = [...this.images];
-		const [moved] = next.splice(from, 1);
-		next.splice(to, 0, moved!);
-		this.images = next;
+	pickFit = (at: number) => {
+		this.fit = FITS[at] ?? this.fit;
+		this.#changed();
 	};
 
-	setPageSize = (event: Event) =>
-		(this.pageSizeId = (event.target as HTMLSelectElement).value);
-	setOrientation = (value: PageOrientation) => (this.orientation = value);
-	setFitMode = (value: FitMode) => (this.fitMode = value);
-	setMargin = (mm: number) => (this.marginMm = mm);
+	pickMargin = (at: number) => {
+		this.marginMm = MARGINS_MM[at] ?? this.marginMm;
+		this.#changed();
+	};
 
-	marginLabel = (mm: number) => (mm === 0 ? 'None' : `${mm} mm`);
+	// a change drops the built PDF
+	#changed() {
+		this.#build++;
+		this.building = false;
+		this.buildFailed = false;
+		this.built = null;
+	}
 
-	buildPdf = async () => {
-		if (!this.canBuild) return;
+	export = () => void this.#export();
+
+	async #export() {
+		if (this.building || !this.items.length) return;
+		const build = ++this.#build;
+		const items = this.items;
 		this.building = true;
-		this.error = null;
+		this.progress = 0;
+		this.buildFailed = false;
 		try {
-			const { PDFDocument } = await import('pdf-lib');
-			const doc = await PDFDocument.create();
-			const marginPt = this.marginMm * MM_TO_POINTS;
-
-			for (const image of this.images) {
-				const embedded =
-					image.file.type === 'image/jpeg'
-						? await doc.embedJpg(
-								await image.file.arrayBuffer(),
-							)
-						: image.file.type ===
-							  'image/png'
-							? await doc.embedPng(
-									await image.file.arrayBuffer(),
-								)
-							: await doc.embedPng(
-									await pngBytes(
-										image.file,
-									),
-								);
-
-				const setup = pageSetupPt(
-					this.pageSizeId,
-					this.orientation,
-					image.width,
-					image.height,
-					marginPt,
-				);
-				const page = doc.addPage([
-					setup.width,
-					setup.height,
-				]);
-
-				const areaW = setup.width - marginPt * 2;
-				const areaH = setup.height - marginPt * 2;
-				const mode = this.matchSize
-					? 'contain'
-					: this.fitMode;
-				const placement = fitPlacement(
-					image.width,
-					image.height,
-					areaW,
-					areaH,
-					mode,
-				);
-				page.drawImage(embedded, {
-					x: marginPt + placement.x,
-					y: marginPt + placement.y,
-					width: placement.width,
-					height: placement.height,
-				});
-			}
-
-			if (this.isDestroyed) return;
-			// blobpart requires arraybuffer
-			const bytes = await doc.save();
-			downloadBlob(
-				new Blob([new Uint8Array(bytes)], {
+			const bytes = await buildPdf(
+				items,
+				this.options,
+				(share) => {
+					if (build === this.#build)
+						this.progress = share;
+				},
+			);
+			if (build !== this.#build) return;
+			this.built = {
+				blob: new Blob([new Uint8Array(bytes)], {
 					type: 'application/pdf',
 				}),
-				'images.pdf',
-			);
+				pages: items.length,
+			};
 		} catch {
-			this.error = 'Build failed';
+			if (build === this.#build) this.buildFailed = true;
 		} finally {
-			this.building = false;
-		}
-	};
-
-	choosePdf = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (file) void this.#loadPdf(file);
-	};
-
-	dropPdf = (event: DragEvent) => {
-		event.preventDefault();
-		const file = [...(event.dataTransfer?.files ?? [])].find(
-			(candidate) =>
-				candidate.type === 'application/pdf' ||
-				/\.pdf$/i.test(candidate.name),
-		);
-		if (file) void this.#loadPdf(file);
-	};
-
-	async #loadPdf(file: File) {
-		this.error = null;
-		try {
-			const bytes = await file.arrayBuffer();
-			if (this.isDestroyed) return;
-			this.pdfBytes = bytes;
-			this.pdfName = file.name.replace(/\.pdf$/i, '');
-			await this.#renderPages();
-		} catch {
-			this.error = `Could not read ${file.name}`;
+			if (build === this.#build) this.building = false;
 		}
 	}
 
-	setScale = (value: number) => {
-		this.scale = value;
-		if (this.pdfBytes) void this.#renderPages();
+	save = () => {
+		if (this.built) downloadBlob(this.built.blob, 'images.pdf');
 	};
+
+	loadPdfFile = (file: File) => {
+		if (isPdf(file)) void this.loadPdf(file);
+	};
+
+	async loadPdf(file: File) {
+		this.clearPdf();
+		const token = this.#token;
+		this.pdfFile = file;
+		let pdf: PDFDocumentProxy;
+		try {
+			pdf = await open(await file.arrayBuffer());
+		} catch {
+			if (token === this.#token) this.renderFailed = true;
+			return;
+		}
+		if (token !== this.#token) return void pdf.destroy();
+		this.#pdf = pdf;
+		this.pdfPages = (await sizes(pdf)).map((size) => ({ size }));
+		if (token !== this.#token) return;
+		await thumbnails(
+			pdf,
+			() => token === this.#token,
+			(at, picture) => {
+				const next = [...this.pdfPages];
+				next[at] = { ...next[at]!, picture };
+				this.pdfPages = next;
+			},
+		);
+	}
 
 	clearPdf = () => {
-		this.#renderRun++;
-		this.pdfBytes = null;
-		this.pdfName = null;
-		this.#releaseRenders();
-		this.renders = [];
-		this.error = null;
+		this.#token++;
+		this.#closePdf();
+		this.pdfFile = null;
+		this.pdfPages = [];
+		this.rendering = false;
+		this.renderFailed = false;
 	};
 
-	async #renderPages() {
-		const bytes = this.pdfBytes;
-		if (!bytes) return;
+	#closePdf() {
+		for (const page of this.pdfPages)
+			if (page.picture) URL.revokeObjectURL(page.picture);
+		void this.#pdf?.destroy();
+		this.#pdf = undefined;
+	}
 
-		const run = ++this.#renderRun;
+	pickScale = (at: number) => {
+		this.scale = SCALES[at] ?? this.scale;
+	};
+
+	get stem() {
+		return (this.pdfFile?.name ?? 'pages').replace(/\.pdf$/i, '');
+	}
+
+	async #render<T>(work: (pdf: PDFDocumentProxy) => Promise<T>) {
+		const pdf = this.#pdf;
+		if (!pdf || this.rendering) return undefined;
+		const token = this.#token;
 		this.rendering = true;
-		this.#releaseRenders();
-		this.renders = [];
+		this.renderFailed = false;
 		try {
-			// pdf.js detaches buffers
-			const doc = await loadPdfDocument(bytes.slice(0));
-			const base = this.pdfName ?? 'pages';
-			const renders: RenderedPage[] = [];
-
-			for (let n = 1; n <= doc.numPages; n++) {
-				const page = await doc.getPage(n);
-				const viewport = page.getViewport({
-					scale: this.scale,
-				});
-				const canvas = document.createElement('canvas');
-				canvas.width = Math.ceil(viewport.width);
-				canvas.height = Math.ceil(viewport.height);
-				await page.render({ canvas, viewport }).promise;
-				const blob = await new Promise<Blob | null>(
-					(resolve) =>
-						canvas.toBlob(
-							resolve,
-							'image/png',
-						),
-				);
-				if (
-					!blob ||
-					this.isDestroyed ||
-					run !== this.#renderRun
-				)
-					return;
-				renders.push({
-					page: n,
-					name: `${base}-page-${n}.png`,
-					url: URL.createObjectURL(blob),
-					blob,
-				});
-				this.renders = [...renders];
-			}
+			const result = await work(pdf);
+			return token === this.#token ? result : undefined;
 		} catch {
-			if (run === this.#renderRun)
-				this.error = 'Render failed';
+			if (token === this.#token) this.renderFailed = true;
+			return undefined;
 		} finally {
-			if (run === this.#renderRun) this.rendering = false;
+			if (token === this.#token) this.rendering = false;
 		}
 	}
 
-	downloadPage = (render: RenderedPage) => {
-		downloadUrl(render.url, render.name);
-	};
+	async savePage(at: number) {
+		const blob = await this.#render((pdf) =>
+			pagePng(pdf, at, this.scale),
+		);
+		if (blob) downloadBlob(blob, `${this.stem}-page-${at + 1}.png`);
+	}
 
-	downloadZip = async () => {
-		if (!this.canZip) return;
-		const { default: JSZip } = await import('jszip');
-		const zip = new JSZip();
-		for (const render of this.renders) {
-			zip.file(render.name, render.blob);
-		}
-		const blob = await zip.generateAsync({ type: 'blob' });
-		if (this.isDestroyed) return;
-		downloadBlob(blob, `${this.pdfName ?? 'pages'}-pages.zip`);
-	};
+	saveZip = () => void this.#saveZip();
+
+	async #saveZip() {
+		const { stem, scale } = this;
+		const zip = await this.#render(async (pdf) => {
+			const { default: JSZip } = await import('jszip');
+			const archive = new JSZip();
+			for (let at = 0; at < pdf.numPages; at++)
+				archive.file(
+					`${stem}-page-${at + 1}.png`,
+					await pagePng(pdf, at, scale),
+				);
+			return archive.generateAsync({ type: 'blob' });
+		});
+		if (zip) downloadBlob(zip, `${stem}-pages.zip`);
+	}
 
 	<template>
-		<div
-			class="dt-i2p"
-			{{filePaste this.readImage accept=IMAGE_ACCEPT}}
+		<CanonSplit
+			class="image-to-pdf"
+			@mainLeadsStacked={{true}}
+			{{filePaste this.paste accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.dropped}}
 		>
-			<div class="dt-i2p-frame">
-				<Tabs
-					@value={{this.direction}}
-					@onValueChange={{this.setDirection}}
+			<:banner>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
 				>
-					<TabsList class="dt-i2p-tabs">
-						<TabsTrigger
-							class="dt-i2p-tab"
-							@value="to-pdf"
-						>Image to PDF</TabsTrigger>
-						<TabsTrigger
-							class="dt-i2p-tab"
-							@value="to-png"
-						>PDF to Image</TabsTrigger>
-					</TabsList>
-
-					<TabsContent
-						class="dt-i2p-panel"
-						@value="to-pdf"
+					<CanonPageStrip
+						class="i2p-strip
+							{{if
+								this.blank
+								'i2p-strip--blank'
+							}}"
+						inert={{this.blank}}
+						@pages={{this.stripPages}}
+						@reorders={{this.reorders}}
+						@onMove={{this.move}}
+						@onDrop={{this.dropInStrip}}
+						@menu={{this.menu}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				{{#if this.toPdf}}
+					<CanonRows
+						class="i2p-paper"
+						@framed={{true}}
 					>
-						<div
-							{{on
-								"drop"
-								this.dropImages
+						<CanonHeading
+							@text="Page size"
+						/>
+						<CanonMenuCell
+							class="i2p-size"
+							@items={{sizeLabels}}
+							@selected={{this.sizeIndex}}
+							@label="Page size"
+							@disabled={{this.building}}
+							@onChange={{this.pickSize}}
+						/>
+						<CanonHeading
+							@text="Orientation"
+						/>
+						<CanonSegmented
+							class="i2p-orientation"
+							@items={{orientationLabels}}
+							@selected={{this.orientationIndex}}
+							@disabled={{if
+								this.matches
+								true
+								this.building
 							}}
-							{{on
-								"dragover"
-								this.allowDrop
+							@onChange={{this.pickOrientation}}
+						/>
+						<CanonHeading @text="Fit" />
+						<CanonSegmented
+							class="i2p-fit"
+							@items={{fitLabels}}
+							@selected={{this.fitIndex}}
+							@disabled={{if
+								this.matches
+								true
+								this.building
 							}}
-						>
-							{{#unless
-								this.images.length
+							@onChange={{this.pickFit}}
+						/>
+						<CanonHeading @text="Margin" />
+						<CanonSegmented
+							class="i2p-margin"
+							@items={{marginLabels}}
+							@selected={{this.marginIndex}}
+							@disabled={{this.building}}
+							@onChange={{this.pickMargin}}
+						/>
+					</CanonRows>
+					<CanonRows @framed={{true}}>
+						<Job
+							@title="Export PDF"
+							@icon={{ExportIcon}}
+							@failure="Build failed"
+							@disabled={{if
+								this.items.length
+								false
+								true
 							}}
-								<label
-									class="dt-i2p-drop"
-								>
-									<input
-										type="file"
-										accept={{IMAGE_ACCEPT}}
-										multiple
-										class="dt-sr-only"
-										{{on
-											"change"
-											this.chooseImages
-										}}
-									/>
-									<Icon
-										@name="upload"
-									/>
-									<span
-										class="dt-i2p-drop-title"
-									>Drop
-										images
-										here</span>
-									<span
-										class="dt-i2p-drop-hint"
-									>click
-										or
-										paste</span>
-								</label>
-							{{/unless}}
-
-							{{#if
-								this.images.length
+							@busy={{this.building}}
+							@progress={{this.progress}}
+							@failed={{this.buildFailed}}
+							@result={{this.resultRow}}
+							@onRun={{this.export}}
+							@onSave={{this.save}}
+						/>
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Resolution"
+						/>
+						<CanonSegmented
+							class="i2p-scale"
+							@items={{scaleLabels}}
+							@selected={{this.scaleIndex}}
+							@disabled={{this.rendering}}
+							@onChange={{this.pickScale}}
+						/>
+						<CanonButton
+							class="i2p-zip"
+							@kind="primary"
+							@text={{passAlong
+								"Download zip"
 							}}
-								<div
-									class="dt-i2p-bar"
-								>
-									<div
-										class="dt-i2p-info"
-									>
-										<span
-											class="dt-i2p-count"
-										>{{this.imageCountLabel}}</span>
-									</div>
-									<label
-										class="dt-i2p-btn"
-									>
-										<input
-											type="file"
-											accept={{IMAGE_ACCEPT}}
-											multiple
-											class="dt-sr-only"
-											{{on
-												"change"
-												this.chooseImages
-											}}
-										/>
-										<Icon
-											@name="image-plus"
-										/>
-										Add
-										images
-									</label>
-									<button
-										type="button"
-										class="dt-i2p-btn"
-										{{on
-											"click"
-											this.clearImages
-										}}
-									>
-										<Icon
-											@name="trash-2"
-										/>
-										Clear
-									</button>
-									<button
-										type="button"
-										class="dt-i2p-btn is-primary"
-										disabled={{not
-											this.canBuild
-										}}
-										{{on
-											"click"
-											this.buildPdf
-										}}
-									>
-										<DownloadLabel
-											@label="Build PDF"
-										/>
-									</button>
-								</div>
-
-								<div
-									class="dt-i2p-settings"
-								>
-									<label
-										class="dt-i2p-field"
-									>
-										<span
-										>Page
-											size</span>
-										<select
-											{{on
-												"change"
-												this.setPageSize
-											}}
-										>
-											{{#each
-												PAGE_SIZE_OPTIONS
-												key="id"
-												as |sizeOption|
-											}}
-												<option
-													value={{sizeOption.id}}
-													selected={{eq
-														this.pageSizeId
-														sizeOption.id
-													}}
-												>{{sizeOption.label}}</option>
-											{{/each}}
-										</select>
-									</label>
-
-									<div
-										class="dt-i2p-field"
-									>
-										<span
-										>Orientation</span>
-										<div
-											class="segmented dt-i2p-orient"
-										>
-											{{#each
-												ORIENTATIONS
-												key="@index"
-												as |option|
-											}}
-												<button
-													type="button"
-													class="dt-i2p-opt
-														{{if
-															(eq
-																this.orientation
-																option
-															)
-															'is-active'
-														}}"
-													disabled={{this.matchSize}}
-													{{on
-														"click"
-														(fn
-															this.setOrientation
-															option
-														)
-													}}
-												>{{option}}</button>
-											{{/each}}
-										</div>
-									</div>
-
-									<div
-										class="dt-i2p-field"
-									>
-										<span
-										>Fit</span>
-										<div
-											class="segmented dt-i2p-fit"
-										>
-											{{#each
-												FIT_MODES
-												key="value"
-												as |option|
-											}}
-												<button
-													type="button"
-													class="dt-i2p-opt
-														{{if
-															(eq
-																this.fitMode
-																option.value
-															)
-															'is-active'
-														}}"
-													disabled={{this.matchSize}}
-													{{on
-														"click"
-														(fn
-															this.setFitMode
-															option.value
-														)
-													}}
-												>{{option.label}}</button>
-											{{/each}}
-										</div>
-									</div>
-
-									<div
-										class="dt-i2p-field"
-									>
-										<span
-										>Margin</span>
-										<div
-											class="segmented dt-i2p-margin"
-										>
-											{{#each
-												MARGINS_MM
-												key="@index"
-												as |mm|
-											}}
-												<button
-													type="button"
-													class="dt-i2p-opt
-														{{if
-															(eq
-																this.marginMm
-																mm
-															)
-															'is-active'
-														}}"
-													{{on
-														"click"
-														(fn
-															this.setMargin
-															mm
-														)
-													}}
-												>{{this.marginLabel
-														mm
-													}}</button>
-											{{/each}}
-										</div>
-									</div>
-								</div>
-
-								<ol
-									class="dt-i2p-grid"
-								>
-									{{#each
-										this.images
-										key="id"
-										as |image|
-									}}
-										<li
-											class="dt-i2p-cell
-												{{if
-													(eq
-														this.dragOverId
-														image.id
-													)
-													'is-drag-over'
-												}}"
-											draggable="true"
-											{{on
-												"dragstart"
-												(fn
-													this.dragStart
-													image.id
-												)
-											}}
-											{{on
-												"dragover"
-												(fn
-													this.dragOver
-													image.id
-												)
-											}}
-											{{on
-												"drop"
-												(fn
-													this.dropOnCell
-													image.id
-												)
-											}}
-											{{on
-												"dragend"
-												this.dragEnd
-											}}
-										>
-											<img
-												class="dt-i2p-thumb"
-												src={{image.url}}
-												alt={{image.file.name}}
-											/>
-											<div
-												class="dt-i2p-cell-foot"
-											>
-												<span
-													class="dt-i2p-badge"
-												>{{image.file.name}}</span>
-												<button
-													type="button"
-													class="dt-i2p-tool"
-													title="Remove"
-													{{on
-														"click"
-														(fn
-															this.removeImage
-															image
-														)
-													}}
-												>
-													<Icon
-														@name="x"
-													/>
-												</button>
-											</div>
-										</li>
-									{{/each}}
-								</ol>
-							{{/if}}
-						</div>
-					</TabsContent>
-
-					<TabsContent
-						class="dt-i2p-panel"
-						@value="to-png"
-					>
-						<div
-							{{on
-								"drop"
-								this.dropPdf
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{if
+								this.canZip
+								false
+								true
 							}}
-							{{on
-								"dragover"
-								this.allowDrop
-							}}
-						>
-							{{#unless
-								this.pdfBytes
-							}}
-								<label
-									class="dt-i2p-drop"
-								>
-									<input
-										type="file"
-										accept={{PDF_ACCEPT}}
-										class="dt-sr-only"
-										{{on
-											"change"
-											this.choosePdf
-										}}
-									/>
-									<Icon
-										@name="upload"
-									/>
-									<span
-										class="dt-i2p-drop-title"
-									>Drop
-										PDF
-										here</span>
-									<span
-										class="dt-i2p-drop-hint"
-									>click
-										to
-										select</span>
-								</label>
-							{{/unless}}
-
-							{{#if this.pdfBytes}}
-								<div
-									class="dt-i2p-bar"
-								>
-									<div
-										class="dt-i2p-info"
-									>
-										<span
-											class="dt-i2p-count"
-										>{{this.pdfInfoLabel}}</span>
-									</div>
-									<button
-										type="button"
-										class="dt-i2p-btn"
-										{{on
-											"click"
-											this.clearPdf
-										}}
-									>
-										<Icon
-											@name="trash-2"
-										/>
-										Clear
-									</button>
-									<button
-										type="button"
-										class="dt-i2p-btn is-primary"
-										disabled={{not
-											this.canZip
-										}}
-										{{on
-											"click"
-											this.downloadZip
-										}}
-									>
-										<DownloadLabel
-											@label="Download zip"
-										/>
-									</button>
-								</div>
-
-								<div
-									class="dt-i2p-settings"
-								>
-									<div
-										class="dt-i2p-field"
-									>
-										<span
-										>Scale</span>
-										<div
-											class="segmented dt-i2p-scale"
-										>
-											{{#each
-												SCALES
-												key="value"
-												as |option|
-											}}
-												<button
-													type="button"
-													class="dt-i2p-opt
-														{{if
-															(eq
-																this.scale
-																option.value
-															)
-															'is-active'
-														}}"
-													{{on
-														"click"
-														(fn
-															this.setScale
-															option.value
-														)
-													}}
-												>{{option.label}}</button>
-											{{/each}}
-										</div>
-									</div>
-									{{#if
-										this.rendering
-									}}
-										<div
-											class="dt-i2p-field"
-										>
-											<span
-											>Status</span>
-											<span
-												class="dt-i2p-status"
-											>Rendering…</span>
-										</div>
-									{{/if}}
-								</div>
-
-								<ol
-									class="dt-i2p-grid"
-								>
-									{{#each
-										this.renders
-										key="page"
-										as |render|
-									}}
-										<li
-											class="dt-i2p-cell"
-										>
-											<img
-												class="dt-i2p-thumb"
-												src={{render.url}}
-												alt={{render.name}}
-											/>
-											<div
-												class="dt-i2p-cell-foot"
-											>
-												<span
-													class="dt-i2p-badge"
-												>p.
-													{{render.page}}</span>
-												<button
-													type="button"
-													class="dt-i2p-tool"
-													title={{passAlong
-														"Download"
-													}}
-													aria-label={{passAlong
-														"Download"
-													}}
-													{{on
-														"click"
-														(fn
-															this.downloadPage
-															render
-														)
-													}}
-												>
-													<Icon
-														@name={{(downloadIcon
-														)}}
-													/>
-												</button>
-											</div>
-										</li>
-									{{/each}}
-								</ol>
-							{{/if}}
-						</div>
-					</TabsContent>
-				</Tabs>
-
-				{{#if this.error}}
-					<p
-						class="dt-i2p-error"
-					>{{this.error}}</p>
+							@onClick={{this.saveZip}}
+						/>
+						{{#if this.rendering}}
+							<CanonRow
+								class="i2p-busy"
+								@title="Processing…"
+							>
+								<CanonLoader
+									@cell={{5}}
+									@gap={{1}}
+								/>
+							</CanonRow>
+						{{/if}}
+						{{#if this.renderFailed}}
+							<CanonStatus
+								class="i2p-render-failed"
+								@text="Render failed"
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					</CanonRows>
 				{{/if}}
-			</div>
-		</div>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Direction" />
+					<CanonSegmented
+						class="i2p-direction"
+						@items={{directions}}
+						@selected={{this.directionIndex}}
+						@disabled={{this.building}}
+						@onChange={{this.pickDirection}}
+					/>
+				</CanonRows>
+				{{#if this.toPdf}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Images" />
+						<Slot
+							class="i2p-images"
+							@prompt="Drop images here"
+							@icon="image-plus"
+							@row={{true}}
+							@multiple={{true}}
+							@accept={{IMAGE_ACCEPT}}
+							@over={{this.drop.over}}
+							@onFiles={{this.chooseImages}}
+						/>
+						{{#if this.readError}}
+							<CanonStatus
+								class="i2p-read-error"
+								@text={{this.readError}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+						<CanonGrid class="i2p-order">
+							<CanonButton
+								class="i2p-sort-up"
+								@kind="cell"
+								@text="A–Z"
+								@icon={{SortUp}}
+								@disabled={{if
+									this.reorders
+									false
+									true
+								}}
+								@onClick={{this.sortUp}}
+							/>
+							<CanonButton
+								class="i2p-sort-down"
+								@kind="cell"
+								@text="Z–A"
+								@icon={{SortDown}}
+								@disabled={{if
+									this.reorders
+									false
+									true
+								}}
+								@onClick={{this.sortDown}}
+							/>
+							<CanonButton
+								class="i2p-clear"
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{if
+									this.reorders
+									false
+									true
+								}}
+								@onClick={{this.clearImages}}
+							/>
+						</CanonGrid>
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						{{#if this.pdfFile}}
+							<CanonRow
+								class="i2p-source"
+								@title={{this.pdfFile.name}}
+								@detail={{this.pdfDetail}}
+								@form="flush"
+							>
+								<CanonButton
+									@kind="cell"
+									@text="Clear"
+									@icon={{Trash}}
+									@onClick={{this.clearPdf}}
+								/>
+							</CanonRow>
+						{{else}}
+							<Slot
+								class="i2p-pdf"
+								@prompt="Drop PDF here"
+								@icon="file"
+								@row={{true}}
+								@accept={{PDF_ACCEPT}}
+								@over={{this.drop.over}}
+								@onFile={{this.loadPdfFile}}
+							/>
+						{{/if}}
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }

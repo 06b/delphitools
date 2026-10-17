@@ -1,8 +1,6 @@
 // usage: npm start, then node scripts/verify/image-to-pdf.mjs
-// no checked-in fixture
-// node pdf-lib writes pdf fixture
-// page sizes prove orientation
-// png headers prove render scale
+// no checked-in fixture: pdf-lib writes the pdf, a canvas draws the images
+// page sizes prove orientation, png headers prove render scale
 
 import {
 	mkdtempSync,
@@ -65,8 +63,81 @@ await client.send('Browser.setDownloadBehavior', {
 	downloadPath: downloads,
 });
 
-await visit(page, '/tools/image-to-pdf');
+const clickText = (scope, text) =>
+	page.evaluate(
+		(s, t) => {
+			const button = [
+				...document.querySelectorAll(`${s} button`),
+			].find((b) => b.textContent.trim() === t);
+			button?.click();
+			return !!button;
+		},
+		scope,
+		text,
+	);
 
+const names = () =>
+	page.$$eval('.i2p-strip .canon-page-strip-name', (els) =>
+		els.map((el) => el.textContent.trim()),
+	);
+
+const stripState = () =>
+	page.evaluate(() => {
+		const strip = document.querySelector('.i2p-strip');
+		const paper = strip?.querySelector('.canon-page-strip-paper');
+		const box = paper?.getBoundingClientRect();
+		return {
+			cells: strip?.querySelectorAll('.canon-page-strip-cell').length,
+			inert: strip?.hasAttribute('inert'),
+			aspect: box ? box.width / box.height : 0,
+			band: strip?.closest('.canon-canvas')?.getBoundingClientRect()
+				.height,
+		};
+	});
+
+await visit(page, '/tools/image-to-pdf');
+check(
+	'the split fills the slot',
+	await page.evaluate(
+		() =>
+			document.querySelector('.dt-canon-tool').getBoundingClientRect()
+				.height ===
+			document.querySelector('.image-to-pdf').getBoundingClientRect()
+				.height,
+	),
+);
+
+const empty = await stripState();
+check(
+	'empty: one blank page, inert, portrait A4',
+	empty.cells === 1 && empty.inert && Math.abs(empty.aspect - 0.707) < 0.02,
+	JSON.stringify(empty),
+);
+check(
+	'empty: the Images row is the slot with the iOS wording, Export and order off, settings on',
+	await page.evaluate(
+		() =>
+			document
+				.querySelector('.i2p-images')
+				?.textContent.includes('Drop images here') &&
+			document.querySelector('.media-job-run').disabled &&
+			document.querySelector('.i2p-sort-up').disabled &&
+			document.querySelector('.i2p-clear').disabled &&
+			!document.querySelector('.i2p-size select').disabled &&
+			[
+				...document.querySelectorAll('.i2p-margin button'),
+			].every((b) => !b.disabled),
+	),
+);
+await clickText('.i2p-orientation', 'Landscape');
+await sleep(200);
+check(
+	'empty: the blank page follows the orientation',
+	(await stripState()).aspect > 1.3,
+);
+await clickText('.i2p-orientation', 'Auto');
+
+// drop anywhere in the tool
 await page.evaluate(async () => {
 	const make = (width, height, colour, name) =>
 		new Promise((resolve) => {
@@ -88,8 +159,7 @@ await page.evaluate(async () => {
 	]);
 	const dataTransfer = new DataTransfer();
 	for (const file of files) dataTransfer.items.add(file);
-	const target = document.querySelector('.dt-i2p-drop');
-	target.dispatchEvent(
+	document.querySelector('.image-to-pdf .canon-split-main').dispatchEvent(
 		new DragEvent('drop', {
 			bubbles: true,
 			cancelable: true,
@@ -97,72 +167,119 @@ await page.evaluate(async () => {
 		}),
 	);
 });
-
 const queued = await page
 	.waitForFunction(
-		() => document.querySelectorAll('.dt-i2p-cell').length === 2,
+		() =>
+			document.querySelectorAll('.i2p-strip .canon-page-strip-name')
+				.length === 2,
 		{ timeout: 15000 },
 	)
 	.then(() => true)
 	.catch(() => false);
-check('two dropped images queue up', queued);
+check('two dropped images queue up in order', queued, (await names()).join('|'));
+const loaded = await stripState();
+check(
+	'loaded: the strip takes pages, the band keeps its height',
+	!loaded.inert && loaded.band === empty.band,
+	`${empty.band} → ${loaded.band}`,
+);
 
-await page.evaluate(() => {
-	const cells = [...document.querySelectorAll('.dt-i2p-cell')];
-	const dataTransfer = new DataTransfer();
-	const init = { bubbles: true, cancelable: true, dataTransfer };
-	cells[0].dispatchEvent(new DragEvent('dragstart', init));
-	cells[1].dispatchEvent(new DragEvent('dragover', init));
-	cells[1].dispatchEvent(new DragEvent('drop', init));
-	cells[0].dispatchEvent(new DragEvent('dragend', init));
+await page.focus('.i2p-strip [data-page-index="0"] .canon-page-strip-page');
+await page.keyboard.down('Alt');
+await page.keyboard.press('ArrowRight');
+await page.keyboard.up('Alt');
+await sleep(300);
+check(
+	'Alt+ArrowRight moves a page',
+	(await names()).join('|') === 'blue-tall.png|red-wide.png',
+	(await names()).join('|'),
+);
+
+await page.click('.i2p-sort-down');
+await sleep(200);
+const zToA = (await names()).join('|');
+await page.click('.i2p-sort-up');
+await sleep(200);
+check(
+	'Z–A then A–Z sort by name',
+	zToA === 'red-wide.png|blue-tall.png' &&
+		(await names()).join('|') === 'blue-tall.png|red-wide.png',
+);
+
+const menu = await page.evaluate(() => {
+	const button = document.querySelector(
+		'.i2p-strip [data-page-index="0"] .canon-page-strip-page',
+	);
+	const box = button.getBoundingClientRect();
+	button.dispatchEvent(
+		new MouseEvent('contextmenu', {
+			bubbles: true,
+			cancelable: true,
+			clientX: box.left + 10,
+			clientY: box.top + 10,
+		}),
+	);
+	return button.getAttribute('aria-label');
 });
 await sleep(300);
-
-const order = await page.$$eval('.dt-i2p-badge', (els) =>
-	els.map((el) => el.textContent),
+const items = await page.$$eval(
+	'.i2p-strip .canon-page-strip-menu [role=menuitem]',
+	(els) => els.map((el) => el.textContent.trim()),
 );
 check(
-	'drag reorders the queue',
-	order.join('|') === 'blue-tall.png|red-wide.png',
-	order.join('|'),
+	'a page is named and its menu moves or removes it',
+	menu === 'Page 1, blue-tall.png' &&
+		items.join('|') === 'Move to start|Move to end|Remove',
+	`${menu}: ${items.join('|')}`,
+);
+await clickText('.i2p-strip .canon-page-strip-menu', 'Move to end');
+await sleep(200);
+check(
+	'Move to end',
+	(await names()).join('|') === 'red-wide.png|blue-tall.png',
 );
 
-await page.click('.dt-i2p-btn.is-primary');
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+await page.click('.media-job-save');
 const built = await waitForDownload(/^images\.pdf$/);
-check('Build PDF downloads', !!built, built?.name ?? 'nothing landed');
-
+check('Export PDF downloads', !!built, built?.name ?? 'nothing landed');
 if (built) {
 	const doc = await PDFDocument.load(built.bytes);
 	check('one page per image', doc.getPageCount() === 2);
 	const [first, second] = doc.getPages().map((p) => p.getSize());
 	check(
-		'auto orientation: tall image portrait, wide image landscape',
-		Math.round(first.height) === Math.round(A4[1]) &&
-			Math.round(first.width) === Math.round(A4[0]) &&
-			Math.round(second.width) === Math.round(A4[1]),
+		'auto orientation: wide image landscape, tall image portrait',
+		Math.round(first.width) === Math.round(A4[1]) &&
+			Math.round(second.height) === Math.round(A4[1]) &&
+			Math.round(second.width) === Math.round(A4[0]),
 		`${Math.round(first.width)}×${Math.round(first.height)}, ${Math.round(second.width)}×${Math.round(second.height)}`,
 	);
 }
 
 clearDownloads();
-await page.select('.dt-i2p-field select', 'match');
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-i2p-margin .dt-i2p-opt')]
-		.find((b) => b.textContent.trim() === '10 mm')
-		.click();
-});
+await page.select('.i2p-size select', '0');
+await clickText('.i2p-margin', '10 mm');
 await sleep(200);
-await page.click('.dt-i2p-btn.is-primary');
-const matchFile = await waitForDownload(/^images\.pdf$/);
 check(
-	'match-image build downloads',
-	!!matchFile,
-	matchFile?.name ?? 'nothing landed',
+	'a setting drops the result; match greys orientation and fit',
+	await page.evaluate(
+		() =>
+			!document.querySelector('.media-job-save') &&
+			[...document.querySelectorAll('.i2p-orientation button')].every(
+				(b) => b.disabled,
+			),
+	),
 );
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+await page.click('.media-job-save');
+const matchFile = await waitForDownload(/^images\.pdf$/);
+check('match-image build downloads', !!matchFile);
 if (matchFile) {
 	const doc = await PDFDocument.load(matchFile.bytes);
 	const margin = 10 * MM_TO_PT;
-	const first = doc.getPage(0).getSize();
+	const first = doc.getPage(1).getSize();
 	const expected = {
 		width: 100 * 0.75 + margin * 2,
 		height: 200 * 0.75 + margin * 2,
@@ -175,46 +292,114 @@ if (matchFile) {
 	);
 }
 
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-i2p-tab')]
-		.find((b) => b.textContent.includes('PDF to Image'))
-		.click();
-});
-await (await page.$('.dt-i2p-drop input[type="file"]')).uploadFile(fixture);
-
+await clickText('.i2p-direction', 'PDF to Image');
+await sleep(200);
+const pdfEmpty = await stripState();
+check(
+	'PDF to Image empty: blank A4, the Source slot, Download zip off',
+	pdfEmpty.cells === 1 &&
+		pdfEmpty.inert &&
+		pdfEmpty.band === empty.band &&
+		(await page.evaluate(
+			() =>
+				document
+					.querySelector('.i2p-pdf')
+					?.textContent.includes('Drop PDF here') &&
+				document.querySelector('.i2p-zip').disabled,
+		)),
+);
+await (await page.$('.media-slot-bar ~ input[type="file"]')).uploadFile(
+	fixture,
+);
 const rendered = await page
 	.waitForFunction(
-		() => document.querySelectorAll('.dt-i2p-cell').length === 3,
+		() =>
+			document.querySelectorAll('.i2p-strip img').length === 3 &&
+			!document.querySelector('.i2p-strip[inert]'),
 		{ timeout: 30000 },
 	)
 	.then(() => true)
 	.catch(() => false);
-check('the PDF renders one cell per page', rendered);
+check('the PDF shows one page per page', rendered);
+check(
+	'the source row names the file',
+	await page.evaluate(() =>
+		document.querySelector('.i2p-source')?.textContent.includes('three.pdf'),
+	),
+);
 
-await page.click('.dt-i2p-cell .dt-i2p-tool[title="Download"]');
+clearDownloads();
+await page.evaluate(() => {
+	const button = document.querySelector(
+		'.i2p-strip [data-page-index="0"] .canon-page-strip-page',
+	);
+	const box = button.getBoundingClientRect();
+	button.dispatchEvent(
+		new MouseEvent('contextmenu', {
+			bubbles: true,
+			cancelable: true,
+			clientX: box.left + 10,
+			clientY: box.top + 10,
+		}),
+	);
+});
+await sleep(300);
+await clickText('.i2p-strip .canon-page-strip-menu', 'Download');
 const png = await waitForDownload(/-page-1\.png$/);
-check('a single page downloads as PNG', !!png, png?.name ?? 'nothing');
+check('a page menu downloads one PNG', !!png, png?.name ?? 'nothing');
 if (png) {
-	const isPng = png.bytes.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+	const isPng = png.bytes
+		.subarray(0, 4)
+		.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 	const width = png.bytes.readUInt32BE(16);
 	check(
-		'the PNG is rendered at 2× (72 → 144 DPI)',
+		'the PNG is 144 DPI by default',
 		isPng && Math.abs(width - A4[0] * 2) < 3,
 		`width ${width}`,
 	);
 }
 
-await page.click('.dt-i2p-btn.is-primary');
+clearDownloads();
+await clickText('.i2p-scale', '72 DPI');
+await page.waitForFunction(
+	() => !document.querySelector('.i2p-zip').disabled,
+);
+await page.click('.i2p-zip');
 const zip = await waitForDownload(/-pages\.zip$/);
 check('Download zip lands', !!zip, zip?.name ?? 'nothing');
 if (zip) {
 	const archive = await JSZip.loadAsync(zip.bytes);
-	const names = Object.keys(archive.files).sort();
+	const entries = Object.keys(archive.files).sort();
+	const first = await archive.file(entries[0]).async('nodebuffer');
 	check(
-		'the zip holds one PNG per page',
-		names.length === 3 && names.every((n) => /-page-\d+\.png$/.test(n)),
-		names.join(', '),
+		'the zip holds one PNG per page at the chosen DPI',
+		entries.length === 3 &&
+			entries.every((n) => /-page-\d+\.png$/.test(n)) &&
+			Math.abs(first.readUInt32BE(16) - A4[0]) < 3,
+		entries.join(', '),
 	);
 }
+
+// paste anywhere: an image goes back to Image to PDF
+await page.evaluate(async () => {
+	const canvas = document.createElement('canvas');
+	canvas.width = canvas.height = 50;
+	const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+	const dataTransfer = new DataTransfer();
+	dataTransfer.items.add(new File([blob], 'pasted.png', { type: 'image/png' }));
+	document.dispatchEvent(
+		new ClipboardEvent('paste', {
+			bubbles: true,
+			cancelable: true,
+			clipboardData: dataTransfer,
+		}),
+	);
+});
+await sleep(800);
+check(
+	'a pasted image joins the queue in Image to PDF',
+	(await names()).join('|') === 'red-wide.png|blue-tall.png|pasted.png',
+	(await names()).join('|'),
+);
 
 await finish(browser);
