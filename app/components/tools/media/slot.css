@@ -49,7 +49,18 @@
 	block-size: auto;
 }
 
+.media-slot-bar {
+	display: flex;
+	background: var(--canon-muted);
+}
+
+.media-slot-files {
+	flex: none;
+}
+
 .media-slot--row {
+	flex: 1;
+	min-inline-size: 0;
 	flex-direction: row;
 	gap: 10px;
 

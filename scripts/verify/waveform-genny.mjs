@@ -139,7 +139,7 @@ check(
 	'empty: the Source row is the drop slot with the web wording',
 	await page.evaluate(() => {
 		const slot = document.querySelector('.canon-split-sidebar .wg-slot');
-		const heading = slot?.parentElement.querySelector('.canon-heading');
+		const heading = slot?.closest('.media-slot-bar').parentElement.querySelector('.canon-heading');
 		return (
 			slot?.tagName === 'BUTTON' &&
 			slot.classList.contains('media-slot--row') &&

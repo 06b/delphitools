@@ -9,7 +9,6 @@ import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonColourWell from 'delphicanon/components/canon-colour-well';
-import CanonDropZone from 'delphicanon/components/canon-drop-zone';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import type { CanonLamp } from 'delphicanon/components/canon-lamps';
@@ -118,7 +117,6 @@ const HIDDEN_ERROR =
 // probed once; static per browser
 const FORMATS = supportedFormats();
 
-const Captions = <template><IconSvg @name="captions" /></template>;
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Flame = <template><IconSvg @name="flame" /></template>;
 const PlayIcon = <template><IconSvg @name="play" /></template>;
@@ -147,9 +145,6 @@ const PLACES = [
 const tc = (ms: number) => formatTimestamp(ms, '.');
 const rgb = (colour: string): Rgb => parseHex(colour) ?? [1, 1, 1];
 const off = (on: boolean) => !on;
-
-// the document paste (filePaste) would load a drop-zone paste a second time
-const keepPaste = (event: Event) => event.stopPropagation();
 
 const sameBox = (a: TextBox | null, b: TextBox | null) =>
 	a === b ||
@@ -1247,14 +1242,14 @@ export default class SubtitleStudioTool extends Component {
 							/>
 						</CanonRow>
 					{{else}}
-						<CanonDropZone
+						<Slot
 							class="ss-subs-drop"
 							@prompt="SRT or VTT"
-							@icon={{Captions}}
+							@icon="captions"
+							@row={{true}}
+							@multiple={{true}}
 							@accept={{SUBS}}
-							@paste={{false}}
 							@onFiles={{this.readFiles}}
-							{{on "paste" keepPaste}}
 						/>
 					{{/if}}
 					{{#if this.subsFailed}}

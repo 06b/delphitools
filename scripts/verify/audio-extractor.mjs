@@ -66,6 +66,20 @@ check(
 	),
 );
 check(
+	'empty: the Source row has a Files cell that opens the picker',
+	await page.evaluate(() => {
+		const files = document.querySelector('.media-slot-files');
+		let opened = false;
+		const click = HTMLInputElement.prototype.click;
+		HTMLInputElement.prototype.click = function () {
+			opened = this.type === 'file';
+		};
+		files?.click();
+		HTMLInputElement.prototype.click = click;
+		return files?.textContent.trim() === 'Files' && opened;
+	}),
+);
+check(
 	'empty: the counter shows hyphens',
 	await page.evaluate(() => !/\d/.test(document.querySelector('.canon-timecode')?.textContent ?? '')),
 );
