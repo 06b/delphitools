@@ -700,6 +700,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert documents between Markdown, HTML, Word, LaTeX, EPUB and more',
 				icon: 'file-type-2',
 				href: '/tools/doc-converter',
+				canon: true,
 				produces: [
 					'.md',
 					'.html',

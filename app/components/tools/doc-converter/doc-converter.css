@@ -1,0 +1,289 @@
+/* the source editor: the tool's main field */
+.dc-editor {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 240px;
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	caret-color: var(--canon-primary);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.5;
+	resize: vertical;
+	appearance: none;
+}
+
+.dc-editor::placeholder {
+	color: var(--canon-muted-foreground);
+	opacity: 1;
+}
+
+.dc-editor:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* empty: the dashed box, the place to paste or drop */
+.dc-editor:placeholder-shown {
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	background: var(--canon-muted);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.dc-editor:focus-visible:placeholder-shown,
+.dc-editor--over,
+.dc-editor--over:placeholder-shown {
+	border: var(--canon-hairline) solid var(--canon-primary);
+}
+
+/* the from and to cells with the swap between, as CanonFromTo */
+.dc-formats {
+	display: flex;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.dc-formats > .dc-format-pick {
+	flex: 1 1 0;
+	min-inline-size: 0;
+}
+
+.dc-formats > .dc-format-pick .canon-button-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dc-formats > .dc-swap {
+	flex: none;
+	inline-size: var(--canon-control-height);
+}
+
+.dc-error {
+	box-sizing: border-box;
+	max-block-size: 200px;
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	overflow: auto;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.dc-about-text {
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.45;
+}
+
+.dc-about-text a {
+	color: var(--canon-primary);
+}
+
+/* a page, as the print or the word processor shows it */
+.dc-preview {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 420px;
+	border: 0;
+	background: #fff;
+}
+
+.dc-warnings {
+	margin: 0;
+	padding: 8px var(--canon-panel-padding) 10px 32px;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+/* the ledger banner (iOS DocConvertLedger) */
+.dc-ledger {
+	box-sizing: border-box;
+	block-size: 100%;
+	margin: 0;
+	padding: 0 var(--canon-panel-padding) var(--canon-panel-padding);
+	font-family: var(--canon-font);
+}
+
+.dc-ledger-head,
+.dc-ledger-row {
+	display: grid;
+	grid-template-columns: 28px minmax(0, 1fr) 24px minmax(0, 1fr) 44px;
+	align-items: center;
+}
+
+.dc-ledger-head {
+	block-size: 30px;
+	padding-block-start: 8px;
+	box-sizing: border-box;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.dc-ledger--wide .dc-ledger-head {
+	inline-size: calc((100% - 32px) / 2);
+}
+
+.dc-ledger-head > * {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dc-ledger-from {
+	grid-column: 2;
+}
+
+.dc-ledger-to {
+	grid-column: 4;
+}
+
+.dc-ledger-rows {
+	display: grid;
+	grid-auto-flow: column;
+	grid-template-columns: repeat(var(--dc-columns), minmax(0, 1fr));
+	grid-template-rows: repeat(var(--dc-per-column), 34px);
+	column-gap: 32px;
+}
+
+.dc-ledger-row {
+	block-size: 34px;
+	color: var(--canon-muted-foreground);
+}
+
+.dc-ledger-mark {
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.dc-ledger-arrow {
+	display: flex;
+	justify-content: center;
+	padding-inline-end: 6px;
+}
+
+.dc-ledger-arrow svg {
+	inline-size: 12px;
+	block-size: 12px;
+}
+
+.dc-ledger-count {
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	text-align: end;
+}
+
+.dc-sample {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	padding-inline-end: 8px;
+}
+
+.dc-sample--text {
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+}
+
+.dc-ledger-target.dc-sample--text {
+	color: var(--canon-primary);
+}
+
+.dc-ledger-target.dc-sample--rich {
+	color: var(--canon-foreground);
+}
+
+.dc-ledger-row--lost .dc-ledger-target {
+	color: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 60%,
+		transparent
+	);
+}
+
+.dc-sample--rich {
+	font-size: 11px;
+}
+
+.dc-sample--heading {
+	font-weight: var(--canon-weight-semibold);
+}
+
+.dc-sample--heading[data-level="1"] {
+	font-size: 22px;
+}
+
+.dc-sample--heading[data-level="2"] {
+	font-size: 17px;
+}
+
+.dc-sample--heading[data-level="3"] {
+	font-size: 15px;
+}
+
+.dc-sample--heading[data-level="4"] {
+	font-size: 13px;
+}
+
+.dc-sample--quote {
+	font-style: italic;
+}
+
+.dc-sample--rule::after {
+	display: inline-block;
+	inline-size: 60%;
+	block-size: 0;
+	border-block-start: var(--canon-hairline) solid currentcolor;
+	vertical-align: middle;
+	content: "";
+}
+
+.dc-sample--rich.dc-sample--code,
+.dc-sample--rich .dc-c {
+	font-family: var(--canon-mono-font);
+}
+
+.dc-b {
+	font-weight: var(--canon-weight-semibold);
+}
+
+.dc-i {
+	font-style: italic;
+}
+
+.dc-sample--rich .dc-a {
+	color: var(--canon-primary);
+	text-decoration: underline;
+}
+
+.dc-ledger-slot {
+	padding-inline-end: 8px;
+}
+
+.dc-ledger-bar {
+	display: block;
+	block-size: 8px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 14%,
+		transparent
+	);
+}
