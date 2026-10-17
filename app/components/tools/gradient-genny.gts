@@ -117,9 +117,9 @@ export default class GradientGenny extends Component {
 		}
 		this.model = model;
 		const first = model.selectedColour ?? '#3B82F6';
-		// sliced row, oklch hue
+		// sliced row, rgb blue
 		this.state = new PickState({
-			space: 'oklch',
+			space: 'rgb',
 			colour: rgbOf(first),
 			activeRow: 2,
 		});

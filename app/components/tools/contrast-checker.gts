@@ -91,9 +91,8 @@ function launchFlags(search: string) {
 		background: typed('contrastBg') ?? parseHex('1A1A2E')!,
 		onBackground: query.get('contrastWell') === '1',
 		space:
-			solidSpaces[
-				Number(query.get('contrastSpace') ?? 3) || 0
-			] ?? 'oklch',
+			solidSpaces[Number(query.get('contrastSpace')) || 0] ??
+			'rgb',
 		later: query.has('contrastLater'),
 	};
 }
@@ -125,7 +124,7 @@ export default class ContrastChecker extends Component {
 		this.fixed = flags.onBackground
 			? flags.foreground
 			: flags.background;
-		// sliced row, oklch hue
+		// sliced row, rgb blue
 		this.state = new CanonColourSolidState({
 			space: flags.space,
 			colour: flags.onBackground

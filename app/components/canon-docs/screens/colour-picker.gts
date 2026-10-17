@@ -36,7 +36,7 @@ const turned = (colour: Rgb, turns: number[]): Rgb[] => {
 export default class ColourPickerScreen extends Component {
 	@service('canon-toast') declare toast: CanonToastService;
 
-	state = new CanonColourSolidState({ space: 'oklch' });
+	state = new CanonColourSolidState({ space: 'rgb' });
 
 	get colour() {
 		return this.state.colour;

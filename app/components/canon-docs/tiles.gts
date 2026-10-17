@@ -366,7 +366,7 @@ const ColourCard = <template>
 </template>;
 
 class ColourControls extends Component {
-	state = new CanonColourSolidState({ space: 'hsl' });
+	state = new CanonColourSolidState({ space: 'rgb' });
 
 	<template><CanonColourControls @state={{this.state}} /></template>
 }
@@ -388,7 +388,7 @@ class ColourNotation extends Component {
 }
 
 class ColourSolid extends Component {
-	state = new CanonColourSolidState({ space: 'hsl' });
+	state = new CanonColourSolidState({ space: 'rgb' });
 
 	<template>
 		<CanonCanvas @aspect={{1}} @background="var(--canon-muted)">

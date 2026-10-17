@@ -71,9 +71,9 @@ export default class ColourAtlas extends Component {
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const flags = launchFlags(window.location.search);
-		// sliced row, oklch hue
+		// sliced row, rgb blue
 		this.state = new CanonColourSolidState({
-			space: flags.space ?? 'oklch',
+			space: flags.space ?? 'rgb',
 			colour: flags.colour ?? startColour,
 			activeRow: flags.row ?? 2,
 		});
