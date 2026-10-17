@@ -1,4 +1,4 @@
-// the canon audio-atlas: slot, band, MediaInfo and loudness tiles, sheet, zoom, transport, open-in
+// the canon audio-atlas: blank layout, band, MediaInfo and loudness tiles, sheet, zoom, transport, open-in
 import {
 	launch,
 	visit,
@@ -94,14 +94,101 @@ check(
 			document.querySelector('.audio-atlas').getBoundingClientRect().height,
 	),
 );
+const bandTall = () =>
+	page.$eval('.audio-atlas .canon-canvas', (el) =>
+		Math.round(el.getBoundingClientRect().height),
+	);
+// the media/strips bandHeight: readoutBandHeight(96)
+const BAND = 138;
+const blankInfo = () =>
+	page.evaluate(() => {
+		const values = [
+			...document.querySelectorAll('.media-sections .canon-tiles-value'),
+		];
+		const headings = [
+			...document.querySelectorAll('.media-sections .canon-heading'),
+		].map((h) => h.textContent.trim());
+		return (
+			headings.join() === 'General,Audio #1,Loudness' &&
+			values.length > 0 &&
+			values.every((v) => v.textContent.trim() === '\u2014')
+		);
+	});
 check(
-	'empty: the drop slot with the web wording, no report or footer',
+	'empty: the Source slot row with the web wording',
+	await page.evaluate(() => {
+		const slot = document.querySelector('.aa-slot.media-slot--row');
+		const heading = slot
+			?.closest('.canon-rows')
+			?.querySelector('.canon-heading');
+		return (
+			heading?.textContent.trim() === 'Source' &&
+			slot.textContent.trim() ===
+				'Drop an audio file here or click to upload'
+		);
+	}),
+);
+check('empty: the band is bandHeight tall', (await bandTall()) === BAND, String(await bandTall()));
+check(
+	'empty: the band is a flat line, the readout hyphens',
 	await page.evaluate(
 		() =>
-			document.querySelector('.aa-slot')?.textContent.trim() ===
-				'Drop an audio file here or click to upload' &&
-			!document.querySelector('.media-sections') &&
-			!document.querySelector('.media-transport'),
+			!!document.querySelector('.aa-band.media-strips--blank .media-wave') &&
+			!/\d/.test(
+				document.querySelector('.canon-readout-band')?.textContent ?? '1',
+			),
+	),
+);
+check('empty: General, Audio and Loudness tiles, every value a dash', await blankInfo());
+check(
+	'empty: the View row, its zoom cells off',
+	await page.evaluate(
+		() =>
+			document.querySelector('.aa-view .canon-row-detail')?.textContent.trim() ===
+				'\u2014' &&
+			['.aa-zoom-out', '.aa-zoom-in', '.aa-fit'].every(
+				(s) => document.querySelector(s)?.disabled === true,
+			),
+	),
+);
+check(
+	'empty: the blank sheet at the loaded height: flat wave, empty ruler and plate',
+	await page.evaluate(() => {
+		const sheet = document.querySelector('.aa-picture .aa-sheet--blank');
+		return (
+			!!sheet &&
+			Math.round(
+				document.querySelector('.aa-picture').getBoundingClientRect().height,
+			) === 304 &&
+			!!sheet.querySelector('.aa-wave') &&
+			sheet.querySelector('.aa-ruler')?.children.length === 0 &&
+			sheet.querySelector('.aa-plate')?.children.length === 0 &&
+			!document.querySelector('.aa-scrub')
+		);
+	}),
+);
+check(
+	'empty: the Open in cells, all off',
+	await page.evaluate(() => {
+		const cells = [...document.querySelectorAll('.aa-open .aa-open-blank')];
+		const ids = cells.map((c) => c.dataset.tool);
+		return (
+			cells.length > 0 &&
+			cells.every((c) => c.disabled) &&
+			ids.includes('audio-trimmer') &&
+			!ids.includes('audio-atlas') &&
+			!document.querySelector('.aa-open a')
+		);
+	}),
+);
+check(
+	'empty: the transport is there, off',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.media-transport') &&
+			['.media-play', '.media-stop'].every(
+				(s) => document.querySelector(s)?.disabled === true,
+			),
 	),
 );
 
@@ -120,14 +207,19 @@ check(
 
 await makeWav(page, { seconds: 4, amplitude: 0.5, frequency: 440 });
 await dropClip(page, '.audio-atlas');
-await page.waitForSelector('.aa-sheet', { timeout: 15000 });
+await page.waitForSelector('.aa-scrub', { timeout: 15000 });
 await page.waitForFunction(
 	() => /LUFS/.test(document.querySelector('.media-sections')?.textContent),
 	{ timeout: 15000 },
 );
 await page.waitForFunction(
-	() => /General/.test(document.querySelector('.media-sections')?.textContent),
+	() => /Wave/.test(document.querySelector('.media-sections')?.textContent),
 	{ timeout: 20000 },
+);
+check('loaded: the band is bandHeight tall', (await bandTall()) === BAND, String(await bandTall()));
+check(
+	'loaded: no blank objects left',
+	!(await page.$('.media-strips--blank, .aa-sheet--blank, .aa-open-blank, .aa-slot')),
 );
 const detail = await page.$eval('.aa-source .canon-row-detail', (el) =>
 	el.textContent.trim(),
@@ -373,10 +465,11 @@ await page.evaluate(() =>
 );
 await sleep(200);
 check(
-	'Clear returns to the slot',
+	'Clear returns to the blank layout',
 	!!(await page.$('.aa-slot')) &&
-		!(await page.$('.aa-sheet')) &&
-		!(await page.$('.media-sections')),
+		!!(await page.$('.aa-sheet--blank')) &&
+		!(await page.$('.aa-scrub')) &&
+		(await blankInfo()),
 );
 
 // paste anywhere loads; ?atlasZoom and ?atlasLoop as the iOS launch arguments
@@ -389,7 +482,7 @@ await page.evaluate(() => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await page.waitForSelector('.aa-sheet', { timeout: 15000 });
+await page.waitForSelector('.aa-scrub', { timeout: 15000 });
 await sleep(100);
 check(
 	'paste loads; ?atlasZoom=yes shows 30 to 50 %',

@@ -10,7 +10,7 @@ import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
-import { IconSvg } from 'delphitools-v2/components/icon';
+import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import {
 	AudioIntake,
@@ -22,17 +22,22 @@ import {
 } from 'delphitools-v2/lib/audio';
 import {
 	analyzeMedia,
+	blankSections,
 	sections,
 	type Section,
 	type Track,
 } from 'delphitools-v2/lib/mediainfo';
 import { AUDIO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
+import { toolsForFile } from 'delphitools-v2/lib/omni';
+import { sample } from 'delphitools-v2/lib/workflows';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import OpenIn from 'delphitools-v2/components/tools/media/open-in';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import { peakBuckets } from 'delphitools-v2/components/tools/media/frames';
 import { label } from 'delphitools-v2/components/tools/audio-atlas/ruler';
@@ -47,11 +52,22 @@ import './audio-atlas/audio-atlas.css';
 const ACCEPT = acceptAttr(AUDIO_ACCEPT);
 const DROP_PROMPT = 'Drop an audio file here or click to upload';
 const noFrames: string[] = [];
+const BLANK_INFO = blankSections(['General', 'Audio']);
+const BLANK_LOUDNESS: Section = {
+	type: 'Other',
+	title: 'Loudness',
+	rows: ['Peak', 'RMS', 'Loudness'].map((label) => ({
+		label,
+		value: '\u2014',
+	})),
+};
+// ponytail: a WAV's list; an MP3 or FLAC may open in a few others
+const BLANK_OPEN = toolsForFile(sample('.wav')).filter(
+	(tool) => tool.id !== 'audio-atlas' && !tool.route,
+);
 
-// iOS AudioAtlasViewController: band 150; sheet 120 + 24 + 160
-const bandHeight = 150;
+// iOS AudioAtlasViewController: sheet 120 + 24 + 160
 const sheetHeight = 304;
-const slotHeight = 180;
 
 const flag = (name: string) =>
 	typeof window !== 'undefined' &&
@@ -132,7 +148,7 @@ export default class AudioAtlas extends Component {
 	}
 
 	get viewText() {
-		if (!this.decoded) return '';
+		if (!this.decoded) return '\u2014';
 		return `${label(this.view.start, 0.01)} – ${label(this.view.end, 0.01)}`;
 	}
 
@@ -160,9 +176,9 @@ export default class AudioAtlas extends Component {
 			: null;
 	}
 
-	get loudness(): Section | null {
+	get loudness(): Section {
 		const levels = this.levels;
-		if (!levels) return null;
+		if (!levels) return BLANK_LOUDNESS;
 		return {
 			type: 'Other',
 			title: 'Loudness',
@@ -172,9 +188,10 @@ export default class AudioAtlas extends Component {
 
 	@cached
 	get sections() {
-		const loudness = this.loudness;
-		const all = sections(this.tracks);
-		return loudness ? [...all, loudness] : all;
+		const all = this.tracks.length
+			? sections(this.tracks)
+			: BLANK_INFO;
+		return [...all, this.loudness];
 	}
 
 	/** iOS AudioAtlasTagRow, less the artwork: MediaInfo's title, performer and album. */
@@ -336,7 +353,6 @@ export default class AudioAtlas extends Component {
 			class="audio-atlas"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -361,6 +377,11 @@ export default class AudioAtlas extends Component {
 							@playhead={{this.playback.playhead}}
 							@selection={{this.selection}}
 							@onScrub={{this.seek}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
 						/>
 					</CanonReadoutBand>
 				</CanonCanvas>
@@ -402,8 +423,10 @@ export default class AudioAtlas extends Component {
 						preload="auto"
 						{{this.playback.register}}
 					></audio>
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="aa-source
 								{{if
@@ -421,91 +444,126 @@ export default class AudioAtlas extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-						<CanonRow
-							class="aa-view"
-							@title="View"
-							@detail={{this.viewText}}
-							@form="flush"
-						>
-							<CanonGrid
-								class="aa-zoom"
-							>
-								<CanonButton
-									class="aa-zoom-out"
-									@kind="cell"
-									@label="Zoom out"
-									@icon={{ZoomOut}}
-									@disabled={{this.notZoomed}}
-									@onClick={{this.zoomOut}}
-								/>
-								<CanonButton
-									class="aa-zoom-in"
-									@kind="cell"
-									@label="Zoom in"
-									@icon={{ZoomIn}}
-									@disabled={{this.undecoded}}
-									@onClick={{this.zoomIn}}
-								/>
-								<CanonButton
-									class="aa-fit"
-									@kind="cell"
-									@label="Reset zoom"
-									@icon={{Fit}}
-									@disabled={{this.notZoomed}}
-									@onClick={{this.fit}}
-								/>
-							</CanonGrid>
-						</CanonRow>
-					</CanonRows>
-					{{#if this.intake.buffer}}
-						<CanonCanvas
-							class="aa-picture"
-							@height={{sheetHeight}}
-							@boxing="unlessWide"
-							@background="var(--canon-muted)"
-						>
-							<Sheet
-								@buffer={{this.intake.buffer}}
-								@peaks={{this.viewPeaks}}
-								@start={{this.view.start}}
-								@end={{this.view.end}}
-								@playhead={{this.playback.playhead}}
-								@onSeek={{this.seek}}
-								@onWindow={{this.moveWindow}}
-								@onNudge={{this.nudge}}
-								@onFit={{this.fit}}
+					{{else}}
+						<Slot
+							class="aa-slot"
+							@prompt={{DROP_PROMPT}}
+							@icon="audio-waveform"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.intake.error}}
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
 							/>
-						</CanonCanvas>
+						{{/if}}
 					{{/if}}
+					<CanonRow
+						class="aa-view"
+						@title="View"
+						@detail={{this.viewText}}
+						@form="flush"
+					>
+						<CanonGrid class="aa-zoom">
+							<CanonButton
+								class="aa-zoom-out"
+								@kind="cell"
+								@label="Zoom out"
+								@icon={{ZoomOut}}
+								@disabled={{this.notZoomed}}
+								@onClick={{this.zoomOut}}
+							/>
+							<CanonButton
+								class="aa-zoom-in"
+								@kind="cell"
+								@label="Zoom in"
+								@icon={{ZoomIn}}
+								@disabled={{this.undecoded}}
+								@onClick={{this.zoomIn}}
+							/>
+							<CanonButton
+								class="aa-fit"
+								@kind="cell"
+								@label="Reset zoom"
+								@icon={{Fit}}
+								@disabled={{this.notZoomed}}
+								@onClick={{this.fit}}
+							/>
+						</CanonGrid>
+					</CanonRow>
+				</CanonRows>
+				<CanonCanvas
+					class="aa-picture"
+					@height={{sheetHeight}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					{{#if this.intake.buffer}}
+						<Sheet
+							@buffer={{this.intake.buffer}}
+							@peaks={{this.viewPeaks}}
+							@start={{this.view.start}}
+							@end={{this.view.end}}
+							@playhead={{this.playback.playhead}}
+							@onSeek={{this.seek}}
+							@onWindow={{this.moveWindow}}
+							@onNudge={{this.nudge}}
+							@onFit={{this.fit}}
+						/>
+					{{else}}
+						<div
+							class="aa-sheet aa-sheet--blank"
+							aria-hidden="true"
+						>
+							<span
+								class="aa-wave"
+							></span>
+							<span
+								class="aa-ruler"
+							></span>
+							<span
+								class="aa-plate"
+							></span>
+						</div>
+					{{/if}}
+				</CanonCanvas>
+				{{#if this.loaded}}
 					<OpenIn
 						class="aa-open"
 						@file={{this.intake.file}}
 						@self="audio-atlas"
 					/>
 				{{else}}
-					<CanonCanvas
-						class="aa-drop"
-						@height={{slotHeight}}
-						@boxing="unlessWide"
+					<CanonRows
+						class="media-open aa-open"
+						@framed={{true}}
 					>
-						<Slot
-							class="aa-slot"
-							@prompt={{DROP_PROMPT}}
-							@icon="audio-waveform"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					</CanonCanvas>
-					{{#if this.intake.error}}
-						<CanonRows @framed={{true}}>
-							<CanonStatus
-								@text={{this.intake.error}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						</CanonRows>
-					{{/if}}
+						<CanonHeading @text="Open in" />
+						<div class="dt-atlas-open">
+							{{#each
+								BLANK_OPEN
+								key="id"
+								as |tool|
+							}}
+								<button
+									type="button"
+									class="aa-open-blank"
+									data-tool={{tool.id}}
+									disabled
+								>
+									<Icon
+										@name={{tool.icon}}
+									/>
+									<span
+									>{{tool.name}}</span>
+								</button>
+							{{/each}}
+						</div>
+					</CanonRows>
 				{{/if}}
 			</:main>
 			<:footer>

@@ -176,3 +176,51 @@
 .aa-audio {
 	display: none;
 }
+
+/* the Source slot as tall as the file row it stands for */
+.aa-slot.media-slot--row {
+	min-block-size: var(--canon-secondary-height);
+}
+
+/* before a file: the sheet's waveform as a flat line */
+.aa-sheet--blank {
+	cursor: default;
+}
+
+.aa-sheet--blank .aa-wave {
+	position: relative;
+}
+
+.aa-sheet--blank .aa-wave::after {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-start: calc(50% - var(--canon-hairline) / 2);
+	block-size: var(--canon-hairline);
+	background: currentcolor;
+	content: "";
+	opacity: 0.5;
+}
+
+/* the open-in cells before a file, as the shared links, off */
+.media-open .dt-atlas-open .aa-open-blank {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 14px 8px;
+	border: 0;
+	background: var(--canon-card);
+	color: color-mix(in srgb, var(--canon-foreground) 40%, transparent);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	line-height: inherit;
+	text-align: center;
+	cursor: default;
+}
+
+.media-open .dt-atlas-open .aa-open-blank .dt-icon {
+	inline-size: 20px;
+	block-size: 20px;
+	color: color-mix(in srgb, var(--canon-primary) 40%, transparent);
+}
