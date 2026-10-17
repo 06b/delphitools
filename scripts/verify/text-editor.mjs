@@ -1,6 +1,6 @@
 // what unit tests cannot see
 // usage: npm start, then node scripts/verify/text-editor.mjs
-//   SHOTS=<dir> also saves 390, 1400 and 2200 wide, light and dark, empty, loaded and settings
+//   SHOTS=<dir> also saves screenshots
 
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -232,7 +232,6 @@ await page.evaluate(() =>
 const html = await waitForDownload(/\.html$/);
 check('HTML (.html) downloads the document', html?.text.includes('<h2>Edited</h2>'), html?.name);
 
-// settings: the sheet from the Settings cell, by keyboard
 await page.focus('.te-settings-cell');
 await page.keyboard.press('Enter');
 await sleep(400);
@@ -258,7 +257,7 @@ check('the Settings cell reports the open sheet', (await page.$eval('.te-setting
 const reached = new Set();
 for (let i = 0; i < 20; i += 1) {
 	await page.keyboard.press('Tab');
-	// a modal dialog wraps through the browser's own UI, which reads as body
+	// browser chrome reads body
 	reached.add(
 		await page.evaluate(() => {
 			const el = document.activeElement;

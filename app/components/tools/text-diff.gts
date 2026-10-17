@@ -56,7 +56,6 @@ export default class TextDiffTool extends Component {
 
 	@tracked oldText = '';
 	@tracked newText = '';
-	// the texts last diffed
 	@tracked diffed: [string, string] = ['', ''];
 	#settleTimer?: ReturnType<typeof setTimeout>;
 	@tracked wrap = true;
@@ -81,7 +80,7 @@ export default class TextDiffTool extends Component {
 		clearTimeout(this.#settleTimer);
 	}
 
-	// large texts wait for a typing pause; the web tool waited 120 ms always
+	// large texts debounce typing
 	#settle() {
 		clearTimeout(this.#settleTimer);
 		const run = () => (this.diffed = [this.oldText, this.newText]);
@@ -104,7 +103,7 @@ export default class TextDiffTool extends Component {
 	@cached
 	get marks() {
 		const [old, next] = this.diffed;
-		// marks only for the text on screen
+		// stale diff: no marks
 		if (old !== this.oldText || next !== this.newText)
 			return { old: [], new: [] };
 		return sideMarks(this.diff, this.spans);

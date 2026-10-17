@@ -386,7 +386,7 @@ export default class DocConverterTool extends Component {
 		this.file = null;
 		this.fileError = null;
 		this.notice = null;
-		// text cannot be a binary format
+		// text is never binary
 		if (getFormat(this.from)?.kind === 'binary')
 			this.from = AUTO_DETECT;
 		this.#changed();

@@ -52,7 +52,7 @@ const WALL_STICKERS: Sticker[] = [
 	},
 ];
 
-// iOS's ToolStickerView: -2.5 deg, at most 360 pt, padded by its column
+// ios ToolStickerView values
 const LOUSY_STICKER = {
 	rot: -2.5,
 	width: 'min(100%, 360px)',
@@ -168,7 +168,7 @@ interface PeelStickerSignature {
 
 const TOOL_STICKER_CAPTION = 'Have a sticker! Peel it off to download.';
 
-// named as on iOS: "Sticker", valued with the tool's name
+// ios accessibility name/value
 const PeelSticker: TOC<PeelStickerSignature> = <template>
 	<StickerButton
 		@sticker={{hash

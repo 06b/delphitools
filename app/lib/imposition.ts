@@ -226,7 +226,7 @@ function calculateSaddleStitch(
 	return makeResult(sheets, totalSourcePages, totalPages);
 }
 
-/** One saddle-stitched signature of `totalPages` (a multiple of 4) after page `base`. */
+// one saddle-stitched signature
 function nestedSheets(
 	totalPages: number,
 	base: number,
@@ -319,7 +319,7 @@ function nestedSheets(
 /** ios ImpositionConfig.signaturePages */
 export const DEFAULT_SIGNATURE_PAGES = 16;
 
-/** Signatures of `signaturePages`, each nested like a saddle stitch, stacked; blanks pad the last. */
+// stacked nested signatures, padded
 function calculatePerfectBind(
 	totalSourcePages: number,
 	config: ImpositionConfig,
@@ -603,7 +603,7 @@ export function turnsTopOverBottom(
 		: sheetW > sheetH;
 }
 
-/** Half-turns each back so it registers behind its front. */
+// registers back behind front
 function turnBacks(
 	result: ImpositionResult,
 	config: ImpositionConfig,
@@ -626,7 +626,7 @@ function turnBacks(
 	};
 }
 
-// layouts assume a book turn
+// layouts assume book turn
 function withDuplexPostProcess(
 	calculateFn: (
 		totalSourcePages: number,

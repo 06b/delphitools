@@ -89,7 +89,7 @@ export default class RecipeTableTool extends Component {
 	@tracked copyFailed = false;
 	@tracked pictureHeight?: number;
 	#failedTimer?: ReturnType<typeof setTimeout>;
-	// query text never overwrites the draft
+	// query never overwrites draft
 	#persists = true;
 
 	constructor(owner: Owner, args: object) {
@@ -123,7 +123,7 @@ export default class RecipeTableTool extends Component {
 			this.recipe.problems.map((p) => p.line),
 		);
 		return this.text.split('\n').map((text, index) => ({
-			// an empty line keeps its height
+			// keeps empty line height
 			text: text || ' ',
 			lit: flagged.has(index + 1),
 		}));

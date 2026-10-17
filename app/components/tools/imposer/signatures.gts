@@ -13,7 +13,7 @@ const spine = blockHeight - 14 - label - 8;
 
 const range = (signature: Signature) => `${signature.from}–${signature.to}`;
 
-// ios scrollRectToVisible, 24 px slack
+// ios scrollRectToVisible, 24px slack
 const reveal = modifier((element: HTMLElement, [lit]: [number]) => {
 	void lit;
 	const button = element.querySelector<HTMLElement>(

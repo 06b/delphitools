@@ -89,7 +89,7 @@ export function gamutOverSRGB(icc: ExifData): number | null {
 	return area(points) / area(SRGB);
 }
 
-// ICC.1:2010 10.6 curveType and 10.18 parametricCurveType, as a 256-entry table of 8-bit codes
+// icc.1:2010 10.6, 10.18
 function curve(raw: unknown): Float64Array | null {
 	if (!(raw instanceof Uint8Array) || raw.length < 12) return null;
 	const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
@@ -136,7 +136,7 @@ function curve(raw: unknown): Float64Array | null {
 	return Float64Array.from({ length: 256 }, (_, i) => at(i / 255));
 }
 
-// lindbloom: XYZ D50 to linear sRGB, bradford-adapted
+// lindbloom bradford d50 matrix
 const XYZ_D50_TO_SRGB = [
 	[3.1338561, -1.6168667, -0.4906146],
 	[-0.9787684, 1.9161415, 0.033454],

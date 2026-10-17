@@ -46,7 +46,7 @@ const FACES: Record<FontFamily, StandardFonts> = {
 };
 const embedders = new Map<FontFamily, StandardFontEmbedder>();
 
-// advance at size 1; unencodable as "?"
+// size-1 advance; unencodable "?"
 export function unitWidth(text: string, font: FontFamily): number {
 	let face = embedders.get(font);
 	if (!face) {
@@ -69,7 +69,7 @@ export function unitWidth(text: string, font: FontFamily): number {
 	return width;
 }
 
-// 45° box, 1em tall, in 80% of the short side
+// rotated box: 80% min-side
 export function watermarkSize(
 	pageW: number,
 	pageH: number,
@@ -82,7 +82,7 @@ export function watermarkSize(
 	);
 }
 
-// baseline 0.175em under the centre
+// baseline 0.175em below centre
 export function watermarkAt(
 	pageW: number,
 	pageH: number,

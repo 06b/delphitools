@@ -8,7 +8,7 @@ export interface PixelFormat {
 const text = (bytes: Uint8Array, at: number, length = 4) =>
 	String.fromCharCode(...bytes.subarray(at, at + length));
 
-// png 11.2.2 IHDR colour types: 0 grey, 2 truecolour, 3 indexed, 4 grey + alpha, 6 truecolour + alpha
+// png spec 11.2.2 ihdr
 function png(bytes: Uint8Array, view: DataView): PixelFormat | null {
 	if (bytes.length < 33 || text(bytes, 12) !== 'IHDR') return null;
 	const depth = bytes[24]!;
@@ -27,7 +27,7 @@ function png(bytes: Uint8Array, view: DataView): PixelFormat | null {
 	};
 }
 
-// itu t.81 b.2.2: SOFn carries precision then size then the component count
+// itu t.81 b.2.2
 const SOF = new Set([
 	0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce,
 	0xcf,
@@ -53,7 +53,7 @@ function jpeg(bytes: Uint8Array, view: DataView): PixelFormat | null {
 	return null;
 }
 
-// webp container spec: VP8X flags bit 4 is alpha; VP8L header bit 28 is alpha_is_used
+// webp spec alpha bits
 function webp(bytes: Uint8Array, view: DataView): PixelFormat | null {
 	if (bytes.length < 30 || text(bytes, 8) !== 'WEBP') return null;
 	const alpha = {

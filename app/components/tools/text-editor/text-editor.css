@@ -190,7 +190,7 @@ img.ProseMirror-separator {
 	box-sizing: border-box;
 	inline-size: 100%;
 
-	/* iOS full screen: a 680 px measure */
+	/* ios 680px measure */
 	max-inline-size: calc(
 		680px + var(--te-lead) + var(--canon-panel-padding)
 	);
@@ -415,7 +415,7 @@ img.ProseMirror-separator {
 	outline-offset: -2px;
 }
 
-/* full screen: iOS ManuscriptFullScreenViewController, 20 px */
+/* ios ManuscriptFullScreenViewController size */
 .te-pane--zen {
 	--te-size: 20px;
 }

@@ -41,7 +41,7 @@ export async function launch({
 		...(userDataDir ? { userDataDir } : {}),
 		args,
 	});
-	// downloads go to a temp dir, not ~/Downloads; a harness may set its own
+	// temp download dir
 	const cdp = await browser.target().createCDPSession();
 	await cdp.send('Browser.setDownloadBehavior', {
 		behavior: 'allow',

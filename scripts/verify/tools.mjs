@@ -1,4 +1,4 @@
-// a missing tool component passes build, lint, prerender unseen
+// catches missing tool components
 
 import { readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';

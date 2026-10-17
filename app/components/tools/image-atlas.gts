@@ -96,7 +96,7 @@ const MapPin = <template><IconSvg @name="map-pin" /></template>;
 // the document paste (filePaste) would load a drop-zone paste a second time
 const keepPaste = (event: Event) => event.stopPropagation();
 
-// the decoder's own values, before the browser converts them to sRGB
+// skips browser sRGB conversion
 async function ownPixels(file: File, width: number, height: number) {
 	const bitmap = await createImageBitmap(file, {
 		colorSpaceConversion: 'none',
@@ -136,7 +136,7 @@ async function scanOf(image: HTMLImageElement, file: File, icc: ExifData) {
 		context.getImageData(0, 0, canvas.width, canvas.height).data,
 		pixels && space ? { pixels, space } : undefined,
 	);
-	// untagged and grey files are inside sRGB; a LUT or CMYK profile has no matrix to convert with
+	// lut/cmyk: no matrix
 	if (!pixels && Object.keys(icc).length && !('GrayTRC' in icc))
 		scan.outside = null;
 	const palette = rankClusters(
@@ -199,7 +199,7 @@ export default class ImageAtlas extends Component {
 	@tracked bannerWidth = 390;
 
 	#token = 0;
-	// the scan converts with the profile, so it waits for the read
+	// scan awaits profile read
 	#read: Promise<void> = Promise.resolve();
 	#input?: HTMLInputElement;
 	#otherFlag = false;

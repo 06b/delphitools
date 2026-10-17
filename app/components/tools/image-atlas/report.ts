@@ -657,7 +657,7 @@ export function scanPixels(data: ArrayLike<number>, source?: Source): Scan {
 		histogram[0][data[i]!]!++;
 		histogram[1][data[i + 1]!]!++;
 		histogram[2][data[i + 2]!]!++;
-		// iOS ImageColourScan.plotChromaticity: alpha above 0.004, brightest above 0.002, a channel below -1 % of it
+		// ios plotChromaticity thresholds
 		const own = source?.pixels;
 		if (!own || own[i + 3]! < 2) continue;
 		const r = red![own[i]!]!;
@@ -709,7 +709,7 @@ export function reportText(
 	lines.push(`File: ${fileName} (${formatBytes(fileSize)})`);
 	if (dims) lines.push(`Dimensions: ${dims.w} × ${dims.h}`);
 	lines.push('');
-	// iOS reportText: a section heading, a line per known row
+	// as ios reportText
 	const known = colour.filter((row) => row.value !== DASH);
 	if (known.length)
 		lines.push(

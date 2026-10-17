@@ -5,7 +5,7 @@ import CanonSegmented from 'delphicanon/components/canon-segmented';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import './anchors.css';
 
-/** The nine anchors in reading order (iOS PDFStampEngine.Anchor, WatermarkPosition). */
+// ios Anchor reading order
 const ANCHOR_NAMES = [
 	'Top left',
 	'Top centre',

@@ -80,7 +80,7 @@
 	}
 }
 
-/* the glosses are buttons over the spelling; the textarea lies between */
+/* buttons above the textarea */
 .sh-picture-text .media-marked-marks {
 	pointer-events: none;
 }

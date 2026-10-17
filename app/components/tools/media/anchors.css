@@ -14,7 +14,7 @@
 	cursor: pointer;
 }
 
-/* default 30 %: the iOS watermark anchors at 10 and 90 % of the image */
+/* ios watermark: 10/90% */
 .media-anchor-mark {
 	position: absolute;
 	inset-block-start: 50%;

@@ -79,7 +79,6 @@ export default class Picture extends Component<PictureSignature> {
 		return detail ? `${name}, ${detail}` : name;
 	}
 
-	// read from the editor's own text, so the tones sit on what is shown
 	get runs(): Run[] {
 		const { cipher, encode, params, source, text } = this.args;
 		return source
@@ -180,12 +179,11 @@ export default class Picture extends Component<PictureSignature> {
 				</span>
 			</div>
 			<div class="dec-scroll">
-				{{! the tones lie under a transparent textarea set in the same type }}
 				<div
 					class="dec-text"
 					{{reportHeight @onHeight}}
 				>
-					{{! the zero-width tail gives a trailing newline its line }}
+					{{! tail keeps trailing newline }}
 					<div
 						class="dec-marks"
 						aria-hidden="true"

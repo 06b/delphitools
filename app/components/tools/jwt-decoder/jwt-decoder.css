@@ -73,7 +73,7 @@
 	}
 }
 
-/* the dashed box only while empty; a token is as tall as its lines */
+/* dashed box only empty */
 .jwt-token .media-marked-source:not(:placeholder-shown) {
 	min-block-size: 0;
 }

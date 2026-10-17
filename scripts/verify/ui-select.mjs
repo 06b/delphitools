@@ -3,7 +3,6 @@
 import { launch, visit, check, sleep, finish } from './harness.mjs';
 
 const { browser, page } = await launch();
-// hosted on the custom workflow row; values are read, not assumed
 await visit(page, '/workflows');
 await page.waitForSelector('.dt-wf-custom .dt-select-trigger', { timeout: 15000 });
 

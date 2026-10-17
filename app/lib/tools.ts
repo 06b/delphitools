@@ -43,7 +43,7 @@ export interface Tool {
 	route?: string;
 	highlight?: boolean;
 	atlas?: boolean;
-	// built on the delphicanon kit; the drawer row shows a marker
+	// kit-built; drawer marker
 	canon?: boolean;
 	// a canon tool whose picture may grow past the 1200 px column
 	expands?: boolean;

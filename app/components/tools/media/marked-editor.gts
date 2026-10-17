@@ -28,7 +28,7 @@ interface MarkedEditorSignature<L extends MarkedLine> {
 	Element: HTMLDivElement;
 }
 
-// the picture head over the text: 6 px over a 44 px head
+// 6px over 44px head
 const headHeight = 50;
 
 /** Reports the picture's own height in px (the head plus this element) at its current width. */
@@ -60,6 +60,11 @@ export default class MarkedEditor<
 		return htmlSafe(
 			`--media-marked-gutter: calc(${Math.max(2, digits)}ch + 14px)`,
 		);
+	}
+
+	// zero-width; keeps a trailing newline
+	get tail() {
+		return this.args.text?.endsWith('\n') ? '\u200b' : '';
 	}
 
 	input = (event: Event) =>
@@ -99,6 +104,7 @@ export default class MarkedEditor<
 							{{~/each~}}
 						{{~else~}}
 							{{~yield~}}
+							{{~this.tail~}}
 						{{~/if~}}
 					</div>
 				{{/unless}}

@@ -38,10 +38,10 @@ export default class CanonTool extends Component<CanonToolSignature> {
 	@tracked expandedIds = stored();
 	@tracked stickerSlot: HTMLElement | null = null;
 
-	// the outermost split, as iOS's split(in:) searches; reruns per tool
+	// outermost split, as ios
 	findStickerSlot = modifier(
 		(tool: HTMLElement, [component]: [unknown]) => {
-			// state this render read cannot change inside it
+			// defer: avoids render backtracking
 			queueMicrotask(() => {
 				this.stickerSlot = component
 					? tool.querySelector<HTMLElement>(
@@ -79,7 +79,7 @@ export default class CanonTool extends Component<CanonToolSignature> {
 				<@component />
 			{{/if}}
 			{{#if this.stickerSlot}}
-				{{! no whitespace: the kit hides an :empty slot }}
+				{{! whitespace breaks :empty }}
 				{{~#in-element
 					this.stickerSlot insertBefore=null
 				~}}

@@ -142,7 +142,7 @@ export default class CropRect extends Component<CropRectSignature> {
 		};
 	}
 
-	// uncropped: the pane keeps scrolling
+	// uncropped: pane scrolls
 	grabs = (point: Point) => {
 		if (!this.args.url) return false;
 		const shown = this.shownCrop;

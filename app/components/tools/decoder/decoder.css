@@ -1,4 +1,3 @@
-/* the banner: caption and score, the typed text, one of three pictures */
 .dec-picture {
 	position: absolute;
 	inset: 0;
@@ -53,7 +52,6 @@
 	align-self: stretch;
 }
 
-/* the text takes what the band has left, and scrolls in it */
 .dec-scroll {
 	flex: 1 1 0;
 	min-block-size: 0;
@@ -70,7 +68,7 @@
 	line-height: 24px;
 }
 
-/* both in one cell, set alike, so the caret sits on the tones */
+/* overlap so caret aligns */
 .dec-marks,
 .dec-input {
 	grid-area: 1 / 1;
@@ -106,7 +104,7 @@
 	color: var(--canon-muted-foreground);
 }
 
-/* empty: the dashed box, the place to type or paste; with .dec-text's padding the 88 px in decoder.gts */
+/* sums to decoder.gts 88px */
 .dec-input:placeholder-shown {
 	min-block-size: 80px;
 	padding: 12px;
@@ -120,7 +118,7 @@
 	border-color: var(--canon-primary);
 }
 
-/* stageHeight in picture.gts; it gives way only once the text has none left */
+/* stageHeight in picture.gts */
 .dec-stage {
 	position: relative;
 	flex: 0 1 148px;

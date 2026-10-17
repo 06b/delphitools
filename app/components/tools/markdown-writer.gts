@@ -178,7 +178,6 @@ export default class MarkdownWriterTool extends Component {
 		this.#flush();
 	}
 
-	// a pending save is written, not dropped
 	#flush = () => {
 		if (this.#saveTimer === undefined) return;
 		window.clearTimeout(this.#saveTimer);

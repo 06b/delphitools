@@ -1,4 +1,4 @@
-/* both in one cell, set alike, so the caret sits on the marks */
+/* overlap so caret aligns */
 .media-marked {
 	display: grid;
 }
@@ -55,7 +55,6 @@
 	color: var(--canon-muted-foreground);
 }
 
-/* empty: the dashed box, the place to type */
 .media-marked-source:placeholder-shown {
 	padding: 12px;
 	border: var(--canon-hairline) dashed var(--canon-muted-foreground);

@@ -18,7 +18,7 @@ export async function clipboardImages(): Promise<File[]> {
 				);
 		}
 	} catch {
-		// a denied clipboard pastes nothing
+		// denied: paste nothing
 	}
 	return files;
 }

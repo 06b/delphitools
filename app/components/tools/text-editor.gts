@@ -435,7 +435,7 @@ export default class TextEditorTool extends Component {
 
 	openSettings = () => (this.settingsOpen = true);
 
-	// Safari leaves a clicked button unfocused, so the dialog has no invoker
+	// safari: no invoker focus
 	closeSettings = () => {
 		this.settingsOpen = false;
 		this.#settingsCell?.focus();

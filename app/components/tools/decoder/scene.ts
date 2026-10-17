@@ -332,7 +332,7 @@ export interface Run {
 const alternate = (group: number | undefined): Tone =>
 	group === undefined ? 'muted' : group % 2 ? 'lit' : 'ink';
 
-/** Each run of characters between `apart` is one symbol. */
+// each run: one symbol
 function symbols(characters: string[], apart: RegExp): Tone[] {
 	let group = -1;
 	let inside = false;
@@ -347,7 +347,7 @@ function symbols(characters: string[], apart: RegExp): Tone[] {
 	});
 }
 
-// as encoded() and decoding() read: one tone per group of characters
+// mirrors encoded() and decoding()
 function bitTones(characters: string[], cipher: CipherId): Tone[] {
 	const code = codeOf(cipher);
 	const per = charsPerGroup(code);
@@ -393,7 +393,7 @@ function tonesOf(
 				characters.length,
 				params.rails,
 			);
-			// the cipher text is the rails one after another
+			// ciphertext is rails concatenated
 			return (
 				encode ? rails : rails.sort((a, b) => a - b)
 			).map(alternate);
@@ -439,7 +439,7 @@ function tonesOf(
 					),
 				);
 			} catch {
-				// no reading, nothing to compare
+				// no output to compare
 			}
 			if (output.length !== characters.length)
 				return characters.map(() => 'ink');

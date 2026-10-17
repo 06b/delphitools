@@ -48,9 +48,9 @@ const directions = ['Decode', 'Encode'];
 const cipherIds = CIPHER_OPTIONS.map((option) => option.value);
 const cipherLabels = CIPHER_OPTIONS.map((option) => option.label);
 const coprimes = AFFINE_COPRIMES.map(String);
-// collapsed: the head over one 88 px row of the drawing
+// head plus 88px row
 const collapsedHeight = headHeight + 88 + 4;
-// the empty band: head, the dashed box, drawing, rules
+// head, box, drawing, rules
 const emptyHeight = headHeight + 88 + stageHeight + 4;
 
 const reference = [
@@ -193,7 +193,7 @@ export default class Decoder extends Component {
 		return reference;
 	}
 
-	// while typing the band keeps its full height: CanonSplit never shrinks below collapsesTo
+	// typing never collapses band
 	get collapsesTo() {
 		return this.typing ? Number.MAX_SAFE_INTEGER : collapsedHeight;
 	}
@@ -297,7 +297,7 @@ export default class Decoder extends Component {
 	setTyping = (typing: boolean) => (this.typing = typing);
 
 	measured = (height: number) => {
-		// CanonCanvas takes both rules off @height
+		// canvas subtracts both rules
 		if (height + 4 !== this.pictureHeight)
 			this.pictureHeight = height + 4;
 	};

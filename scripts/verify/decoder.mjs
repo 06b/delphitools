@@ -102,7 +102,6 @@ check(
 	JSON.stringify(editor),
 );
 
-// the band's own height, the editor's scroller and the tones under the editor
 const picture = () =>
 	page.evaluate(() => {
 		const q = (s) => document.querySelector(`.decoder ${s}`);
@@ -160,7 +159,7 @@ check(
 	JSON.stringify(p.tones.slice(0, 4)),
 );
 
-// the band grows with the text up to a cap, then the text scrolls inside
+// band grows, then scrolls
 const oneLine = p.band;
 await setInput('AOL XBPJR IYVDU MVE QBTWZ VCLY AOL SHGF KVN.\n'.repeat(4));
 p = await picture();
@@ -184,7 +183,6 @@ await sleep(150);
 check('typing does not move the editor\'s scroll', (await picture()).scrollTop === 120, String((await picture()).scrollTop));
 await page.$eval('.decoder .dec-input', (el) => el.blur());
 
-// Paste and Clear sit in the picture's corner
 await page.evaluate(() => navigator.clipboard.writeText('Uryyb jbeyq'));
 await press('Paste');
 check(
@@ -328,7 +326,7 @@ check(
 	toneOf((await picture()).tones),
 );
 
-// phone: the picture collapses as the page scrolls, unless the editor has focus
+// phone: collapses unless focused
 await visit(page, `/tools/decoder?cipherReference=1&cipherText=${encodeURIComponent('AOL XBPJR IYVDU MVE QBTWZ VCLY AOL SHGF KVN. '.repeat(3))}`);
 const full = (await picture()).band;
 await page.$eval('.decoder .canon-split-body', (el) => (el.scrollTop = 500));

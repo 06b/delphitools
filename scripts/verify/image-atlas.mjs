@@ -450,8 +450,7 @@ const open = await page.$$eval('.ia-open:not([inert]) .dt-atlas-open [data-tool]
 );
 check('open-in lists image tools, not itself', open.includes('metadata-stripper') && !open.includes('image-atlas'));
 
-// [kind, system profile, expected name, expected gamut, outside sRGB range in %]
-// the fixture's sRGB-encoded #3a6 half lies outside sRGB once read as P3 or Adobe RGB, the #e33 half inside
+// #3a6 outside, #e33 inside
 const profiled = [
 	['jpeg', 'Display P3.icc', 'Display P3', '1.36 × sRGB', [45, 55]],
 	['png', 'AdobeRGB1998.icc', 'Adobe RGB (1998)', '1.35 × sRGB', [45, 55]],

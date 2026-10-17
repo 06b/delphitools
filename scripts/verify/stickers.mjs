@@ -2,7 +2,7 @@ import { BASE, check, finish, launch, sleep, visit } from "./harness.mjs";
 
 const { browser, page } = await launch();
 
-// scrolls every scroller to its end so the lazy sticker loads
+// triggers lazy sticker load
 async function toEnd() {
 	await page.evaluate(() => {
 		for (const el of document.querySelectorAll(
@@ -28,7 +28,7 @@ const place = () =>
 		);
 		const last = sections.at(-1);
 		const box = (el) => el.getBoundingClientRect();
-		// stacked: the panes are display: contents, the body is the column
+		// stacked: panes display contents
 		const items = [...(body?.querySelectorAll(
 			":scope > *, :scope > .canon-split-pane > *",
 		) ?? [])].filter(
@@ -116,7 +116,6 @@ for (const id of ["stupid-units", "recipe-table"]) {
 	check(`${id} without art shows nothing`, none);
 }
 
-// in-app navigation swaps the sticker for the next tool's
 await page.evaluate(() => {
 	const a = document.querySelector('a[href="/tools/json-formatter"]');
 	a?.click();
