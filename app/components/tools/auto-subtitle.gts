@@ -53,6 +53,7 @@ import {
 	acceptAttr,
 } from 'delphitools-v2/lib/tools';
 import { MODELS, transcribe, type Mode } from 'delphitools-v2/lib/transcribe';
+import { bandHeight } from 'delphitools-v2/components/tools/media/strips';
 import './media/media.css';
 import './auto-subtitle/auto-subtitle.css';
 
@@ -61,8 +62,6 @@ const FORMATS: SubtitleFormat[] = ['srt', 'vtt'];
 const FORMAT_LABELS = ['SRT', 'VTT'];
 const MODES: Mode[] = ['fast', 'reasonable', 'accurate'];
 const MODE_LABELS = ['Rough', 'Decent', 'Experimental'];
-/** iOS CanonCanvas(picture, size: .fixed(150)) */
-const bandHeight = 150;
 
 const DROP_TITLE = 'Drop an audio or video file';
 const FAILURES: Record<Exclude<Failure, ''>, string> = {

@@ -29,7 +29,9 @@ import {
 	RecorderBand,
 	RecorderTransport,
 } from 'delphitools-v2/components/tools/media/recorder';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import './media/media.css';
 import './voice-recorder/voice-recorder.css';
 
@@ -38,7 +40,6 @@ const MIC_DENIED = 'Microphone access was denied. Check browser permissions.';
 const NO_MIC = 'No microphone was found on this device.';
 const UNSUPPORTED = 'Recording is not supported in this browser.';
 
-const bandHeight = 150;
 const overviewHeight = 96;
 const noFrames: string[] = [];
 

@@ -33,7 +33,9 @@ import {
 	RecorderBand,
 	RecorderTransport,
 } from 'delphitools-v2/components/tools/media/recorder';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import './media/media.css';
 import './screen-recorder/screen-recorder.css';
 
@@ -45,7 +47,6 @@ const UNSUPPORTED = 'Screen recording is not supported in this browser.';
 const MIC_LABEL = 'Mix in microphone audio';
 const ASIDE = "Isn't it crazy that your browser can do this, by the way?";
 
-const bandHeight = 150;
 const overviewHeight = 96;
 // iOS AVEdit preview: height over width at most 1.25
 const tallest = 1.25;
