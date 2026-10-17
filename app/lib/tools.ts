@@ -894,7 +894,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'book-open',
 				href: '/tools/zine-imposer',
 				produces: ['application/pdf'],
-				accepts: ['.pdf'],
+				accepts: ['.pdf', 'image/*'],
 				canon: true,
 			},
 		],
