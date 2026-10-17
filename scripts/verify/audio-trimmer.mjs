@@ -1,4 +1,4 @@
-// the canon audio-trimmer: slot, band, trim editor, fades, zoom, export, transport
+// the canon audio-trimmer: blank layout, band, trim editor, fades, zoom, export, transport
 import {
 	launch,
 	visit,
@@ -109,16 +109,44 @@ check(
 			document.querySelector('.audio-trimmer').getBoundingClientRect().height,
 	),
 );
+const bandHeight = () =>
+	page.$eval('.canon-split-banner .canon-canvas', (el) => Math.round(el.getBoundingClientRect().height));
+let band = await bandHeight();
+check('empty: the band is the shared 138 px', band === 138, String(band));
 check(
-	'empty: the editor is the drop slot with the web wording, no settings or footer',
+	'empty: the Source row is the slot with the web wording',
 	await page.evaluate(
 		() =>
-			document.querySelector('.at-slot')?.textContent.trim() ===
-				'Drop an audio file here or click to upload' &&
-			!document.querySelector('.media-job-run') &&
-			!document.querySelector('.media-transport'),
+			document.querySelector('.canon-split-sidebar .at-slot.media-slot--row')?.textContent.trim() ===
+				'Drop an audio file here or click to upload',
 	),
 );
+check(
+	'empty: the loaded layout in blank: flat band and editor lanes',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.at-band.media-strips--blank .media-wave') &&
+			!!document.querySelector('.at-editor .media-strips--blank .media-wave') &&
+			[...document.querySelectorAll('.audio-trimmer .canon-heading')].map((h) => h.textContent.trim()).join() ===
+				'Source,Fades',
+	),
+);
+check(
+	'empty: no grips; fades, Export, Start, End, Set in, Set out, zoom and the transport are off',
+	await page.evaluate(() => {
+		const off = (sel) => document.querySelector(sel)?.disabled === true;
+		const sliders = [...document.querySelectorAll('.at-fade [role="slider"]')];
+		return (
+			sliders.length === 2 &&
+			sliders.every((s) => s.getAttribute('aria-disabled') === 'true' && s.tabIndex === -1) &&
+			['.media-job-run', '.at-start input', '.at-end input', '.at-set-in', '.at-set-out', '.at-zoom-out', '.at-zoom-in', '.at-fit', '.media-play', '.media-loop', '.media-stop'].every(off) &&
+			!document.querySelector('.media-trim-grip')
+		);
+	}),
+);
+
+const emptyClear = await footerClear();
+check('empty: the footer clears the last row', emptyClear.ok, JSON.stringify(emptyClear));
 
 await page.evaluate(() => {
 	const transfer = new DataTransfer();
@@ -144,6 +172,18 @@ check(
 );
 const detail = await page.$eval('.at-source .canon-row-detail', (el) => el.textContent.trim());
 check('the source row: length, rate, channels', /^3\.00 s · \d+ Hz · 2 ch$/.test(detail), detail);
+band = await bandHeight();
+check('loaded: the band stays 138 px', band === 138, String(band));
+check(
+	'loaded: the strips are no longer blank, the fades are on',
+	await page.evaluate(
+		() =>
+			!document.querySelector('.media-strips--blank') &&
+			[...document.querySelectorAll('.at-fade [role="slider"]')].every(
+				(s) => !s.hasAttribute('aria-disabled') && s.tabIndex === 0,
+			),
+	),
+);
 check('the band waveform is painted', await painted('.at-band .media-wave-canvas'));
 check('the editor waveform is painted', await painted('.at-editor .media-wave-canvas'));
 const ink = () =>
@@ -327,7 +367,11 @@ await page.evaluate(() =>
 	[...document.querySelectorAll('.at-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
 );
 await sleep(200);
-check('Clear returns to the slot', !!(await page.$('.at-slot')) && !(await page.$('.at-editor')));
+check(
+	'Clear returns to the slot and the blank layout',
+	!!(await page.$('.at-slot')) && !(await page.$('.at-source')) && !(await page.$('.media-trim-grip')) &&
+		(await page.$$('.media-strips--blank')).length === 2,
+);
 
 // paste anywhere loads; ?trimFades and ?trimLoop as the iOS launch arguments
 await visit(page, '/tools/audio-trimmer?trimFades=yes');

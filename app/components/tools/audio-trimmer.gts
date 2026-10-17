@@ -30,7 +30,9 @@ import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import Trim, {
 	type TrimEdge,
@@ -57,8 +59,7 @@ const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 const fixed = (seconds: number) => seconds.toFixed(2);
 const noFrames: string[] = [];
 
-// iOS AudioTrimmerViewController: band 150, editor 180
-const bandHeight = 150;
+// iOS AudioTrimmerViewController: editor 180
 const editorHeight = 180;
 
 const flag = (name: string) =>
@@ -105,6 +106,10 @@ export default class AudioTrimmer extends Component {
 
 	get loaded() {
 		return this.intake.fileName !== '';
+	}
+
+	get blank() {
+		return !this.loaded;
 	}
 
 	get decoded() {
@@ -410,7 +415,6 @@ export default class AudioTrimmer extends Component {
 			class="audio-trimmer"
 			@sidebarWidth={{380}}
 			@bannerSticks={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -435,14 +439,15 @@ export default class AudioTrimmer extends Component {
 							@playhead={{this.playback.playhead}}
 							@selection={{this.selection}}
 							@onScrub={{this.playback.scrub}}
+							@blank={{this.blank}}
 						/>
 					</CanonReadoutBand>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="at-source
 								{{if
@@ -460,54 +465,221 @@ export default class AudioTrimmer extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-						<CanonHeading @text="Fades" />
-						<CanonRow
-							class="at-fade at-fade-in"
-							@title="Fade in (s)"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonSlider
-								@value={{this.fadeIn}}
-								@max={{this.fadeMax}}
-								@step={{0.01}}
-								@readout={{fixed}}
-								@labelledBy={{titleId}}
-								@onChange={{this.setFadeIn}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="at-fade at-fade-out"
-							@title="Fade out (s)"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonSlider
-								@value={{this.fadeOut}}
-								@max={{this.fadeMax}}
-								@step={{0.01}}
-								@readout={{fixed}}
-								@fillsFromTrailing={{true}}
-								@labelledBy={{titleId}}
-								@onChange={{this.setFadeOut}}
-							/>
-						</CanonRow>
-						<Job
-							@title="Export WAV"
-							@icon={{Save}}
-							@failure={{EXPORT_ERROR}}
-							@disabled={{this.undecoded}}
-							@busy={{this.busy}}
-							@failed={{this.failed}}
-							@result={{this.resultRow}}
-							@onRun={{this.export}}
-							@onSave={{this.save}}
-							@onPreview={{this.preview}}
+					{{else}}
+						<Slot
+							class="at-slot"
+							@prompt={{DROP_PROMPT}}
+							@icon="audio-waveform"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
 						/>
-					</CanonRows>
-				{{/if}}
+						{{#if this.intake.error}}
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+					<CanonHeading @text="Fades" />
+					<CanonRow
+						class="at-fade at-fade-in
+							{{if
+								this.blank
+								'at-fade--off'
+							}}"
+						@title="Fade in (s)"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.fadeIn}}
+							@max={{this.fadeMax}}
+							@step={{0.01}}
+							@readout={{fixed}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setFadeIn}}
+							aria-disabled={{if
+								this.blank
+								"true"
+							}}
+							tabindex={{if
+								this.blank
+								"-1"
+								"0"
+							}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="at-fade at-fade-out
+							{{if
+								this.blank
+								'at-fade--off'
+							}}"
+						@title="Fade out (s)"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.fadeOut}}
+							@max={{this.fadeMax}}
+							@step={{0.01}}
+							@readout={{fixed}}
+							@fillsFromTrailing={{true}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setFadeOut}}
+							aria-disabled={{if
+								this.blank
+								"true"
+							}}
+							tabindex={{if
+								this.blank
+								"-1"
+								"0"
+							}}
+						/>
+					</CanonRow>
+					<Job
+						@title="Export WAV"
+						@icon={{Save}}
+						@failure={{EXPORT_ERROR}}
+						@disabled={{this.undecoded}}
+						@busy={{this.busy}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.export}}
+						@onSave={{this.save}}
+						@onPreview={{this.preview}}
+					/>
+				</CanonRows>
 			</:sidebar>
 			<:main>
+				<CanonCanvas
+					class="at-editor"
+					@height={{editorHeight}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					<Trim
+						@duration={{this.view.span}}
+						@start={{this.viewStart}}
+						@end={{this.viewEnd}}
+						@origin={{this.view.start}}
+						@disabled={{this.undecoded}}
+						@onChange={{this.edit}}
+					>
+						<div class="at-lane">
+							<Strips
+								@thumbnails={{noFrames}}
+								@waveform={{true}}
+								@peaks={{this.viewPeaks}}
+								@duration={{this.view.span}}
+								@playhead={{this.viewPlayhead}}
+								@blank={{this.blank}}
+							/>
+							{{#if this.curve}}
+								<svg
+									class="at-curve"
+									viewBox="0 0 1 1"
+									preserveAspectRatio="none"
+									aria-hidden="true"
+								><polyline
+										points={{this.curve}}
+									/></svg>
+							{{/if}}
+						</div>
+					</Trim>
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						class="at-start"
+						@title="Start"
+						@detail={{this.startText}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.start}}
+							@max={{this.startMax}}
+							@labelledBy={{titleId}}
+							@disabled={{this.undecoded}}
+							@onChange={{this.selectStart}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="at-end"
+						@title="End"
+						@detail={{this.endText}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.end}}
+							@min={{this.endMin}}
+							@max={{this.duration}}
+							@labelledBy={{titleId}}
+							@disabled={{this.undecoded}}
+							@onChange={{this.selectEnd}}
+						/>
+					</CanonRow>
+					<CanonGrid>
+						<CanonButton
+							class="at-set-in"
+							@text="Set in"
+							@icon={{SetIn}}
+							@disabled={{this.noPlayhead}}
+							@onClick={{this.setIn}}
+						/>
+						<CanonButton
+							class="at-set-out"
+							@text="Set out"
+							@icon={{SetOut}}
+							@disabled={{this.noPlayhead}}
+							@onClick={{this.setOut}}
+						/>
+					</CanonGrid>
+					<CanonGrid class="at-zoom">
+						<CanonButton
+							class="at-zoom-out"
+							@label="Zoom out"
+							@icon={{ZoomOut}}
+							@disabled={{if
+								this.view.isZoomed
+								false
+								true
+							}}
+							@onClick={{this.zoomOut}}
+						/>
+						<CanonButton
+							class="at-zoom-in"
+							@label="Zoom in"
+							@icon={{ZoomIn}}
+							@disabled={{this.undecoded}}
+							@onClick={{this.zoomIn}}
+						/>
+						<CanonButton
+							class="at-fit"
+							@label="Reset zoom"
+							@icon={{Fit}}
+							@disabled={{if
+								this.view.isZoomed
+								false
+								true
+							}}
+							@onClick={{this.fit}}
+						/>
+					</CanonGrid>
+					{{#if this.viewLabel}}
+						<CanonRow
+							class="at-view"
+							@title="View"
+							@detail={{this.viewLabel}}
+						/>
+					{{/if}}
+				</CanonRows>
+				{{! last: a hidden first child keeps the kit from setting the editor flush under the band }}
 				{{#if this.loaded}}
 					{{! the transport is its control; user media lacks captions }}
 					{{! template-lint-disable require-media-caption }}
@@ -519,154 +691,6 @@ export default class AudioTrimmer extends Component {
 						{{fadeGain this.gain}}
 						{{on "timeupdate" this.follow}}
 					></audio>
-					<CanonCanvas
-						class="at-editor"
-						@height={{editorHeight}}
-						@boxing="unlessWide"
-						@background="var(--canon-muted)"
-					>
-						<Trim
-							@duration={{this.view.span}}
-							@start={{this.viewStart}}
-							@end={{this.viewEnd}}
-							@origin={{this.view.start}}
-							@disabled={{this.undecoded}}
-							@onChange={{this.edit}}
-						>
-							<div class="at-lane">
-								<Strips
-									@thumbnails={{noFrames}}
-									@waveform={{true}}
-									@peaks={{this.viewPeaks}}
-									@duration={{this.view.span}}
-									@playhead={{this.viewPlayhead}}
-								/>
-								{{#if
-									this.curve
-								}}
-									<svg
-										class="at-curve"
-										viewBox="0 0 1 1"
-										preserveAspectRatio="none"
-										aria-hidden="true"
-									><polyline
-											points={{this.curve}}
-										/></svg>
-								{{/if}}
-							</div>
-						</Trim>
-					</CanonCanvas>
-					<CanonRows @framed={{true}}>
-						<CanonRow
-							class="at-start"
-							@title="Start"
-							@detail={{this.startText}}
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.start}}
-								@max={{this.startMax}}
-								@labelledBy={{titleId}}
-								@disabled={{this.undecoded}}
-								@onChange={{this.selectStart}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="at-end"
-							@title="End"
-							@detail={{this.endText}}
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.end}}
-								@min={{this.endMin}}
-								@max={{this.duration}}
-								@labelledBy={{titleId}}
-								@disabled={{this.undecoded}}
-								@onChange={{this.selectEnd}}
-							/>
-						</CanonRow>
-						<CanonGrid>
-							<CanonButton
-								class="at-set-in"
-								@text="Set in"
-								@icon={{SetIn}}
-								@disabled={{this.noPlayhead}}
-								@onClick={{this.setIn}}
-							/>
-							<CanonButton
-								class="at-set-out"
-								@text="Set out"
-								@icon={{SetOut}}
-								@disabled={{this.noPlayhead}}
-								@onClick={{this.setOut}}
-							/>
-						</CanonGrid>
-						<CanonGrid class="at-zoom">
-							<CanonButton
-								class="at-zoom-out"
-								@label="Zoom out"
-								@icon={{ZoomOut}}
-								@disabled={{if
-									this.view.isZoomed
-									false
-									true
-								}}
-								@onClick={{this.zoomOut}}
-							/>
-							<CanonButton
-								class="at-zoom-in"
-								@label="Zoom in"
-								@icon={{ZoomIn}}
-								@disabled={{this.undecoded}}
-								@onClick={{this.zoomIn}}
-							/>
-							<CanonButton
-								class="at-fit"
-								@label="Reset zoom"
-								@icon={{Fit}}
-								@disabled={{if
-									this.view.isZoomed
-									false
-									true
-								}}
-								@onClick={{this.fit}}
-							/>
-						</CanonGrid>
-						{{#if this.viewLabel}}
-							<CanonRow
-								class="at-view"
-								@title="View"
-								@detail={{this.viewLabel}}
-							/>
-						{{/if}}
-					</CanonRows>
-				{{else}}
-					<CanonCanvas
-						class="at-drop"
-						@height={{editorHeight}}
-						@boxing="unlessWide"
-					>
-						<Slot
-							class="at-slot"
-							@prompt={{DROP_PROMPT}}
-							@icon="audio-waveform"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					</CanonCanvas>
-					{{#if this.intake.error}}
-						<CanonRows @framed={{true}}>
-							<CanonStatus
-								@text={{this.intake.error}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						</CanonRows>
-					{{/if}}
 				{{/if}}
 			</:main>
 			<:footer>
