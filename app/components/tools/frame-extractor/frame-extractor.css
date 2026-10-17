@@ -15,11 +15,6 @@
 	object-fit: contain;
 }
 
-/* the loaded Source row, title over detail, is 60 tall */
-.fx-slot.media-slot--row {
-	min-block-size: var(--canon-secondary-height);
-}
-
 .fx-blank {
 	display: block;
 	inline-size: 100%;
