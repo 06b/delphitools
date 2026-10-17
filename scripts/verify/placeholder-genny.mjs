@@ -167,6 +167,44 @@ const png = await page.evaluate(async () => {
 	return { type: window.__result.type, width: bitmap.width, height: bitmap.height };
 });
 check('Download PNG writes the export', png.type === 'image/png' && png.width === 1920 && png.height === 1080, JSON.stringify(png));
+check('the SVG label names Iosevka', /<text[^>]*font-family="Iosevka/.test(code));
+const face = await page.evaluate(async () => {
+	const pixels = (source) => {
+		const c = document.createElement('canvas');
+		c.width = 1920;
+		c.height = 1080;
+		const ctx = c.getContext('2d');
+		ctx.drawImage(source, 0, 0);
+		return ctx.getImageData(0, 0, 1920, 1080).data;
+	};
+	const reference = (family) => {
+		const c = document.createElement('canvas');
+		c.width = 1920;
+		c.height = 1080;
+		const ctx = c.getContext('2d');
+		ctx.fillStyle = '#1e6626';
+		ctx.fillRect(0, 0, 1920, 1080);
+		ctx.fillStyle = '#666666';
+		ctx.font = `bold 135px ${family}`;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		ctx.fillText('Hi & <there>', 960, 540);
+		return pixels(c);
+	};
+	const diff = (a, b) => {
+		let n = 0;
+		for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i]) n++;
+		return n;
+	};
+	const exported = pixels(document.querySelector('.ph-sheet'));
+	return {
+		loaded: document.fonts.check('bold 16px Iosevka'),
+		iosevka: diff(exported, reference('Iosevka')),
+		generic: diff(exported, reference('monospace')),
+	};
+});
+// an in-page canvas antialiases a few edge pixels differently from the attached one
+check('the PNG label is drawn in Iosevka', face.loaded && face.iosevka * 4 < face.generic, JSON.stringify(face));
 
 // phone: collapses, nothing scrolls sideways
 await page.setViewport({ width: 390, height: 844 });

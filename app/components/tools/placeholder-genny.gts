@@ -29,6 +29,7 @@ import {
 	base64Utf8,
 	baseName,
 	maxDimension,
+	monoFont,
 	placeholderFontSize,
 	placeholderLabel,
 	placeholderSvg,
@@ -118,7 +119,7 @@ export default class PlaceholderGenny extends Component {
 	}
 
 	get svg() {
-		return placeholderSvg(this.spec);
+		return placeholderSvg(this.spec, monoFont());
 	}
 
 	get sizeLabel() {

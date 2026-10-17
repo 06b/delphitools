@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
+import type Owner from '@ember/owner';
 import CanonDimensionLine from 'delphicanon/components/canon-dimension-line';
 import {
 	dimensionLines,
@@ -10,6 +11,7 @@ import {
 } from 'delphicanon/lib/dimension-line';
 import {
 	drawPlaceholder,
+	monoFont,
 	placeholderLabel,
 	type PlaceholderSpec,
 } from 'delphitools-v2/components/tools/placeholder-genny/placeholder';
@@ -37,6 +39,19 @@ function box({ x, y, width, height }: Rect) {
  */
 export default class PlaceholderPicture extends Component<PlaceholderPictureSignature> {
 	@tracked area: Rect = { x: 0, y: 0, width: 0, height: 0 };
+	@tracked fontReady = false;
+
+	font = monoFont();
+
+	constructor(owner: Owner, args: PlaceholderPictureSignature['Args']) {
+		super(owner, args);
+		// a canvas draws with a fallback until the face is loaded
+		void document.fonts
+			.load(`bold 16px ${this.font}`)
+			.finally(() => {
+				if (!this.isDestroying) this.fontReady = true;
+			});
+	}
 
 	get frame() {
 		const { width, height } = this.args.spec;
@@ -70,9 +85,10 @@ export default class PlaceholderPicture extends Component<PlaceholderPictureSign
 		return () => observer.disconnect();
 	});
 
-	// autotracked: redraws on every change of the spec
+	// autotracked: redraws on every change of the spec and once the font loads
 	paint = modifier((canvas: HTMLCanvasElement) => {
-		drawPlaceholder(canvas, this.args.spec);
+		if (!this.fontReady) return;
+		drawPlaceholder(canvas, this.args.spec, this.font);
 		this.args.onCanvas(canvas);
 	});
 

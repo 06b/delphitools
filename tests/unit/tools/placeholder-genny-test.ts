@@ -26,7 +26,7 @@ module('Unit | Tool | placeholder-genny', function () {
 	test('the SVG is the web export', function (assert) {
 		const svg = placeholderSvg(spec);
 		assert.true(svg.includes('font-size="75"'));
-		assert.true(svg.includes('font-family="monospace"'));
+		assert.true(svg.includes('font-family="Iosevka, monospace"'));
 		assert.true(svg.includes('<rect fill="#e2e2e2"'));
 		assert.true(svg.includes('>800 × 600</text>'));
 		assert.true(

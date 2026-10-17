@@ -11,6 +11,16 @@ export interface PlaceholderSpec {
 
 export const maxDimension = 4096;
 
+export const fallbackFont = 'Iosevka, monospace';
+
+/** The app's `--canon-mono-font` stack. */
+export function monoFont(): string {
+	const stack = getComputedStyle(document.documentElement)
+		.getPropertyValue('--canon-mono-font')
+		.trim();
+	return stack || fallbackFont;
+}
+
 export const presets = [
 	{ label: 'HD', width: 1920, height: 1080 },
 	{ label: 'Square', width: 1000, height: 1000 },
@@ -41,13 +51,16 @@ export function escapeXml(value: string): string {
 		.replace(/'/g, '&apos;');
 }
 
-export function placeholderSvg(spec: PlaceholderSpec): string {
+export function placeholderSvg(
+	spec: PlaceholderSpec,
+	font = fallbackFont,
+): string {
 	const { width, height, background, foreground } = spec;
 	const fontSize = placeholderFontSize(width, height);
 	const label = escapeXml(placeholderLabel(spec.text, width, height));
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect fill="${escapeXml(background)}" width="${width}" height="${height}"/>
-  <text fill="${escapeXml(foreground)}" font-family="monospace" font-size="${fontSize}" font-weight="bold" x="50%" y="50%" text-anchor="middle" dominant-baseline="middle">${label}</text>
+  <text fill="${escapeXml(foreground)}" font-family="${escapeXml(font)}" font-size="${fontSize}" font-weight="bold" x="50%" y="50%" text-anchor="middle" dominant-baseline="middle">${label}</text>
 </svg>`;
 }
 
@@ -62,6 +75,7 @@ export function base64Utf8(value: string): string {
 export function drawPlaceholder(
 	canvas: HTMLCanvasElement,
 	spec: PlaceholderSpec,
+	font = fallbackFont,
 ): void {
 	const { width, height } = spec;
 	canvas.width = width;
@@ -74,7 +88,7 @@ export function drawPlaceholder(
 	ctx.fillRect(0, 0, width, height);
 
 	ctx.fillStyle = spec.foreground;
-	ctx.font = `bold ${placeholderFontSize(width, height)}px monospace`;
+	ctx.font = `bold ${placeholderFontSize(width, height)}px ${font}`;
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	ctx.fillText(
