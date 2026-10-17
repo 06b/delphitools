@@ -1,0 +1,16 @@
+/* as tall as the flush Source row: kit canon-row.css, 20px padding,
+   2px gap, title and detail at line-height 1.3 */
+.va-slot.media-slot--row {
+	min-block-size: calc(
+		22px + 1.3 *
+			(var(--canon-text-body) + var(--canon-text-caption))
+	);
+}
+
+.va-open--blank .dt-atlas-open a {
+	color: var(--canon-muted-foreground);
+}
+
+.va-open--blank .dt-atlas-open a .dt-icon {
+	color: inherit;
+}

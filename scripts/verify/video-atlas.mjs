@@ -1,4 +1,4 @@
-// the canon video-atlas: slot, filmstrip band, report, copy, preview, transport
+// the canon video-atlas: blank layout, filmstrip band, report, copy, preview, transport
 import {
 	launch,
 	visit,
@@ -27,18 +27,107 @@ check(
 			document.querySelector('.video-atlas').getBoundingClientRect().height,
 	),
 );
+const bandHeight = () =>
+	page.evaluate(() => ({
+		band: document.querySelector('.video-atlas .canon-canvas').getBoundingClientRect().height,
+		strip: document.querySelector('.media-strips').getBoundingClientRect().height,
+	}));
+const headings = () =>
+	page.evaluate(() =>
+		[...document.querySelectorAll('.video-atlas .canon-heading')].map((h) => h.textContent.trim()).join('|'),
+	);
+const shots = async (state) => {
+	if (!process.env.SHOTS) return;
+	for (const [w, h] of [
+		[390, 844],
+		[1400, 1000],
+	])
+		for (const theme of ['light', 'dark']) {
+			await page.setViewport({ width: w, height: h });
+			await page.evaluate((t) => {
+				document.documentElement.classList.remove('light', 'dark');
+				document.documentElement.classList.add(t);
+			}, theme);
+			await sleep(400);
+			await page.screenshot({ path: `${process.env.SHOTS}/video-atlas-${state}-${w}-${theme}.png` });
+		}
+	await page.setViewport({ width: 1400, height: 1000 });
+	await sleep(300);
+};
+
 check(
-	'empty: the band is the drop slot with the web wording, no transport',
+	'empty: the Source row is the drop slot, a button with the web wording',
 	await page.evaluate(
 		() =>
-			document.querySelector('.va-slot')?.textContent.trim() === 'Drop a video here' &&
-			!document.querySelector('.media-transport'),
+			document.querySelector('.va-slot.media-slot--row')?.tagName === 'BUTTON' &&
+			document.querySelector('.va-slot').textContent.trim() === 'Drop a video here',
 	),
 );
+check(
+	'empty: blank frame cells, no waveform, dashed General/Video/Audio info',
+	await page.evaluate(
+		() =>
+			document.querySelectorAll('.media-strips--blank .media-frame--blank').length > 0 &&
+			!document.querySelector('.media-wave') &&
+			[...document.querySelectorAll('.media-sections .canon-heading')].map((h) => h.textContent.trim()).join('|') ===
+				'General|Video #1|Audio #1' &&
+			[...document.querySelectorAll('.media-sections .canon-tiles-value')].every(
+				(v) => v.textContent.trim() === '\u2014',
+			),
+	),
+);
+check(
+	'empty: the counter shows hyphens',
+	await page.evaluate(() => !/\d/.test(document.querySelector('.canon-timecode')?.textContent ?? '')),
+);
+const emptyBand = await bandHeight();
+check('empty: the band is bandHeight (138) tall', emptyBand.band === 138, JSON.stringify(emptyBand));
+const previewBox = () =>
+	page.evaluate(() => {
+		const { x, y, width, height } = document.querySelector('.va-preview').getBoundingClientRect();
+		return JSON.stringify([x, y, width, height].map(Math.round));
+	});
+check(
+	'empty: the picture is a blank muted box, no video, 16:9 below the 340 px cap',
+	await page.evaluate(() => {
+		const preview = document.querySelector('.va-preview');
+		const box = preview.querySelector('.canon-canvas-content').getBoundingClientRect();
+		const fill = preview.style.getPropertyValue('--canon-canvas-background');
+		return (
+			!preview.querySelector('video') &&
+			(box.height >= 336 || Math.abs(box.width / box.height - 16 / 9) < 0.02) &&
+			fill.trim() === 'var(--canon-muted)' &&
+			preview.textContent.trim() === ''
+		);
+	}),
+);
+const emptyPreview = await previewBox();
+check(
+	'empty: Copy report, the transport and Full Screen are off',
+	await page.evaluate(
+		() =>
+			document.querySelector('.va-copy').disabled === true &&
+			document.querySelector('.media-play')?.disabled === true &&
+			document.querySelector('.va-full')?.disabled === true,
+	),
+);
+check(
+	'empty: the Open in cells are shown, inert, without this tool',
+	await page.evaluate(() => {
+		const open = document.querySelector('.va-open--blank');
+		const ids = [...(open?.querySelectorAll('[data-tool]') ?? [])].map((a) => a.dataset.tool);
+		return open?.inert === true && ids.includes('video-muter') && !ids.includes('video-atlas');
+	}),
+);
+const emptyOrder = await headings();
+await shots('empty');
 
 await makeClip(page, { audio: true, name: 'sweep.webm' });
 await dropClip(page, '.video-atlas');
-await page.waitForSelector('.media-sections', { timeout: 30000 });
+await page.waitForFunction(
+	() => /WebM|Matroska/.test(document.querySelector('.media-sections .canon-tiles-value')?.textContent ?? ''),
+	{ timeout: 30000 },
+);
 const report = await page.evaluate(() => {
 	const out = {};
 	let title = '';
@@ -81,13 +170,26 @@ check(
 	JSON.stringify(copied).slice(0, 120),
 );
 
-await page.waitForFunction(() => document.querySelectorAll('.media-frame').length > 0, {
+await page.waitForFunction(() => document.querySelectorAll('img.media-frame').length > 0, {
 	timeout: 15000,
 });
 check(
 	'the band is a filmstrip without a waveform',
-	!(await page.$('.media-wave')) && (await page.$$('.media-frame')).length > 0,
+	!(await page.$('.media-wave')) && !(await page.$('.media-frame--blank')),
 );
+const loadedBand = await bandHeight();
+check(
+	'loaded: the band is bandHeight (138) tall, the filmstrip as tall as empty',
+	loadedBand.band === 138 && loadedBand.strip === emptyBand.strip,
+	JSON.stringify(loadedBand),
+);
+check('loaded: the picture keeps the blank box size and place (16:9 clip)', (await previewBox()) === emptyPreview, `${emptyPreview} → ${await previewBox()}`);
+check('loaded: the same headings in the same order as empty', (await headings()) === emptyOrder, emptyOrder);
+check(
+	'loaded: the Open in cells are live',
+	await page.evaluate(() => !document.querySelector('.va-open--blank') && !document.querySelector('.va-open').inert),
+);
+await shots('loaded');
 check(
 	'the preview has no native controls; the transport has Picture in Picture and Full Screen',
 	await page.evaluate(
@@ -121,8 +223,14 @@ await page.evaluate(() =>
 );
 await sleep(200);
 check(
-	'Clear returns to the slot',
-	!!(await page.$('.va-slot')) && !(await page.$('.media-sections')),
+	'Clear returns to the blank layout',
+	!!(await page.$('.va-slot')) &&
+		!!(await page.$('.media-strips--blank')) &&
+		(await page.evaluate(() =>
+			[...document.querySelectorAll('.media-sections .canon-tiles-value')].every(
+				(v) => v.textContent.trim() === '\u2014',
+			),
+		)),
 );
 
 await page.setViewport({ width: 390, height: 844 });

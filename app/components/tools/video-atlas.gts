@@ -6,9 +6,7 @@ import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSplit from 'delphicanon/components/canon-split';
@@ -18,8 +16,11 @@ import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { VideoIntake } from 'delphitools-v2/lib/video';
 import { VIDEO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
+import { toolsForFile } from 'delphitools-v2/lib/omni';
+import { sample } from 'delphitools-v2/lib/workflows';
 import {
 	analyzeMedia,
+	blankSections,
 	reportText,
 	sections,
 	type Track,
@@ -29,18 +30,23 @@ import OpenIn from 'delphitools-v2/components/tools/media/open-in';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import {
 	release,
 	thumbnails,
 } from 'delphitools-v2/components/tools/media/frames';
 import './media/media.css';
+import './video-atlas/video-atlas.css';
 
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const READ_ERROR = "Couldn't read that file's container";
-// four frames on a phone (iOS stripHeight)
-const bandHeight = readoutBandHeight(56);
+const BLANK_INFO = blankSections(['General', 'Video', 'Audio']);
+const BLANK_OPEN = toolsForFile(sample('video/mp4')).filter(
+	(tool) => tool.id !== 'video-atlas' && !tool.route,
+);
 // iOS: height over width at most 1.25, at most 340 pt tall
 const tallest = 1.25;
 const tallestPreview = 340;
@@ -84,6 +90,10 @@ export default class VideoAtlas extends Component {
 	@cached
 	get sections() {
 		return sections(this.tracks);
+	}
+
+	get shownInfo() {
+		return this.sections.length ? this.sections : BLANK_INFO;
 	}
 
 	get streamSummary() {
@@ -184,6 +194,7 @@ export default class VideoAtlas extends Component {
 		this.tracks = [];
 		this.busy = false;
 		this.failed = false;
+		this.aspect = 16 / 9;
 	};
 
 	<template>
@@ -191,7 +202,6 @@ export default class VideoAtlas extends Component {
 			class="video-atlas"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -208,34 +218,28 @@ export default class VideoAtlas extends Component {
 						}}
 						@readout="below"
 					>
-						{{#if this.loaded}}
-							<Strips
-								@thumbnails={{this.frames}}
-								@aspect={{this.aspect}}
-								@duration={{this.intake.duration}}
-								@playhead={{this.playback.playhead}}
-								@onScrub={{this.playback.scrub}}
-							/>
-						{{else}}
-							<Slot
-								class="va-slot"
-								@prompt="Drop a video here"
-								@icon="film"
-								@accept={{ACCEPT}}
-								@over={{this.drop.over}}
-								@onFile={{this.intake.load}}
-							/>
-						{{/if}}
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@duration={{this.intake.duration}}
+							@playhead={{this.playback.playhead}}
+							@onScrub={{this.playback.scrub}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
+						/>
 					</CanonReadoutBand>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				<Sections @sections={{this.sections}} />
+				<Sections @sections={{this.shownInfo}} />
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="va-source"
 							@title={{this.intake.fileName}}
@@ -249,26 +253,49 @@ export default class VideoAtlas extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-						<CanonButton
-							class="va-copy"
-							@kind="primary"
-							@text="Copy report"
-							@icon={{Copy}}
-							@disabled={{if
-								this.tracks.length
-								false
-								true
-							}}
-							@onClick={{this.copy}}
+					{{else}}
+						<Slot
+							class="va-slot"
+							@prompt="Drop a video here"
+							@icon="film"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
 						/>
-					</CanonRows>
-					<CanonCanvas
-						class="va-preview"
-						@aspect={{this.previewAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-						@background="#000"
-					>
+						{{#if this.warning}}
+							<CanonStatus
+								@text={{this.warning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+					<CanonButton
+						class="va-copy"
+						@kind="primary"
+						@text="Copy report"
+						@icon={{Copy}}
+						@disabled={{if
+							this.tracks.length
+							false
+							true
+						}}
+						@onClick={{this.copy}}
+					/>
+				</CanonRows>
+				<CanonCanvas
+					class="va-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if
+						this.loaded
+						"#000"
+						"var(--canon-muted)"
+					}}
+				>
+					{{#if this.loaded}}
 						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
@@ -288,20 +315,21 @@ export default class VideoAtlas extends Component {
 								this.intake.failed
 							}}
 						></video>
-					</CanonCanvas>
+					{{/if}}
+				</CanonCanvas>
+				{{#if this.loaded}}
 					<OpenIn
 						class="va-open"
 						@file={{this.intake.file}}
 						@self="video-atlas"
 					/>
-				{{else if this.warning}}
-					<CanonRows @framed={{true}}>
-						<CanonStatus
-							@text={{this.warning}}
-							@tone="warn"
-							@row={{true}}
-						/>
-					</CanonRows>
+				{{else}}
+					{{! no file to hand off yet }}
+					<OpenIn
+						class="va-open va-open--blank"
+						@tools={{BLANK_OPEN}}
+						inert
+					/>
 				{{/if}}
 			</:main>
 			<:footer>
