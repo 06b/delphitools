@@ -1,0 +1,361 @@
+/* iOS DiffListing: removed is destructive, added is maths green */
+.text-diff {
+	--td-del: var(--canon-destructive);
+	--td-add: var(--canon-math-green);
+	--td-del-line: color-mix(in srgb, var(--td-del) 10%, transparent);
+	--td-add-line: color-mix(in srgb, var(--td-add) 13%, transparent);
+	--td-del-word: color-mix(in srgb, var(--td-del) 24%, transparent);
+	--td-add-word: color-mix(in srgb, var(--td-add) 30%, transparent);
+}
+
+/* picture: both sides as editors; each side keeps what it needs, up to an equal share */
+.td-picture {
+	display: grid;
+	grid-template-rows: repeat(2, minmax(0, auto));
+	block-size: 100%;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	container-type: inline-size;
+}
+
+.td-side {
+	display: flex;
+	flex-direction: column;
+	min-block-size: 0;
+}
+
+.td-side + .td-side {
+	box-shadow: inset 0 var(--canon-hairline) 0 var(--canon-border);
+}
+
+.td-side-head,
+.td-side-text {
+	box-sizing: border-box;
+	inline-size: min(100%, 736px);
+	margin-inline: auto;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.td-side-head {
+	display: flex;
+	flex: none;
+	gap: 16px;
+	align-items: center;
+	block-size: 44px;
+	margin-block-start: 6px;
+}
+
+.td-side-label {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.td-side-tools {
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-inline-start: auto;
+}
+
+.td-side-scroll {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+/* both in one cell, set alike, so the caret sits on the marks */
+.td-side-text {
+	display: grid;
+	flex: 1 0 auto;
+	padding-block: 4px var(--canon-panel-padding);
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+	line-height: 1.5;
+}
+
+.td-marks,
+.td-source {
+	grid-area: 1 / 1;
+	min-inline-size: 0;
+}
+
+.td-mark-line {
+	display: grid;
+	grid-template-columns: var(--td-gutter) minmax(0, 1fr);
+}
+
+.td-side--old .td-mark-line--lit {
+	background: var(--td-del-line);
+}
+
+.td-side--new .td-mark-line--lit {
+	background: var(--td-add-line);
+}
+
+.td-side--old .td-word {
+	background: var(--td-del-word);
+}
+
+.td-side--new .td-word {
+	background: var(--td-add-word);
+}
+
+.td-gutter {
+	padding-inline-end: 10px;
+	color: var(--canon-muted-foreground);
+	font-size: 11px;
+	text-align: end;
+	user-select: none;
+}
+
+.td-mark-text,
+.td-source {
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	tab-size: 8;
+}
+
+.td-source {
+	box-sizing: border-box;
+	min-block-size: 96px;
+	margin: 0;
+	padding: 0 0 0 var(--td-gutter);
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: transparent;
+	caret-color: var(--canon-foreground);
+	font: inherit;
+	line-height: inherit;
+	resize: none;
+	outline: none;
+}
+
+.td-source::selection {
+	background: color-mix(in srgb, var(--canon-primary) 30%, transparent);
+}
+
+.td-source::placeholder {
+	color: var(--canon-muted-foreground);
+}
+
+/* empty: the dashed box, the place to type */
+.td-source:placeholder-shown {
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.td-source:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+/* the ribbon map (iOS DiffRibbons) */
+.td-ribbons {
+	box-sizing: border-box;
+	block-size: 100%;
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.td-ribbons-box {
+	inline-size: min(100%, 760px);
+	margin-inline: auto;
+}
+
+.td-ribbons-figures {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	block-size: 40px;
+	margin-block-end: 8px;
+}
+
+.td-ribbons-figures--blank {
+	visibility: hidden;
+}
+
+.td-ribbons-figure {
+	display: inline-flex;
+	gap: 8px;
+	align-items: baseline;
+}
+
+.td-ribbons-word {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.td-ribbons-map {
+	display: block;
+	overflow: visible;
+}
+
+.td-ribbons-blank {
+	fill: none;
+	stroke: var(--canon-muted-foreground);
+	stroke-width: var(--canon-hairline);
+	stroke-dasharray: 4 3;
+}
+
+.td-ribbon {
+	stroke-width: var(--canon-hairline);
+}
+
+.td-ribbon--same {
+	fill: color-mix(in srgb, var(--canon-foreground) 11%, transparent);
+	stroke: color-mix(in srgb, var(--canon-foreground) 22%, transparent);
+}
+
+.td-ribbon--del,
+.td-ribbon--swap {
+	stroke: color-mix(in srgb, var(--td-del) 70%, transparent);
+}
+
+.td-ribbon--add {
+	stroke: color-mix(in srgb, var(--td-add) 70%, transparent);
+}
+
+.td-stop-del {
+	stop-color: var(--td-del);
+	stop-opacity: 0.34;
+}
+
+.td-stop-add {
+	stop-color: var(--td-add);
+	stop-opacity: 0.38;
+}
+
+.td-stop--faint {
+	stop-opacity: 0.06;
+}
+
+.td-bars--same {
+	fill: color-mix(in srgb, var(--canon-foreground) 30%, transparent);
+}
+
+.td-bars--del {
+	fill: var(--td-del);
+}
+
+.td-bars--add {
+	fill: var(--td-add);
+}
+
+.td-ribbons-captions {
+	display: flex;
+	justify-content: space-between;
+	margin-block-start: 6px;
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 14px;
+}
+
+.td-ribbons-count {
+	margin-inline-start: 0.6em;
+	color: var(--canon-muted-foreground);
+}
+
+/* the unified listing */
+.td-listing {
+	display: grid;
+	grid-template-columns: minmax(100%, max-content);
+	box-sizing: border-box;
+	max-block-size: 600px;
+	padding-block: 10px;
+	overflow: auto;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 13px;
+	line-height: 1.5;
+	outline: none;
+}
+
+.td-listing:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--canon-primary);
+}
+
+.td-listing--wrap {
+	grid-template-columns: 100%;
+}
+
+.td-row {
+	display: grid;
+	grid-template-columns:
+		calc(var(--td-digits) * 1ch) calc(var(--td-digits) * 1ch)
+		1ch minmax(0, 1fr);
+	gap: 8px;
+	align-items: baseline;
+	padding-inline: 12px var(--canon-panel-padding);
+
+	/* rows out of view skip layout while typing in a long text */
+	content-visibility: auto;
+	contain-intrinsic-block-size: auto 19.5px;
+}
+
+.td-row--del {
+	background: var(--td-del-line);
+}
+
+.td-row--add {
+	background: var(--td-add-line);
+}
+
+.td-row--del .td-word {
+	background: var(--td-del-word);
+}
+
+.td-row--add .td-word {
+	background: var(--td-add-word);
+}
+
+.td-num,
+.td-marker {
+	color: var(--canon-muted-foreground);
+	font-size: 11px;
+	text-align: end;
+	user-select: none;
+}
+
+.td-marker {
+	font-weight: var(--canon-weight-bold);
+}
+
+.td-row--del .td-marker {
+	color: var(--td-del);
+}
+
+.td-row--add .td-marker {
+	color: var(--td-add);
+}
+
+.td-row-text {
+	white-space: pre;
+	tab-size: 8;
+}
+
+.td-listing--wrap .td-row-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.td-credit {
+	margin: 0;
+	padding: 0 var(--canon-panel-padding);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.td-credit a {
+	color: inherit;
+}

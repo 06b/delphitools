@@ -781,7 +781,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'git-compare',
 				href: '/tools/text-diff',
 				accepts: ['text/*', '.txt', '.md'],
-				wide: true,
+				canon: true,
 			},
 			{
 				id: 'typo-calc',
