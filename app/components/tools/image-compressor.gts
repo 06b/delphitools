@@ -9,12 +9,12 @@ import CanonCompressionScale from 'delphicanon/components/canon-compression-scal
 import CanonDropZone from 'delphicanon/components/canon-drop-zone';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonImageCompare from 'delphicanon/components/canon-image-compare';
+import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
-import CanonSwitch from 'delphicanon/components/canon-switch';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
@@ -35,6 +35,7 @@ const FORMATS: { id: CompressFormat; label: string }[] = [
 	{ id: 'webp', label: 'WebP' },
 	{ id: 'oxipng', label: 'PNG' },
 	{ id: 'avif', label: 'AVIF' },
+	{ id: 'jxl', label: 'JXL' },
 ];
 
 const whole = (value: number) => String(Math.round(value));
@@ -51,7 +52,7 @@ interface Source {
 	bitmap?: ImageBitmap;
 }
 
-// ?compressSample ?compressFormat=<JPEG|WebP|PNG|AVIF> ?compressQuality=<1-100> ?compressEffort=<1-6>
+// ?compressSample ?compressFormat=<JPEG|WebP|PNG|AVIF|JXL> ?compressQuality=<1-100> ?compressEffort=<1-6>
 function launchFlags() {
 	const query = new URLSearchParams(window.location.search);
 	const label = query.get('compressFormat')?.toLowerCase();
@@ -94,7 +95,6 @@ export default class ImageCompressor extends Component {
 	@tracked format: CompressFormat;
 	@tracked quality: number;
 	@tracked effort: number;
-	@tracked avifEnabled: boolean;
 	@tracked result?: { blob: Blob; url: string };
 	@tracked failed = false;
 	@tracked decoding = false;
@@ -108,24 +108,17 @@ export default class ImageCompressor extends Component {
 		this.format = flags.format;
 		this.quality = flags.quality;
 		this.effort = flags.effort;
-		this.avifEnabled = flags.format === 'avif';
 		registerDestructor(this, () => this.#release());
 		if (flags.sample)
 			void drawnSample().then((file) => this.load(file));
 	}
 
-	get formats() {
-		return FORMATS.filter(
-			(f) => f.id !== 'avif' || this.avifEnabled,
-		);
-	}
-
 	get formatLabels() {
-		return this.formats.map((f) => f.label);
+		return FORMATS.map((f) => f.label);
 	}
 
 	get formatIndex() {
-		return this.formats.findIndex((f) => f.id === this.format);
+		return FORMATS.findIndex((f) => f.id === this.format);
 	}
 
 	get formatLabel() {
@@ -214,7 +207,7 @@ export default class ImageCompressor extends Component {
 	};
 
 	pickFormat = (index: number) => {
-		const format = this.formats[index]?.id;
+		const format = FORMATS[index]?.id;
 		if (!format || format === this.format) return;
 		this.format = format;
 		this.#compress();
@@ -230,14 +223,6 @@ export default class ImageCompressor extends Component {
 		if (value === this.effort) return;
 		this.effort = value;
 		this.#compress();
-	};
-
-	toggleAvif = (on: boolean) => {
-		this.avifEnabled = on;
-		if (!on && this.format === 'avif') {
-			this.format = 'webp';
-			this.#compress();
-		}
 	};
 
 	save = () => {
@@ -395,18 +380,6 @@ export default class ImageCompressor extends Component {
 							/>
 						</CanonRow>
 					{{/if}}
-					<CanonRow
-						class="ic-avif"
-						@title="AVIF"
-						@detail="AVIF is slow"
-						as |titleId|
-					>
-						<CanonSwitch
-							@on={{this.avifEnabled}}
-							@onChange={{this.toggleAvif}}
-							aria-labelledby={{titleId}}
-						/>
-					</CanonRow>
 					{{#if this.source}}
 						<CanonButton
 							class="ic-download"
@@ -441,6 +414,11 @@ export default class ImageCompressor extends Component {
 							@failed={{this.failed}}
 							@failure="Failed"
 						/>
+						{{#if this.working}}
+							<CanonLoader
+								class="ic-encoding"
+							/>
+						{{/if}}
 					</CanonCanvas>
 				{{else}}
 					<CanonRows @framed={{true}}>

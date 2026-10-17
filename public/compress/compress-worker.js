@@ -1,8 +1,8 @@
 /**
  * Image Compressor encode worker — all codecs off the main thread. Lives in
  * /public (never bundled, same reason as /public/jxl, see app/lib/jxl.ts) and
- * loads each vendored codec glue relative to itself, on first use of that
- * format. Spawned as a module worker:
+ * loads each vendored codec glue relative to itself (JXL from /public/jxl),
+ * on first use of that format. Spawned as a module worker:
  * new Worker("/compress/compress-worker.js", { type: "module" }).
  *
  * Codecs are the @jsquash emscripten/wasm-bindgen builds, copied verbatim from
@@ -11,7 +11,7 @@
  * 2026-08-13); the binding rejects unknown keys, so keep them in sync.
  *
  * Request:  { id, format, data: Uint8ClampedArray (RGBA), width, height,
- *             quality: 1..100, level: 0..6 }
+ *             quality: 1..100, level: 0..6, options?: JXL options }
  * Response: { id, ok: true, bytes: Uint8Array, mime } | { id, ok: false, error }
  */
 
@@ -83,7 +83,7 @@ const modules = new Map();
 
 /** Emscripten MODULARIZE glue: default export is a factory returning the
  *  ready promise; locateFile points at the self-hosted wasm. */
-function loadEmscripten(name, jsFile) {
+function loadEmscripten(name, jsFile, base = "/compress/") {
   if (!modules.has(name)) {
     modules.set(
       name,
@@ -91,7 +91,7 @@ function loadEmscripten(name, jsFile) {
         .then(({ default: factory }) =>
           factory({
             noInitialRun: true,
-            locateFile: (path) => `/compress/${path}`,
+            locateFile: (path) => `${base}${path}`,
           }),
         )
         .catch((err) => {
@@ -152,6 +152,14 @@ async function encodeAvif({ data, width, height, quality }) {
   return { bytes: new Uint8Array(result), mime: "image/avif" };
 }
 
+// options come from app/lib/jxl-defaults.ts through the request
+async function encodeJxl({ data, width, height, options }) {
+  const mod = await loadEmscripten("jxl", "../jxl/jxl_enc.js", "/jxl/");
+  const result = mod.encode(data, width, height, options);
+  if (!result) throw new Error("JXL encoding failed");
+  return { bytes: new Uint8Array(result), mime: "image/jxl" };
+}
+
 async function encodeOxipng({ data, width, height, level }) {
   const mod = await loadOxipng();
   const result = mod.optimise_raw(data, width, height, level, false, false);
@@ -164,6 +172,7 @@ const ENCODERS = {
   webp: encodeWebp,
   avif: encodeAvif,
   oxipng: encodeOxipng,
+  jxl: encodeJxl,
 };
 
 self.onmessage = async (event) => {

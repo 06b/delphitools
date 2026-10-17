@@ -1,18 +1,26 @@
 /** worker assets bypass bundles. */
 
-export type CompressFormat = 'mozjpeg' | 'webp' | 'oxipng' | 'avif';
+import { JXL_ENCODE_DEFAULTS } from './jxl-defaults';
+
+export type CompressFormat = 'mozjpeg' | 'webp' | 'oxipng' | 'avif' | 'jxl';
 
 export const COMPRESS_EXTENSIONS: Record<CompressFormat, string> = {
 	mozjpeg: 'jpg',
 	webp: 'webp',
 	oxipng: 'png',
 	avif: 'avif',
+	jxl: 'jxl',
 };
 
 export const OPAQUE_FORMATS: CompressFormat[] = ['mozjpeg'];
 
 /** oxipng ignores quality. */
-export const QUALITY_FORMATS: CompressFormat[] = ['mozjpeg', 'webp', 'avif'];
+export const QUALITY_FORMATS: CompressFormat[] = [
+	'mozjpeg',
+	'webp',
+	'avif',
+	'jxl',
+];
 
 export function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -79,6 +87,7 @@ export function compressImageData(
 	{ quality = 75, level = 2 }: { quality?: number; level?: number } = {},
 ): Promise<Blob> {
 	const id = seq++;
+	quality = Math.min(100, Math.max(1, Math.round(quality)));
 	const { promise, resolve, reject } = Promise.withResolvers<Blob>();
 	pending.set(id, { resolve, reject });
 	getWorker().postMessage({
@@ -87,8 +96,16 @@ export function compressImageData(
 		data: imageData.data,
 		width: imageData.width,
 		height: imageData.height,
-		quality: Math.min(100, Math.max(1, Math.round(quality))),
+		quality,
 		level: Math.min(6, Math.max(0, Math.round(level))),
+		options:
+			format === 'jxl'
+				? {
+						...JXL_ENCODE_DEFAULTS,
+						quality,
+						lossless: false,
+					}
+				: undefined,
 	});
 	return promise;
 }

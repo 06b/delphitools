@@ -1,5 +1,5 @@
 // the canon image-compressor on the real codecs and worker (no network)
-// avif is slow even at 192 px, hence the gate; the gradient compresses, noise would not
+// avif and jxl are slow even at 192 px; the gradient compresses, noise would not
 // usage: bun run start, then node scripts/verify/image-compressor.mjs
 // SHOTS=<dir> also saves the loaded tool
 
@@ -33,7 +33,29 @@ await page.evaluateOnNewDocument(() => {
 	};
 });
 
+// the Original label's offset in its bar, every frame from the first paint
+await page.evaluateOnNewDocument(() => {
+	window.__originalLabel = [];
+	const t0 = performance.now();
+	const tick = () => {
+		const bar = document.querySelector('.canon-compression-scale-bar');
+		const label = bar?.querySelector('.canon-compression-scale-label');
+		if (label)
+			window.__originalLabel.push(
+				Math.round(label.getBoundingClientRect().left - bar.getBoundingClientRect().left),
+			);
+		if (performance.now() - t0 < 3000) requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+});
 await visit(page, '/tools/image-compressor');
+await sleep(800);
+const original = await page.evaluate(() => [...new Set(window.__originalLabel)]);
+check(
+	'the Original bar sits full from the start, its label still',
+	original.length === 1 && original[0] === 10,
+	original.join(','),
+);
 
 check(
 	'the split fills the sheet',
@@ -59,8 +81,8 @@ const segments = () =>
 		els.map((el) => el.textContent.trim()),
 	);
 check(
-	'empty: the settings are ready, AVIF gated out',
-	(await segments()).join() === 'JPEG,WebP,PNG',
+	'empty: the settings are ready, every format a plain option',
+	(await segments()).join() === 'JPEG,WebP,PNG,AVIF,JXL',
 	(await segments()).join(),
 );
 check('empty: no Download yet', !(await page.$('.ic-download')));
@@ -230,30 +252,47 @@ check(
 	}),
 );
 
-// slow once ungated
-check(
-	'the AVIF switch is a named switch',
-	await page.$eval('.ic-avif input', (el) => {
-		const id = el.getAttribute('aria-labelledby');
-		return el.getAttribute('role') === 'switch' && document.getElementById(id)?.textContent.trim() === 'AVIF';
-	}),
-);
-await page.click('.ic-avif input');
-check('the gate reveals AVIF', (await segments()).join() === 'JPEG,WebP,PNG,AVIF');
-await pick('AVIF');
+// AVIF and JXL are plain options; their slow encode shows the loader over the picture
+const loaderSeen = () =>
+	page.evaluate(() => {
+		window.__loaderShown = false;
+		const watch = () => {
+			const el = document.querySelector(".canon-split-main .ic-encoding");
+			if (el) window.__loaderShown = true;
+			if (!window.__loaderShown) window.__loaderWatch = requestAnimationFrame(watch);
+		};
+		watch();
+	});
+check("no AVIF switch", !(await page.$(".ic-avif")));
+await loaderSeen();
+await pick("AVIF");
 result = await waitForNewResult(lastSrc, 120000);
 check(
-	'AVIF encodes (slow, hence the gate)',
-	result && ascii(result, 4, 8) === 'ftyp',
-	result ? `${result.size} B` : 'timed out',
+	"AVIF encodes",
+	result && ascii(result, 4, 8) === "ftyp",
+	result ? `${result.size} B` : "timed out",
 );
 await settled();
-await page.click('.ic-avif input');
+lastSrc = (await readResult())?.src ?? lastSrc;
+check("the loader is over the picture during the encode", await page.evaluate(() => window.__loaderShown));
 check(
-	'closing the gate falls back to WebP',
-	(await segments()).join() === 'JPEG,WebP,PNG' &&
-		(await page.$eval('.ic-formats [aria-checked="true"], .ic-formats [aria-pressed="true"], .ic-formats .canon-button--selected', (el) => el.textContent.trim()).catch(() => '')) === 'WebP',
+	"and is gone once it is done",
+	!(await page.$(".canon-split-main .ic-encoding")),
 );
+await pick("JXL");
+result = await waitForNewResult(lastSrc, 120000);
+check(
+	"JXL encodes (a codestream or a container)",
+	result &&
+		(isMagic(result, [[0, 0xff], [1, 0x0a]]) ||
+			ascii(result, 4, 8) === "JXL "),
+	result ? `${result.size} B` : "timed out",
+);
+check("JXL takes the quality slider", !!(await page.$(".ic-quality .canon-slider")));
+await settled();
+lastSrc = (await readResult())?.src ?? lastSrc;
+await pick("WebP");
+await waitForNewResult(lastSrc);
 await settled();
 
 // download: the file, named after the source

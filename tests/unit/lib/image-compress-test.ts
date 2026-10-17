@@ -36,6 +36,7 @@ module('Unit | Lib | image-compress', function () {
 			'webp',
 			'oxipng',
 			'avif',
+			'jxl',
 		];
 		for (const format of formats) {
 			assert.ok(
