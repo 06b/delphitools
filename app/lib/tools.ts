@@ -814,6 +814,7 @@ export const toolCategories: ToolCategory[] = [
 					'Merge, split and rearrange PDF pages',
 				icon: 'file-stack',
 				href: '/tools/pdf-organiser',
+				canon: true,
 				produces: [
 					'application/pdf',
 					'application/zip',
