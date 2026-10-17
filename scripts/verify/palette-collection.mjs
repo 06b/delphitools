@@ -28,7 +28,7 @@ const state = () =>
 			chips: [...document.querySelectorAll('.pc-chip[data-hex]')].map(
 				(c) => c.dataset.hex,
 			),
-			heading: text('.palette-collection .canon-split-main .canon-rows:last-child .canon-heading'),
+			heading: text('.palette-collection .canon-split-main .canon-rows:nth-last-child(1 of .canon-rows) .canon-heading'),
 			cards: document.querySelectorAll('.canon-colour-card--row').length,
 			description: text('.pc-description'),
 			empty: text('.pc-empty'),
