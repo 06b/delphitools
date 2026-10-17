@@ -1,6 +1,11 @@
 import {
 	PDFDocument,
+	clip,
 	degrees,
+	endPath,
+	popGraphicsState,
+	pushGraphicsState,
+	rectangle,
 	type PDFEmbeddedPage,
 	type PDFPage,
 } from 'pdf-lib';
@@ -733,11 +738,42 @@ export function effectiveSheetH(
 		: Math.max(paperSize.widthMm, paperSize.heightMm);
 }
 
+/** pdf-lib draw box centring `size` in `cell` (points, y up). */
+export function placeInCell(
+	cell: { x: number; y: number; width: number; height: number },
+	size: { width: number; height: number },
+	rotation: number,
+	scaling: ImpositionConfig['scaling'],
+) {
+	const sideways = rotation === 90 || rotation === 270;
+	const [frameW, frameH] = sideways
+		? [cell.height, cell.width]
+		: [cell.width, cell.height];
+	const ratio =
+		scaling === 'actual'
+			? 1
+			: (scaling === 'fill' ? Math.max : Math.min)(
+					frameW / size.width,
+					frameH / size.height,
+				);
+	const [w, h] = [size.width * ratio, size.height * ratio];
+	// pdf-lib turns counterclockwise about (x, y)
+	const turn = (rotation * Math.PI) / 180;
+	const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
+	return {
+		x: cell.x + cell.width / 2 - ((w / 2) * cos - (h / 2) * sin),
+		y: cell.y + cell.height / 2 - ((w / 2) * sin + (h / 2) * cos),
+		width: w,
+		height: h,
+	};
+}
+
 export function drawPlacementsOnPage(
 	page: PDFPage,
 	placements: PagePlacement[],
 	embeddedPages: PDFEmbeddedPage[],
 	sheetHPt: number,
+	scaling: ImpositionConfig['scaling'],
 ) {
 	for (const p of placements) {
 		if (p.pageNumber === 0) continue;
@@ -748,39 +784,18 @@ export function drawPlacementsOnPage(
 		const wPt = p.width * MM_TO_POINTS;
 		const hPt = p.height * MM_TO_POINTS;
 		const yPt = sheetHPt - (p.y * MM_TO_POINTS + hPt);
-
-		if (p.rotation === 0) {
-			page.drawPage(embedded, {
-				x: xPt,
-				y: yPt,
-				width: wPt,
-				height: hPt,
-			});
-		} else if (p.rotation === 180) {
-			page.drawPage(embedded, {
-				x: xPt + wPt,
-				y: yPt + hPt,
-				width: wPt,
-				height: hPt,
-				rotate: degrees(180),
-			});
-		} else if (p.rotation === 90) {
-			page.drawPage(embedded, {
-				x: xPt + wPt,
-				y: yPt,
-				width: hPt,
-				height: wPt,
-				rotate: degrees(90),
-			});
-		} else if (p.rotation === 270) {
-			page.drawPage(embedded, {
-				x: xPt,
-				y: yPt + hPt,
-				width: hPt,
-				height: wPt,
-				rotate: degrees(270),
-			});
-		}
+		const cell = { x: xPt, y: yPt, width: wPt, height: hPt };
+		page.pushOperators(
+			pushGraphicsState(),
+			rectangle(xPt, yPt, wPt, hPt),
+			clip(),
+			endPath(),
+		);
+		page.drawPage(embedded, {
+			...placeInCell(cell, embedded, p.rotation, scaling),
+			rotate: degrees(p.rotation),
+		});
+		page.pushOperators(popGraphicsState());
 	}
 }
 
@@ -935,7 +950,13 @@ export async function imposePdf(
 	for (const sheet of result.sheets) {
 		for (const side of [sheet.front, sheet.back]) {
 			const page = out.addPage([sheetW, sheetH]);
-			drawPlacementsOnPage(page, side, pages, sheetH);
+			drawPlacementsOnPage(
+				page,
+				side,
+				pages,
+				sheetH,
+				config.scaling,
+			);
 			if (config.cropMarks)
 				drawCropMarksOnPdfPage(page, side, sheetH);
 		}
