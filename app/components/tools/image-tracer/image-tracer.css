@@ -51,6 +51,18 @@
 	translate: none;
 }
 
+/* shown only while a setting is newer than the trace */
+.trace-box .trace-retrace {
+	position: absolute;
+	inset-block-end: 10px;
+	inset-inline-start: 50%;
+	inline-size: auto;
+	min-block-size: var(--canon-control-height);
+	padding-inline: 16px;
+	translate: -50% 0;
+	box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
+}
+
 .trace-strip {
 	flex: none;
 }

@@ -349,8 +349,8 @@ export default class ImageTracer extends Component {
 		return SCALES.indexOf(this.options.scale);
 	}
 
-	get retraceDisabled() {
-		return !this.source || !this.dirty || this.tracing;
+	get retraceShown() {
+		return !!this.source && this.dirty && !this.tracing;
 	}
 
 	get actionsDisabled() {
@@ -611,7 +611,17 @@ export default class ImageTracer extends Component {
 						@tracing={{this.tracing}}
 						@over={{this.drop.over}}
 						@onFile={{this.load}}
-					/>
+					>
+						{{#if this.retraceShown}}
+							<CanonButton
+								class="trace-retrace"
+								@kind="primary"
+								@text="Retrace"
+								@icon={{Refresh}}
+								@onClick={{this.retrace}}
+							/>
+						{{/if}}
+					</Picture>
 				</CanonCanvas>
 			</:sidebar>
 			<:main>
@@ -775,14 +785,6 @@ export default class ImageTracer extends Component {
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Traced SVG" />
-					<CanonButton
-						class="trace-retrace"
-						@kind="secondary"
-						@text="Retrace"
-						@icon={{Refresh}}
-						@disabled={{this.retraceDisabled}}
-						@onClick={{this.retrace}}
-					/>
 					{{#if this.tracing}}
 						<CanonRow
 							class="trace-busy-row"

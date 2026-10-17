@@ -73,7 +73,7 @@ const state = () =>
 			ltres: q('.trace-ltres .canon-slider-readout')?.textContent.trim(),
 			qtres: q('.trace-qtres .canon-slider-readout')?.textContent.trim(),
 			scale: q('.trace-scales [aria-checked="true"]')?.textContent.trim(),
-			retrace: q('.trace-retrace').disabled,
+			retrace: !q('.trace-retrace'),
 			copy: q('.trace-copy').disabled,
 			optimise: q('.trace-optimise').disabled,
 			download: q('.trace-download').disabled,
@@ -113,7 +113,7 @@ check(
 	s.tiles.join(),
 );
 check(
-	'empty: retrace, copy, optimise and download off',
+	'empty: no Retrace; copy, optimise and download off',
 	s.retrace && s.copy && s.optimise && s.download,
 );
 check('empty: settings stay on', s.disabledSettings === 0, `${s.disabledSettings}`);
@@ -160,7 +160,7 @@ check(
 );
 check('the code outlines the SVG, a line per tag', s.code.split('\n')[1]?.startsWith('  <path '));
 check('copy, optimise, download on', !s.copy && !s.optimise && !s.download);
-check('retrace off until a setting changes', s.retrace);
+check('no Retrace until a setting changes', s.retrace);
 
 // a setting change waits for Retrace, as the web tool did
 const code = s.code;
@@ -170,12 +170,24 @@ await sleep(300);
 s = await state();
 check('an edit makes the preset Custom', s.preset === 'Custom', s.preset);
 check('an edit does not retrace by itself', s.code === code && !s.busy);
-check('Retrace turns on', !s.retrace);
+check('Retrace shows', !s.retrace);
+const floating = await page.evaluate(() => {
+	const button = document.querySelector('.trace-retrace');
+	const box = document.querySelector('.trace-box').getBoundingClientRect();
+	const r = button.getBoundingClientRect();
+	return {
+		inPicture: !!button.closest('.canon-split-sidebar .trace-box'),
+		floats: getComputedStyle(button).position === 'absolute',
+		within: r.left >= box.left && r.right <= box.right && r.bottom <= box.bottom && r.top >= box.top,
+		inSettings: !!document.querySelector('.canon-split-main .trace-retrace'),
+	};
+});
+check('Retrace floats on the picture, not in the settings', floating.inPicture && floating.floats && floating.within && !floating.inSettings, JSON.stringify(floating));
 await page.click('.trace-retrace');
 await traced();
 s = await state();
 check('Retrace traces with the edit', s.tiles[0] === 'Colours=2', s.tiles[0]);
-check('Retrace turns off again', s.retrace);
+check('Retrace hides again after the trace', s.retrace);
 
 // presets: scale kept, values shown, Custom again after an edit
 await page.evaluate(() =>

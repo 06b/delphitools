@@ -17,6 +17,8 @@ const boxStyle = (aspect: number) => htmlSafe(`--trace-aspect: ${aspect}`);
  * strip below. The port of iOS ImageTracerPicture.
  */
 const TracerPicture: TOC<{
+	/** Floats over the picture: the Retrace button. */
+	Blocks: { default: [] };
 	Args: {
 		/** The source on the checks; none shows the slot that takes a file. */
 		before?: string;
@@ -43,6 +45,7 @@ const TracerPicture: TOC<{
 						@beforeTitle="Original"
 						@afterTitle="SVG"
 					/>
+					{{yield}}
 					{{#if @tracing}}
 						<div
 							class="trace-busy
