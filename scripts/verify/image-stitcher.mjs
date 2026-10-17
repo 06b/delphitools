@@ -428,7 +428,7 @@ await sleep(200);
 s = await state();
 check(
 	'batch Clear: blank strip, dashes, export off',
-	s.strip === 1 && s.readout.join('|') === '—|—|—' && s.downloadOff,
+	s.strip > 1 && s.readout.join('|') === '—|—|—' && s.downloadOff,
 	`${s.strip} ${s.readout.join('|')}`,
 );
 

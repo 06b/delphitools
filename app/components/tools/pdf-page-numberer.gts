@@ -35,6 +35,7 @@ import Fresh, {
 } from 'delphitools-v2/components/substrata/panels/inspector/fresh';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
+import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -554,35 +555,9 @@ export default class PdfPageNumberer extends Component {
 							@onSelect={{this.selectPage}}
 						/>
 					{{else}}
-						<div
+						<BlankStrip
 							class="ppn-blank-strip"
-							aria-hidden="true"
-						>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-							<span
-								class="ppn-blank-sheet"
-							></span>
-						</div>
+						/>
 					{{/if}}
 				</CanonCanvas>
 			</:banner>

@@ -29,6 +29,7 @@ import {
 	type PreflightReport,
 } from 'delphitools-v2/lib/pdf-preflight';
 import Drop from 'delphitools-v2/components/tools/media/drop';
+import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	comparison,
@@ -56,7 +57,6 @@ import './pdf-preflight/pdf-preflight.css';
 
 const ACCEPT = '.pdf,application/pdf';
 const A4 = { width: 595, height: 842 };
-const BLANK: CanonPage[] = [{ size: A4 }, { size: A4 }, { size: A4 }];
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Cross = <template><IconSvg @name="x" /></template>;
@@ -374,11 +374,8 @@ export default class PdfPreflight extends Component {
 							@onSelect={{this.selectStrip}}
 						/>
 					{{else}}
-						<CanonPageStrip
-							class="pf-strip pf-strip--blank"
-							@pages={{BLANK}}
-							aria-hidden="true"
-							inert
+						<BlankStrip
+							class="pf-strip--blank"
 						/>
 					{{/if}}
 				</CanonCanvas>

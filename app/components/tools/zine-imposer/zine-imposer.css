@@ -264,3 +264,9 @@ button.zi-turner {
 		transition: none;
 	}
 }
+
+/* empty slots match the blank strips */
+.zi-strip .canon-page-strip-paper:not(:has(.canon-page-strip-picture)) {
+	background: var(--canon-muted);
+	box-shadow: inset 0 0 0 var(--canon-hairline) var(--canon-border);
+}

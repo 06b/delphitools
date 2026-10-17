@@ -108,8 +108,8 @@ check(
 
 const empty = await stripState();
 check(
-	'empty: one blank page, inert, portrait A4',
-	empty.cells === 1 && empty.inert && Math.abs(empty.aspect - 0.707) < 0.02,
+	'empty: blank pages across the strip, inert, portrait A4',
+	empty.cells > 1 && empty.inert && Math.abs(empty.aspect - 0.707) < 0.02,
 	JSON.stringify(empty),
 );
 check(
@@ -295,7 +295,7 @@ await sleep(200);
 const pdfEmpty = await stripState();
 check(
 	'PDF to Image empty: blank A4, the Source slot, Download zip off',
-	pdfEmpty.cells === 1 &&
+	pdfEmpty.cells > 1 &&
 		pdfEmpty.inert &&
 		pdfEmpty.band === empty.band &&
 		(await page.evaluate(

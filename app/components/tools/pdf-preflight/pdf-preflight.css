@@ -1,16 +1,3 @@
-.pf-strip--blank .canon-page-strip-paper {
-	background: var(--canon-muted);
-	box-shadow: none;
-}
-
-.pf-strip--blank .canon-page-strip-number {
-	visibility: hidden;
-}
-
-.pf-strip--blank .canon-page-strip-page {
-	cursor: default;
-}
-
 .pf-strip .canon-page-strip-name {
 	font-variant-numeric: tabular-nums;
 }

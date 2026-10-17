@@ -31,6 +31,7 @@ import {
 } from 'delphitools-v2/lib/pdf-pages';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
+import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -44,14 +45,9 @@ import {
 	type Size,
 } from 'delphitools-v2/components/tools/pdf-organiser/plan';
 import './media/media.css';
-import './pdf-organiser/organiser.css';
 
 const ACCEPT = '.pdf,application/pdf';
 const modes = ['By ranges', 'Every page'];
-const BLANKS = Array.from({ length: 12 }, (_, index) => index);
-const blankStyle = htmlSafe(
-	'--canon-page-ratio: 0.7071; --canon-page-room: 0px',
-);
 const dropTypes = ['application/pdf'];
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -545,29 +541,9 @@ export default class PdfOrganiser extends Component {
 							{{this.stripKeys}}
 						/>
 					{{else}}
-						<div
-							class="canon-page-strip porg-blank"
-							aria-hidden="true"
-						>
-							<ol
-								class="canon-page-strip-list"
-							>
-								{{#each BLANKS}}
-									<li
-										class="canon-page-strip-cell"
-										style={{blankStyle}}
-									>
-										<span
-											class="canon-page-strip-art"
-										>
-											<span
-												class="canon-page-strip-stack porg-blank-paper"
-											></span>
-										</span>
-									</li>
-								{{/each}}
-							</ol>
-						</div>
+						<BlankStrip
+							class="porg-blank"
+						/>
 					{{/if}}
 				</CanonCanvas>
 			</:banner>

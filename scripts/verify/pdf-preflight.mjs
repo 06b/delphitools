@@ -61,7 +61,7 @@ const empty = await page.evaluate(() => {
 });
 check(
 	'empty: blank inert pages in the strip, the Source slot with a Files cell',
-	empty.blank === 3 && empty.inert && empty.pictures === 0 && empty.slot === 'Drop PDF here' && empty.files,
+	empty.blank > 3 && empty.inert && empty.pictures === 0 && empty.slot === 'Drop PDF here' && empty.files,
 	JSON.stringify(empty),
 );
 const dashes = [

@@ -124,7 +124,7 @@ check(
 const empty = await page.evaluate(() => ({
 	blanks: document.querySelectorAll('.porg-blank .canon-page-strip-cell')
 		.length,
-	blankText: document.querySelector('.porg-blank')?.textContent.trim(),
+	blankText: document.querySelector('.porg-blank')?.innerText.trim(),
 	hidden: document
 		.querySelector('.porg-blank')
 		?.getAttribute('aria-hidden'),

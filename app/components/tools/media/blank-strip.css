@@ -1,0 +1,13 @@
+.media-blank-strip .canon-page-strip-list {
+	overflow: hidden;
+}
+
+.media-blank-strip .canon-page-strip-paper {
+	background: var(--canon-muted);
+	box-shadow: inset 0 0 0 var(--canon-hairline) var(--canon-border);
+}
+
+.media-blank-strip .canon-page-strip-number,
+.media-blank-strip .canon-page-strip-name {
+	visibility: hidden;
+}

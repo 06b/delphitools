@@ -292,14 +292,6 @@ span.stitch-tile {
 }
 
 /* the empty strip: a blank sheet, no number */
-.stitch-strip--blank .canon-page-strip-paper {
-	background: var(--canon-muted);
-}
-
-.stitch-strip--blank .canon-page-strip-number {
-	visibility: hidden;
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.stitch-picture--springs .stitch-tile {
 		transition: none;

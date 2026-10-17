@@ -28,6 +28,7 @@ import { stem } from 'delphicanon/lib/files';
 import { reducedMotion, springEasing } from 'delphicanon/lib/motion';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
@@ -70,6 +71,7 @@ import './image-stitcher/image-stitcher.css';
 const spring = htmlSafe(`--stitch-spring: ${springEasing(0.82)}`);
 const springMs = 450;
 const stripStyle = htmlSafe(`block-size: ${pageStripHeight}px`);
+const BLANK_SIZE = { width: 4, height: 3 };
 const aspects = { min: 0.75, max: 1.5, empty: 4 / 3 };
 const modes = ['Individual', 'Batch'];
 const fitLabels = ['Match', 'Cheese', 'Matte'];
@@ -356,7 +358,7 @@ export default class ImageStitcher extends Component {
 	get pages(): CanonPage[] {
 		const srcs = this.batchSrcs;
 		const first = srcs[0];
-		if (!first) return [{ size: { width: 4, height: 3 } }];
+		if (!first) return [];
 		const size = { width: first.w, height: first.h };
 		return srcs.map((src) => {
 			// the cover crop, centred, as the stitch draws it
@@ -382,6 +384,10 @@ export default class ImageStitcher extends Component {
 
 	get blankBatch() {
 		return this.batchIds.length === 0;
+	}
+
+	get emptyBatch() {
+		return this.batch && this.blankBatch;
 	}
 
 	get formatIndex() {
@@ -883,21 +889,18 @@ export default class ImageStitcher extends Component {
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Images" />
-					{{#if this.batch}}
-						<CanonPageStrip
-							class="stitch-strip
-								{{if
-									this.blankBatch
-									'stitch-strip--blank'
-								}}"
+					{{#if this.emptyBatch}}
+						<BlankStrip
+							class="stitch-strip stitch-strip--blank"
 							style={{stripStyle}}
-							inert={{this.blankBatch}}
+							@size={{BLANK_SIZE}}
+						/>
+					{{else if this.batch}}
+						<CanonPageStrip
+							class="stitch-strip"
+							style={{stripStyle}}
 							@pages={{this.pages}}
-							@reorders={{if
-								this.blankBatch
-								false
-								true
-							}}
+							@reorders={{true}}
 							@onMove={{this.move}}
 							@onDrop={{this.dropInStrip}}
 							@menu={{this.menu}}

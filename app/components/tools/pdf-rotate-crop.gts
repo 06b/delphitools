@@ -41,6 +41,7 @@ import {
 } from 'delphitools-v2/lib/pdf-crop';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
+import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -697,14 +698,9 @@ export default class PdfRotateCrop extends Component {
 							@onSelect={{this.select}}
 						/>
 					{{else}}
-						<div
+						<BlankStrip
 							class="prc-blank-strip"
-							aria-hidden="true"
-						>
-							<span
-								class="prc-blank-strip-page"
-							></span>
-						</div>
+						/>
 					{{/if}}
 				</CanonCanvas>
 			</:banner>

@@ -32,6 +32,7 @@ import {
 } from 'delphitools-v2/lib/pdf-pages';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
+import BlankStrip from 'delphitools-v2/components/tools/media/blank-strip';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -50,7 +51,6 @@ import {
 	pagePng,
 } from 'delphitools-v2/components/tools/image-to-pdf/export';
 import './media/media.css';
-import './image-to-pdf/image-to-pdf.css';
 
 const IMAGE_ACCEPT = 'image/*';
 const PDF_ACCEPT = '.pdf,application/pdf';
@@ -273,11 +273,13 @@ export default class ImageToPdf extends Component {
 		return this.toPdf ? !this.items.length : !this.pdfFile;
 	}
 
+	get blankSize() {
+		return this.toPdf ? blankPage(this.options).size : A4;
+	}
+
 	get stripPages(): CanonPage[] {
-		if (!this.toPdf)
-			return this.pdfFile ? this.pdfPages : [{ size: A4 }];
+		if (!this.toPdf) return this.pdfPages;
 		const { options } = this;
-		if (!this.items.length) return [blankPage(options)];
 		return this.items.map((item) => {
 			const { page, area, placement } = layout(
 				item.width,
@@ -639,19 +641,21 @@ export default class ImageToPdf extends Component {
 					@height={{pageStripHeight}}
 					@background="var(--canon-muted)"
 				>
-					<CanonPageStrip
-						class="i2p-strip
-							{{if
-								this.blank
-								'i2p-strip--blank'
-							}}"
-						inert={{this.blank}}
-						@pages={{this.stripPages}}
-						@reorders={{this.reorders}}
-						@onMove={{this.move}}
-						@onDrop={{this.dropInStrip}}
-						@menu={{this.menu}}
-					/>
+					{{#if this.blank}}
+						<BlankStrip
+							class="i2p-strip i2p-strip--blank"
+							@size={{this.blankSize}}
+						/>
+					{{else}}
+						<CanonPageStrip
+							class="i2p-strip"
+							@pages={{this.stripPages}}
+							@reorders={{this.reorders}}
+							@onMove={{this.move}}
+							@onDrop={{this.dropInStrip}}
+							@menu={{this.menu}}
+						/>
+					{{/if}}
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
