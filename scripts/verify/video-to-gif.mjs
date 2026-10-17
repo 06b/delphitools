@@ -78,6 +78,11 @@ const footerClear = () =>
 		return { ok: last < top, last: Math.round(last), top: Math.round(top) };
 	});
 const videoTime = () => page.$eval('.vg-preview video', (v) => v.currentTime);
+// the floating footer covers the lowest rows at 1400 x 1000 until they scroll up
+const tap = async (sel) => {
+	await page.$eval(sel, (el) => el.scrollIntoView({ block: 'center' }));
+	await page.click(sel);
+};
 
 check(
 	'the split fills the sheet',
@@ -87,15 +92,65 @@ check(
 			document.querySelector('.video-to-gif').getBoundingClientRect().height,
 	),
 );
+// bandHeight in media/strips: readoutBandHeight(96)
+const BAND = 138;
+const layout = () =>
+	page.evaluate(() => {
+		const box = (sel) => {
+			const r = document.querySelector(sel)?.getBoundingClientRect();
+			return r ? { top: Math.round(r.top), height: Math.round(r.height) } : null;
+		};
+		return {
+			band: box('.video-to-gif .canon-readout-band')?.height,
+			bandBox: Math.round(
+				document.querySelector('.canon-readout-band').closest('.canon-canvas').getBoundingClientRect().height,
+			),
+			preview: box('.vg-preview'),
+			editor: box('.vg-editor'),
+			start: box('.vg-start'),
+			sidebar: [...document.querySelectorAll('.vg-fps, .vg-width, .vg-budget, .media-job-run')].length,
+		};
+	});
 check(
-	'empty: the slot has the web wording, no settings or footer',
+	'empty: the loaded layout in blank: Source slot row, blank strips, dashed tiles, a blank picture',
+	await page.evaluate(() => {
+		const slot = document.querySelector('.vg-slot');
+		const tiles = [...document.querySelectorAll('.vg-budget .canon-tiles-tile')].map((t) => [
+			t.querySelector('.canon-tiles-label').textContent.trim(),
+			t.querySelector('.canon-tiles-value').textContent.trim(),
+		]);
+		const preview = document.querySelector('.vg-preview');
+		return (
+			slot?.classList.contains('media-slot--row') &&
+			slot.textContent.trim() === 'Drop a video here or click to upload' &&
+			slot.closest('.canon-rows').querySelector('.canon-heading')?.textContent.trim() === 'Source' &&
+			document.querySelectorAll('.canon-readout-band .media-frame--blank').length > 0 &&
+			document.querySelectorAll('.vg-editor .media-frame--blank').length > 0 &&
+			JSON.stringify(tiles) === JSON.stringify([['Frames', '—'], ['Size', '—']]) &&
+			!preview.querySelector('video') &&
+			Math.abs(Number(preview.dataset.canonAspect) - 16 / 9) < 0.001 &&
+			[...document.querySelectorAll('.vg-start .canon-row-detail, .vg-end .canon-row-detail')].every(
+				(d) => d.textContent.trim() === '—',
+			)
+		);
+	}),
+);
+check(
+	'empty: FPS and Width preset the output; Create GIF, Start, End, Set in, Set out and the transport are off',
 	await page.evaluate(
 		() =>
-			document.querySelector('.vg-slot')?.textContent.trim() ===
-				'Drop a video here or click to upload' &&
-			!document.querySelector('.media-job-run') &&
-			!document.querySelector('.media-transport'),
+			document.querySelector('.vg-fps [role="slider"]')?.getAttribute('aria-disabled') !== 'true' &&
+			document.querySelector('.vg-width input')?.disabled === false &&
+			['.media-job-run', '.vg-start input', '.vg-end input', '.vg-set-in', '.vg-set-out', '.vg-back', '.vg-forward', '.media-play', '.media-loop'].every(
+				(sel) => document.querySelector(sel)?.disabled === true,
+			),
 	),
+);
+const emptyLayout = await layout();
+check(
+	'empty: the band is bandHeight tall',
+	emptyLayout.bandBox === BAND,
+	JSON.stringify(emptyLayout),
 );
 
 // 7 s: past the 5 s first cut, and 7 s at 50 fps passes the 300 frame cap
@@ -106,6 +161,16 @@ await page.waitForFunction(
 	{ timeout: 20000 },
 );
 await sleep(300);
+const loadedLayout = await layout();
+check(
+	'loaded: the band stays bandHeight; the picture, editor and fields keep their place',
+	loadedLayout.bandBox === BAND &&
+		loadedLayout.band === emptyLayout.band &&
+		JSON.stringify([loadedLayout.preview, loadedLayout.editor, loadedLayout.start]) ===
+			JSON.stringify([emptyLayout.preview, emptyLayout.editor, emptyLayout.start]) &&
+		loadedLayout.sidebar === emptyLayout.sidebar,
+	JSON.stringify({ emptyLayout, loadedLayout }),
+);
 const detail = await page.$eval('.vg-source .canon-row-detail', (el) => el.textContent.trim());
 check(
 	'webm duration resolves: the source row reads size, rate and a finite length',
@@ -235,10 +300,10 @@ await page.click('.media-play');
 
 await page.$eval('.vg-preview video', (v) => (v.currentTime = 1));
 await sleep(200);
-await page.click('.vg-set-in');
+await tap('.vg-set-in');
 await page.$eval('.vg-preview video', (v) => (v.currentTime = 1.5));
 await sleep(200);
-await page.click('.vg-set-out');
+await tap('.vg-set-out');
 s = await state();
 check('Set in and Set out take the preview time', s.start === 1 && s.end === 1.5, JSON.stringify(s));
 check(
@@ -264,10 +329,14 @@ await page.evaluate(() =>
 	[...document.querySelectorAll('.vg-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
 );
 await sleep(200);
-check('Clear returns to the slot', !!(await page.$('.vg-slot')) && !(await page.$('.vg-preview')));
+check(
+	'Clear returns to the slot and the blank picture',
+	!!(await page.$('.vg-slot')) && !(await page.$('.vg-preview video')) && !!(await page.$('.vg-preview')),
+);
 
-// paste anywhere loads; ?gifCut, ?gifFps and ?gifRun set up a state
+// paste anywhere loads; ?gifCut, ?gifFps and ?gifRun set up a state; a Width set before the file holds
 await visit(page, '/tools/video-to-gif?gifCut=0.5,1.5&gifFps=20&gifRun=yes');
+await typeInto('.vg-width input', '160');
 await makeClip(page, { ms: 2500, name: 'paste.webm' });
 await page.evaluate(() => {
 	const transfer = new DataTransfer();
@@ -278,8 +347,13 @@ await page.waitForSelector('.vg-gif', { timeout: 30000 });
 s = await state();
 gif = await gifInfo();
 check(
-	'paste loads; ?gifCut=0.5,1.5&gifFps=20&gifRun=yes makes a 20 frame GIF',
-	s.start === 0.5 && s.end === 1.5 && s.fps === 20 && gif.controls === 20 && gif.title === 'paste.gif',
+	'paste loads; ?gifCut=0.5,1.5&gifFps=20&gifRun=yes makes a 20 frame GIF at the pre-file Width',
+	s.start === 0.5 &&
+		s.end === 1.5 &&
+		s.fps === 20 &&
+		gif.controls === 20 &&
+		gif.title === 'paste.gif' &&
+		gif.width === 160,
 	JSON.stringify({ s, gif }),
 );
 

@@ -7,9 +7,7 @@ import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonNumberField from 'delphicanon/components/canon-number-field';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSlider from 'delphicanon/components/canon-slider';
@@ -29,7 +27,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Marks from 'delphitools-v2/components/tools/media/marks';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import Trim, {
 	type TrimEdge,
@@ -60,13 +60,12 @@ const frameLabel = (n: number) => (n === 1 ? '1 frame' : `${n} frames`);
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 const whole = (value: number) => String(Math.round(value));
 
-// iOS VideoToGIFViewController: strip 56, editor 72
-const bandHeight = readoutBandHeight(56);
+// iOS VideoToGIFViewController: editor 72
 const editorHeight = 72;
 // height over width at most 1.25, at most 340 pt tall
 const tallest = 1.25;
 const tallestPreview = 340;
-const emptyAspect = 16 / 9;
+const DASH = '—';
 // seconds selected when a file loads
 const firstCut = 5;
 
@@ -200,7 +199,17 @@ export default class VideoToGif extends Component {
 		);
 	}
 
+	// presets output before load
+	get widthLocked() {
+		return this.loaded && this.unselected;
+	}
+
 	get budget() {
+		if (!this.loaded)
+			return [
+				{ label: 'Frames', value: DASH, level: 0 },
+				{ label: 'Size', value: DASH },
+			];
 		const [w, h] = this.size;
 		return [
 			{
@@ -237,11 +246,11 @@ export default class VideoToGif extends Component {
 	}
 
 	get startText() {
-		return tc(this.start);
+		return this.loaded ? tc(this.start) : DASH;
 	}
 
 	get endText() {
-		return tc(this.end);
+		return this.loaded ? tc(this.end) : DASH;
 	}
 
 	get #frameSeconds() {
@@ -425,7 +434,6 @@ export default class VideoToGif extends Component {
 			class="video-to-gif"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -442,108 +450,104 @@ export default class VideoToGif extends Component {
 						}}
 						@readout="below"
 					>
-						{{#if this.loaded}}
-							<div class="vg-lane">
-								<Strips
-									@thumbnails={{this.frames}}
-									@aspect={{this.aspect}}
-									@duration={{this.duration}}
-									@playhead={{this.playback.playhead}}
-									@selection={{this.selection}}
-									@onScrub={{this.playback.scrub}}
-								/>
-								<Marks
-									@dim={{this.frameMarks}}
-									@duration={{this.duration}}
-								/>
-							</div>
-						{{else}}
+						<div class="vg-lane">
 							<Strips
 								@thumbnails={{this.frames}}
-								@duration={{0}}
+								@aspect={{this.aspect}}
+								@duration={{this.duration}}
+								@playhead={{this.playback.playhead}}
+								@selection={{this.selection}}
+								@onScrub={{this.playback.scrub}}
+								@blank={{if
+									this.loaded
+									false
+									true
+								}}
 							/>
-						{{/if}}
+							<Marks
+								@dim={{this.frameMarks}}
+								@duration={{this.duration}}
+							/>
+						</div>
 					</CanonReadoutBand>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Range" />
-						<CanonRow
-							class="vg-fps"
-							@title="FPS"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonSlider
-								@value={{this.fps}}
-								@min={{1}}
-								@max={{50}}
-								@step={{1}}
-								@readout={{whole}}
-								@labelledBy={{titleId}}
-								@onChange={{this.setFps}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="vg-width"
-							@title="Width"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonNumberField
-								@value={{this.width}}
-								@min={{16}}
-								@max={{1920}}
-								@step={{16}}
-								@unit="px"
-								@labelledBy={{titleId}}
-								@disabled={{this.unselected}}
-								@onChange={{this.setWidth}}
-							/>
-						</CanonRow>
-						<CanonTiles
-							class="vg-budget"
-							@items={{this.budget}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Range" />
+					<CanonRow
+						class="vg-fps"
+						@title="FPS"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.fps}}
+							@min={{1}}
+							@max={{50}}
+							@step={{1}}
+							@readout={{whole}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setFps}}
 						/>
-						{{#if this.overCap}}
-							<CanonStatus
-								class="vg-over"
-								@text={{TOO_MANY_FRAMES}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						{{/if}}
-					</CanonRows>
-					<CanonRows @framed={{true}}>
-						<Job
-							@title="Create GIF"
-							@icon={{Clapper}}
-							@failure={{ENCODE_ERROR}}
-							@disabled={{this.runDisabled}}
-							@busy={{this.busy}}
-							@progress={{this.progress}}
-							@failed={{this.failed}}
-							@result={{this.resultRow}}
-							@onRun={{this.encode}}
-							@onCancel={{this.cancel}}
-							@onSave={{this.save}}
+					</CanonRow>
+					<CanonRow
+						class="vg-width"
+						@title="Width"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonNumberField
+							@value={{this.width}}
+							@min={{16}}
+							@max={{1920}}
+							@step={{16}}
+							@unit="px"
+							@labelledBy={{titleId}}
+							@disabled={{this.widthLocked}}
+							@onChange={{this.setWidth}}
 						/>
-						{{#if this.gifUrl}}
-							<img
-								class="vg-gif"
-								src={{this.gifUrl}}
-								alt="Encoded GIF"
-							/>
-						{{/if}}
-					</CanonRows>
-				{{/if}}
+					</CanonRow>
+					<CanonTiles
+						class="vg-budget"
+						@items={{this.budget}}
+					/>
+					{{#if this.overCap}}
+						<CanonStatus
+							class="vg-over"
+							@text={{TOO_MANY_FRAMES}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<Job
+						@title="Create GIF"
+						@icon={{Clapper}}
+						@failure={{ENCODE_ERROR}}
+						@disabled={{this.runDisabled}}
+						@busy={{this.busy}}
+						@progress={{this.progress}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.encode}}
+						@onCancel={{this.cancel}}
+						@onSave={{this.save}}
+					/>
+					{{#if this.gifUrl}}
+						<img
+							class="vg-gif"
+							src={{this.gifUrl}}
+							alt="Encoded GIF"
+						/>
+					{{/if}}
+				</CanonRows>
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="vg-source"
 							@title={{this.intake.fileName}}
@@ -561,14 +565,37 @@ export default class VideoToGif extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-					</CanonRows>
-					<CanonCanvas
-						class="vg-preview"
-						@aspect={{this.previewAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-						@background="#000"
-					>
+					{{else}}
+						<Slot
+							class="vg-slot"
+							@prompt={{DROP_TITLE}}
+							@icon="clapperboard"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.warning}}
+							<CanonStatus
+								@text={{this.warning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+				<CanonCanvas
+					class="vg-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if
+						this.loaded
+						"#000"
+						"var(--canon-muted)"
+					}}
+				>
+					{{#if this.loaded}}
 						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
@@ -588,103 +615,83 @@ export default class VideoToGif extends Component {
 								this.intake.failed
 							}}
 						></video>
-					</CanonCanvas>
-					<CanonCanvas
-						class="vg-editor"
-						@height={{editorHeight}}
-						@boxing="unlessWide"
-						@background="var(--canon-muted)"
-					>
-						<Trim
-							@duration={{this.duration}}
-							@start={{this.start}}
-							@end={{this.end}}
-							@disabled={{this.unselected}}
-							@onChange={{this.edit}}
-						>
-							<Strips
-								@thumbnails={{this.frames}}
-								@aspect={{this.aspect}}
-								@duration={{this.duration}}
-								@playhead={{this.playback.playhead}}
-							/>
-						</Trim>
-					</CanonCanvas>
-					<CanonRows @framed={{true}}>
-						<CanonRow
-							class="vg-start"
-							@title="Start"
-							@detail={{this.startText}}
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.start}}
-								@max={{this.startMax}}
-								@labelledBy={{titleId}}
-								@disabled={{this.unselected}}
-								@onChange={{this.selectStart}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="vg-end"
-							@title="End"
-							@detail={{this.endText}}
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.end}}
-								@min={{this.endMin}}
-								@max={{this.duration}}
-								@labelledBy={{titleId}}
-								@disabled={{this.unselected}}
-								@onChange={{this.selectEnd}}
-							/>
-						</CanonRow>
-						<CanonGrid>
-							<CanonButton
-								class="vg-set-in"
-								@text="Set in"
-								@icon={{SetIn}}
-								@disabled={{this.unselected}}
-								@onClick={{this.setIn}}
-							/>
-							<CanonButton
-								class="vg-set-out"
-								@text="Set out"
-								@icon={{SetOut}}
-								@disabled={{this.unselected}}
-								@onClick={{this.setOut}}
-							/>
-						</CanonGrid>
-					</CanonRows>
-				{{else}}
-					<CanonCanvas
-						class="vg-drop"
-						@aspect={{emptyAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-					>
-						<Slot
-							class="vg-slot"
-							@prompt={{DROP_TITLE}}
-							@icon="clapperboard"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					</CanonCanvas>
-					{{#if this.warning}}
-						<CanonRows @framed={{true}}>
-							<CanonStatus
-								@text={{this.warning}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						</CanonRows>
 					{{/if}}
-				{{/if}}
+				</CanonCanvas>
+				<CanonCanvas
+					class="vg-editor"
+					@height={{editorHeight}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					<Trim
+						@duration={{this.duration}}
+						@start={{this.start}}
+						@end={{this.end}}
+						@disabled={{this.unselected}}
+						@onChange={{this.edit}}
+					>
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@duration={{this.duration}}
+							@playhead={{this.playback.playhead}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
+						/>
+					</Trim>
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						class="vg-start"
+						@title="Start"
+						@detail={{this.startText}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.start}}
+							@max={{this.startMax}}
+							@labelledBy={{titleId}}
+							@disabled={{this.unselected}}
+							@onChange={{this.selectStart}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="vg-end"
+						@title="End"
+						@detail={{this.endText}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.end}}
+							@min={{this.endMin}}
+							@max={{this.duration}}
+							@labelledBy={{titleId}}
+							@disabled={{this.unselected}}
+							@onChange={{this.selectEnd}}
+						/>
+					</CanonRow>
+					<CanonGrid>
+						<CanonButton
+							class="vg-set-in"
+							@text="Set in"
+							@icon={{SetIn}}
+							@disabled={{this.unselected}}
+							@onClick={{this.setIn}}
+						/>
+						<CanonButton
+							class="vg-set-out"
+							@text="Set out"
+							@icon={{SetOut}}
+							@disabled={{this.unselected}}
+							@onClick={{this.setOut}}
+						/>
+					</CanonGrid>
+				</CanonRows>
 			</:main>
 			<:footer>
 				<Transport
