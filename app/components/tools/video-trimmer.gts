@@ -6,9 +6,7 @@ import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonReadoutBand, {
-	readoutBandHeight,
-} from 'delphicanon/components/canon-readout-band';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
@@ -42,7 +40,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Playback from 'delphitools-v2/components/tools/media/playback';
 import Sections from 'delphitools-v2/components/tools/media/sections';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import Strips from 'delphitools-v2/components/tools/media/strips';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
 import Transport from 'delphitools-v2/components/tools/media/transport';
 import Trim, {
 	type TrimEdge,
@@ -56,18 +56,18 @@ import {
 	thumbnails,
 } from 'delphitools-v2/components/tools/media/frames';
 import './media/media.css';
+import './video-trimmer/video-trimmer.css';
 
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
 const TRIM_ERROR = "Couldn't process. Try MP4, MOV or WEBM";
 const tc = (seconds: number) => formatTimestamp(seconds * 1000, '.');
 
-// iOS VideoTrimmerViewController: strip 56, editor 72
-const bandHeight = readoutBandHeight(56);
+// iOS VideoTrimmerViewController: editor 72
 const editorHeight = 72;
 // height over width at most 1.25, at most 340 pt tall
 const tallest = 1.25;
 const tallestPreview = 340;
-const emptyAspect = 16 / 9;
+const DASH = '—';
 const containerLabels = CONTAINERS.map((c) => c.label);
 
 type Mode = 'keyframe' | 'exact';
@@ -124,6 +124,7 @@ export default class VideoTrimmer extends Component {
 	#token = 0;
 	#job = 0;
 	#abort: AbortController | null = null;
+	#fresh = true;
 
 	willDestroy() {
 		super.willDestroy();
@@ -182,7 +183,13 @@ export default class VideoTrimmer extends Component {
 		return MODES.indexOf(this.mode);
 	}
 
+	// presets output before load
+	get locked() {
+		return this.loaded && this.unselected;
+	}
+
 	get unsupported() {
+		if (!this.loaded) return [];
 		return CONTAINERS.flatMap((c, index) =>
 			this.support?.[c.id] ? [] : [index],
 		);
@@ -226,11 +233,11 @@ export default class VideoTrimmer extends Component {
 	}
 
 	get startText() {
-		return tc(this.start);
+		return this.loaded ? tc(this.start) : DASH;
 	}
 
 	get endText() {
-		return tc(this.end);
+		return this.loaded ? tc(this.end) : DASH;
 	}
 
 	get unselected() {
@@ -249,7 +256,11 @@ export default class VideoTrimmer extends Component {
 	stepForward = () => this.playback.stepBy(this.#frameSeconds);
 
 	#load(file: File) {
+		// pre-file pick carries over
+		const container = this.#fresh ? this.container : '';
+		this.#fresh = false;
 		this.#reset();
+		this.container = container;
 		const token = this.#token;
 		const live = () => token === this.#token;
 		void thumbnails(file, live).then((urls) => {
@@ -422,6 +433,7 @@ export default class VideoTrimmer extends Component {
 	clear = () => {
 		this.playback.unload();
 		this.#reset();
+		this.#fresh = true;
 		this.intake.clear();
 	};
 
@@ -430,7 +442,6 @@ export default class VideoTrimmer extends Component {
 			class="video-trimmer"
 			@bannerSticks={{true}}
 			@mainLeadsStacked={{true}}
-			@footerHidden={{if this.loaded false true}}
 			{{filePaste this.intake.load accept=ACCEPT}}
 			{{on "dragover" this.drop.enter}}
 			{{on "dragleave" this.drop.leave}}
@@ -447,72 +458,66 @@ export default class VideoTrimmer extends Component {
 						}}
 						@readout="below"
 					>
-						{{#if this.loaded}}
-							<Strips
-								@thumbnails={{this.frames}}
-								@aspect={{this.aspect}}
-								@duration={{this.duration}}
-								@playhead={{this.playback.playhead}}
-								@selection={{this.selection}}
-								@onScrub={{this.playback.scrub}}
-							/>
-						{{else}}
-							<Strips
-								@thumbnails={{this.frames}}
-								@duration={{0}}
-							/>
-						{{/if}}
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@duration={{this.duration}}
+							@playhead={{this.playback.playhead}}
+							@selection={{this.selection}}
+							@onScrub={{this.playback.scrub}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
+						/>
 					</CanonReadoutBand>
 				</CanonCanvas>
 			</:banner>
 			<:sidebar>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading
-							@text="Container"
-						/>
-						<CanonSegmented
-							class="vt-containers"
-							@items={{containerLabels}}
-							@selected={{this.containerIndex}}
-							@disabledIndices={{this.unsupported}}
-							@disabled={{this.unselected}}
-							@onChange={{this.pickContainer}}
-						/>
-						<CanonHeading @text="Cut" />
-						<CanonSegmented
-							class="vt-modes"
-							@items={{modeLabels}}
-							@selected={{this.modeIndex}}
-							@disabled={{this.unselected}}
-							@onChange={{this.pickMode}}
-						/>
-						<Job
-							@title="Trim"
-							@icon={{Scissors}}
-							@failure={{TRIM_ERROR}}
-							@disabled={{if
-								this.ready
-								false
-								true
-							}}
-							@busy={{this.busy}}
-							@progress={{this.progress}}
-							@failed={{this.failed}}
-							@result={{this.resultRow}}
-							@onRun={{this.trim}}
-							@onCancel={{this.cancel}}
-							@onSave={{this.save}}
-							@onPreview={{this.preview}}
-						/>
-					</CanonRows>
-					<Sections @sections={{this.info}} />
-				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Container" />
+					<CanonSegmented
+						class="vt-containers"
+						@items={{containerLabels}}
+						@selected={{this.containerIndex}}
+						@disabledIndices={{this.unsupported}}
+						@disabled={{this.locked}}
+						@onChange={{this.pickContainer}}
+					/>
+					<CanonHeading @text="Cut" />
+					<CanonSegmented
+						class="vt-modes"
+						@items={{modeLabels}}
+						@selected={{this.modeIndex}}
+						@disabled={{this.locked}}
+						@onChange={{this.pickMode}}
+					/>
+					<Job
+						@title="Trim"
+						@icon={{Scissors}}
+						@failure={{TRIM_ERROR}}
+						@disabled={{if
+							this.ready
+							false
+							true
+						}}
+						@busy={{this.busy}}
+						@progress={{this.progress}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.trim}}
+						@onCancel={{this.cancel}}
+						@onSave={{this.save}}
+						@onPreview={{this.preview}}
+					/>
+				</CanonRows>
+				<Sections @sections={{this.info}} />
 			</:sidebar>
 			<:main>
-				{{#if this.loaded}}
-					<CanonRows @framed={{true}}>
-						<CanonHeading @text="Source" />
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
 						<CanonRow
 							class="vt-source"
 							@title={{this.intake.fileName}}
@@ -530,14 +535,37 @@ export default class VideoTrimmer extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-					</CanonRows>
-					<CanonCanvas
-						class="vt-preview"
-						@aspect={{this.previewAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-						@background="#000"
-					>
+					{{else}}
+						<Slot
+							class="vt-slot"
+							@prompt="Drop a video file"
+							@icon="scissors"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.warning}}
+							<CanonStatus
+								@text={{this.warning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+				<CanonCanvas
+					class="vt-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if
+						this.loaded
+						"#000"
+						"var(--canon-muted)"
+					}}
+				>
+					{{#if this.loaded}}
 						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
@@ -557,104 +585,83 @@ export default class VideoTrimmer extends Component {
 								this.intake.failed
 							}}
 						></video>
-					</CanonCanvas>
-					<CanonCanvas
-						class="vt-editor"
-						@height={{editorHeight}}
-						@boxing="unlessWide"
-						@background="var(--canon-muted)"
-					>
-						<Trim
-							@duration={{this.duration}}
-							@start={{this.start}}
-							@end={{this.end}}
-							@disabled={{this.unselected}}
-							@onChange={{this.edit}}
-						>
-							<Strips
-								@thumbnails={{this.frames}}
-								@aspect={{this.aspect}}
-								@duration={{this.duration}}
-								@playhead={{this.playback.playhead}}
-							/>
-						</Trim>
-					</CanonCanvas>
-					<CanonRows @framed={{true}}>
-						<CanonRow
-							class="vt-start"
-							@title="Start"
-							@detail={{this.startText}}
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.start}}
-								@max={{this.startMax}}
-								@labelledBy={{titleId}}
-								@disabled={{this.unselected}}
-								@onChange={{this.selectStart}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="vt-end"
-							@title="End"
-							@detail={{this.endText}}
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.end}}
-								@min={{this.endMin}}
-								@max={{this.duration}}
-								@labelledBy={{titleId}}
-								@disabled={{this.unselected}}
-								@onChange={{this.selectEnd}}
-							/>
-						</CanonRow>
-						<CanonGrid>
-							<CanonButton
-								class="vt-set-in"
-								@text="Set in"
-								@icon={{SetIn}}
-								@disabled={{this.unselected}}
-								@onClick={{this.setIn}}
-							/>
-							<CanonButton
-								class="vt-set-out"
-								@text="Set out"
-								@icon={{SetOut}}
-								@disabled={{this.unselected}}
-								@onClick={{this.setOut}}
-							/>
-						</CanonGrid>
-					</CanonRows>
-				{{else}}
-					{{! iOS: the drop zone where the preview goes }}
-					<CanonCanvas
-						class="vt-drop"
-						@aspect={{emptyAspect}}
-						@maxHeight={{tallestPreview}}
-						@boxing="unlessWide"
-					>
-						<Slot
-							class="vt-slot"
-							@prompt="Drop a video file"
-							@icon="scissors"
-							@accept={{ACCEPT}}
-							@over={{this.drop.over}}
-							@onFile={{this.intake.load}}
-						/>
-					</CanonCanvas>
-					{{#if this.warning}}
-						<CanonRows @framed={{true}}>
-							<CanonStatus
-								@text={{this.warning}}
-								@tone="warn"
-								@row={{true}}
-							/>
-						</CanonRows>
 					{{/if}}
-				{{/if}}
+				</CanonCanvas>
+				<CanonCanvas
+					class="vt-editor"
+					@height={{editorHeight}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					<Trim
+						@duration={{this.duration}}
+						@start={{this.start}}
+						@end={{this.end}}
+						@disabled={{this.unselected}}
+						@onChange={{this.edit}}
+					>
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@duration={{this.duration}}
+							@playhead={{this.playback.playhead}}
+							@blank={{if
+								this.loaded
+								false
+								true
+							}}
+						/>
+					</Trim>
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						class="vt-start"
+						@title="Start"
+						@detail={{this.startText}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.start}}
+							@max={{this.startMax}}
+							@labelledBy={{titleId}}
+							@disabled={{this.unselected}}
+							@onChange={{this.selectStart}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="vt-end"
+						@title="End"
+						@detail={{this.endText}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.end}}
+							@min={{this.endMin}}
+							@max={{this.duration}}
+							@labelledBy={{titleId}}
+							@disabled={{this.unselected}}
+							@onChange={{this.selectEnd}}
+						/>
+					</CanonRow>
+					<CanonGrid>
+						<CanonButton
+							class="vt-set-in"
+							@text="Set in"
+							@icon={{SetIn}}
+							@disabled={{this.unselected}}
+							@onClick={{this.setIn}}
+						/>
+						<CanonButton
+							class="vt-set-out"
+							@text="Set out"
+							@icon={{SetOut}}
+							@disabled={{this.unselected}}
+							@onClick={{this.setOut}}
+						/>
+					</CanonGrid>
+				</CanonRows>
 			</:main>
 			<:footer>
 				<Transport

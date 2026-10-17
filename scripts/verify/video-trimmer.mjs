@@ -79,6 +79,29 @@ const footerClear = () =>
 		return { ok: last < top, last: Math.round(last), top: Math.round(top) };
 	});
 const videoTime = () => page.$eval('.vt-preview video', (v) => v.currentTime);
+// the floating footer covers the lowest rows at 1400 x 1000 until they scroll up
+const tap = async (sel) => {
+	await page.$eval(sel, (el) => el.scrollIntoView({ block: 'center' }));
+	await page.click(sel);
+};
+// bandHeight in media/strips: readoutBandHeight(96)
+const BAND = 138;
+const layout = () =>
+	page.evaluate(() => {
+		const box = (sel) => {
+			const r = document.querySelector(sel)?.getBoundingClientRect();
+			return r ? { top: Math.round(r.top), height: Math.round(r.height) } : null;
+		};
+		return {
+			bandBox: Math.round(
+				document.querySelector('.canon-readout-band').closest('.canon-canvas').getBoundingClientRect().height,
+			),
+			preview: box('.vt-preview'),
+			editor: box('.vt-editor'),
+			start: box('.vt-start'),
+			job: box('.media-job-run'),
+		};
+	});
 
 check(
 	'the split fills the sheet',
@@ -89,14 +112,39 @@ check(
 	),
 );
 check(
-	'empty: the band is the drop slot with the web wording, no settings or footer',
+	'empty: the loaded layout in blank: Source slot row, blank strips, a blank picture, dashed fields',
+	await page.evaluate(() => {
+		const slot = document.querySelector('.vt-slot');
+		const preview = document.querySelector('.vt-preview');
+		return (
+			slot?.classList.contains('media-slot--row') &&
+			slot.textContent.trim() === 'Drop a video file' &&
+			slot.closest('.canon-rows').querySelector('.canon-heading')?.textContent.trim() === 'Source' &&
+			document.querySelectorAll('.canon-readout-band .media-frame--blank').length > 0 &&
+			document.querySelectorAll('.vt-editor .media-frame--blank').length > 0 &&
+			!preview.querySelector('video') &&
+			Math.abs(Number(preview.dataset.canonAspect) - 16 / 9) < 0.001 &&
+			[...document.querySelectorAll('.vt-start .canon-row-detail, .vt-end .canon-row-detail')].every(
+				(d) => d.textContent.trim() === '—',
+			)
+		);
+	}),
+);
+check(
+	'empty: Container and Cut preset the output; Trim, Start, End, Set in, Set out and the transport are off',
 	await page.evaluate(
 		() =>
-			document.querySelector('.vt-slot')?.textContent.trim() === 'Drop a video file' &&
-			!document.querySelector('.media-job-run') &&
-			!document.querySelector('.media-transport'),
+			[...document.querySelectorAll('.vt-containers [role="radio"], .vt-modes [role="radio"]')].every(
+				(b) => !b.disabled,
+			) &&
+			document.querySelector('.vt-containers [aria-checked="true"]')?.textContent.trim() === 'MP4' &&
+			['.media-job-run', '.vt-start input', '.vt-end input', '.vt-set-in', '.vt-set-out', '.vt-back', '.vt-forward', '.media-play', '.media-loop'].every(
+				(sel) => document.querySelector(sel)?.disabled === true,
+			),
 	),
 );
+const emptyLayout = await layout();
+check('empty: the band is bandHeight tall', emptyLayout.bandBox === BAND, JSON.stringify(emptyLayout));
 
 await captureObjectUrl(page);
 await makeClip(page, { audio: true, ms: 2500, name: 'tone.webm' });
@@ -106,6 +154,12 @@ await page.waitForFunction(
 	{ timeout: 15000 },
 );
 await sleep(300);
+const loadedLayout = await layout();
+check(
+	'loaded: the band stays bandHeight; the picture, editor, fields and Trim keep their place',
+	loadedLayout.bandBox === BAND && JSON.stringify(loadedLayout) === JSON.stringify(emptyLayout),
+	JSON.stringify({ emptyLayout, loadedLayout }),
+);
 let s = await state();
 check(
 	'a drop selects the whole file: Start 0, End the length, the counter reads the length',
@@ -246,12 +300,12 @@ check('wide: at the end of the scroll the footer clears the last row', clear.ok,
 
 await page.$eval('.vt-preview video', (v) => (v.currentTime = 1));
 await sleep(200);
-await page.click('.vt-set-in');
+await tap('.vt-set-in');
 s = await state();
 check('Set in takes the preview time', s.start === 1, JSON.stringify(s));
 await page.$eval('.vt-preview video', (v) => (v.currentTime = 1.5));
 await sleep(200);
-await page.click('.vt-set-out');
+await tap('.vt-set-out');
 s = await state();
 check('Set out takes the preview time', s.end === 1.5, JSON.stringify(s));
 
@@ -278,12 +332,14 @@ await page.evaluate(() =>
 );
 await sleep(200);
 check(
-	'Clear returns to the slot',
-	!!(await page.$('.vt-slot')) && !(await page.$('.vt-preview')),
+	'Clear returns to the slot and the blank picture',
+	!!(await page.$('.vt-slot')) && !(await page.$('.vt-preview video')) && !!(await page.$('.vt-preview')),
 );
 
-// paste anywhere loads, and ?vtrimCut sets the cut
+// paste anywhere loads, and ?vtrimCut sets the cut; a Container and Cut picked before the file hold
 await visit(page, '/tools/video-trimmer?vtrimCut=0.25,1');
+await pick('vt-containers', 'MKV');
+await pick('vt-modes', 'Exact');
 await makeClip(page, { ms: 1500, name: 'paste.webm' });
 await page.evaluate(() => {
 	const transfer = new DataTransfer();
@@ -296,6 +352,14 @@ await page.waitForFunction(
 );
 s = await state();
 check('paste loads; ?vtrimCut=0.25,1 sets the cut', s.start === 0.25 && s.end === 1, JSON.stringify(s));
+check(
+	'the pre-file MKV and Exact hold after the load',
+	await page.evaluate(
+		() =>
+			document.querySelector('.vt-containers [aria-checked="true"]')?.textContent.trim() === 'MKV' &&
+			document.querySelector('.vt-modes [aria-checked="true"]')?.textContent.trim() === 'Exact',
+	),
+);
 
 await page.setViewport({ width: 390, height: 844 });
 await sleep(400);
