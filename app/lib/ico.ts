@@ -42,7 +42,7 @@ export function buildIco(frames: IcoFrame[]): ArrayBuffer {
 	return buffer;
 }
 
-export function dataUrlToBytes(dataUrl: string): Uint8Array {
+export function dataUrlToBytes(dataUrl: string): Uint8Array<ArrayBuffer> {
 	const binary = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
 	const out = new Uint8Array(binary.length);
 	for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);

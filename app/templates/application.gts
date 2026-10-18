@@ -47,7 +47,7 @@ export default class ApplicationTemplate extends Component {
 			string | undefined;
 	}
 
-	get page() {
+	get page(): { title: string; icon: string; description?: string } {
 		const route = this.router.currentRouteName ?? '';
 		const tool = this.toolId
 			? getToolById(this.toolId)
