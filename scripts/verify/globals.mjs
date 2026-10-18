@@ -159,6 +159,32 @@ check(
 	JSON.stringify(zip),
 );
 
+// G5: the drop-more row after a multi-file list
+await visit(page, '/canon/patterns/drop-slot');
+check(
+	'the drop-more row has the wording',
+	(await page.$eval('.media-drop-more', (el) => el.textContent.trim()).catch(() => '')) ===
+		'Drop additional images here',
+);
+const [more] = await Promise.all([
+	page.waitForFileChooser({ timeout: 3000 }).catch(() => null),
+	page.click('.media-drop-more'),
+]);
+check('a click on the row opens a multi-file picker', !!more?.isMultiple());
+if (more) await more.cancel();
+await page.evaluate(() => {
+	const data = new DataTransfer();
+	data.items.add(new File(['a'], 'a.png', { type: 'image/png' }));
+	data.items.add(new File(['b'], 'b.png', { type: 'image/png' }));
+	data.items.add(new File(['c'], 'c.txt', { type: 'text/plain' }));
+	document
+		.querySelector('.media-drop-more')
+		.dispatchEvent(new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }));
+});
+await sleep(200);
+const listed = await page.$$eval('.cd-drop-more .canon-row-title', (els) => els.map((e) => e.textContent.trim()));
+check('a drop on the row adds the accepted files', listed.join() === 'a.png,b.png', listed.join());
+
 // G6: side by side at desktop widths, also when the 1200 px column is portrait
 const layout = () =>
 	page.evaluate(() =>

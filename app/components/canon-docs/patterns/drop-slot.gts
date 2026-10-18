@@ -12,6 +12,7 @@ import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import Drop from 'delphitools-v2/components/tools/media/drop';
+import DropMore from 'delphitools-v2/components/tools/media/drop-more';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import '../../tools/media/media.css';
 
@@ -24,6 +25,11 @@ export default class DropSlotPattern extends Component {
 	@tracked url = '';
 	@tracked name = '';
 	@tracked size = 0;
+	@tracked more: File[] = [];
+
+	add = (files: File[]) => {
+		this.more = [...this.more, ...files];
+	};
 
 	willDestroy() {
 		super.willDestroy();
@@ -95,6 +101,21 @@ export default class DropSlotPattern extends Component {
 					{{else}}
 						<CanonEmptyRow @text="None" />
 					{{/if}}
+				</CanonRows>
+				<CanonRows
+					class="cd-drop-more"
+					@framed={{true}}
+				>
+					<CanonHeading @text="Several" />
+					{{#each this.more as |file|}}
+						<CanonRow
+							@title={{file.name}}
+							@detail={{formatBytes
+								file.size
+							}}
+						/>
+					{{/each}}
+					<DropMore @onFiles={{this.add}} />
 				</CanonRows>
 			</:main>
 		</CanonSplit>
