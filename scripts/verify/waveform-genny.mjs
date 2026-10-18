@@ -441,7 +441,8 @@ await page.click('.dt-canon-edge.is-start');
 await sleep(400);
 const expanded = await page.$eval('.dt-canon-tool > .canon-split', (el) => el.getBoundingClientRect().width);
 p = await picture();
-check('2200: expanding stretches the picture', expanded > 1900 && p.inside, `${expanded}`);
+// 1960 sheet less the 40 px expanded gutter each side
+check('2200: expanding stretches the picture', expanded > 1850 && p.inside, `${expanded}`);
 if (shots) await page.screenshot({ path: `${shots}/wg-2200-expanded-light.png` });
 
 await finish(browser);

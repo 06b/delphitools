@@ -223,13 +223,15 @@ const phone = await page.evaluate(() => ({
 		(b) => b.getAttribute('aria-label') === 'History',
 	),
 	scrolls: (() => {
+		// the sticker sits below, as on iOS; the calculator itself must fit
 		const body = document.querySelector('.sci-calc .canon-split-body');
-		return body.scrollHeight > body.clientHeight + 1;
+		const keys = document.querySelector('.sci-keypad');
+		return keys.getBoundingClientRect().bottom > body.getBoundingClientRect().top + body.clientHeight + 1;
 	})(),
 	tall: !document.querySelector('.sci-keypad--wide'),
 }));
 check('stacked: the tape leaves for a History button', !phone.tape && phone.history, JSON.stringify(phone));
-check('stacked: the calculator does not scroll', !phone.scrolls);
+check('stacked: the calculator fits without scrolling', !phone.scrolls);
 check('stacked: functions over the digits', phone.tall);
 await page.evaluate(() =>
 	document
