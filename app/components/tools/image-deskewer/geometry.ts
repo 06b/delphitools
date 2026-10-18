@@ -36,6 +36,23 @@ export function capped(size: Size, edge = maxEdge): Size {
 	};
 }
 
+/** `size` reshaped to exactly `width`:`height`, keeping its long edge. */
+export function toRatio(size: Size, width: number, height: number): Size {
+	const long = Math.max(size.width, size.height, 1);
+	if (width >= height)
+		return {
+			width: long,
+			height: Math.max(
+				1,
+				Math.round((long * height) / width),
+			),
+		};
+	return {
+		width: Math.max(1, Math.round((long * width) / height)),
+		height: long,
+	};
+}
+
 /**
  * True for a convex quad wound clockwise in top-left coordinates; a bow-tie,
  * mirrored or collapsed quad has no perspective correction.

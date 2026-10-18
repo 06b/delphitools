@@ -63,7 +63,7 @@ check(
 );
 check(
 	'every aspect, web order',
-	empty.aspects.join() === 'Auto,A4,Letter,1:1,4:3,3:2,16:9',
+	empty.aspects.join() === 'Auto,A4,Letter,1:1,4:3,3:2,16:9,Custom',
 	empty.aspects.join(),
 );
 check('empty: export and reset off', empty.exportOff && empty.resetOff);
@@ -129,6 +129,12 @@ const state = () =>
 				?.textContent.trim(),
 		};
 	});
+const ratioText = () =>
+	page.evaluate(() =>
+		document
+			.querySelector('.deskew-ratio .canon-menu-cell-title')
+			?.textContent.trim(),
+	);
 const size = (s) => s.result.match(/\d+/g).map(Number);
 
 let s = await state();
@@ -328,6 +334,54 @@ check(
 	Math.abs(sw / sh - Math.SQRT2) < 0.02 && s.aspect === 'A4',
 	s.result,
 );
+check('no ratio row for a preset', !(await ratioText()), await ratioText());
+
+// a custom ratio: the popover sets width and height, Swap turns it
+await pick('Custom');
+await sleep(150);
+s = await state();
+[sw, sh] = size(s);
+check(
+	'Custom: a 4:5 ratio row, the output 4:5 on the long edge',
+	s.aspect === 'Custom' && (await ratioText()) === '4:5' && sh === 152 && sw === 122,
+	`${await ratioText()} ${s.result}`,
+);
+await page.click('.deskew-ratio .canon-aspect-popover-trigger');
+await sleep(150);
+const typeSide = async (side, value) => {
+	await page.$eval(`.canon-aspect-popover-${side} input`, (el) => {
+		el.focus();
+		el.select();
+	});
+	await page.keyboard.type(String(value));
+	await page.keyboard.press('Enter');
+	await sleep(100);
+};
+await typeSide('width', 16);
+await typeSide('height', 9);
+s = await state();
+[sw, sh] = size(s);
+check(
+	'a typed 16:9 sets the output',
+	(await ratioText()) === '16:9' && sw === 152 && sh === 86,
+	`${await ratioText()} ${s.result}`,
+);
+await page.click('.canon-aspect-popover-swap');
+await sleep(150);
+s = await state();
+[sw, sh] = size(s);
+check(
+	'Swap turns the ratio and the output',
+	(await ratioText()) === '9:16' && sw === 86 && sh === 152,
+	`${await ratioText()} ${s.result}`,
+);
+await page.keyboard.press('Escape');
+await sleep(100);
+await pick('A4');
+await sleep(150);
+s = await state();
+[sw, sh] = size(s);
+
 check(
 	'the result springs at rest',
 	await page.evaluate(() => !!document.querySelector('.deskew-result--springs')),
@@ -440,6 +494,17 @@ check(
 		s.values[0] === '160, 120' &&
 		s.loupe,
 	`${s.detail} ${s.aspect} ${s.values[0]} ${s.loupe}`,
+);
+
+await visit(page, '/tools/image-deskewer?deskewSample&deskewRatio=3:1');
+await page.waitForSelector('.deskew-handle', { timeout: 5000 });
+await sleep(400);
+s = await state();
+[sw, sh] = size(s);
+check(
+	'?deskewRatio picks Custom at that ratio',
+	s.aspect === 'Custom' && (await ratioText()) === '3:1' && Math.abs(sw / sh - 3) < 0.02,
+	`${s.aspect} ${await ratioText()} ${s.result}`,
 );
 
 // phone: stacked, collapses, nothing scrolls sideways

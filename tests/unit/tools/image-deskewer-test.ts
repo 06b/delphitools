@@ -7,6 +7,7 @@ import {
 	isConvex,
 	moveGrab,
 	project,
+	toRatio,
 } from 'delphitools-v2/components/tools/image-deskewer/geometry';
 
 const square: Quad = [
@@ -137,5 +138,21 @@ module('Unit | Tool | image-deskewer', function () {
 			hintSpot(frame, quad, { width: 400, height: 20 }),
 			undefined,
 		);
+	});
+
+	test('toRatio: the long edge kept, the ratio as given', function (assert) {
+		const size = { width: 300, height: 200 };
+		assert.deepEqual(toRatio(size, 4, 5), {
+			width: 240,
+			height: 300,
+		});
+		assert.deepEqual(toRatio(size, 16, 9), {
+			width: 300,
+			height: 169,
+		});
+		assert.deepEqual(toRatio(size, 1, 1), {
+			width: 300,
+			height: 300,
+		});
 	});
 });

@@ -5,6 +5,7 @@ import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
+import CanonAspectPopover from 'delphicanon/components/canon-aspect-popover';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonHeading from 'delphicanon/components/canon-heading';
@@ -36,6 +37,7 @@ import Result from 'delphitools-v2/components/tools/image-deskewer/result';
 import {
 	capped,
 	isConvex,
+	toRatio,
 } from 'delphitools-v2/components/tools/image-deskewer/geometry';
 import './image-deskewer/image-deskewer.css';
 
@@ -45,7 +47,8 @@ const crossed = "Don't let the streams cross!";
 const resultAspect = 4 / 3;
 // iOS: spring damping 0.82 over 0.55 s
 const spring = htmlSafe(`--deskew-spring: ${springEasing(0.82)}`);
-const aspectNames = ASPECTS.map(({ label }) => label);
+const custom = ASPECTS.length;
+const aspectNames = [...ASPECTS.map(({ label }) => label), 'Custom'];
 // iOS ImageDeskewerViewModel.previewEdge; the web tool's 720 while dragging
 const previewEdge = { resting: 1024, dragging: 720 };
 
@@ -68,6 +71,7 @@ export default class ImageDeskewer extends Component {
 	@tracked source?: Source;
 	@tracked quad: Quad = insetQuad(1, 1);
 	@tracked aspect = 0;
+	@tracked ratio = { width: 4, height: 5 };
 	@tracked failed = false;
 	@tracked exporting = false;
 	@tracked dragging = false;
@@ -81,7 +85,7 @@ export default class ImageDeskewer extends Component {
 	#loading = 0;
 	#frame = 0;
 
-	// ?deskewSample ?deskewAspect=<index> ?deskewCorners=x,y;x,y;x,y;x,y (unit) ?deskewGrab=<corner>: the iOS launch arguments
+	// ?deskewSample ?deskewAspect=<index> ?deskewRatio=<w>:<h> ?deskewCorners=x,y;x,y;x,y;x,y (unit) ?deskewGrab=<corner>: the iOS launch arguments
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
@@ -89,8 +93,15 @@ export default class ImageDeskewer extends Component {
 		if (aspect)
 			this.aspect = Math.min(
 				Math.max(Math.round(aspect), 0),
-				ASPECTS.length - 1,
+				custom,
 			);
+		const [rw, rh] = (query.get('deskewRatio') ?? '')
+			.split(':')
+			.map(Number);
+		if (rw! >= 1 && rh! >= 1) {
+			this.ratio = { width: rw!, height: rh! };
+			this.aspect = custom;
+		}
 		const corners = (query.get('deskewCorners') ?? '')
 			.split(';')
 			.map((pair) => pair.split(',').map(Number))
@@ -135,12 +146,17 @@ export default class ImageDeskewer extends Component {
 		return isConvex(this.quad);
 	}
 
+	get custom() {
+		return this.aspect === custom;
+	}
+
 	get output() {
+		const size = outputSize(this.quad);
+		const { width, height } = this.ratio;
 		return capped(
-			fitAspect(
-				outputSize(this.quad),
-				ASPECTS[this.aspect]!.ratio,
-			),
+			this.custom
+				? toRatio(size, width, height)
+				: fitAspect(size, ASPECTS[this.aspect]!.ratio),
 		);
 	}
 
@@ -230,6 +246,12 @@ export default class ImageDeskewer extends Component {
 
 	pickAspect = (index: number) => {
 		this.aspect = index;
+		this.#changed();
+	};
+
+	setRatio = (width: number, height: number) => {
+		this.ratio = { width, height };
+		this.aspect = custom;
 		this.#changed();
 	};
 
@@ -405,6 +427,21 @@ export default class ImageDeskewer extends Component {
 						@selected={{this.aspect}}
 						@onChange={{this.pickAspect}}
 					/>
+					{{#if this.custom}}
+						<CanonRow
+							class="deskew-ratio"
+							@title="Ratio"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonAspectPopover
+								@width={{this.ratio.width}}
+								@height={{this.ratio.height}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setRatio}}
+							/>
+						</CanonRow>
+					{{/if}}
 					<CanonRow
 						@title="Corners"
 						@form="flush"
