@@ -102,7 +102,7 @@ await sleep(150);
 const p3 = toPage(650, 1000);
 await page.mouse.click(p3.x, p3.y, { button: "right" });
 await sleep(300);
-// the layer menu card keeps Rasterize behind More Options
+// the layer menu card keeps Rasterise behind More Options
 const clickRow = (title) =>
   page.evaluate((t) => {
     const it = [...document.querySelectorAll(".sub-menu-row-title")].find((el) => el.textContent?.trim() === t);
@@ -111,10 +111,10 @@ const clickRow = (title) =>
   }, title);
 await clickRow("More Options");
 await sleep(200);
-const clicked = await clickRow("Rasterize");
+const clicked = await clickRow("Rasterise");
 await sleep(400);
 ls = await layers();
-check("menu: Rasterize item works", `${clicked} ${ls[ls.length - 1]?.kind}`, clicked && ls[ls.length - 1]?.kind === "raster");
+check("menu: Rasterise item works", `${clicked} ${ls[ls.length - 1]?.kind}`, clicked && ls[ls.length - 1]?.kind === "raster");
 
 const again = await page.evaluate((id) => window.__substrata.rasterize(id), ls[ls.length - 1].id);
 check("gate: raster layer refuses", String(again), again === false);

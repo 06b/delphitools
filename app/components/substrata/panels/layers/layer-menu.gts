@@ -395,7 +395,7 @@ export default class LayerMenu extends Component {
 							</div>
 							<div class="sub-lm-box">
 								<MenuRow
-									@title="Rasterize"
+									@title="Rasterise"
 									@icon="grid-2x2"
 									@disabled={{not
 										this.layer.rasterIds.length
