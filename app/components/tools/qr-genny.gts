@@ -711,7 +711,7 @@ export default class QrGennyTool extends Component {
 					value: `${this.vcard.firstName} ${this.vcard.lastName}`.trim(),
 				},
 				{
-					label: 'Organization',
+					label: 'Organisation',
 					value: this.vcard.organization,
 				},
 				{ label: 'Job Title', value: this.vcard.title },
@@ -1475,7 +1475,7 @@ export default class QrGennyTool extends Component {
 							/>
 						</CanonRow>
 						<CanonRow
-							@title="Organization"
+							@title="Organisation"
 							@form="flush"
 							as |titleId|
 						>

@@ -82,7 +82,7 @@ export const BARCODE_TYPES: Record<BarcodeType, BarcodeInfo> = {
 		year: '1991',
 		description:
 			'Portable Data File with 4 bars and spaces in 17 modules. Used on IDs, shipping labels, and boarding passes.',
-		placeholder: 'ID or license data',
+		placeholder: 'ID or licence data',
 	},
 	code128: {
 		name: 'Code 128',
@@ -103,7 +103,7 @@ export const BARCODE_TYPES: Record<BarcodeType, BarcodeInfo> = {
 		inventor: 'David Allais & Ray Stevens (Intermec)',
 		year: '1974',
 		description:
-			'One of the first alphanumeric barcodes. Still used in automotive, defense, and healthcare.',
+			'One of the first alphanumeric barcodes. Still used in automotive, defence, and healthcare.',
 		placeholder: 'CODE39TEST',
 		validate: (value) =>
 			CODE39.test(value)

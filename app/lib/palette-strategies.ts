@@ -166,7 +166,7 @@ export const STRATEGY_INFO: Record<PaletteStrategy, StrategyInfo> = {
 	},
 	bauhaus: {
 		name: 'Bauhaus',
-		description: 'Primary colors, geometric, bold',
+		description: 'Primary colours, geometric, bold',
 		category: 'cultural',
 	},
 	'art-deco': {

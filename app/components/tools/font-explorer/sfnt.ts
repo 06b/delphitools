@@ -251,7 +251,7 @@ export const tableDescriptions: Record<string, string> = {
 	kern: 'Legacy kerning — pair-based kern values (replaced by GPOS)',
 	loca: "Index to location — glyph offset table for 'glyf'",
 	maxp: 'Maximum profile — glyph count, max points/contours/components',
-	name: 'Naming table — family, style, copyright, license, designer',
+	name: 'Naming table — family, style, copyright, licence, designer',
 	post: 'PostScript — glyph names, italic angle, underline metrics',
 	'CFF ': 'Compact Font Format — PostScript cubic Bezier outlines',
 	CFF2: 'CFF version 2 — variable font outline data',

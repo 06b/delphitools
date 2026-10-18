@@ -1043,7 +1043,7 @@ export const toolCategories: ToolCategory[] = [
 				id: 'qr-genny',
 				name: 'QR Generator',
 				description:
-					'Generate styled QR codes with custom colors, shapes, and logos',
+					'Generate styled QR codes with custom colours, shapes, and logos',
 				icon: 'qr-code',
 				href: '/tools/qr-genny',
 				canon: true,

@@ -291,8 +291,8 @@ export default class SvgOptimiserTool extends Component {
 
 	download = () => {
 		const filename = this.fileName
-			? this.fileName.replace('.svg', '-optimized.svg')
-			: 'optimized.svg';
+			? this.fileName.replace('.svg', '-optimised.svg')
+			: 'optimised.svg';
 		downloadText(this.output, filename, 'image/svg+xml');
 	};
 

@@ -56,7 +56,7 @@ export const GENERATION_MODES: {
 		value: 'vivid',
 		title: 'Vivid',
 		label: 'Vivid',
-		description: 'Maximizes saturation across all shades',
+		description: 'Maximises saturation across all shades',
 	},
 	{
 		value: 'muted',

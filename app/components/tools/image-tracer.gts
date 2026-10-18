@@ -129,7 +129,7 @@ const TRACE_SLIDERS = [
 	slider(
 		'pathomit',
 		'Min path size',
-		'Paths with fewer than this many nodes are removed. Raise to filter out noise and small artifacts.',
+		'Paths with fewer than this many nodes are removed. Raise to filter out noise and small artefacts.',
 		0,
 		200,
 		1,

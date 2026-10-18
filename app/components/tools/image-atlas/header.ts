@@ -21,7 +21,7 @@ function png(bytes: Uint8Array, view: DataView): PixelFormat | null {
 		at += 12 + view.getUint32(at);
 	}
 	return {
-		model: type === 0 || type === 4 ? 'Gray' : 'RGB',
+		model: type === 0 || type === 4 ? 'Grey' : 'RGB',
 		depth,
 		alpha,
 	};
@@ -32,7 +32,7 @@ const SOF = new Set([
 	0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce,
 	0xcf,
 ]);
-const JPEG_MODEL: Record<number, string> = { 1: 'Gray', 3: 'RGB', 4: 'CMYK' };
+const JPEG_MODEL: Record<number, string> = { 1: 'Grey', 3: 'RGB', 4: 'CMYK' };
 
 function jpeg(bytes: Uint8Array, view: DataView): PixelFormat | null {
 	for (let at = 2; at + 9 < bytes.length;) {

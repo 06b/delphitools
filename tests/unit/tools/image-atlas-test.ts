@@ -242,7 +242,7 @@ module('Unit | Tool | image-atlas', function () {
 			alpha: true,
 		});
 		assert.deepEqual(pixelFormat(png(8, 4)), {
-			model: 'Gray',
+			model: 'Grey',
 			depth: 8,
 			alpha: true,
 		});
@@ -251,7 +251,7 @@ module('Unit | Tool | image-atlas', function () {
 			12, 0, 4, 0, 4, 1, 1, 0x11, 0,
 		]);
 		assert.deepEqual(pixelFormat(jpeg), {
-			model: 'Gray',
+			model: 'Grey',
 			depth: 12,
 			alpha: false,
 		});

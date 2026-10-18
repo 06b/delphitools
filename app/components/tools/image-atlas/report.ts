@@ -144,7 +144,7 @@ export function prettyLabel(key: string): string {
 
 const ENUM_LABELS: Record<string, Record<string, string>> = {
 	colorspace: { '1': 'sRGB', '65535': 'Uncalibrated' },
-	ycbcrpositioning: { '1': 'Centered', '2': 'Co-sited' },
+	ycbcrpositioning: { '1': 'Centred', '2': 'Co-sited' },
 	contrast: { '0': 'Normal', '1': 'Soft', '2': 'Hard' },
 	saturation: { '0': 'Normal', '1': 'Low', '2': 'High' },
 	sharpness: { '0': 'Normal', '1': 'Soft', '2': 'Hard' },
@@ -160,8 +160,8 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
 	gaincontrol: { '0': 'None', '1': 'Low gain up', '2': 'High gain up' },
 	sensingmethod: {
 		'1': 'Not defined',
-		'2': 'One-chip color area',
-		'3': 'Two-chip color area',
+		'2': 'One-chip colour area',
+		'3': 'Two-chip colour area',
 	},
 	filesource: { '3': 'Digital camera' },
 	scenetype: { '1': 'Directly photographed' },
@@ -185,7 +185,7 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
 	meteringmode: {
 		'0': 'Unknown',
 		'1': 'Average',
-		'2': 'Center-weighted average',
+		'2': 'Centre-weighted average',
 		'3': 'Spot',
 		'4': 'Multi-spot',
 		'5': 'Multi-segment',
