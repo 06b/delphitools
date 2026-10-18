@@ -16,12 +16,12 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import { formatFps } from 'delphitools-v2/lib/media-probe';
 import { formatTimestamp } from 'delphitools-v2/lib/subtitles';
 import { seekTo, VideoIntake } from 'delphitools-v2/lib/video';
 import { VIDEO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Marks from 'delphitools-v2/components/tools/media/marks';
@@ -79,7 +79,6 @@ function flags() {
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Camera = <template><IconSvg @name="camera" /></template>;
 const Sheet = <template><IconSvg @name="grid-3x3" /></template>;
-const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Back = <template><IconSvg @name="chevron-left" /></template>;
 const Forward = <template><IconSvg @name="chevron-right" /></template>;
 const PlayIcon = <template><IconSvg @name="play" /></template>;
@@ -279,17 +278,14 @@ export default class FrameExtractor extends Component {
 		this.stills = this.stills.filter((s) => s !== still);
 	};
 
-	saveAll = () => void this.#zipStills();
+	stillFiles = () =>
+		this.stills.map((still) => ({
+			name: still.fileName,
+			blob: still.blob,
+		}));
 
-	async #zipStills() {
-		if (this.stills.length === 0) return;
-		const { default: JSZip } = await import('jszip');
-		const zip = new JSZip();
-		for (const still of this.stills)
-			zip.file(still.fileName, still.blob);
-		const blob = await zip.generateAsync({ type: 'blob' });
-		if (this.isDestroyed) return;
-		downloadBlob(blob, `${this.baseName}-frames.zip`);
+	get zipName() {
+		return `${this.baseName}-frames.zip`;
 	}
 
 	setSheetCount = (value: number) => {
@@ -432,13 +428,11 @@ export default class FrameExtractor extends Component {
 							@onSave={{this.saveStill}}
 							@onRemove={{this.removeStill}}
 						/>
-						<CanonButton
+						<DownloadAll
 							class="fx-save-all"
-							@text={{passAlong
-								"Download all"
-							}}
-							@icon={{Save}}
-							@onClick={{this.saveAll}}
+							@kind="secondary"
+							@files={{this.stillFiles}}
+							@zipName={{this.zipName}}
 						/>
 					{{else}}
 						<CanonEmptyRow @text="None" />

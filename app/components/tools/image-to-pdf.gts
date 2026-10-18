@@ -22,7 +22,7 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import { passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import {
 	MATCH_IMAGE_SIZE,
@@ -32,6 +32,7 @@ import {
 } from 'delphitools-v2/lib/pdf-pages';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import {
 	open,
@@ -71,7 +72,6 @@ const Trash = <template><IconSvg @name="trash-2" /></template>;
 const SortUp = <template><IconSvg @name="arrow-down" /></template>;
 const SortDown = <template><IconSvg @name="arrow-up" /></template>;
 const ExportIcon = <template><IconSvg @name="file-text" /></template>;
-const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
 interface Item {
 	id: number;
@@ -598,22 +598,23 @@ export default class ImageToPdf extends Component {
 		if (blob) downloadBlob(blob, `${this.stem}-page-${at + 1}.png`);
 	}
 
-	saveZip = () => void this.#saveZip();
-
-	async #saveZip() {
-		const { stem, scale } = this;
-		const zip = await this.#render(async (pdf) => {
-			const { default: JSZip } = await import('jszip');
-			const archive = new JSZip();
-			for (let at = 0; at < pdf.numPages; at++)
-				archive.file(
-					`${stem}-page-${at + 1}.png`,
-					await pagePng(pdf, at, scale),
-				);
-			return archive.generateAsync({ type: 'blob' });
-		});
-		if (zip) downloadBlob(zip, `${stem}-pages.zip`);
+	get zipName() {
+		return `${this.stem}-pages.zip`;
 	}
+
+	pageFiles = async () => {
+		const { stem, scale } = this;
+		const files = await this.#render(async (pdf) => {
+			const pages = [];
+			for (let at = 0; at < pdf.numPages; at++)
+				pages.push({
+					name: `${stem}-page-${at + 1}.png`,
+					blob: await pagePng(pdf, at, scale),
+				});
+			return pages;
+		});
+		return files ?? [];
+	};
 
 	<template>
 		<CanonSplit
@@ -729,20 +730,15 @@ export default class ImageToPdf extends Component {
 							@disabled={{this.rendering}}
 							@onChange={{this.pickScale}}
 						/>
-						<CanonButton
+						<DownloadAll
 							class="i2p-zip"
-							@kind="primary"
-							@text={{passAlong
-								"Download zip"
-							}}
-							@icon={{Save}}
-							@iconStyle="oversized"
+							@files={{this.pageFiles}}
+							@zipName={{this.zipName}}
 							@disabled={{if
 								this.canZip
 								false
 								true
 							}}
-							@onClick={{this.saveZip}}
 						/>
 						{{#if this.rendering}}
 							<CanonRow

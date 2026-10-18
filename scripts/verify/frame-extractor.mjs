@@ -237,7 +237,7 @@ blob = await lastBlob();
 check('Download saves that still', blob?.type === 'image/png', JSON.stringify(blob));
 
 await clearResult();
-await page.click('.fx-save-all');
+await page.click('.fx-save-all .media-download-all-zip');
 await page.waitForFunction(() => window.__result?.type === 'application/zip', { timeout: 10000 });
 blob = await lastBlob();
 check('Download all saves a zip', blob.head[0] === 0x50 && blob.head[1] === 0x4b, JSON.stringify(blob));

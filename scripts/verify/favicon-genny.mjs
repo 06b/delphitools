@@ -166,7 +166,7 @@ await page.evaluate(() => document.querySelectorAll('.favicon-save')[5].click())
 for (let i = 0; i < 40 && !existsSync(one); i++) await sleep(100);
 check('a row downloads its PNG', existsSync(one));
 const zip = join(downloads, 'favicons.zip');
-await page.click('.favicon-all');
+await page.click('.favicon-all .media-download-all-zip');
 for (let i = 0; i < 60 && !existsSync(zip); i++) await sleep(100);
 check('Download All writes favicons.zip', existsSync(zip) && readFileSync(zip).subarray(0, 2).toString() === 'PK');
 

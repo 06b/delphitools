@@ -36,6 +36,7 @@ import {
 } from 'delphitools-v2/components/tools/favicon-genny/favicon';
 import Crop from 'delphitools-v2/components/tools/favicon-genny/crop';
 import Scene from 'delphitools-v2/components/tools/favicon-genny/scene';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import './favicon-genny/favicon-genny.css';
 
 const LOAD_FAILED = 'Image could not be read. Try another file?';
@@ -224,21 +225,13 @@ export default class FaviconGenny extends Component {
 		if (url) downloadUrl(url, fileName(size));
 	};
 
-	downloadAll = () => void this.#zip();
-
-	async #zip() {
-		if (this.icons.length === 0) return;
-		const { default: JSZip } = await import('jszip');
-		const zip = new JSZip();
-		for (const icon of this.icons)
-			zip.file(
-				fileName(icon.size),
-				dataUrlToBytes(icon.dataUrl),
-			);
-		const blob = await zip.generateAsync({ type: 'blob' });
-		if (this.isDestroyed) return;
-		downloadBlob(blob, 'favicons.zip');
-	}
+	iconFiles = () =>
+		this.icons.map((icon) => ({
+			name: fileName(icon.size),
+			blob: new Blob([dataUrlToBytes(icon.dataUrl)], {
+				type: 'image/png',
+			}),
+		}));
 
 	downloadIco = () => {
 		const frames = this.icons
@@ -300,7 +293,7 @@ export default class FaviconGenny extends Component {
 								@onChange={{this.crop}}
 							/>
 						{{/if}}
-						<CanonGrid>
+						<CanonGrid @columns={{1}}>
 							<CanonButton
 								class="favicon-ico"
 								@text="favicon.ico"
@@ -312,20 +305,15 @@ export default class FaviconGenny extends Component {
 								}}
 								@onClick={{this.downloadIco}}
 							/>
-							<CanonButton
+							<DownloadAll
 								class="favicon-all"
-								@kind="primary"
-								@text={{passAlong
-									"Download All"
-								}}
-								@icon={{Save}}
-								@iconStyle="oversized"
+								@files={{this.iconFiles}}
+								@zipName="favicons.zip"
 								@disabled={{if
 									this.ready
 									false
 									true
 								}}
-								@onClick={{this.downloadAll}}
 							/>
 						</CanonGrid>
 					{{else}}

@@ -121,6 +121,44 @@ for (const [w, h] of [
 			(await page.$eval('.canon-detent-wheel', (el) => el.getAttribute('aria-valuenow') ?? el.textContent)) !== before,
 	);
 }
+// G3: Download all saves each file, Zip one valid archive
+await visit(page, '/tools/favicon-genny');
+await page.evaluate(() => {
+	window.__saved = [];
+	HTMLAnchorElement.prototype.click = function () {
+		window.__saved.push({ name: this.download, url: this.href });
+	};
+	// the block revokes nothing, saveBlob revokes at once
+	URL.revokeObjectURL = () => {};
+});
+await copyImage();
+await page.click('.favicon-drop .canon-button:nth-of-type(2), .favicon-drop button:last-of-type');
+await page.waitForSelector('.favicon-all .media-download-all-zip:not([disabled])', { timeout: 10000 });
+const sizes = await page.evaluate(() => {
+	const all = document.querySelector('.favicon-all');
+	const box = (sel) => all.querySelector(sel).getBoundingClientRect();
+	return { each: box('.media-download-all-each').width, zip: box('.media-download-all-zip').width };
+});
+check('Download all is wider than Zip', sizes.each > sizes.zip * 2, JSON.stringify(sizes));
+await page.click('.favicon-all .media-download-all-each');
+await sleep(3000);
+const each = await page.evaluate(() => window.__saved.map((s) => s.name));
+check('Download all saves every PNG on its own', each.length > 4 && each.every((n) => n.endsWith('.png')), each.join());
+await page.evaluate(() => (window.__saved = []));
+await page.click('.favicon-all .media-download-all-zip');
+await page.waitForFunction(() => window.__saved.length === 1, { timeout: 10000 }).catch(() => {});
+const zip = await page.evaluate(async () => {
+	const saved = window.__saved[0];
+	if (!saved) return null;
+	const bytes = new Uint8Array(await (await fetch(saved.url)).arrayBuffer());
+	return { name: saved.name, head: [bytes[0], bytes[1]], size: bytes.length };
+});
+check(
+	'Zip saves one valid archive',
+	zip?.name === 'favicons.zip' && zip.head[0] === 0x50 && zip.head[1] === 0x4b,
+	JSON.stringify(zip),
+);
+
 // G6: side by side at desktop widths, also when the 1200 px column is portrait
 const layout = () =>
 	page.evaluate(() =>

@@ -303,7 +303,7 @@ check(
 				document
 					.querySelector('.i2p-pdf')
 					?.textContent.includes('Drop PDF here') &&
-				document.querySelector('.i2p-zip').disabled,
+				document.querySelector('.i2p-zip .media-download-all-zip').disabled,
 		)),
 );
 await (await page.$('.media-slot-bar ~ input[type="file"]')).uploadFile(
@@ -360,9 +360,9 @@ if (png) {
 clearDownloads();
 await clickText('.i2p-scale', '72 DPI');
 await page.waitForFunction(
-	() => !document.querySelector('.i2p-zip').disabled,
+	() => !document.querySelector('.i2p-zip .media-download-all-zip').disabled,
 );
-await page.click('.i2p-zip');
+await page.click('.i2p-zip .media-download-all-zip');
 const zip = await waitForDownload(/-pages\.zip$/);
 check('Download zip lands', !!zip, zip?.name ?? 'nothing');
 if (zip) {
