@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
@@ -32,8 +33,19 @@ export interface PictureSignature {
 		lamps: boolean[];
 		/** A file is dragged over the tool. */
 		over: boolean;
+		/** Every loaded file, for the film strip; empty hides it. */
+		thumbs: Thumb[];
+		/** Bumped when a file joins a loaded batch; each bump plays the arrival. */
+		arrival: number;
 		onChoose: () => void;
+		onPick: (index: number) => void;
 	};
+}
+
+export interface Thumb {
+	url: string;
+	name: string;
+	current: boolean;
 }
 
 const lampNames = ['Alpha', 'Lossy', '256 Colours'];
@@ -65,6 +77,32 @@ const springs = modifier((element: HTMLElement, [key]: [string]) => {
 		springMs,
 	);
 	return () => window.clearTimeout(timer);
+});
+
+const arriveMs = 450;
+
+const arrives = modifier((element: HTMLElement, [count]: [number]) => {
+	if (!count || reducedMotion()) return;
+	element.classList.remove('conv-picture--arrives');
+	// restarts the animation when files arrive back to back
+	void element.offsetWidth;
+	element.classList.add('conv-picture--arrives');
+	const timer = window.setTimeout(
+		() => element.classList.remove('conv-picture--arrives'),
+		arriveMs,
+	);
+	return () => window.clearTimeout(timer);
+});
+
+// scrolls the strip itself; scrollIntoView would also move the page
+const showsCurrent = modifier((strip: HTMLElement, [index]: [number]) => {
+	const thumb = strip.children[index] as HTMLElement | undefined;
+	if (!thumb) return;
+	const start = thumb.offsetLeft - strip.offsetLeft;
+	const end = start + thumb.offsetWidth;
+	if (start < strip.scrollLeft) strip.scrollLeft = start;
+	else if (end > strip.scrollLeft + strip.clientWidth)
+		strip.scrollLeft = end - strip.clientWidth;
 });
 
 /**
@@ -175,6 +213,10 @@ export default class Picture extends Component<PictureSignature> {
 		}));
 	}
 
+	get currentThumb() {
+		return this.args.thumbs.findIndex((thumb) => thumb.current);
+	}
+
 	failedToShow = (event: Event) => {
 		this.broken = (event.target as HTMLImageElement).src;
 	};
@@ -195,9 +237,11 @@ export default class Picture extends Component<PictureSignature> {
 	<template>
 		<div
 			class="conv-picture
-				{{if @source 'conv-picture--loaded'}}"
+				{{if @source 'conv-picture--loaded'}}
+				{{if @thumbs.length 'conv-picture--film'}}"
 			style={{spring}}
 			{{springs this.springKey}}
+			{{arrives @arrival}}
 		>
 			<span class="conv-area" {{this.measure}}></span>
 			{{#if this.area.width}}
@@ -260,6 +304,40 @@ export default class Picture extends Component<PictureSignature> {
 					@down={{true}}
 					style={{this.lines.down}}
 				/>
+			{{/if}}
+			{{#if @thumbs.length}}
+				<div
+					class="conv-film"
+					{{showsCurrent this.currentThumb}}
+				>
+					{{#each @thumbs as |thumb index|}}
+						<button
+							type="button"
+							class="conv-thumb
+								{{if
+									thumb.current
+									'conv-thumb--current'
+								}}"
+							aria-label={{thumb.name}}
+							aria-pressed={{if
+								thumb.current
+								"true"
+								"false"
+							}}
+							{{on
+								"click"
+								(fn
+									@onPick
+									index
+								)
+							}}
+						><img
+								src={{thumb.url}}
+								alt=""
+								draggable="false"
+							/></button>
+					{{/each}}
+				</div>
 			{{/if}}
 			<div class="conv-footer">
 				<ul class="conv-lamps" aria-hidden="true">

@@ -53,7 +53,11 @@ const state = () =>
 			resultTitle: text('.conv-result-file .canon-row-title'),
 			resultDetail: text('.conv-result-file .canon-row-detail'),
 			download: document.querySelector('.conv-download').disabled,
-			zip: !!document.querySelector('.conv-zip'),
+			zip: !!document.querySelector('.conv-all'),
+			more: !!document.querySelector('.conv-more'),
+			thumbs: [...document.querySelectorAll('.conv-thumb')].map(
+				(t) => `${t.getAttribute('aria-label')}${t.getAttribute('aria-pressed') === 'true' ? '*' : ''}`,
+			),
 			figure: text('.conv-bytes .canon-figure-said'),
 			lines: [
 				...document.querySelectorAll(
@@ -115,6 +119,12 @@ const type = async (selector, value) => {
 };
 
 let s = await state();
+check(
+	'empty: the picture is 3:2, not square',
+	(await page.$eval('.image-converter .canon-canvas', (x) => x.dataset.canonAspect)) === '1.5',
+);
+check('empty: no SVG option', !(await page.$('.conv-svg')));
+check('empty: no film strip, no drop-more row', s.thumbs.length === 0 && !s.more);
 check(
 	'empty: the picture is the drop target, a button',
 	s.slot === 'Drop images here' && s.slotTag === 'BUTTON',
@@ -190,6 +200,32 @@ check('the figure reads the bytes with a unit', /^[\d.]+(B|KB|MB)$/.test(s.figur
 check('lamps: alpha kept, lossy, not 256', s.lamps === 'on,on,off', s.lamps);
 check('download on, zip offered for two', !s.download && s.zip);
 check('the shown file is pressed', (await page.$$eval('.conv-show', (b) => b.map((x) => x.getAttribute('aria-pressed')).join())) === 'true,false');
+check('film strip: both files, the first marked', s.thumbs.join() === 'logo.png*,photo.jpg', s.thumbs.join());
+check('a drop-more row ends the file list', s.more && (await page.$eval('.conv-more', (x) => x.textContent.trim())) === 'Drop additional images here');
+check(
+	'a line between the preview and remove cells',
+	await page.evaluate(() => {
+		const eye = document.querySelector('.conv-show').getBoundingClientRect();
+		const bin = document.querySelector('.conv-remove').getBoundingClientRect();
+		return bin.left - eye.right >= 1;
+	}),
+);
+check(
+	'Download all outsizes Zip',
+	await page.evaluate(() => {
+		const each = document.querySelector('.conv-all .media-download-all-each');
+		const zip = document.querySelector('.conv-all .media-download-all-zip');
+		return each.textContent.trim() === 'Download all' && zip.textContent.trim() === 'Zip' && each.offsetWidth > zip.offsetWidth * 2;
+	}),
+);
+await page.focus('.conv-thumb:nth-child(2)');
+await page.keyboard.press('Enter');
+await settle();
+s = await state();
+check('a thumbnail opens its file from the keyboard', s.thumbs.join() === 'logo.png,photo.jpg*' && s.resultTitle === 'photo.webp', `${s.thumbs} ${s.resultTitle}`);
+await page.click('.conv-thumb:nth-child(1)');
+await settle();
+check('a click on a thumbnail opens it', (await state()).resultTitle === 'logo.webp');
 
 await captureObjectUrl(page);
 const magic = async () => {
@@ -289,9 +325,9 @@ s = await state();
 check('preview the second: its own result and locked size', s.resultTitle === 'photo.png' && s.resultDetail.startsWith('700 × 700'), `${s.resultTitle} ${s.resultDetail}`);
 await page.evaluate(() => {
 	window.__result = undefined;
-	document.querySelector('.conv-zip').click();
+	document.querySelector('.conv-all .media-download-all-zip').click();
 });
-await page.waitForFunction(() => window.__result?.type === 'application/zip' || window.__result?.size > 0 && !document.querySelector('.conv-zip').disabled, { timeout: 20000 });
+await page.waitForFunction(() => window.__result?.type === 'application/zip', { timeout: 20000 });
 const zip = await page.evaluate(async () => {
 	const bytes = new Uint8Array(await window.__result.arrayBuffer());
 	const text = new TextDecoder('latin1').decode(bytes);
@@ -313,7 +349,25 @@ await page.evaluate((b64) => {
 	document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }));
 }, pngBase64);
 await page.waitForFunction(() => document.querySelectorAll('.conv-file').length === 2, { timeout: 5000 }).catch(() => {});
-check('paste anywhere adds a file', (await state()).files.length === 2);
+s = await state();
+check('paste anywhere adds a file', s.files.length === 2);
+check('the added file is shown and marked', s.resultTitle === 'pasted.png' && s.thumbs.join() === 'logo.png,pasted.png*', `${s.resultTitle} ${s.thumbs}`);
+// the arrival: catch the class while it plays
+const arrived = page.waitForFunction(() => !!document.querySelector('.conv-picture--arrives'), { timeout: 3000 }).then(() => true, () => false);
+await page.evaluate((b64) => {
+	const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+	const transfer = new DataTransfer();
+	transfer.items.add(new File([bytes], 'more.png', { type: 'image/png' }));
+	document.querySelector('.conv-more').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }));
+}, pngBase64);
+check('a later file plays the arrival', await arrived);
+await page.waitForFunction(() => document.querySelectorAll('.conv-file').length === 3, { timeout: 5000 }).catch(() => {});
+await settle();
+s = await state();
+check('drop on the drop-more row adds once and shows it', s.files.length === 3 && s.resultTitle === 'more.png' && s.thumbs.at(-1) === 'more.png*', `${s.files.length} ${s.resultTitle} ${s.thumbs}`);
+await page.evaluate(() => document.querySelectorAll('.conv-remove')[2].click());
+await settle();
+check('remove takes the thumbnail too', (await state()).thumbs.length === 2);
 await page.evaluate((b64) => {
 	const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 	const transfer = new DataTransfer();
@@ -354,12 +408,18 @@ s = await state();
 check('flags: format, scale, sample', s.format === 'JPEG' && s.resize === 'Percentage' && s.preset === '50%' && s.resultDetail.startsWith('800 × 600'), `${s.format} ${s.resize} ${s.preset} ${s.resultDetail}`);
 check('flags: quality', (await page.$eval('.conv-quality [role="slider"]', (x) => x.getAttribute('aria-valuenow'))) === '40');
 
-await page.click('.conv-svg');
-await page.waitForFunction(() => location.pathname.endsWith('/image-tracer'), { timeout: 5000 }).catch(() => {});
-check('SVG opens the image tracer', await page.evaluate(() => location.pathname.endsWith('/image-tracer')));
+check('flags: no SVG option', !(await page.$('.conv-svg')));
 
 // phone: stacked, no sideways scroll
 await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/image-converter');
+check(
+	'390 px: the empty picture is 3:2',
+	await page.evaluate(() => {
+		const r = document.querySelector('.image-converter .canon-canvas').getBoundingClientRect();
+		return Math.abs(r.width / r.height - 1.5) < 0.03;
+	}),
+);
 await visit(page, '/tools/image-converter?convSample');
 await page.waitForSelector('.conv-file', { timeout: 5000 });
 check('390 px: no horizontal scroll', await page.evaluate(() => document.querySelector('.dt-main').scrollWidth <= document.querySelector('.dt-main').clientWidth));

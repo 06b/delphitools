@@ -13,6 +13,74 @@
 		calc(var(--canon-panel-padding) + 40px);
 }
 
+.conv-picture--film .conv-area {
+	inset-block-end: calc(var(--canon-panel-padding) + 40px + 56px);
+}
+
+.conv-film {
+	position: absolute;
+	inset-inline: var(--canon-panel-padding);
+	inset-block-end: calc(var(--canon-panel-padding) + 40px);
+	display: flex;
+	gap: 6px;
+	block-size: 48px;
+	overflow: auto hidden;
+	scrollbar-width: none;
+}
+
+.conv-thumb {
+	flex: none;
+	inline-size: 48px;
+	block-size: 48px;
+	margin: 0;
+	padding: 0;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	cursor: pointer;
+	opacity: 0.6;
+	transition: opacity 200ms;
+}
+
+.conv-thumb img {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+}
+
+.conv-thumb--current {
+	border: var(--canon-frame) solid var(--canon-primary);
+	opacity: 1;
+}
+
+.conv-thumb:hover {
+	opacity: 1;
+}
+
+.conv-thumb:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+	opacity: 1;
+}
+
+.conv-picture--arrives .conv-image,
+.conv-picture--arrives .conv-thumb--current {
+	animation: conv-arrive 450ms var(--conv-spring);
+}
+
+@keyframes conv-arrive {
+	from {
+		opacity: 0;
+		transform: scale(0.85);
+	}
+}
+
+/* flush rows draw no line between two cells */
+.conv-file > .canon-row-control {
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
 .conv-edge,
 .conv-checks,
 .conv-image,
@@ -172,6 +240,7 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.conv-image,
+	.conv-thumb,
 	.conv-lamp,
 	.conv-lamp-light {
 		transition: none;

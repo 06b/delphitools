@@ -2,10 +2,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import { isDestroying, registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
-import type RouterService from '@ember/routing/router-service';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
@@ -31,7 +29,10 @@ import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Drop from 'delphitools-v2/components/tools/media/drop';
+import DropMore from 'delphitools-v2/components/tools/media/drop-more';
+import type { NamedBlob } from 'delphitools-v2/lib/zip-files';
 import Picture from 'delphitools-v2/components/tools/image-converter/picture';
 import {
 	BIT_DEPTHS,
@@ -78,8 +79,6 @@ const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Eye = <template><IconSvg @name="eye" /></template>;
 const Folder = <template><IconSvg @name="folder-open" /></template>;
 const Paste = <template><IconSvg @name="clipboard-paste" /></template>;
-const Link = <template><IconSvg @name="link" /></template>;
-const Archive = <template><IconSvg @name="archive" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
 type FlagKey =
@@ -167,15 +166,15 @@ function launchFlags() {
 
 /** The port of ImageConverterViewController, on the web tool's encoders, batch and zip. */
 export default class ImageConverter extends Component {
-	@service declare router: RouterService;
 	@tracked sources: Source[] = [];
 	@tracked current?: Source;
 	@tracked settings: Settings;
 	@tracked result?: { blob: Blob; url: string };
 	@tracked failed = false;
 	@tracked busy = false;
-	@tracked zipping = false;
 	@tracked loadError = '';
+	// files added after the first; each one replays the arrival
+	@tracked arrivals = 0;
 	drop = new Drop(ACCEPT, (files) => void this.add(files), true);
 
 	#queued = false;
@@ -275,14 +274,16 @@ export default class ImageConverter extends Component {
 		];
 	}
 
-	// iOS: the output's own shape, from 0.8 to 1.5
+	// iOS: the output's own shape, from 0.8 to 1.5; empty, the slot's 3:2
 	get aspect() {
 		const output = this.output;
-		if (!output) return 1;
-		return Math.min(
+		if (!output) return 1.5;
+		const shape = Math.min(
 			1.5,
 			Math.max(0.8, output.width / output.height),
 		);
+		// ponytail: a fixed share for the film strip's row, not its measured 56 px
+		return this.many ? shape * 0.85 : shape;
 	}
 
 	get resultName() {
@@ -301,6 +302,21 @@ export default class ImageConverter extends Component {
 	get downloadDisabled() {
 		return !this.result || this.busy || this.failed;
 	}
+
+	get thumbs() {
+		return this.many
+			? this.sources.map((source) => ({
+					url: source.url,
+					name: source.name,
+					current: source === this.current,
+				}))
+			: [];
+	}
+
+	showAt = (index: number) => {
+		const source = this.sources[index];
+		if (source) this.show(source);
+	};
 
 	sourceDetail = (source: Source) =>
 		`${source.natural.width} × ${source.natural.height} · ${formatBytes(source.file.size)}`;
@@ -350,7 +366,8 @@ export default class ImageConverter extends Component {
 			const { width, height } = added[0]!.natural;
 			this.settings = { ...this.settings, width, height };
 		}
-		if (!this.current) this.show(added[0]!);
+		if (this.current) this.arrivals++;
+		this.show(added[0]!);
 	};
 
 	show = (source: Source) => {
@@ -454,9 +471,6 @@ export default class ImageConverter extends Component {
 		this.#convert();
 	};
 
-	openTracer = () =>
-		void this.router.transitionTo('tools.tool', 'image-tracer');
-
 	download = () => {
 		const { result, current } = this;
 		if (result && current)
@@ -466,60 +480,35 @@ export default class ImageConverter extends Component {
 			);
 	};
 
-	downloadZip = async () => {
-		if (this.zipping) return;
-		this.zipping = true;
+	convertedFiles = async () => {
 		const settings = this.settings;
-		try {
-			const { default: JSZip } = await import('jszip');
-			const zip = new JSZip();
-			const taken = new Map<string, number>();
-			// jszip overwrites a repeated name
-			const unique = (name: string) => {
-				const n = (taken.get(name) ?? 0) + 1;
-				taken.set(name, n);
-				return n === 1
-					? name
-					: name.replace(
-							/(\.[^.]*)?$/,
-							`-${n}$1`,
-						);
-			};
-			for (const source of this.sources) {
+		const files: NamedBlob[] = [];
+		for (const source of this.sources) {
+			try {
+				const image = await decodeImage(source.file);
 				try {
-					const image = await decodeImage(
-						source.file,
-					);
-					try {
-						zip.file(
-							unique(
-								outputName(
-									source.name,
-									settings.format,
-								),
-							),
-							await convert(
-								image,
-								source.natural,
-								settings,
-							),
-						);
-					} finally {
-						image.close();
-					}
-				} catch (error) {
-					console.error(
-						`Failed to convert ${source.name}:`,
-						error,
-					);
+					files.push({
+						name: outputName(
+							source.name,
+							settings.format,
+						),
+						blob: await convert(
+							image,
+							source.natural,
+							settings,
+						),
+					});
+				} finally {
+					image.close();
 				}
+			} catch (error) {
+				console.error(
+					`Failed to convert ${source.name}:`,
+					error,
+				);
 			}
-			const blob = await zip.generateAsync({ type: 'blob' });
-			if (!isDestroying(this))
-				downloadBlob(blob, 'converted-images.zip');
-		} finally {
-			if (!isDestroying(this)) this.zipping = false;
 		}
+		return files;
 	};
 
 	#setResult(next?: { blob: Blob; url: string }) {
@@ -610,7 +599,10 @@ export default class ImageConverter extends Component {
 						@failed={{this.failed}}
 						@lamps={{this.lamps}}
 						@over={{this.drop.over}}
+						@thumbs={{this.thumbs}}
+						@arrival={{this.arrivals}}
 						@onChoose={{this.choose}}
+						@onPick={{this.showAt}}
 					/>
 				</CanonCanvas>
 			</:sidebar>
@@ -679,6 +671,11 @@ export default class ImageConverter extends Component {
 								{{/if}}
 							</CanonRow>
 						{{/each}}
+						<DropMore
+							class="conv-more"
+							@accept={{ACCEPT}}
+							@onFiles={{this.add}}
+						/>
 						<CanonGrid class="conv-add">
 							<CanonButton
 								class="conv-files"
@@ -732,15 +729,6 @@ export default class ImageConverter extends Component {
 						@selected={{this.formatIndex}}
 						@onChange={{this.pickFormat}}
 					/>
-					<CanonGrid>
-						<CanonButton
-							class="conv-svg"
-							@kind="cell"
-							@text="SVG"
-							@icon={{Link}}
-							@onClick={{this.openTracer}}
-						/>
-					</CanonGrid>
 					{{#if (is this.settings.format "png")}}
 						<CanonRow
 							class="conv-png-alpha"
@@ -1147,23 +1135,15 @@ export default class ImageConverter extends Component {
 							@disabled={{this.downloadDisabled}}
 							@onClick={{this.download}}
 						/>
-						{{#if this.many}}
-							<CanonButton
-								class="conv-zip"
-								@kind="secondary"
-								@text={{if
-									this.zipping
-									"Converting…"
-									(passAlong
-										"Download All as ZIP"
-									)
-								}}
-								@icon={{Archive}}
-								@disabled={{this.zipping}}
-								@onClick={{this.downloadZip}}
-							/>
-						{{/if}}
 					</CanonGrid>
+					{{#if this.many}}
+						<DownloadAll
+							class="conv-all"
+							@kind="secondary"
+							@files={{this.convertedFiles}}
+							@zipName="converted-images.zip"
+						/>
+					{{/if}}
 				</CanonRows>
 				{{! the empty picture and the Files cell open it }}
 				{{! template-lint-disable require-input-label }}
