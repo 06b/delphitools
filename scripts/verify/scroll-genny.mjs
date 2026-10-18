@@ -80,8 +80,8 @@ check(
 	JSON.stringify(slot),
 );
 check(
-	'empty: Download All and Fill are off, the tiles dashed',
-	(await page.$eval('.scroll-export', (el) => el.disabled)) &&
+	'empty: Download all and Fill are off, the tiles dashed',
+	(await page.$eval('.scroll-export .media-download-all-each', (el) => el.disabled)) &&
 		(await page.$$eval('.scroll-fills [role="radio"]', (els) =>
 			els.every((el) => el.disabled),
 		)) &&
@@ -165,7 +165,7 @@ check('Blur hides the well', !(await page.$('.scroll-genny .canon-colour-well'))
 await pick('scroll-shapes', '4:5 Portrait');
 await settle();
 
-// Download All: one PNG a slide, at full size, web names
+// Download all: one PNG a slide, at full size, web names
 await page.evaluate(() => {
 	window.__saved = [];
 	const create = URL.createObjectURL.bind(URL);
@@ -180,7 +180,7 @@ await page.evaluate(() => {
 		return anchor.call(this);
 	};
 });
-await page.click('.scroll-export');
+await page.click('.scroll-export .media-download-all-each');
 await page.waitForFunction(() => window.__saved.length === 3, { timeout: 15000 }).catch(() => {});
 const saved = await page.evaluate(() =>
 	Promise.all(
@@ -191,10 +191,46 @@ const saved = await page.evaluate(() =>
 	),
 );
 check(
-	'Download All writes three PNGs at 1080 x 1350, named after the source',
+	'Download all writes three PNGs at 1080 x 1350, named after the source',
 	saved.join('|') ===
 		[1, 2, 3].map((n) => `pano-scroll-${n}.png image/png 1080x1350`).join('|'),
 	saved.join('|'),
+);
+
+await page.evaluate(() => (window.__saved = []));
+await page.click('.scroll-export .media-download-all-zip');
+await page.waitForFunction(() => window.__saved.length === 1, { timeout: 15000 }).catch(() => {});
+const zip = await page.evaluate(async () => {
+	const { name, blob } = window.__saved[0] ?? {};
+	const head = blob ? new Uint8Array(await blob.slice(0, 2).arrayBuffer()) : [];
+	return `${name} ${String.fromCharCode(...head)}`;
+});
+check('Zip writes one archive of the slides', zip === 'pano-scroll.zip PK', zip);
+
+// custom ratio: the popover sets any width:height, the presets unselect
+await page.click('.scroll-ratio .canon-aspect-popover-trigger');
+await page.waitForSelector('.canon-aspect-popover:popover-open', { timeout: 3000 });
+const typeSide = async (field, value) => {
+	await page.$eval(`.canon-aspect-popover:popover-open .canon-aspect-popover-${field} input`, (el) => el.select());
+	await page.keyboard.type(String(value));
+	await page.keyboard.press('Tab');
+};
+await typeSide('width', 3);
+await typeSide('height', 4);
+await page.keyboard.press('Escape');
+await settle();
+check(
+	'a custom 3:4 ratio: 1013 px tiles, no preset selected',
+	(await tiles()) === '3|1013 × 1350 px|Edge fill' &&
+		(await page.$$('.scroll-shapes [aria-checked="true"]')).length === 0 &&
+		(await page.$eval('.scroll-ratio .canon-menu-cell-title', (el) => el.textContent.trim())) === '3:4',
+	await tiles(),
+);
+await pick('scroll-shapes', '4:5 Portrait');
+await settle();
+check(
+	'a preset sets the ratio back',
+	(await page.$eval('.scroll-ratio .canon-menu-cell-title', (el) => el.textContent.trim())) === '4:5',
 );
 
 // a slide in the strip: click downloads it, the menu copies it
@@ -308,9 +344,9 @@ await page.evaluate(() =>
 );
 await sleep(200);
 check(
-	'Clear: the slot is back, Download All off, the strip empty',
+	'Clear: the slot is back, Download all off, the strip empty',
 	!!(await page.$('.scroll-slot')) &&
-		(await page.$eval('.scroll-export', (el) => el.disabled)) &&
+		(await page.$eval('.scroll-export .media-download-all-each', (el) => el.disabled)) &&
 		(await picture()).pages === 0,
 );
 
@@ -326,8 +362,40 @@ check(
 	await tiles(),
 );
 
-// reduced motion: no transitions
+// stacked to side by side and back: the strip morphs between its two places, a plain resize does not
+const strideSizes = async (from, to) => {
+	await page.setViewport(from);
+	await visit(page, '/tools/scroll-genny?scrollSample');
+	await page.waitForSelector('.scroll-slide img', { timeout: 10000 });
+	await sleep(800);
+	await page.evaluate(() => {
+		window.__widths = [];
+		const t0 = performance.now();
+		const tick = () => {
+			window.__widths.push(Math.round(document.querySelector('.scroll-strip').getBoundingClientRect().width));
+			if (performance.now() - t0 < 600) requestAnimationFrame(tick);
+		};
+		requestAnimationFrame(tick);
+	});
+	await page.setViewport(to);
+	await sleep(800);
+	return [...new Set(await page.evaluate(() => window.__widths))];
+};
+for (const [from, to, name] of [
+	[{ width: 860, height: 600 }, { width: 900, height: 600 }, 'stacked to side by side'],
+	[{ width: 900, height: 600 }, { width: 860, height: 600 }, 'side by side to stacked'],
+]) {
+	const widths = await strideSizes(from, to);
+	check(`${name}: the strip morphs over frames`, widths.length > 4, widths.join(' '));
+}
+const plain = await strideSizes({ width: 1000, height: 800 }, { width: 1060, height: 800 });
+check('a resize that keeps the layout follows at once', plain.length === 2, plain.join(' '));
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+const still = await strideSizes({ width: 860, height: 600 }, { width: 900, height: 600 });
+check('reduced motion: no morph', still.length <= 2, still.join(' '));
+await page.setViewport({ width: 1400, height: 1000 });
+
+// reduced motion: no transitions
 await visit(page, '/tools/scroll-genny?scrollSample');
 await page.waitForSelector('.scroll-strip', { timeout: 10000 });
 check(
@@ -339,7 +407,7 @@ check(
 );
 await page.emulateMediaFeatures([]);
 
-// a workflow step: the carried image loads, Download All reads Pass along
+// a workflow step: the carried image loads, Download all reads Pass along
 await page.goto(`${BASE}/w/paste-image.scroll-genny`, { waitUntil: 'networkidle2' });
 await page.waitForSelector('.dt-pass-go', { timeout: 15000 });
 await page.click('.dt-pass-go');
@@ -352,10 +420,10 @@ await page.waitForFunction(() => location.pathname === '/tools/scroll-genny', { 
 await page.waitForSelector('.scroll-source', { timeout: 15000 });
 check('in a flow the carried image loads', (await sourceRow()).detail === '400 × 200 px', (await sourceRow()).detail);
 check(
-	'and Download All reads Pass along',
-	(await page.$eval('.scroll-export', (el) => el.textContent.trim())) === 'Pass along',
+	'and Download all reads Pass along',
+	(await page.$eval('.scroll-export .media-download-all-each', (el) => el.textContent.trim())) === 'Pass along',
 );
-await page.click('.scroll-export');
+await page.click('.scroll-export .media-download-all-each');
 check(
 	'Pass along finishes the flow',
 	await page

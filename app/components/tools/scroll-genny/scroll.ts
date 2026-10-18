@@ -3,8 +3,13 @@ import {
 	overscan,
 } from 'delphitools-v2/components/tools/matte-genny/matte';
 
-/** Width over height, in the order of the shape segments. */
-export const ratios = [4 / 5, 1];
+/** The shape segments, as width and height. */
+export const presets = [
+	{ width: 4, height: 5, label: '4:5' },
+	{ width: 1, height: 1, label: '1:1' },
+];
+// ponytail: sides up to 32 as matte-genny; a wide ratio on a tall image can pass the canvas size limit
+export const maxRatioSide = 32;
 
 /** Blur radius at the written size, px. */
 export const blur = 30;

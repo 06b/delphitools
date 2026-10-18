@@ -1,7 +1,10 @@
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import CanonLoader from 'delphicanon/components/canon-loader';
+import { springEasing } from 'delphicanon/lib/motion';
+import { reducedMotion } from 'delphitools-v2/lib/flow-hooks';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import type { Geometry } from 'delphitools-v2/components/tools/scroll-genny/scroll';
 
@@ -18,6 +21,14 @@ export interface PictureSignature {
 }
 
 const pct = (value: number) => `${Math.round(value * 10000) / 100}%`;
+
+// iOS: spring over 0.5 s, damping 0.8
+const morph = { duration: 500, easing: springEasing(0.8) };
+
+const layoutOf = (element: Element) =>
+	getComputedStyle(element)
+		.getPropertyValue('--canon-split-layout')
+		.trim();
 
 /**
  * The slides side by side as the carousel shows them, fitted to the band:
@@ -66,6 +77,56 @@ export default class Picture extends Component<PictureSignature> {
 		}));
 	}
 
+	/**
+	 * When the split turns between stacked and side by side, the strip
+	 * moves and resizes from where it was to where it lands; a plain resize
+	 * follows the window at once.
+	 */
+	morphOnLayout = modifier((strip: HTMLElement) => {
+		const body = strip.closest('.canon-split-body');
+		if (!body) return;
+		let layout = layoutOf(body);
+		let last: DOMRect | undefined;
+		let running: Animation | undefined;
+		const observer = new ResizeObserver(() => {
+			const next = layoutOf(body);
+			const flipped = next !== layout;
+			layout = next;
+			// a resize during the morph retargets it from where the strip is shown
+			const moving = running?.playState === 'running';
+			const shown = strip.getBoundingClientRect();
+			running?.cancel();
+			const from = moving
+				? shown
+				: flipped
+					? last
+					: undefined;
+			const to = strip.getBoundingClientRect();
+			last = to;
+			if (!from || !to.width || reducedMotion()) return;
+			const dx = from.left - to.left;
+			const dy = from.top - to.top;
+			running = strip.animate(
+				[
+					{
+						transformOrigin: '0 0',
+						transform: `translate(${dx}px, ${dy}px) scale(${from.width / to.width})`,
+					},
+					{
+						transformOrigin: '0 0',
+						transform: 'none',
+					},
+				],
+				morph,
+			);
+		});
+		observer.observe(strip);
+		return () => {
+			observer.disconnect();
+			running?.cancel();
+		};
+	});
+
 	get unit() {
 		return this.args.geometry?.slideCount === 1
 			? 'slide'
@@ -80,6 +141,7 @@ export default class Picture extends Component<PictureSignature> {
 						class="scroll-strip"
 						aria-label={{strip.label}}
 						style={{strip.style}}
+						{{this.morphOnLayout}}
 					>
 						{{#each this.slides as |slide|}}
 							<span

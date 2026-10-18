@@ -5,6 +5,7 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
+import CanonAspectPopover from 'delphicanon/components/canon-aspect-popover';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonColourWell from 'delphicanon/components/canon-colour-well';
@@ -26,9 +27,11 @@ import { springEasing } from 'delphicanon/lib/motion';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import type { NamedBlob } from 'delphitools-v2/lib/zip-files';
+import { passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { bytes } from 'delphitools-v2/components/tools/matte-genny/matte';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Picture from 'delphitools-v2/components/tools/scroll-genny/picture';
 import {
@@ -38,22 +41,21 @@ import {
 	geometry,
 	pngOf,
 	decode,
-	ratios,
+	maxRatioSide,
+	presets,
 	type Fill,
 } from 'delphitools-v2/components/tools/scroll-genny/scroll';
 import './scroll-genny/scroll-genny.css';
 
 const loadFailed = 'Image could not be read. Try another file?';
 const shapes = ['4:5 Portrait', '1:1 Square'];
+const clampSide = (side: number) =>
+	Math.min(Math.max(Math.round(side), 1), maxRatioSide);
 const fills = ['Blur', 'Solid Colour'];
-
-// web value: stagger multiple file downloads
-const downloadGap = 300;
 
 // iOS: spring over 0.5 s, damping 0.8
 const spring = htmlSafe(`--scroll-spring: ${springEasing(0.8)}`);
 
-const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 
 interface Source {
@@ -62,13 +64,21 @@ interface Source {
 	stem: string;
 }
 
-// ?scrollShape=<index> ?scrollFill=<index> ?scrollColour=<rrggbb> ?scrollSample: the iOS -scrollShape, -scrollFill, -scrollColour, -scrollSample flags
+// ?scrollShape=<index> ?scrollFill=<index> ?scrollColour=<rrggbb> ?scrollSample: the iOS -scrollShape, -scrollFill, -scrollColour, -scrollSample flags; ?scrollRatio=W:H is web only
 function launchFlags() {
 	const query = new URLSearchParams(window.location.search);
 	const index = (name: string) =>
 		Math.abs(Number(query.get(name)) || 0) % 2;
+	const ratio = (query.get('scrollRatio') ?? '')
+		.split(':')
+		.map(Number)
+		.filter((side) => side > 0);
+	const preset = presets[index('scrollShape')]!;
 	return {
-		shape: index('scrollShape'),
+		ratio:
+			ratio.length === 2
+				? ratio.map(clampSide)
+				: [preset.width, preset.height],
 		fill: index('scrollFill'),
 		colour: parseHex(query.get('scrollColour') ?? '') ?? [0, 0, 0],
 		sample: query.has('scrollSample'),
@@ -79,7 +89,8 @@ function launchFlags() {
 export default class ScrollGenny extends Component {
 	@service('canon-toast') declare toast: CanonToastService;
 
-	@tracked shape: number;
+	@tracked ratioW: number;
+	@tracked ratioH: number;
 	@tracked fill: number;
 	@tracked colour: Rgb;
 	@tracked source?: Source;
@@ -92,18 +103,16 @@ export default class ScrollGenny extends Component {
 	#loading = 0;
 	#rendering = 0;
 	#frame = 0;
-	#timers: number[] = [];
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
 		const flags = launchFlags();
-		this.shape = flags.shape;
+		[this.ratioW, this.ratioH] = flags.ratio as [number, number];
 		this.fill = flags.fill;
 		this.colour = flags.colour;
 		if (flags.sample) void drawnPanorama().then(this.load);
 		registerDestructor(this, () => {
 			cancelAnimationFrame(this.#frame);
-			this.#timers.forEach(clearTimeout);
 			this.#release();
 		});
 	}
@@ -111,8 +120,19 @@ export default class ScrollGenny extends Component {
 	get geometry() {
 		const full = this.source?.full;
 		return full
-			? geometry(full.width, full.height, ratios[this.shape]!)
+			? geometry(
+					full.width,
+					full.height,
+					this.ratioW / this.ratioH,
+				)
 			: undefined;
+	}
+
+	get shape() {
+		const at = presets.findIndex(
+			(p) => p.width * this.ratioH === p.height * this.ratioW,
+		);
+		return at < 0 ? null : at;
 	}
 
 	get fillChoice(): Fill {
@@ -170,6 +190,10 @@ export default class ScrollGenny extends Component {
 		return this.slides.map((picture) => ({ size, picture }));
 	}
 
+	get zipName() {
+		return `${this.source?.stem ?? 'image'}-scroll.zip`;
+	}
+
 	get exportDisabled() {
 		return !this.source || this.exporting;
 	}
@@ -216,7 +240,13 @@ export default class ScrollGenny extends Component {
 	};
 
 	pickShape = (index: number) => {
-		this.shape = index;
+		const preset = presets[index]!;
+		this.setRatio(preset.width, preset.height);
+	};
+
+	setRatio = (width: number, height: number) => {
+		this.ratioW = width;
+		this.ratioH = height;
 		this.#rerender();
 	};
 
@@ -230,32 +260,48 @@ export default class ScrollGenny extends Component {
 		this.#rerender();
 	};
 
-	exportAll = () => void this.export();
-
-	/** No index: every slide, as the web tool did, a download apart. */
-	async export(index?: number) {
+	/** Every slide at full size, for Download all and Zip. */
+	slideFiles = async (): Promise<NamedBlob[]> => {
 		const { source, geometry: g } = this;
-		if (!source || !g || this.exporting) return;
-		this.exporting = true;
+		if (!source || !g) return [];
 		const fill = this.fillChoice;
-		const indices =
-			index === undefined
-				? [...Array(g.slideCount).keys()]
-				: [index];
+		this.exporting = true;
 		try {
-			for (const [k, i] of indices.entries()) {
+			const files: NamedBlob[] = [];
+			for (let i = 0; i < g.slideCount; i++) {
 				const blob = await pngOf(
 					drawSlide(source.full, g, i, fill),
 				);
-				if (!blob || source !== this.source) return;
-				const name = fileName(source.stem, i);
-				this.#timers.push(
-					window.setTimeout(
-						() => downloadBlob(blob, name),
-						k * downloadGap,
-					),
-				);
+				if (!blob || source !== this.source) return [];
+				files.push({
+					name: fileName(source.stem, i),
+					blob,
+				});
 			}
+			return files;
+		} finally {
+			this.exporting = false;
+		}
+	};
+
+	async export(index: number) {
+		const { source, geometry: g } = this;
+		if (!source || !g || this.exporting) return;
+		this.exporting = true;
+		try {
+			const blob = await pngOf(
+				drawSlide(
+					source.full,
+					g,
+					index,
+					this.fillChoice,
+				),
+			);
+			if (blob && source === this.source)
+				downloadBlob(
+					blob,
+					fileName(source.stem, index),
+				);
 		} finally {
 			this.exporting = false;
 		}
@@ -377,6 +423,21 @@ export default class ScrollGenny extends Component {
 						@selected={{this.shape}}
 						@onChange={{this.pickShape}}
 					/>
+					<CanonRow
+						class="scroll-ratio"
+						@title="Ratio"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonAspectPopover
+							@width={{this.ratioW}}
+							@height={{this.ratioH}}
+							@presets={{presets}}
+							@max={{maxRatioSide}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setRatio}}
+						/>
+					</CanonRow>
 					<CanonHeading @text="Fill" />
 					<CanonSegmented
 						class="scroll-fills"
@@ -404,16 +465,11 @@ export default class ScrollGenny extends Component {
 							@row={{true}}
 						/>
 					{{/if}}
-					<CanonButton
+					<DownloadAll
 						class="scroll-export"
-						@kind="primary"
-						@text={{passAlong
-							"Download All"
-						}}
-						@icon={{Save}}
-						@iconStyle="oversized"
+						@files={{this.slideFiles}}
+						@zipName={{this.zipName}}
 						@disabled={{this.exportDisabled}}
-						@onClick={{this.exportAll}}
 					/>
 					{{#if this.exporting}}
 						<CanonRow @title="Processing…">
