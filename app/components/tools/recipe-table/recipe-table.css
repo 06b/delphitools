@@ -34,7 +34,7 @@
 }
 
 /* side by side the picture fills its pane; stacked it takes the card's height */
-@container canon-split (min-width: 640px) and (orientation: landscape) {
+@container canon-split ((min-width: 640px) and (orientation: landscape)) or (min-width: 900px) {
 	.rt-card {
 		min-block-size: 100%;
 	}
