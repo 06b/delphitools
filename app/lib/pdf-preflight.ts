@@ -634,9 +634,9 @@ export function colourIssues(spaces: string[], page: number): PreflightIssue[] {
 		issues.push({
 			severity: 'info',
 			category: 'colour',
-			message: 'Grayscale colour space detected',
+			message: 'Greyscale colour space detected',
 			page,
-			details: 'Grayscale content found. This is generally fine for print but ensure it meets your colour requirements.',
+			details: 'Greyscale content found. This is generally fine for print but ensure it meets your colour requirements.',
 		});
 	}
 
@@ -653,7 +653,7 @@ export function colourIssues(spaces: string[], page: number): PreflightIssue[] {
 	const activeSpaces = [
 		hasRGB && 'RGB',
 		hasCMYK && 'CMYK',
-		hasGray && 'Gray',
+		hasGray && 'Grey',
 		hasSpot && 'Spot',
 	].filter((name): name is string => typeof name === 'string');
 	if (activeSpaces.length > 1) {

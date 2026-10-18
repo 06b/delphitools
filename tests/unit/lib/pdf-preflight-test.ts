@@ -33,7 +33,7 @@ module('Unit | lib | pdf-preflight', function () {
 				['warning', 2],
 			],
 		);
-		assert.true(rgbGray[2]!.message.includes('RGB, Gray'));
+		assert.true(rgbGray[2]!.message.includes('RGB, Grey'));
 		assert.strictEqual(
 			colourIssues(['Separation'], 1)[0]?.severity,
 			'info',
