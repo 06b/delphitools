@@ -217,11 +217,14 @@ export interface LaunchFlags {
 	space?: SolidSpace;
 	row?: number;
 	ortho: boolean;
+	/** Every space at once. */
+	grid: boolean;
 }
 
 /**
  * The iOS launch arguments as query flags: ?converterColour=<any notation>
- * ?converterSpace=<picker index> ?converterRow=<index> ?converterOrtho=1,
+ * ?converterSpace=<picker index> ?converterRow=<index> ?converterOrtho=1
+ * ?converterGrid=1,
  * plus the carried ?color=<hex>.
  */
 export function launchFlags(search: string): LaunchFlags {
@@ -239,5 +242,6 @@ export function launchFlags(search: string): LaunchFlags {
 		space: space === undefined ? undefined : solidSpaces[space],
 		row: index('converterRow'),
 		ortho: query.has('converterOrtho'),
+		grid: query.has('converterGrid'),
 	};
 }

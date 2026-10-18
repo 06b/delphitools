@@ -154,6 +154,7 @@ export const toolCategories: ToolCategory[] = [
 				produces: [COLOUR_OUTPUT],
 				carryColour: true,
 				canon: true,
+				expands: true,
 			},
 			{
 				id: 'contrast-checker',

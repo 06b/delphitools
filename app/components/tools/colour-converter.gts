@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonColourControls, {
 	CanonColourSolidState,
@@ -19,6 +21,7 @@ import {
 	spaceNames,
 	type SolidSpace,
 } from 'delphicanon/lib/colour-space';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { getColourName } from 'delphitools-v2/lib/colour-names';
 import { carryColour } from 'delphitools-v2/lib/colour-query';
 import {
@@ -42,9 +45,12 @@ const labelWidth = 76;
 
 const closestName = (colour: Rgb) => getColourName(hex(colour));
 
+const Grid = <template><IconSvg @name="layout-grid" /></template>;
+
 /** The port of ColourConverterViewController, without its colour management. */
 export default class ColourConverter extends Component {
 	state: CanonColourSolidState;
+	@tracked grid = false;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
@@ -56,6 +62,7 @@ export default class ColourConverter extends Component {
 			activeRow: flags.row ?? 2,
 		});
 		this.state.viewPlane = flags.ortho;
+		this.grid = flags.grid;
 		if (flags.typed) this.#take(flags.typed);
 	}
 
@@ -110,6 +117,25 @@ export default class ColourConverter extends Component {
 		});
 	}
 
+	/** The grid's solids, one per space, each at the colour. */
+	get cells() {
+		return solidSpaces.map((space) => ({
+			space,
+			label: spaceNames[space],
+			point:
+				space === this.state.space
+					? this.state.point
+					: pointFor(space, this.colour),
+			current: space === this.state.space,
+		}));
+	}
+
+	toggleGrid = () => (this.grid = !this.grid);
+
+	/** A pick on a grid solid; drags follow at once. */
+	pickColour = (_point: unknown, colour: Rgb) =>
+		this.state.setPoint(pointFor(this.state.space, colour), false);
+
 	get name() {
 		return getColourName(this.hex);
 	}
@@ -160,21 +186,64 @@ export default class ColourConverter extends Component {
 		>
 			<:sidebar>
 				<CanonCanvas
-					@aspect={{1}}
+					@aspect={{1.4}}
 					@maxHeight={{640}}
 					@background="var(--canon-muted)"
 				>
 					<div class="cc-picture">
-						<CanonColourSolid
-							class="cc-solid"
-							@space={{this.state.space}}
-							@point={{this.state.point}}
-							@animated={{this.state.animated}}
-							@sliceAxis={{this.state.sliceAxis}}
-							@isOrtho={{this.state.isOrtho}}
-							@showsWhole={{this.state.showsWhole}}
-							@onChange={{this.state.pick}}
-							@closestName={{closestName}}
+						{{#if this.grid}}
+							<div class="cc-grid">
+								{{#each
+									this.cells
+									key="space"
+									as |cell|
+								}}
+									<div
+										class="cc-cell
+											{{if
+												cell.current
+												'cc-cell--current'
+											}}"
+									>
+										<CanonColourSolid
+											@space={{cell.space}}
+											@point={{cell.point}}
+											@animated={{this.state.animated}}
+											@onChange={{this.pickColour}}
+											@closestName={{closestName}}
+										/>
+										<span
+											class="cc-cell-label"
+											aria-hidden="true"
+										>{{cell.label}}</span>
+									</div>
+								{{/each}}
+							</div>
+						{{else}}
+							<CanonColourSolid
+								class="cc-solid"
+								@space={{this.state.space}}
+								@point={{this.state.point}}
+								@animated={{this.state.animated}}
+								@sliceAxis={{this.state.sliceAxis}}
+								@isOrtho={{this.state.isOrtho}}
+								@showsWhole={{this.state.showsWhole}}
+								@onChange={{this.state.pick}}
+								@closestName={{closestName}}
+							/>
+						{{/if}}
+						<CanonButton
+							class="cc-grid-toggle"
+							@kind="segment"
+							@icon={{Grid}}
+							@label="All spaces"
+							@selected={{this.grid}}
+							@onClick={{this.toggleGrid}}
+							aria-pressed={{if
+								this.grid
+								"true"
+								"false"
+							}}
 						/>
 						<CanonColourStrip
 							@colour={{this.colour}}
@@ -195,12 +264,6 @@ export default class ColourConverter extends Component {
 						@label="Any notation"
 						{{on "input" this.typeLive}}
 						{{on "focusin" this.selectAll}}
-					/>
-				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonColourControls
-						@state={{this.state}}
-						@hidesNotation={{true}}
 					/>
 				</CanonRows>
 				<CanonRows @framed={{true}}>
@@ -240,6 +303,23 @@ export default class ColourConverter extends Component {
 								@labelWidth={{labelWidth}}
 							/>
 						{{/if}}
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonColourControls
+						@state={{this.state}}
+						@hidesNotation={{true}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Channels" />
+					{{#each
+						this.spaces key="space"
+						as |line|
+					}}
+						<CanonHeading
+							@text={{line.label}}
+						/>
 						<Ribbons
 							@space={{line.space}}
 							@values={{line.values}}

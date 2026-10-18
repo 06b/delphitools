@@ -1,13 +1,68 @@
 /* the picture: the solid over the strip */
 .cc-picture {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	block-size: 100%;
+	container: cc-picture / size;
 }
 
 .cc-solid {
 	flex: 1;
 	min-block-size: 0;
+}
+
+/* every space at once: 2 x 4 in a tall pane, 4 x 2 in a wide one */
+.cc-grid {
+	display: grid;
+	flex: 1;
+	grid-template: repeat(4, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr));
+	gap: var(--canon-hairline);
+	min-block-size: 0;
+	background: var(--canon-border);
+}
+
+@container cc-picture (aspect-ratio > 1) {
+	.cc-grid {
+		grid-template-rows: repeat(2, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
+.cc-cell {
+	position: relative;
+	min-block-size: 0;
+	background: var(--canon-muted);
+}
+
+.cc-cell .canon-colour-solid-hint {
+	display: none;
+}
+
+/* bottom centre: clear of the toggle and the expanded edge chevron */
+.cc-cell-label {
+	position: absolute;
+	inset-block-end: 6px;
+	inset-inline-start: 50%;
+	translate: -50% 0;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	pointer-events: none;
+}
+
+.cc-cell--current .cc-cell-label {
+	color: var(--canon-primary);
+}
+
+.colour-converter .cc-grid-toggle {
+	position: absolute;
+	z-index: 1;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	inline-size: var(--canon-row-height);
+	block-size: var(--canon-row-height);
 }
 
 /* first and large: typing a colour is the main way in */
@@ -79,5 +134,12 @@
 @media (prefers-reduced-motion: reduce) {
 	.cc-ribbons--eases .cc-ribbon-tick {
 		transition: none;
+	}
+}
+
+/* expanded, the picture meets the folder tab; the shell reads --dt-tab-fill */
+@container (width > 1300px) {
+	.dt-sheet:has(.dt-canon-tool.is-expanded > .colour-converter) {
+		--dt-tab-fill: var(--canon-muted);
 	}
 }

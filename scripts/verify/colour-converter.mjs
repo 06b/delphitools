@@ -232,4 +232,137 @@ await sleep(300);
 const typed = await page.$eval('.cc-input input', (el) => el.value);
 check('a click selects the value, so typing replaces it', typed === '#4cb86a', typed);
 
+
+// the converted values come first, above the fold
+const fold = () =>
+	page.evaluate(() => {
+		const body = document
+			.querySelector('.colour-converter .canon-split-body')
+			.getBoundingClientRect();
+		const shown = [
+			...document.querySelectorAll('.colour-converter .canon-split-main .canon-value-line'),
+		]
+			.filter((line) => {
+				const box = line.getBoundingClientRect();
+				return box.top >= body.top && box.bottom <= body.bottom;
+			})
+			.map((line) => line.querySelector('.canon-value-line-label').textContent.trim());
+		const main = [...document.querySelector('.colour-converter .canon-split-main').children];
+		const formats = main.findIndex((el) => el.textContent.includes('All Formats'));
+		const controls = main.findIndex((el) => el.querySelector('.canon-colour-controls'));
+		return { shown, formatsFirst: formats === 1 && controls > formats };
+	});
+await page.setViewport({ width: 1400, height: 1000 });
+await visit(page, '/tools/colour-converter');
+let seen = await fold();
+check('the formats follow the field, the controls after', seen.formatsFirst);
+check('1400 x 1000: every format is above the fold', seen.shown.length === 11, seen.shown.join(','));
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/colour-converter');
+seen = await fold();
+check(
+	'390 x 844: the sRGB formats are above the fold',
+	['HEX', 'RGB', 'Decimal RGB', 'HSL', 'HSB'].every((l) => seen.shown.includes(l)),
+	seen.shown.join(','),
+);
+
+// it expands like the other cube tools
+await page.setViewport({ width: 2200, height: 1100 });
+await page.evaluate(() => localStorage.setItem('dt-canon-expanded', '[]'));
+await visit(page, '/tools/colour-converter');
+await page.click('.dt-canon-edge.is-start');
+await sleep(500);
+const wide = await page.evaluate(() => ({
+	expandable: !!document.querySelector('.dt-canon-tool.is-expandable.is-expanded'),
+	picture: document.querySelector('.colour-converter .canon-split-sidebar').getBoundingClientRect().width,
+	settings: document.querySelector('.colour-converter .canon-split-main').getBoundingClientRect().width,
+}));
+check(
+	'the edge chevron stretches the picture, the settings keep 600 px',
+	wide.expandable && wide.picture > 900 && Math.round(wide.settings) === 600,
+	`${wide.picture} ${wide.settings}`,
+);
+await page.evaluate(() => localStorage.setItem('dt-canon-expanded', '[]'));
+
+// all spaces at once: eight solids, one webgl context each, released on the way back
+await page.setViewport({ width: 1400, height: 1000 });
+await visit(page, '/tools/colour-converter');
+const solids = () =>
+	page.evaluate(() => ({
+		count: document.querySelectorAll('.colour-converter .canon-colour-solid').length,
+		gl: document.querySelectorAll('.colour-converter .canon-colour-solid[data-gl="ready"]').length,
+		labels: [...document.querySelectorAll('.cc-cell-label')].map((l) => l.textContent.trim()),
+		current: document.querySelector('.cc-cell--current .cc-cell-label')?.textContent.trim(),
+		pressed: document.querySelector('.cc-grid-toggle').getAttribute('aria-pressed'),
+		name: document.querySelector('.cc-grid-toggle').getAttribute('aria-label'),
+	}));
+let grid = await solids();
+check('one solid by default', grid.count === 1 && grid.pressed === 'false', `${grid.count} ${grid.pressed}`);
+check('the toggle is named', grid.name === 'All spaces', grid.name);
+await page.click('.cc-grid-toggle');
+await sleep(300);
+grid = await solids();
+check('the toggle shows a solid per space', grid.count === 8 && grid.gl === 8 && grid.pressed === 'true', `${grid.count} ${grid.gl}`);
+check(
+	'each cell names its space, the current one marked',
+	grid.labels.join() === 'RGB,HSL,HSB,OKLCH,OKLab,LCH,Lab,CMYK' && grid.current === 'RGB',
+	`${grid.labels.join()} ${grid.current}`,
+);
+const marks = await page.$$eval('.cc-cell .canon-colour-solid-marker--pick', (m) => m.filter((x) => !x.hidden).length);
+check('every cell marks the colour', marks === 8, `${marks}`);
+const unpicked = (await state()).strip;
+const cell = await page.$eval('.cc-cell:nth-child(1) .canon-colour-solid', (el) => {
+	const r = el.getBoundingClientRect();
+	return { x: r.left + r.width * 0.45, y: r.top + r.height * 0.6 };
+});
+await page.mouse.click(cell.x, cell.y);
+await sleep(300);
+check('a press on a cell picks there', (await state()).strip !== unpicked, `${unpicked} -> ${(await state()).strip}`);
+await page.click('.cc-grid-toggle');
+await sleep(300);
+grid = await solids();
+check('and back to the one solid', grid.count === 1 && grid.pressed === 'false', `${grid.count}`);
+await visit(page, '/tools/colour-converter?converterGrid=1');
+check('?converterGrid opens the grid', (await solids()).count === 8);
+
+// G4: the solid starts in RGB with the orbit hint, and drifts after 4 s idle
+await visit(page, '/tools/colour-converter');
+const axes = () =>
+	page.$$eval('.colour-converter .canon-colour-solid-axis', (labels) =>
+		labels.map((l) => l.style.translate).join(),
+	);
+const start = await page.evaluate(() => ({
+	space: document
+		.querySelector('.canon-colour-controls [role="radio"][aria-checked="true"]')
+		?.textContent.trim(),
+	hint: document.querySelector('.colour-converter .canon-colour-solid-hint')?.textContent.trim(),
+}));
+check('the solid starts in RGB', start.space === 'RGB', start.space);
+check('with the orbit hint', start.hint === 'Drag to orbit', start.hint);
+const still = await axes();
+await sleep(5500);
+check('and drifts after 4 s idle', still !== '' && (await axes()) !== still);
+
+// expanded, the folder tab takes the picture's colour
+const tabFill = () =>
+	page.evaluate(() => ({
+		tab: getComputedStyle(document.querySelector('.dt-tab')).backgroundColor,
+		picture: getComputedStyle(
+			document.querySelector('.colour-converter .canon-canvas-content'),
+		).backgroundColor,
+		sheet: getComputedStyle(document.querySelector('.dt-sheet')).backgroundColor,
+	}));
+await page.setViewport({ width: 2200, height: 1100 });
+await page.evaluate(() =>
+	localStorage.setItem('dt-canon-expanded', JSON.stringify(['colour-converter'])),
+);
+await visit(page, '/tools/colour-converter');
+let fill = await tabFill();
+check('expanded, the tab matches the picture', fill.tab === fill.picture, `${fill.tab} ${fill.picture}`);
+await page.evaluate(() => localStorage.setItem('dt-canon-expanded', '[]'));
+await visit(page, '/tools/colour-converter');
+fill = await tabFill();
+check('in the column, the tab matches the sheet', fill.tab === fill.sheet, `${fill.tab} ${fill.sheet}`);
+await page.setViewport({ width: 1400, height: 1000 });
+
 await finish(browser);
