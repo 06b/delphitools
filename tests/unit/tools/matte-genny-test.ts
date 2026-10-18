@@ -3,10 +3,12 @@ import {
 	average,
 	bytes,
 	cover,
-	diagonalAngle,
+	autoStops,
 	drawMatte,
 	fileName,
 	fit,
+	gradient,
+	gradientLine,
 	heightOf,
 	shifted,
 	solid,
@@ -17,7 +19,11 @@ import {
 const spec = (more: Partial<MatteSpec>): MatteSpec => ({
 	style: solid,
 	colour: [255, 255, 255],
-	dominant: [136, 136, 136],
+	stops: [
+		[136, 136, 136],
+		[106, 106, 106],
+	],
+	angle: 135,
 	ratioW: 1,
 	ratioH: 1,
 	width: 100,
@@ -56,19 +62,56 @@ module('Unit | Tool | matte-genny', function () {
 		assert.deepEqual(bytes([30 / 255, 0.4, 1.2]), [30, 102, 255]);
 	});
 
-	test('the CSS gradient runs corner to corner as the canvas one', function (assert) {
-		assert.strictEqual(diagonalAngle({ width: 1, height: 1 }), 135);
-		const angle =
-			(diagonalAngle({ width: 1920, height: 1080 }) *
-				Math.PI) /
-			180;
-		// the direction of (w, h) in CSS angle terms: (sin, -cos)
-		assert.true(
-			Math.abs(
-				Math.sin(angle) / -Math.cos(angle) -
-					1920 / 1080,
-			) < 1e-9,
+	test('the canvas gradient line draws as the CSS angle', function (assert) {
+		const round = (line: Record<string, number>) =>
+			Object.values(line).map(
+				(v) => Math.round(v * 1e6) / 1e6,
+			);
+		assert.deepEqual(
+			round(gradientLine({ width: 100, height: 100 }, 135)),
+			[0, 0, 100, 100],
+			'135° on a square: corner to corner',
 		);
+		assert.deepEqual(
+			round(gradientLine({ width: 200, height: 100 }, 90)),
+			[0, 50, 200, 50],
+			'90°: left to right',
+		);
+		assert.deepEqual(
+			round(gradientLine({ width: 200, height: 100 }, 0)),
+			[100, 100, 100, 0],
+			'0°: bottom to top',
+		);
+		assert.deepEqual(autoStops([20, 136, 250]), [
+			[20, 136, 250],
+			[0, 106, 220],
+		]);
+	});
+
+	test('draws the gradient stops', function (assert) {
+		const out = new OffscreenCanvas(100, 100);
+		const context = out.getContext('2d')!;
+		const photo = new OffscreenCanvas(1, 1);
+		drawMatte(
+			context,
+			photo,
+			spec({
+				style: gradient,
+				angle: 90,
+				padding: 50,
+				stops: [
+					[255, 0, 0],
+					[0, 255, 0],
+					[0, 0, 255],
+				],
+			}),
+		);
+		const at = (x: number) => [
+			...context.getImageData(x, 2, 1, 1).data.slice(0, 3),
+		];
+		assert.true(at(0)[0]! > 240, 'first stop at the start');
+		assert.true(at(50)[1]! > 240, 'second stop in the middle');
+		assert.true(at(99)[2]! > 240, 'last stop at the end');
 	});
 
 	test('draws the solid matte and the photo at the padding', function (assert) {

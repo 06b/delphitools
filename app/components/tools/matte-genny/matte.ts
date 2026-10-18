@@ -31,7 +31,10 @@ export const maxRatio = 32;
 export interface MatteSpec {
 	style: MatteStyle;
 	colour: Bytes;
-	dominant: Bytes;
+	/** The gradient's colours, evenly spaced. */
+	stops: Bytes[];
+	/** The gradient's CSS angle in degrees. */
+	angle: number;
 	ratioW: number;
 	ratioH: number;
 	width: number;
@@ -39,6 +42,12 @@ export interface MatteSpec {
 }
 
 export const defaultDominant: Bytes = [136, 136, 136];
+export const defaultAngle = 135;
+
+/** iOS's gradient: the photo's mean colour into a darker one. */
+export function autoStops(dominant: Bytes): Bytes[] {
+	return [dominant, shifted(dominant, falloff)];
+}
 
 export function heightOf(width: number, ratioW: number, ratioH: number) {
 	return Math.round((width * ratioH) / ratioW);
@@ -108,13 +117,28 @@ export function rgbCss([r, g, b]: Bytes) {
 	return `rgb(${r}, ${g}, ${b})`;
 }
 
+/** The CSS linear-gradient of `angle` with `stops` evenly spaced. */
+export function gradientCss(angle: number, stops: Bytes[]) {
+	return `linear-gradient(${angle}deg, ${stops.map(rgbCss).join(', ')})`;
+}
+
 /**
- * The CSS angle of a linear gradient from the top left corner to the bottom
- * right one, as the canvas draws it: its line has the diagonal's direction
- * and length, so the stops sit at the corners at any aspect.
+ * The start and end of a canvas gradient that draws as CSS
+ * `linear-gradient(<angle>deg, ...)` on a box: through the centre, as long
+ * as the corners need, so the first and last stops meet the corners.
  */
-export function diagonalAngle({ width, height }: Size) {
-	return (Math.atan2(width, -height) * 180) / Math.PI;
+export function gradientLine({ width, height }: Size, angle: number) {
+	const radians = (angle * Math.PI) / 180;
+	const dx = Math.sin(radians);
+	const dy = -Math.cos(radians);
+	const half = (Math.abs(width * dx) + Math.abs(height * dy)) / 2;
+	const [cx, cy] = [width / 2, height / 2];
+	return {
+		x0: cx - dx * half,
+		y0: cy - dy * half,
+		x1: cx + dx * half,
+		y1: cy + dy * half,
+	};
 }
 
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -131,14 +155,12 @@ export function drawMatte(context: Context, image: Picture, spec: MatteSpec) {
 		context.fillStyle = rgbCss(spec.colour);
 		context.fillRect(0, 0, box.width, box.height);
 	} else if (spec.style === gradient) {
-		const fill = context.createLinearGradient(
-			0,
-			0,
-			box.width,
-			box.height,
+		const { x0, y0, x1, y1 } = gradientLine(box, spec.angle);
+		const fill = context.createLinearGradient(x0, y0, x1, y1);
+		const last = Math.max(spec.stops.length - 1, 1);
+		spec.stops.forEach((stop, index) =>
+			fill.addColorStop(index / last, rgbCss(stop)),
 		);
-		fill.addColorStop(0, rgbCss(spec.dominant));
-		fill.addColorStop(1, rgbCss(shifted(spec.dominant, falloff)));
 		context.fillStyle = fill;
 		context.fillRect(0, 0, box.width, box.height);
 	} else {

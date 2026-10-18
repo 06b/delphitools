@@ -67,6 +67,11 @@
 	transition-duration: 150ms, 500ms, 500ms, 500ms, 500ms;
 }
 
+/* same specificity as the guide rules, so it comes after them */
+.matte-picture.matte-picture--placed.matte-picture--still * {
+	transition: none;
+}
+
 .matte-loader {
 	position: absolute;
 	inset-block-end: var(--canon-panel-padding);

@@ -192,6 +192,62 @@ check('at the output size', saved.size === '1440x1440', saved.size);
 check('named after the source', saved.name === 'photo-matte-1440x1440.png', saved.name);
 check('with the photo in it', saved.centre[0] > 150 && saved.centre[2] < 90, saved.centre.join(','));
 
+// gradient: colour stops, add and remove, angle, into the export
+await pick('matte-styles', 'Gradient');
+const stops = () => page.$$eval('.matte-stop input[type="text"]', (els) => els.map((el) => el.value).join(','));
+check('Gradient shows two stops from the photo', (await stops()).split(',').length === 2, await stops());
+check(
+	'with Remove Stop off at two',
+	await page.$eval('.matte-remove-stop', (el) => el.disabled),
+);
+const typeStop = (index, hex) =>
+	page.evaluate(
+		(index, hex) => {
+			const input = document.querySelectorAll('.matte-stop input[type="text"]')[index];
+			input.value = hex;
+			input.dispatchEvent(new Event('change', { bubbles: true }));
+		},
+		index,
+		hex,
+	);
+await typeStop(0, 'ff0000');
+await typeStop(1, '00ff00');
+await page.click('.matte-add-stop');
+await typeStop(2, '0000ff');
+await sleep(100);
+check('Add Stop adds a well', (await stops()) === 'FF0000,00FF00,0000FF', await stops());
+await page.click('.matte-remove-stop');
+await sleep(100);
+check('Remove Stop takes the last', (await stops()) === 'FF0000,00FF00', await stops());
+await page.click('.matte-add-stop');
+await typeStop(2, '0000ff');
+await page.focus('.matte-angle .canon-slider');
+await page.keyboard.press('Home');
+await sleep(100);
+const preview = await page.$eval('.matte-gradient', (el) => el.style.background);
+check(
+	'the preview draws the stops at the angle',
+	preview.startsWith('linear-gradient(0deg') && preview.includes('rgb(0, 0, 255)'),
+	preview,
+);
+await page.evaluate(() => (window.__result = undefined));
+await page.click('.matte-download');
+await page.waitForFunction(() => window.__result, { timeout: 15000 });
+const ramp = await page.evaluate(async () => {
+	const bitmap = await createImageBitmap(window.__result);
+	const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d');
+	context.drawImage(bitmap, 0, 0);
+	const at = (y) => [...context.getImageData(4, y, 1, 1).data.slice(0, 3)].join(',');
+	return { bottom: at(bitmap.height - 2), middle: at(bitmap.height / 2), top: at(1) };
+});
+check(
+	'the export draws the gradient: 0° runs bottom to top',
+	ramp.bottom.split(',')[0] > 240 && ramp.middle.split(',')[1] > 240 && ramp.top.split(',')[2] > 240,
+	JSON.stringify(ramp),
+);
+await pick('matte-styles', 'Blur');
+check('Blur hides the stops', !(await page.$('.matte-stop')));
+
 // paste anywhere and drop anywhere replace the photo
 const paste = (target, name) =>
 	page.evaluate(
@@ -290,6 +346,35 @@ check(
 	await page.$eval('.matte-sheet', (el) => getComputedStyle(el).transitionProperty === 'none' || getComputedStyle(el).transitionDuration === '0s'),
 );
 await page.emulateMediaFeatures([]);
+
+// resizing across the split: the dimension lines move with the pane, no slide
+await page.setViewport({ width: 600, height: 1000 });
+await visit(page, '/tools/matte-genny');
+await sleep(800);
+await page.evaluate(() => {
+	window.__drift = [];
+	const t0 = performance.now();
+	const tick = () => {
+		const pane = document.querySelector('.matte-picture').getBoundingClientRect();
+		const line = document.querySelector('.canon-dimension-line--down').getBoundingClientRect();
+		window.__drift.push(`${Math.round(line.x - pane.x)},${Math.round(line.y - pane.y)}`);
+		if (performance.now() - t0 < 700) requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+});
+await page.setViewport({ width: 1400, height: 1000 });
+await sleep(900);
+const drift = await page.evaluate(() => [...new Set(window.__drift)]);
+// the pane itself still narrows a few px while the drawer slides in
+const [endX, endY] = drift.at(-1).split(',').map(Number);
+check(
+	'widening to side by side: the down line jumps, no slide',
+	drift.slice(1).every((at) => {
+		const [x, y] = at.split(',').map(Number);
+		return Math.abs(x - endX) <= 12 && Math.abs(y - endY) <= 12;
+	}),
+	drift.join(' '),
+);
 
 // a workflow step: the carried image loads, Download reads Pass along
 await page.goto(`${BASE}/w/paste-image.matte-genny`, { waitUntil: 'networkidle2' });

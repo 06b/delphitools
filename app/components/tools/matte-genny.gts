@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
@@ -26,10 +27,13 @@ import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import {
+	autoStops,
 	bytes,
+	defaultAngle,
 	defaultDominant,
 	fileName,
 	fit,
+	gradient,
 	heightOf,
 	maxRatio,
 	minWidth,
@@ -62,10 +66,19 @@ const clampRatio = (side: number) =>
 const sameRatio = ([a, b]: [number, number], w: number, h: number) =>
 	(a === w && b === h) || (a === h && b === w);
 const pixelsText = (value: number) => `${value} px`;
+const stopLabel = (index: number) => `Stop ${index + 1}`;
+const degreesText = (value: number) => `${value}°`;
+const rgbOf = (stop: Bytes): Rgb => [
+	stop[0] / 255,
+	stop[1] / 255,
+	stop[2] / 255,
+];
 
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Swap = <template><IconSvg @name="arrow-left-right" /></template>;
 const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Plus = <template><IconSvg @name="plus" /></template>;
+const Minus = <template><IconSvg @name="minus" /></template>;
 
 interface Source {
 	url: string;
@@ -73,7 +86,7 @@ interface Source {
 	stem: string;
 }
 
-// ?matteStyle=<0 blur, 1 solid, 2 gradient> ?matteRatio=16:9 ?matteWidth=<px> ?mattePadding=<px> ?matteColour=%231e6626: the iOS -mattestyle, -matteratio, -mattewidth, -mattepadding, -mattecolour flags
+// ?matteStyle=<0 blur, 1 solid, 2 gradient> ?matteRatio=16:9 ?matteWidth=<px> ?mattePadding=<px> ?matteColour=%231e6626: the iOS -mattestyle, -matteratio, -mattewidth, -mattepadding, -mattecolour flags; ?matteAngle=<degrees> is web only
 function launchFlags() {
 	const query = new URLSearchParams(window.location.search);
 	const flag = (name: string) => {
@@ -91,6 +104,9 @@ function launchFlags() {
 		down: ratio.length === 2 ? clampRatio(ratio[1]!) : 1,
 		width: flag('matteWidth') ?? 1080,
 		padding: Math.min(Math.max(flag('mattePadding') ?? 40, 0), 200),
+		angle:
+			(((flag('matteAngle') ?? defaultAngle) % 360) + 360) %
+			360,
 	};
 }
 
@@ -104,6 +120,9 @@ export default class MatteGenny extends Component {
 	@tracked widthValue: number;
 	@tracked padding: number;
 	@tracked dominant: Bytes = defaultDominant;
+	/** The gradient's own colours once edited; until then it follows the photo. */
+	@tracked customStops?: Bytes[];
+	@tracked angle: number;
 	@tracked source?: Source;
 	@tracked failed = false;
 	@tracked exporting = false;
@@ -133,6 +152,7 @@ export default class MatteGenny extends Component {
 		);
 		this.widthValue = flags.width;
 		this.padding = flags.padding;
+		this.angle = flags.angle;
 		this.#worker.onmessage = (event: MessageEvent<MatteReply>) =>
 			this.#reply(event.data);
 		// a worker that fails to start or throws leaves nothing busy
@@ -164,12 +184,25 @@ export default class MatteGenny extends Component {
 		return {
 			style: this.style,
 			colour: bytes(this.colour),
-			dominant: this.dominant,
+			stops: this.stops,
+			angle: this.angle,
 			ratioW: this.ratioW,
 			ratioH: this.ratioH,
 			width: this.width,
 			padding: this.padding,
 		};
+	}
+
+	get stops() {
+		return this.customStops ?? autoStops(this.dominant);
+	}
+
+	get stopWells() {
+		return this.stops.map(rgbOf);
+	}
+
+	get isGradient() {
+		return this.style === gradient;
 	}
 
 	get height() {
@@ -351,6 +384,27 @@ export default class MatteGenny extends Component {
 				: [short, long];
 	};
 
+	pickStop = (index: number, colour: Rgb) => {
+		const stops = [...this.stops];
+		stops[index] = bytes(colour);
+		this.customStops = stops;
+	};
+
+	addStop = () => {
+		const { stops } = this;
+		this.customStops = [...stops, stops[stops.length - 1]!];
+	};
+
+	removeStop = () => {
+		this.customStops = this.stops.slice(0, -1);
+	};
+
+	get removeStopDisabled() {
+		return this.stops.length <= 2;
+	}
+
+	setAngle = (value: number) => (this.angle = value);
+
 	swap = () => {
 		[this.ratioW, this.ratioH] = [this.ratioH, this.ratioW];
 	};
@@ -453,6 +507,57 @@ export default class MatteGenny extends Component {
 							@colour={{this.colour}}
 							@onChange={{this.pickColour}}
 						/>
+					{{/if}}
+					{{#if this.isGradient}}
+						{{#each
+							this.stopWells
+							as |stop index|
+						}}
+							<CanonColourWell
+								class="matte-stop"
+								@label={{stopLabel
+									index
+								}}
+								@colour={{stop}}
+								@onChange={{fn
+									this.pickStop
+									index
+								}}
+							/>
+						{{/each}}
+						<CanonGrid @columns={{2}}>
+							<CanonButton
+								class="matte-add-stop"
+								@kind="cell"
+								@text="Add Stop"
+								@icon={{Plus}}
+								@onClick={{this.addStop}}
+							/>
+							<CanonButton
+								class="matte-remove-stop"
+								@kind="cell"
+								@text="Remove Stop"
+								@icon={{Minus}}
+								@disabled={{this.removeStopDisabled}}
+								@onClick={{this.removeStop}}
+							/>
+						</CanonGrid>
+						<CanonRow
+							class="matte-angle"
+							@title="Angle"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.angle}}
+								@min={{0}}
+								@max={{359}}
+								@step={{1}}
+								@readout={{degreesText}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setAngle}}
+							/>
+						</CanonRow>
 					{{/if}}
 					<CanonHeading @text="Ratio" />
 					<CanonSegmented

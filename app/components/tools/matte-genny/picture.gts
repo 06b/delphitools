@@ -10,14 +10,12 @@ import {
 	blur,
 	blurred,
 	cover,
-	diagonalAngle,
-	falloff,
 	fit,
 	gradient,
+	gradientCss,
 	heightOf,
 	overscan,
 	rgbCss,
-	shifted,
 	solid,
 	type MatteSpec,
 	type Rect,
@@ -65,6 +63,8 @@ function box({ x, y, width, height }: Rect, ...more: string[]) {
  */
 export default class Picture extends Component<PictureSignature> {
 	@tracked area: Rect = { x: 0, y: 0, width: 0, height: 0 };
+	@tracked still = false;
+	#settle = 0;
 
 	get size(): Size {
 		const { width, ratioW, ratioH } = this.args.spec;
@@ -104,9 +104,9 @@ export default class Picture extends Component<PictureSignature> {
 	}
 
 	get gradientStyle() {
-		const { dominant } = this.args.spec;
+		const { angle, stops, style } = this.args.spec;
 		return htmlSafe(
-			`background: linear-gradient(${diagonalAngle(this.size)}deg, ${rgbCss(dominant)}, ${rgbCss(shifted(dominant, falloff))}); opacity: ${this.args.spec.style === gradient ? 1 : 0}`,
+			`background: ${gradientCss(angle, stops)}; opacity: ${style === gradient ? 1 : 0}`,
 		);
 	}
 
@@ -156,6 +156,14 @@ export default class Picture extends Component<PictureSignature> {
 
 	measure = modifier((element: HTMLElement) => {
 		const observer = new ResizeObserver(() => {
+			// layout changes jump; setting changes animate
+			this.still = true;
+			cancelAnimationFrame(this.#settle);
+			this.#settle = requestAnimationFrame(() => {
+				this.#settle = requestAnimationFrame(
+					() => (this.still = false),
+				);
+			});
 			this.area = {
 				x: element.offsetLeft,
 				y: element.offsetTop,
@@ -164,13 +172,17 @@ export default class Picture extends Component<PictureSignature> {
 			};
 		});
 		observer.observe(element);
-		return () => observer.disconnect();
+		return () => {
+			observer.disconnect();
+			cancelAnimationFrame(this.#settle);
+		};
 	});
 
 	<template>
 		<div
 			class="matte-picture
-				{{if this.area.width 'matte-picture--placed'}}"
+				{{if this.area.width 'matte-picture--placed'}}
+				{{if this.still 'matte-picture--still'}}"
 		>
 			<span
 				class="matte-area"
