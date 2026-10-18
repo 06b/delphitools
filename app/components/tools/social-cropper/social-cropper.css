@@ -154,6 +154,16 @@
 	opacity: 1;
 }
 
+.social-handle {
+	position: absolute;
+	inline-size: 14px;
+	block-size: 14px;
+	translate: -50% -50%;
+	background: var(--canon-primary);
+	cursor: nwse-resize;
+}
+
+.social-picture--springs .social-handle,
 .social-picture--springs .social-sheet > * {
 	transition:
 		left 500ms var(--social-spring),
@@ -171,6 +181,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.social-picture--springs .social-handle,
 	.social-picture--springs .social-sheet > *,
 	.social-hint {
 		transition: none;

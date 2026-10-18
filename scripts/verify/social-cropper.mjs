@@ -207,6 +207,120 @@ await page.mouse.up();
 s = await state();
 check('a drag outside the crop does nothing', s.value === '1000, 0', s.value);
 
+// the bottom-right handle resizes, the ratio and the top-left kept
+const sliderValue = (group) =>
+	page.$eval(`.${group} .canon-slider`, (el) => Number(el.getAttribute('aria-valuenow')));
+const handle = await page.evaluate(() => {
+	const box = document.querySelector('.social-handle').getBoundingClientRect();
+	const image = document.querySelector('.social-image').getBoundingClientRect();
+	return { x: box.left + box.width / 2, y: box.top + box.height / 2, scale: 3000 / image.width };
+});
+await page.mouse.move(handle.x, handle.y);
+await page.mouse.down();
+await page.mouse.move(handle.x - 40, handle.y - 100, { steps: 5 });
+await page.mouse.up();
+s = await state();
+const side = Math.round(2000 - 40 * handle.scale);
+const [cropW, cropH] = s.tiles[0].match(/\d+/g).map(Number);
+check(
+	'the handle resizes: the longer pull wins, the ratio and top-left stay',
+	Math.abs(cropW - side) <= 3 && cropW === cropH && s.value === '1000, 0',
+	`${s.tiles[0]} ${s.value} want ~${side}`,
+);
+check(
+	'the Size slider reads the share',
+	(await sliderValue('social-size')) === Math.round((cropW / 2000) * 100),
+	String(await sliderValue('social-size')),
+);
+await page.mouse.move(handle.x - 40, handle.y - 40);
+await page.mouse.down();
+await page.mouse.move(handle.x + 400, handle.y + 400, { steps: 5 });
+await page.mouse.up();
+s = await state();
+check('the handle stops at the image', s.tiles[0] === '2000 × 2000 px' && s.value === '1000, 0', `${s.tiles[0]} ${s.value}`);
+await page.focus('.social-size .canon-slider');
+await page.keyboard.press('ArrowLeft');
+await sleep(100);
+s = await state();
+check('the Size slider takes the arrow keys', s.tiles[0] === '1980 × 1980 px', s.tiles[0]);
+await page.keyboard.press('End');
+
+// zoom: the slider and a ctrl-wheel pinch magnify the view, the crop stays in image pixels
+const view = () =>
+	page.evaluate(() => {
+		const image = document.querySelector('.social-image').getBoundingClientRect();
+		const crop = document.querySelector('.social-crop').getBoundingClientRect();
+		const pane = document.querySelector('.social-picture').getBoundingClientRect();
+		return {
+			width: Math.round(image.width),
+			inView:
+				crop.left >= pane.left - 1 &&
+				crop.right <= pane.right + 1 &&
+				crop.top >= pane.top - 1 &&
+				crop.bottom <= pane.bottom + 1,
+		};
+	});
+const before = await view();
+await page.focus('.social-size .canon-slider');
+await page.keyboard.press('Home');
+const preZoom = (await state()).value;
+await page.focus('.social-zoom .canon-slider');
+await page.keyboard.press('ArrowRight');
+await sleep(100);
+let zoomed = await view();
+s = await state();
+check(
+	'the Zoom slider magnifies the image by 10 %',
+	Math.abs(zoomed.width - before.width * 1.1) <= 2 && (await sliderValue('social-zoom')) === 110,
+	`${before.width} -> ${zoomed.width}`,
+);
+check('the crop keeps its image pixels', s.tiles[0] === '100 × 100 px' && s.value === preZoom, `${s.tiles[0]} ${s.value}`);
+const offset = s.value;
+const wheel = await page.evaluate(() => {
+	const area = document.querySelector('.social-area');
+	const box = area.getBoundingClientRect();
+	const event = new WheelEvent('wheel', {
+		deltaY: -300,
+		ctrlKey: true,
+		clientX: box.left + box.width / 2,
+		clientY: box.top + box.height / 2,
+		bubbles: true,
+		cancelable: true,
+	});
+	area.dispatchEvent(event);
+	return event.defaultPrevented;
+});
+await sleep(100);
+zoomed = await view();
+s = await state();
+check(
+	'a ctrl-wheel pinch zooms in and keeps the browser from zooming',
+	wheel && (await sliderValue('social-zoom')) > 300 && zoomed.width > before.width * 3,
+	`${await sliderValue('social-zoom')} ${zoomed.width}`,
+);
+check('zoomed, the crop is in view and unmoved', zoomed.inView && s.value === offset, `${s.value} ${offset}`);
+await page.focus('.social-crop');
+await page.keyboard.down('Shift');
+for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft');
+await page.keyboard.up('Shift');
+await sleep(100);
+check('moving the crop pans the zoomed view with it', (await view()).inView);
+await page.focus('.social-zoom .canon-slider');
+await page.keyboard.press('Home');
+await page.focus('.social-size .canon-slider');
+await page.keyboard.press('End');
+await page.focus('.social-crop');
+await page.keyboard.down('Shift');
+for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight');
+await page.keyboard.up('Shift');
+await sleep(100);
+s = await state();
+check(
+	'back at 100 %: the whole image, the largest crop',
+	(await view()).width === before.width && s.tiles[0] === '2000 × 2000 px' && s.value === '1000, 0',
+	`${s.tiles[0]} ${s.value}`,
+);
+
 // ratio keeps the centre; platform keeps the same name
 const pick = (group, text) =>
 	page.evaluate(

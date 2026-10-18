@@ -13,6 +13,7 @@ import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTiles from 'delphicanon/components/canon-tiles';
@@ -30,6 +31,7 @@ import {
 	emptyPixels,
 	fileName,
 	instagram,
+	leastFraction,
 	middle,
 	platforms,
 	sameRatio,
@@ -38,7 +40,9 @@ import {
 	type Point,
 	type Size,
 } from 'delphitools-v2/components/tools/social-cropper/crop';
-import Picture from 'delphitools-v2/components/tools/social-cropper/picture';
+import Picture, {
+	maxZoom,
+} from 'delphitools-v2/components/tools/social-cropper/picture';
 import './social-cropper/social-cropper.css';
 
 const loadFailed = 'Image could not be read. Try another file?';
@@ -48,6 +52,9 @@ const spring = htmlSafe(`--social-spring: ${springEasing(0.725)}`);
 const springMs = 500;
 
 const platformNames = platforms.map(({ name }) => name);
+const percentText = (value: number) => `${value} %`;
+const leastPercent = leastFraction * 100;
+const mostZoomPercent = maxZoom * 100;
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Copy = <template><IconSvg @name="copy" /></template>;
@@ -66,6 +73,9 @@ export default class SocialCropper extends Component {
 	@tracked platform: CropPlatform;
 	@tracked ratio: CropRatio;
 	@tracked centre: Point = middleOf(emptyPixels);
+	/** The crop's width as a share of the largest. */
+	@tracked fraction = 1;
+	@tracked zoom = 1;
 	@tracked source?: Source;
 	@tracked failed = false;
 	@tracked exporting = false;
@@ -109,12 +119,25 @@ export default class SocialCropper extends Component {
 		return this.source?.pixels ?? emptyPixels;
 	}
 
+	get aspect() {
+		return this.ratio.width / this.ratio.height;
+	}
+
 	get crop() {
 		return crop(
-			this.ratio.width / this.ratio.height,
+			this.aspect,
 			this.pixels,
 			this.centre,
+			this.fraction,
 		);
+	}
+
+	get sizePercent() {
+		return Math.round(this.fraction * 100);
+	}
+
+	get zoomPercent() {
+		return Math.round(this.zoom * 100);
 	}
 
 	get others() {
@@ -127,11 +150,12 @@ export default class SocialCropper extends Component {
 					ratio.width / ratio.height,
 					this.pixels,
 					centre,
+					this.fraction,
 				),
 			}));
 	}
 
-	get aspect() {
+	get pictureAspect() {
 		const { width, height } = this.pixels;
 		return Math.max(0.5, width / height);
 	}
@@ -226,6 +250,8 @@ export default class SocialCropper extends Component {
 			stem: stem(file.name) || 'image',
 		};
 		this.centre = middleOf(pixels);
+		this.fraction = 1;
+		this.zoom = 1;
 		this.failed = false;
 	};
 
@@ -234,6 +260,8 @@ export default class SocialCropper extends Component {
 		if (this.source) URL.revokeObjectURL(this.source.url);
 		this.source = undefined;
 		this.centre = middleOf(emptyPixels);
+		this.fraction = 1;
+		this.zoom = 1;
 		this.failed = false;
 	};
 
@@ -267,6 +295,21 @@ export default class SocialCropper extends Component {
 		this.centre = { x: this.centre.x + x, y: this.centre.y + y };
 		this.#settle();
 	};
+
+	resize = (fraction: number, centre: Point) => {
+		this.fraction = fraction;
+		this.centre = centre;
+		this.#settle();
+	};
+
+	setSize = (percent: number) => {
+		this.fraction = percent / 100;
+		this.#settle();
+	};
+
+	setZoom = (zoom: number) => (this.zoom = zoom);
+
+	setZoomPercent = (percent: number) => (this.zoom = percent / 100);
 
 	#png(): Promise<Blob | null> {
 		const { source } = this;
@@ -332,7 +375,7 @@ export default class SocialCropper extends Component {
 		>
 			<:sidebar>
 				<CanonCanvas
-					@aspect={{this.aspect}}
+					@aspect={{this.pictureAspect}}
 					@background="var(--canon-muted)"
 					@pattern={{true}}
 				>
@@ -340,6 +383,8 @@ export default class SocialCropper extends Component {
 						@url={{this.source.url}}
 						@pixels={{this.pixels}}
 						@crop={{this.crop}}
+						@aspect={{this.aspect}}
+						@zoom={{this.zoom}}
 						@label={{this.ratio.label}}
 						@others={{this.others}}
 						@springs={{this.springs}}
@@ -347,6 +392,8 @@ export default class SocialCropper extends Component {
 						@over={{this.drop.over}}
 						@onChoose={{this.choose}}
 						@onMove={{this.move}}
+						@onResize={{this.resize}}
+						@onZoom={{this.setZoom}}
 					/>
 				</CanonCanvas>
 			</:sidebar>
@@ -397,6 +444,38 @@ export default class SocialCropper extends Component {
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Crop" />
+					<CanonRow
+						class="social-size"
+						@title="Size"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.sizePercent}}
+							@min={{leastPercent}}
+							@max={{100}}
+							@step={{1}}
+							@readout={{percentText}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setSize}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="social-zoom"
+						@title="Zoom"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.zoomPercent}}
+							@min={{100}}
+							@max={{mostZoomPercent}}
+							@step={{10}}
+							@readout={{percentText}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setZoomPercent}}
+						/>
+					</CanonRow>
 					<CanonTiles @items={{this.tiles}} />
 					<CanonGrid>
 						<CanonButton

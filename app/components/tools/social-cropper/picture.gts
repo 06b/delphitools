@@ -7,10 +7,11 @@ import CanonLoader from 'delphicanon/components/canon-loader';
 import grabPan from 'delphicanon/modifiers/canon-grab-pan';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import type {
-	Point,
-	Rect,
-	Size,
+import {
+	resized,
+	type Point,
+	type Rect,
+	type Size,
 } from 'delphitools-v2/components/tools/social-cropper/crop';
 
 export interface Outline {
@@ -26,6 +27,10 @@ export interface PictureSignature {
 		pixels: Size;
 		/** In image pixels. */
 		crop: Rect;
+		/** The crop's width over height. */
+		aspect: number;
+		/** The view's magnification, 1 fits the image to the pane. */
+		zoom: number;
 		label: string;
 		/** The platform's other ratios round the same centre. */
 		others: Outline[];
@@ -37,11 +42,18 @@ export interface PictureSignature {
 		onChoose: () => void;
 		/** Moves the crop by a delta in image pixels. */
 		onMove: (delta: Point) => void;
+		/** The corner handle's new crop size, a share of the largest, and centre. */
+		onResize: (fraction: number, centre: Point) => void;
+		/** A ctrl-wheel or trackpad pinch. */
+		onZoom: (zoom: number) => void;
 	};
 }
 
 // a drag grabs this far outside the frame, as iOS has it
 const reach = 8;
+// the corner handle's reach, as favicon-genny's
+const handleReach = 22;
+export const maxZoom = 8;
 // ponytail: Iosevka 11 px is 0.5 em a glyph at 13 px line height; measure if the font changes
 const labelSize = (text: string): Size => ({
 	width: text.length * 5.5,
@@ -80,26 +92,93 @@ export default class Picture extends Component<PictureSignature> {
 	@tracked area: Size = { width: 0, height: 0 };
 	@tracked hintSize: Size = { width: 0, height: 0 };
 	@tracked dragging = false;
+	/** The image point at the pane's centre when zoomed; none is the image's centre. */
+	@tracked focus?: Point;
 	#last?: Point;
+	#resizing = false;
 
-	/** The image's box in the area. */
+	/**
+	 * The image's box in the area: fitted, times the zoom, round the focus,
+	 * kept over the pane and pushed so the crop stays in view.
+	 */
 	get frame(): Rect {
-		const { pixels } = this.args;
+		const { pixels, crop } = this.args;
 		const { width, height } = this.area;
 		const scale =
-			Math.min(
+			(Math.min(
 				width / pixels.width,
 				height / pixels.height,
-			) || 0;
-		const shown = {
+			) || 0) *
+			(this.args.url ? Math.max(this.args.zoom, 1) : 1);
+		const focus = this.focus ?? {
+			x: pixels.width / 2,
+			y: pixels.height / 2,
+		};
+		const place = (
+			view: number,
+			side: number,
+			at: number,
+			start: number,
+			length: number,
+		) => {
+			const shown = side * scale;
+			if (shown <= view) return (view - shown) / 2;
+			let offset = Math.min(
+				Math.max(view / 2 - at * scale, view - shown),
+				0,
+			);
+			const lead = offset + start * scale;
+			const tail = lead + length * scale;
+			if (length * scale <= view) {
+				if (lead < 0) offset -= lead;
+				else if (tail > view) offset -= tail - view;
+			}
+			return offset;
+		};
+		return {
+			x: place(
+				width,
+				pixels.width,
+				focus.x,
+				crop.x,
+				crop.width,
+			),
+			y: place(
+				height,
+				pixels.height,
+				focus.y,
+				crop.y,
+				crop.height,
+			),
 			width: pixels.width * scale,
 			height: pixels.height * scale,
 		};
-		return {
-			x: (width - shown.width) / 2,
-			y: (height - shown.height) / 2,
-			...shown,
-		};
+	}
+
+	/** The image point under an area point. */
+	pixelAt({ x, y }: Point): Point {
+		const { frame } = this;
+		const scale = this.scale || 1;
+		return { x: (x - frame.x) / scale, y: (y - frame.y) / scale };
+	}
+
+	get handleStyle() {
+		const { frame } = this;
+		const crop = this.shownCrop;
+		return htmlSafe(
+			`left: ${px(frame.x + crop.x + crop.width)}; top: ${px(frame.y + crop.y + crop.height)}`,
+		);
+	}
+
+	#onHandle(point: Point) {
+		const { frame } = this;
+		const crop = this.shownCrop;
+		return (
+			Math.abs(point.x - (frame.x + crop.x + crop.width)) <
+				handleReach &&
+			Math.abs(point.y - (frame.y + crop.y + crop.height)) <
+				handleReach
+		);
 	}
 
 	get scale() {
@@ -177,16 +256,23 @@ export default class Picture extends Component<PictureSignature> {
 
 	/** The widest dimmed strip that holds the hint, else the crop's bottom edge. */
 	get hint(): Rect {
-		const { width, height } = this.frame;
+		const { frame } = this;
 		const crop = this.shownCrop;
 		const size = this.hintSize;
 		const right = crop.x + crop.width;
 		const bottom = crop.y + crop.height;
+		// zoomed in, only the part of the frame in the pane
+		const left = Math.max(0, -frame.x);
+		const top = Math.max(0, -frame.y);
+		const end = Math.min(frame.width, this.area.width - frame.x);
+		const foot = Math.min(frame.height, this.area.height - frame.y);
+		const width = end - left;
+		const height = foot - top;
 		const strips = [
-			{ x: 0, y: 0, width: crop.x, height },
-			{ x: right, y: 0, width: width - right, height },
-			{ x: 0, y: 0, width, height: crop.y },
-			{ x: 0, y: bottom, width, height: height - bottom },
+			{ x: left, y: top, width: crop.x - left, height },
+			{ x: right, y: top, width: end - right, height },
+			{ x: left, y: top, width, height: crop.y - top },
+			{ x: left, y: bottom, width, height: foot - bottom },
 		].filter(
 			(strip) =>
 				strip.width >= size.width + 8 &&
@@ -296,6 +382,7 @@ export default class Picture extends Component<PictureSignature> {
 	});
 
 	grabs = (point: Point) => {
+		if (this.args.url && this.#onHandle(point)) return true;
 		if (!this.movable) return false;
 		const { frame } = this;
 		const crop = grown(this.shownCrop, reach, reach);
@@ -305,14 +392,37 @@ export default class Picture extends Component<PictureSignature> {
 		);
 	};
 
+	#local(event: { clientX: number; clientY: number }, element: Element) {
+		const box = element.getBoundingClientRect();
+		return {
+			x: event.clientX - box.left,
+			y: event.clientY - box.top,
+		};
+	}
+
 	begin = (event: PointerEvent) => {
 		this.#last = { x: event.clientX, y: event.clientY };
+		this.#resizing = this.#onHandle(
+			this.#local(event, event.currentTarget as Element),
+		);
 		this.dragging = true;
 	};
 
 	drag = (event: PointerEvent) => {
 		const last = this.#last;
 		if (!last) return;
+		if (this.#resizing) {
+			const { aspect, pixels, crop } = this.args;
+			const to = this.pixelAt(
+				this.#local(
+					event,
+					event.currentTarget as Element,
+				),
+			);
+			const next = resized(aspect, pixels, crop, to);
+			this.args.onResize(next.fraction, next.centre);
+			return;
+		}
 		this.#last = { x: event.clientX, y: event.clientY };
 		const scale = this.scale || 1;
 		this.args.onMove({
@@ -323,8 +433,42 @@ export default class Picture extends Component<PictureSignature> {
 
 	end = () => {
 		this.#last = undefined;
+		this.#resizing = false;
 		this.dragging = false;
 	};
+
+	/** Ctrl or Cmd wheel, and a trackpad pinch, zoom round the pointer. */
+	wheel = modifier((element: HTMLElement) => {
+		const zoom = (event: WheelEvent) => {
+			if (!(event.ctrlKey || event.metaKey) || !this.args.url)
+				return;
+			event.preventDefault();
+			const point = this.#local(event, element);
+			const under = this.pixelAt(point);
+			const next = Math.min(
+				Math.max(
+					this.args.zoom *
+						Math.exp(-event.deltaY / 200),
+					1,
+				),
+				maxZoom,
+			);
+			const fitted = (this.scale || 1) / this.args.zoom;
+			const scale = fitted * next;
+			this.focus = {
+				x:
+					under.x -
+					(point.x - this.area.width / 2) / scale,
+				y:
+					under.y -
+					(point.y - this.area.height / 2) /
+						scale,
+			};
+			this.args.onZoom(next);
+		};
+		element.addEventListener('wheel', zoom, { passive: false });
+		return () => element.removeEventListener('wheel', zoom);
+	});
 
 	key = (event: KeyboardEvent) => {
 		const arrows: Record<string, Point> = {
@@ -358,6 +502,7 @@ export default class Picture extends Component<PictureSignature> {
 			<div
 				class="social-area"
 				{{this.measure}}
+				{{this.wheel}}
 				{{grabPan
 					grabs=this.grabs
 					onBegin=this.begin
@@ -456,6 +601,13 @@ export default class Picture extends Component<PictureSignature> {
 								@name={{this.hintIcon}}
 							/>Drag to reposition</span>
 					</div>
+					{{#if @url}}
+						<span
+							class="social-handle"
+							style={{this.handleStyle}}
+							aria-hidden="true"
+						></span>
+					{{/if}}
 				{{/if}}
 			</div>
 			{{#if @busy}}

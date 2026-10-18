@@ -89,13 +89,32 @@ export const instagram = platforms.find(({ id }) => id === 'instagram')!;
 /** The blank sheet's shape before an image arrives. */
 export const emptyPixels: Size = { width: 1600, height: 1200 };
 
-/** The largest crop of `aspect` in `size` round `centre`, kept inside, in whole pixels. */
-export function crop(aspect: number, size: Size, centre: Point): Rect {
+/** Least crop size, a share of the largest. */
+export const leastFraction = 0.05;
+
+/** The widest crop of `aspect` that fits `size`. */
+export const widest = (aspect: number, size: Size) =>
+	Math.min(size.width, size.height * aspect);
+
+/**
+ * The crop of `aspect` in `size` round `centre`, kept inside, in whole
+ * pixels: the largest, or `fraction` of its width.
+ */
+export function crop(
+	aspect: number,
+	size: Size,
+	centre: Point,
+	fraction = 1,
+): Rect {
 	if (!(size.width > 0 && size.height > 0 && aspect > 0))
 		return { x: 0, y: 0, width: 0, height: 0 };
+	const share = Math.min(Math.max(fraction, leastFraction), 1);
 	// rounding the size first keeps the crop inside the image
-	const width = Math.round(Math.min(size.width, size.height * aspect));
-	const height = Math.round(Math.min(size.height, width / aspect));
+	const width = Math.max(1, Math.round(widest(aspect, size) * share));
+	const height = Math.max(
+		1,
+		Math.round(Math.min(size.height, width / aspect)),
+	);
 	const place = (middle: number, side: number, room: number) =>
 		Math.min(
 			Math.max(Math.round(middle - side / 2), 0),
@@ -106,6 +125,39 @@ export function crop(aspect: number, size: Size, centre: Point): Rect {
 		y: place(centre.y, height, size.height),
 		width,
 		height,
+	};
+}
+
+/**
+ * The crop's bottom-right corner dragged to `to`, in image px, the top-left
+ * fixed and the aspect kept: the new size as a share of the widest, and
+ * the new centre.
+ */
+export function resized(
+	aspect: number,
+	size: Size,
+	from: Rect,
+	to: Point,
+): { fraction: number; centre: Point } {
+	const most = widest(aspect, size);
+	const room = Math.min(
+		size.width - from.x,
+		(size.height - from.y) * aspect,
+	);
+	const width = Math.min(
+		Math.max(
+			to.x - from.x,
+			(to.y - from.y) * aspect,
+			most * leastFraction,
+		),
+		room,
+	);
+	return {
+		fraction: width / most,
+		centre: {
+			x: from.x + width / 2,
+			y: from.y + width / aspect / 2,
+		},
 	};
 }
 

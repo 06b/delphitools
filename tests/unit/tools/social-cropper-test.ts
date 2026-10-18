@@ -5,6 +5,7 @@ import {
 	instagram,
 	middle,
 	platforms,
+	resized,
 	sameRatio,
 } from 'delphitools-v2/components/tools/social-cropper/crop';
 
@@ -91,6 +92,31 @@ module('Unit | Tool | social-cropper', function () {
 				width: 0,
 				height: 0,
 			},
+		);
+	});
+
+	test('crop at a share of the largest; the corner handle resizes', function (assert) {
+		assert.deepEqual(crop(1, size, { x: 1500, y: 1000 }, 0.5), {
+			x: 1000,
+			y: 500,
+			width: 1000,
+			height: 1000,
+		});
+		assert.strictEqual(
+			crop(1, size, { x: 1500, y: 1000 }, 0).width,
+			100,
+			'never below the least share',
+		);
+		const from = { x: 1000, y: 500, width: 1000, height: 1000 };
+		assert.deepEqual(
+			resized(1, size, from, { x: 1500, y: 1200 }),
+			{ fraction: 0.35, centre: { x: 1350, y: 850 } },
+			'the longer pull wins, the top-left stays',
+		);
+		assert.deepEqual(
+			resized(1, size, from, { x: 9000, y: 9000 }),
+			{ fraction: 0.75, centre: { x: 1750, y: 1250 } },
+			'held inside the image',
 		);
 	});
 
