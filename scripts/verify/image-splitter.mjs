@@ -40,7 +40,7 @@ const state = () =>
 			t.getAttribute('aria-label'),
 		),
 		labels: document.querySelectorAll('.split-tile-label').length,
-		disabled: document.querySelector('.split-download').disabled,
+		disabled: document.querySelector('.split-download .media-download-all-each').disabled,
 		cols: document.querySelector('.split-cols input')?.value,
 		rows: document.querySelector('.split-rows input')?.value,
 	}));
@@ -174,6 +174,21 @@ await page.exposeFunction('__named', (name, size) => {
 await page.evaluate(() => {
 	const click = HTMLAnchorElement.prototype.click;
 	HTMLAnchorElement.prototype.click = function () {
+		if (this.download.endsWith('.zip'))
+			return void fetch(this.href)
+				.then((r) => r.arrayBuffer())
+				.then((bytes) =>
+					window.__named(
+						this.download,
+						[
+							...new Set(
+								new TextDecoder('latin1')
+									.decode(bytes)
+									.match(/\w+-\d+-\d+\.png/g),
+							),
+						].join(),
+					),
+				);
 		if (this.download)
 			return void fetch(this.href)
 				.then((r) => r.blob())
@@ -268,27 +283,36 @@ check(
 	await page.evaluate(() => !!document.querySelector('.canon-toast')),
 );
 
-// Download All: every tile, in order
+// Download all: every tile, in order; Zip: one archive of them
+const eight =
+	'photo-1-1.png,photo-1-2.png,photo-1-3.png,photo-1-4.png,photo-2-1.png,photo-2-2.png,photo-2-3.png,photo-2-4.png';
+check(
+	'Download all is the large button, Zip the small one',
+	await page.evaluate(() => {
+		const each = document.querySelector('.split-download .media-download-all-each');
+		const zip = document.querySelector('.split-download .media-download-all-zip');
+		return (
+			each.textContent.trim() === 'Download all' &&
+			zip.textContent.trim() === 'Zip' &&
+			each.offsetWidth > zip.offsetWidth * 2
+		);
+	}),
+);
 names.length = 0;
 blobs.length = 0;
-await page.click('.split-download');
-await sleep(80);
-check(
-	'the busy row shows while downloading',
-	await page.evaluate(
-		() =>
-			document.querySelector('.split-busy')?.textContent.trim() ===
-			'Processing…',
-	),
-);
-await sleep(1500);
-check(
-	'Download All writes all eight',
-	names.join() ===
-		'photo-1-1.png,photo-1-2.png,photo-1-3.png,photo-1-4.png,photo-2-1.png,photo-2-2.png,photo-2-3.png,photo-2-4.png',
-	names.join(),
-);
+await page.click('.split-download .media-download-all-each');
+await sleep(2000);
+check('Download all writes all eight', names.join() === eight, names.join());
 check('the busy row goes', !(await page.$('.split-busy')));
+names.length = 0;
+blobs.length = 0;
+await page.click('.split-download .media-download-all-zip');
+await sleep(1000);
+check(
+	'Zip writes one archive with the stem-row-column names',
+	names.join() === 'photo-tiles.zip' && blobs[0] === eight,
+	`${names.join()} ${blobs[0]}`,
+);
 
 // paste anywhere replaces the source
 await page.evaluate(async () => {

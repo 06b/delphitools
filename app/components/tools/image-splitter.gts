@@ -30,7 +30,9 @@ import {
 	reducedMotion,
 } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Drop from 'delphitools-v2/components/tools/media/drop';
+import type { NamedBlob } from 'delphitools-v2/lib/zip-files';
 import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
 import {
 	cellRect,
@@ -47,7 +49,6 @@ import './image-splitter/image-splitter.css';
 // iOS: usingSpringWithDamping 0.62 over 0.6 s
 const spring = htmlSafe(`--split-spring: ${springEasing(0.62)}`);
 const springMs = 650;
-const downloadGapMs = 100;
 const emptyPixels = { width: 4, height: 3 };
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -153,6 +154,10 @@ export default class ImageSplitter extends Component {
 
 	get exportDisabled() {
 		return !this.cuttable || this.exporting;
+	}
+
+	get zipName() {
+		return `${this.source?.stem ?? 'image'}-tiles.zip`;
 	}
 
 	keepInput = modifier((input: HTMLInputElement) => {
@@ -288,30 +293,23 @@ export default class ImageSplitter extends Component {
 		this.toast.show();
 	};
 
-	downloadAll = async () => {
-		if (this.exportDisabled) return;
+	tileFiles = async () => {
+		const files: NamedBlob[] = [];
+		if (!this.cuttable) return files;
 		this.exporting = true;
 		try {
-			const all = cells(this.rows, this.cols);
-			for (const [i, cell] of all.entries()) {
+			for (const cell of cells(this.rows, this.cols)) {
 				const blob = await this.#png(cell);
-				if (isDestroying(this)) return;
-				if (blob) downloadBlob(blob, this.#name(cell));
-				// the web tool's gap between downloads
-				if (i < all.length - 1)
-					await new Promise((resolve) =>
-						this.#later(
-							() =>
-								resolve(
-									undefined,
-								),
-							downloadGapMs,
-						),
-					);
+				if (blob)
+					files.push({
+						name: this.#name(cell),
+						blob,
+					});
 			}
 		} finally {
 			if (!isDestroying(this)) this.exporting = false;
 		}
+		return files;
 	};
 
 	<template>
@@ -396,16 +394,11 @@ export default class ImageSplitter extends Component {
 					</CanonRow>
 					<CanonHeading @text="Tiles" />
 					<CanonTiles @items={{this.tiles}} />
-					<CanonButton
+					<DownloadAll
 						class="split-download"
-						@kind="primary"
-						@text={{passAlong
-							"Download All"
-						}}
-						@icon={{Save}}
-						@iconStyle="oversized"
+						@files={{this.tileFiles}}
+						@zipName={{this.zipName}}
 						@disabled={{this.exportDisabled}}
-						@onClick={{this.downloadAll}}
 					/>
 					{{#if this.exporting}}
 						<CanonRow
