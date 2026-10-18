@@ -35,10 +35,12 @@ import Drop from 'delphitools-v2/components/tools/media/drop';
 import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
 import {
 	clampZoom,
+	clipRect,
 	fileName,
 	paint,
 	scales,
 	side,
+	trimmed,
 	zoomRange,
 } from 'delphitools-v2/components/tools/image-masker/mask';
 import Picker from 'delphitools-v2/components/tools/image-masker/picker';
@@ -58,6 +60,7 @@ const pixelsText = ({ width, height }: { width: number; height: number }) =>
 const couldNotRead = (name: string) => `Could not read ${name}`;
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Upload = <template><IconSvg @name="upload" /></template>;
 const Copy = <template><IconSvg @name="copy" /></template>;
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Reset = <template><IconSvg @name="rotate-ccw" /></template>;
@@ -171,6 +174,12 @@ export default class ImageMasker extends Component {
 		return side(this.source?.image, this.zoom, this.scale);
 	}
 
+	/** The export's box in the cut square. */
+	@cached
+	get clip() {
+		return clipRect(this.cut, this.side);
+	}
+
 	get sourceText() {
 		return this.source ? pixelsText(this.source.image) : '';
 	}
@@ -195,7 +204,7 @@ export default class ImageMasker extends Component {
 		return [
 			{
 				label: 'Size',
-				value: `${this.side} × ${this.side} px`,
+				value: `${pixelsText(this.clip)} px`,
 			},
 			{ label: 'Shape', value: this.shapeName },
 		];
@@ -326,15 +335,23 @@ export default class ImageMasker extends Component {
 	pickScale = (index: number) => (this.scale = scales[index]!);
 
 	#png() {
-		const length = this.side;
+		const { clip } = this;
 		const canvas = document.createElement('canvas');
-		canvas.width = length;
-		canvas.height = length;
+		canvas.width = clip.width;
+		canvas.height = clip.height;
 		const context = canvas.getContext('2d');
 		if (!context) return Promise.resolve(null);
-		paint(context, length, this.cut, this.source?.image, this.view);
+		context.translate(-clip.x, -clip.y);
+		paint(
+			context,
+			this.side,
+			this.cut,
+			this.source?.image,
+			this.view,
+		);
+		const out = trimmed(canvas);
 		return new Promise<Blob | null>((resolve) =>
-			canvas.toBlob(resolve, 'image/png'),
+			out.toBlob(resolve, 'image/png'),
 		);
 	}
 
@@ -409,6 +426,13 @@ export default class ImageMasker extends Component {
 							@form="flush"
 						>
 							<CanonButton
+								class="masker-open"
+								@kind="cell"
+								@icon={{Upload}}
+								@label="Open file"
+								@onClick={{this.choose}}
+							/>
+							<CanonButton
 								@kind="cell"
 								@text="Clear"
 								@icon={{Trash}}
@@ -428,6 +452,35 @@ export default class ImageMasker extends Component {
 						/>
 					</CanonRows>
 				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Frame" />
+					<CanonRow
+						class="masker-zoom"
+						@title="Zoom"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.zoomValue}}
+							@min={{zoomMin}}
+							@max={{zoomMax}}
+							@step={{0.01}}
+							@readout={{zoomText}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setZoom}}
+						/>
+					</CanonRow>
+					<CanonGrid>
+						<CanonButton
+							class="masker-reset"
+							@kind="cell"
+							@text="Reset"
+							@icon={{Reset}}
+							@disabled={{this.resetDisabled}}
+							@onClick={{this.resetView}}
+						/>
+					</CanonGrid>
+				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Shape" />
 					{{#if this.custom}}
@@ -488,35 +541,6 @@ export default class ImageMasker extends Component {
 						@thumb={{this.thumb}}
 						@onPick={{this.pick}}
 					/>
-				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Frame" />
-					<CanonRow
-						class="masker-zoom"
-						@title="Zoom"
-						@form="flush"
-						as |titleId|
-					>
-						<CanonSlider
-							@value={{this.zoomValue}}
-							@min={{zoomMin}}
-							@max={{zoomMax}}
-							@step={{0.01}}
-							@readout={{zoomText}}
-							@labelledBy={{titleId}}
-							@onChange={{this.setZoom}}
-						/>
-					</CanonRow>
-					<CanonGrid>
-						<CanonButton
-							class="masker-reset"
-							@kind="cell"
-							@text="Reset"
-							@icon={{Reset}}
-							@disabled={{this.resetDisabled}}
-							@onClick={{this.resetView}}
-						/>
-					</CanonGrid>
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Output" />

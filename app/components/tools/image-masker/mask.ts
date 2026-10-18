@@ -1,4 +1,5 @@
 import { fitPlacement } from 'delphitools-v2/lib/pdf-pages';
+import { keptRect } from 'delphitools-v2/components/tools/image-clipper/engine';
 import {
 	MASK_FAMILIES,
 	MASK_SHAPES,
@@ -116,6 +117,55 @@ export function paint(
 		);
 	}
 	context.globalCompositeOperation = 'source-over';
+}
+
+const probeSide = 1024;
+
+/** The cut's opaque box in a `length` square; the image fills only the cut. */
+// ponytail: probed at 1024 px at most, rounded outward above; trimmed() makes the file exact
+export function clipRect(cut: Cut, length: number): Rect {
+	const full = { x: 0, y: 0, width: length, height: length };
+	const probe = Math.min(length, probeSide);
+	const canvas = document.createElement('canvas');
+	canvas.width = probe;
+	canvas.height = probe;
+	const context = canvas.getContext('2d', { willReadFrequently: true });
+	if (!context) return full;
+	paint(context, probe, cut, undefined, { zoom: 1, x: 0, y: 0 });
+	const kept = keptRect(
+		context.getImageData(0, 0, probe, probe).data,
+		probe,
+		probe,
+	);
+	if (!kept) return full;
+	const k = length / probe;
+	const x = Math.floor(kept.x * k);
+	const y = Math.floor(kept.y * k);
+	return {
+		x,
+		y,
+		width: Math.ceil((kept.x + kept.width) * k) - x,
+		height: Math.ceil((kept.y + kept.height) * k) - y,
+	};
+}
+
+/** `canvas` without its fully transparent margin. */
+export function trimmed(canvas: HTMLCanvasElement): HTMLCanvasElement {
+	const { width, height } = canvas;
+	const context = canvas.getContext('2d');
+	if (!context) return canvas;
+	const kept = keptRect(
+		context.getImageData(0, 0, width, height).data,
+		width,
+		height,
+	);
+	if (!kept || (kept.width === width && kept.height === height))
+		return canvas;
+	const out = document.createElement('canvas');
+	out.width = kept.width;
+	out.height = kept.height;
+	out.getContext('2d')?.drawImage(canvas, -kept.x, -kept.y);
+	return out;
 }
 
 export interface Family {

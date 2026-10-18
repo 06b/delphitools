@@ -45,8 +45,7 @@ export interface PictureSignature {
 // a drag grabs this far outside the square, as iOS has it
 const reach = 8;
 const gap = 8;
-// ponytail: the iOS 1.8 x hint width, with the hint measured once at about 135 px
-const hintRoom = 240;
+const hintMargin = 12;
 // ponytail: the preview canvas is capped at 2048 px; the export draws full size
 const previewCap = 2048;
 
@@ -87,7 +86,10 @@ const draw = modifier(
 export default class Picture extends Component<PictureSignature> {
 	@tracked area: Size = { width: 0, height: 0 };
 	@tracked dragging = false;
+	@tracked hintWidth = 0;
 	#last?: { x: number; y: number };
+	#touches = new Map<number, { x: number; y: number }>();
+	#spread?: { distance: number; x: number; y: number };
 
 	get square(): Rect {
 		const room = dimensionLine.height + gap;
@@ -127,7 +129,7 @@ export default class Picture extends Component<PictureSignature> {
 		return (
 			!!this.args.image &&
 			!this.dragging &&
-			this.square.width > hintRoom
+			this.square.width > this.hintWidth + 2 * hintMargin
 		);
 	}
 
@@ -156,6 +158,86 @@ export default class Picture extends Component<PictureSignature> {
 		return () => observer.disconnect();
 	});
 
+	measureHint = modifier((hint: HTMLElement) => {
+		const observer = new ResizeObserver(() => {
+			this.hintWidth = hint.offsetWidth;
+		});
+		observer.observe(hint);
+		return () => observer.disconnect();
+	});
+
+	#spreadNow() {
+		const [a, b] = [...this.#touches.values()];
+		return {
+			distance: Math.max(
+				Math.hypot(a!.x - b!.x, a!.y - b!.y),
+				1,
+			),
+			x: (a!.x + b!.x) / 2,
+			y: (a!.y + b!.y) / 2,
+		};
+	}
+
+	/** Two fingers on the square zoom by their spread and move by their centre. */
+	pinch = modifier((element: HTMLElement) => {
+		const local = (event: PointerEvent) => {
+			const box = element.getBoundingClientRect();
+			return {
+				x: event.clientX - box.left,
+				y: event.clientY - box.top,
+			};
+		};
+		const down = (event: PointerEvent) => {
+			if (event.pointerType !== 'touch') return;
+			const point = local(event);
+			if (!this.#touches.size && !this.grabs(point)) return;
+			this.#touches.set(event.pointerId, point);
+			if (this.#touches.size === 2)
+				this.#spread = this.#spreadNow();
+		};
+		const move = (event: PointerEvent) => {
+			if (!this.#touches.has(event.pointerId)) return;
+			this.#touches.set(event.pointerId, local(event));
+			const last = this.#spread;
+			if (!last || this.#touches.size !== 2) return;
+			const now = this.#spreadNow();
+			this.#spread = now;
+			const length = Math.max(this.square.width, 1);
+			this.args.onZoom(now.distance / last.distance);
+			this.args.onMove(
+				(now.x - last.x) / length,
+				(now.y - last.y) / length,
+			);
+		};
+		const up = (event: PointerEvent) => {
+			this.#touches.delete(event.pointerId);
+			if (this.#touches.size < 2) this.#spread = undefined;
+		};
+		// pointerdown comes first, so a pinch on the square is known here
+		const touch = (event: TouchEvent) => {
+			if (event.touches.length > 1 && this.#touches.size)
+				event.preventDefault();
+		};
+		element.addEventListener('pointerdown', down);
+		element.addEventListener('pointermove', move);
+		element.addEventListener('pointerup', up);
+		element.addEventListener('pointercancel', up);
+		element.addEventListener('touchstart', touch, {
+			passive: false,
+		});
+		element.addEventListener('touchmove', touch, {
+			passive: false,
+		});
+		return () => {
+			element.removeEventListener('pointerdown', down);
+			element.removeEventListener('pointermove', move);
+			element.removeEventListener('pointerup', up);
+			element.removeEventListener('pointercancel', up);
+			element.removeEventListener('touchstart', touch);
+			element.removeEventListener('touchmove', touch);
+		};
+	});
+
 	grabs = ({ x, y }: { x: number; y: number }) => {
 		if (!this.args.image) return false;
 		const { square } = this;
@@ -176,6 +258,7 @@ export default class Picture extends Component<PictureSignature> {
 		const last = this.#last;
 		if (!last) return;
 		this.#last = { x: event.clientX, y: event.clientY };
+		if (this.#spread) return;
 		const length = Math.max(this.square.width, 1);
 		this.args.onMove(
 			(event.clientX - last.x) / length,
@@ -224,6 +307,7 @@ export default class Picture extends Component<PictureSignature> {
 					onMove=this.drag
 					onEnd=this.end
 				}}
+				{{this.pinch}}
 				{{on "wheel" this.wheel passive=false}}
 			>
 				{{#if this.area.width}}
@@ -291,10 +375,13 @@ export default class Picture extends Component<PictureSignature> {
 										this.hintShown
 										'masker-hint--shown'
 									}}"
+								{{this.measureHint}}
 							><IconSvg
 									@name="move"
 								/>Drag to
-								reposition</span>
+								reposition ·
+								Scroll or pinch
+								to zoom</span>
 						</span>
 					{{else}}
 						<span

@@ -57,6 +57,7 @@ const state = () =>
 			.querySelector('.canon-split-sidebar .masker-slot .media-slot-prompt')
 			?.innerText.trim(),
 		slotTag: document.querySelector('.masker-slot .media-slot-upload')?.tagName,
+		slotPaste: !!document.querySelector('.masker-slot .media-slot-paste'),
 		source: document
 			.querySelector('.masker-source .canon-row-title')
 			?.textContent.trim(),
@@ -104,8 +105,8 @@ const state = () =>
 
 let s = await state();
 check(
-	'empty: the picture is the drop target, a button',
-	s.slot === 'Drop an image' && s.slotTag === 'BUTTON',
+	'empty: the picture is the drop target, with Upload and Paste',
+	s.slot === 'Drop an image' && s.slotTag === 'BUTTON' && s.slotPaste,
 	s.slot,
 );
 check('empty: no source row', !s.source);
@@ -129,8 +130,8 @@ check(
 );
 check('an outline over a built-in shape', s.edge);
 check(
-	'tiles: size and shape',
-	s.tiles.join('|') === '1024 × 1024 px|Squircle 4',
+	'tiles: the clipped size and shape',
+	s.tiles.join('|') === '944 × 942 px|Squircle 4',
 	s.tiles.join('|'),
 );
 check('reset is off with no image', s.reset === true);
@@ -200,12 +201,24 @@ check(
 );
 check(
 	'1x output is the short side',
-	s.tiles[0] === '2000 × 2000 px' && s.dimension === '2000px',
+	s.tiles[0] === '1646 × 1487 px' && s.dimension === '2000px',
 	`${s.tiles[0]} ${s.dimension}`,
 );
 check('the image shows faint outside the cut', s.ghost);
 check('the image shows through the variant cells', s.thumbs === 12, `${s.thumbs}`);
-check('the drag hint shows', s.hint === 'Drag to reposition', s.hint);
+check(
+	'the drag hint shows',
+	s.hint === 'Drag to reposition · Scroll or pinch to zoom',
+	s.hint,
+);
+check(
+	'the source row has an upload cell',
+	await page.evaluate(
+		() =>
+			document.querySelector('.masker-source .masker-open')?.getAttribute('aria-label') ===
+			'Open file',
+	),
+);
 const lit = await pixel(0.25, 0.5);
 check(
 	'the image fills the cut',
@@ -266,7 +279,7 @@ s = await state();
 check(
 	'the zoom slider takes arrow keys, 1x grows',
 	// the slider snaps to 0.01 steps above log2(0.1), so 50 % is 2^-1.0019
-	s.zoom.startsWith('50 %') && s.tiles[0] === '4005 × 4005 px',
+	s.zoom.startsWith('50 %') && s.tiles[0] === '3295 × 2977 px',
 	`${s.zoom} ${s.tiles[0]}`,
 );
 const grey = await pixel(0.5, 0.8);
@@ -389,7 +402,7 @@ await sleep(400);
 s = await state();
 check(
 	'a paste anywhere replaces the source',
-	s.source === 'tall.png' && s.tiles[0] === '1000 × 1000 px',
+	s.source === 'tall.png' && s.tiles[0] === '767 × 772 px',
 	`${s.source} ${s.tiles[0]}`,
 );
 await paste(
@@ -468,7 +481,7 @@ await sleep(300);
 s = await state();
 check(
 	'?maskShape ?maskScale ?maskSample ?maskZoom ?maskOffset',
-	s.tiles.join('|') === '1800 × 1800 px|Gear 3' &&
+	s.tiles.join('|') === '1654 × 1613 px|Gear 3' &&
 		s.handle === '10 %, 0 %' &&
 		s.zoom.startsWith('200 %'),
 	`${s.tiles.join('|')} ${s.handle} ${s.zoom}`,
@@ -514,6 +527,130 @@ check(
 	'stacked, the picture collapses on scroll down to 240',
 	short < tall && short >= 239,
 	`${Math.round(tall)} -> ${Math.round(short)}`,
+);
+
+// the export is clipped: no clear edge row or column; exact tile up to 1024 px
+const clippedDownload = async (path) => {
+	await visit(page, path);
+	await page.waitForSelector('.masker-source', { timeout: 5000 });
+	await sleep(300);
+	await captureObjectUrl(page);
+	await page.evaluate(() => (window.__result = undefined));
+	await page.click('.masker-download');
+	await sleep(1500);
+	return page.evaluate(async () => {
+		const bitmap = await createImageBitmap(window.__result);
+		const { width, height } = bitmap;
+		const canvas = new OffscreenCanvas(width, height);
+		const context = canvas.getContext('2d');
+		context.drawImage(bitmap, 0, 0);
+		const { data } = context.getImageData(0, 0, width, height);
+		const inked = (x0, y0, dx, dy, n) => {
+			for (let i = 0; i < n; i++)
+				if (data[((y0 + dy * i) * width + x0 + dx * i) * 4 + 3])
+					return true;
+			return false;
+		};
+		return {
+			size: [width, height],
+			tile: document
+				.querySelector('.canon-tiles-value')
+				.textContent.match(/\d+/g)
+				.map(Number),
+			edges: [
+				inked(0, 0, 1, 0, width),
+				inked(0, height - 1, 1, 0, width),
+				inked(0, 0, 0, 1, height),
+				inked(width - 1, 0, 0, 1, height),
+			],
+		};
+	});
+};
+let clipped = await clippedDownload(
+	'/tools/image-masker?maskSample&maskShape=heart-2&maskScale=0',
+);
+check(
+	'0.5x: the download is clipped to the cut, the tile its size',
+	clipped.size.join() === clipped.tile.join() && clipped.edges.every(Boolean),
+	JSON.stringify(clipped),
+);
+clipped = await clippedDownload(
+	'/tools/image-masker?maskSample&maskShape=star-1',
+);
+check(
+	'1x: the download is clipped, the tile within 2 px',
+	clipped.size.every((v, i) => Math.abs(v - clipped.tile[i]) <= 2) &&
+		clipped.edges.every(Boolean),
+	JSON.stringify(clipped),
+);
+
+// Frame comes before Shape: the zoom fits a 1280 x 720 window
+await page.setViewport({ width: 1280, height: 720 });
+await visit(page, '/tools/image-masker?maskSample');
+await sleep(300);
+const zoomBox = await page.evaluate(() => {
+	const box = document.querySelector('.masker-zoom').getBoundingClientRect();
+	return { top: box.top, bottom: box.bottom, height: innerHeight };
+});
+check(
+	'the zoom row shows at 1280 x 720',
+	zoomBox.top > 0 && zoomBox.bottom <= zoomBox.height,
+	JSON.stringify(zoomBox),
+);
+
+// pinch on the square zooms; the page does not zoom or scroll
+await page.setViewport({
+	width: 390,
+	height: 844,
+	isMobile: true,
+	hasTouch: true,
+	deviceScaleFactor: 2,
+});
+await visit(page, '/tools/image-masker?maskSample');
+await sleep(400);
+const touchCdp = await page.createCDPSession();
+const square = await page.evaluate(() => {
+	const box = document.querySelector('.masker-handle').getBoundingClientRect();
+	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+});
+const zoomBefore = (await state()).zoom;
+const fingers = (spread) => [
+	{ x: square.x - spread, y: square.y, id: 0 },
+	{ x: square.x + spread, y: square.y, id: 1 },
+];
+await touchCdp.send('Input.dispatchTouchEvent', {
+	type: 'touchStart',
+	touchPoints: fingers(30),
+});
+for (let spread = 35; spread <= 120; spread += 5) {
+	await touchCdp.send('Input.dispatchTouchEvent', {
+		type: 'touchMove',
+		touchPoints: fingers(spread),
+	});
+	await sleep(16);
+}
+await touchCdp.send('Input.dispatchTouchEvent', {
+	type: 'touchEnd',
+	touchPoints: [],
+});
+await sleep(200);
+const pinched = await page.evaluate(() => ({
+	scale: visualViewport.scale,
+	scrolled:
+		scrollY +
+		document.querySelector('.dt-main').scrollTop +
+		document.querySelector('.image-masker .canon-split-body').scrollTop,
+}));
+const zoomAfter = (await state()).zoom;
+check(
+	'a pinch zooms the image about 4x',
+	zoomBefore.startsWith('100 %') && /^(3[5-9]\d|4[0-4]\d) %/.test(zoomAfter),
+	`${zoomBefore} -> ${zoomAfter}`,
+);
+check(
+	'the page does not zoom or scroll during a pinch',
+	pinched.scale === 1 && pinched.scrolled === 0,
+	JSON.stringify(pinched),
 );
 
 await finish(browser);

@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { MASK_SHAPES, VARIANTS } from 'delphitools-v2/lib/mask-shapes';
 import {
+	clipRect,
 	covers,
 	families,
 	familyIndex,
@@ -9,6 +10,7 @@ import {
 	inFamily,
 	paint,
 	side,
+	trimmed,
 } from 'delphitools-v2/components/tools/image-masker/mask';
 
 const view = { zoom: 1, x: 0, y: 0 };
@@ -122,5 +124,43 @@ module('Unit | Tool | image-masker', function () {
 			[154, 154, 154, 255],
 			'grey past the image',
 		);
+	});
+
+	test('clipRect: the square is whole, a half-width cut is clipped', function (assert) {
+		assert.deepEqual(clipRect('square', 400), {
+			x: 0,
+			y: 0,
+			width: 400,
+			height: 400,
+		});
+		const half = {
+			...MASK_SHAPES[0]!,
+			d: 'M25 0H75V100H25Z',
+		};
+		assert.deepEqual(clipRect(half, 400), {
+			x: 100,
+			y: 0,
+			width: 200,
+			height: 400,
+		});
+		assert.deepEqual(
+			clipRect(half, 2048),
+			{ x: 512, y: 0, width: 1024, height: 2048 },
+			'probed at 1024, scaled',
+		);
+	});
+
+	test('trimmed: drops the clear margin', function (assert) {
+		const canvas = document.createElement('canvas');
+		canvas.width = 50;
+		canvas.height = 40;
+		canvas.getContext('2d')!.fillRect(10, 5, 20, 15);
+		const out = trimmed(canvas);
+		assert.deepEqual([out.width, out.height], [20, 15]);
+		const full = document.createElement('canvas');
+		full.width = 8;
+		full.height = 8;
+		full.getContext('2d')!.fillRect(0, 0, 8, 8);
+		assert.strictEqual(trimmed(full), full, 'nothing to trim');
 	});
 });
