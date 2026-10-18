@@ -1058,6 +1058,12 @@ body {
 	}
 }
 
+// a collapsing picture floats over the top of the body's scrollport; keep
+// scrollIntoView and focus scrolling below it (full: band never exceeds it)
+.dt-canon-tool .canon-split[data-collapsing] > .canon-split-body {
+	scroll-padding-block-start: var(--canon-split-full);
+}
+
 // The kit splits only a landscape split. The column stops at 1200 px, so
 // a tall desktop window (2560 x 1440 at 100 %) makes it portrait and it
 // stacked while 110 % split. This repeats the kit's wide rules
