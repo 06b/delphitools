@@ -22,10 +22,6 @@ The 0BSD grant above covers the code and data written for delphitools. The
 files below are the work of others, carried in this repository under their
 own licences, which continue to apply to them:
 
-  app/components/ui/select.gts, tabs.gts, command.gts, tooltip.gts,
-  popover.gts
-      Vendored from shadcn-ember v0.2.1 (Ignace Maes), MIT.
-
   app/lib/editor/footnote-md.ts
       Vendored from markdown-it-footnote 4.0.0, MIT.
 

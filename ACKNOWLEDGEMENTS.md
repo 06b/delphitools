@@ -7,7 +7,6 @@ delphitools uses the following open-source libraries, licensed under their respe
 @bjorn3/browser_wasi_shim@0.4.2: MIT 
 @dnd-kit/abstract@0.5.0: MIT
 @dnd-kit/dom@0.5.0: MIT
-@floating-ui/dom@1.8.0: MIT
 @huggingface/transformers@3.8.1: Apache-2.0
 @resvg/resvg-js@2.6.2: MPL-2.0
 browser-fs-access@0.38.0: Apache-2.0
@@ -17,7 +16,6 @@ color-name-list@14.47.0: MIT
 crayon-css@0.9.1: MIT
 dexie@4.4.4: Apache-2.0
 ember-click-outside@6.1.1: MIT
-ember-provide-consume-context@0.10.0: MIT
 ember-route-template@1.0.3: MIT
 ember-truth-helpers@5.0.0: MIT
 exifr@7.1.3: MIT

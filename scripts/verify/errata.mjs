@@ -928,6 +928,13 @@ cs = await comments();
 check('comment placed', cs.length === 2 && cs[1].text === '' && cs[1].author === 'Ruby' && Math.round(cs[1].cx) === 200 && Math.round(cs[1].cy) === 250, JSON.stringify(cs[1]));
 let pop = await popover();
 check('comment popover on place, focused', pop?.focused && pop.text === '', JSON.stringify(pop));
+const notePlace = await page.evaluate(() => {
+	const note = document.querySelector('.err-note');
+	const a = document.querySelector('.err-note-anchor').getBoundingClientRect();
+	const n = note.getBoundingClientRect();
+	return { open: note.matches(':popover-open'), gap: Math.round(n.left - a.right), top: Math.round(n.top - a.top), w: Math.round(a.width) };
+});
+check('comment popover sits right of its comment, top-aligned', notePlace.open && notePlace.gap === 6 && notePlace.top === 0 && notePlace.w > 0, JSON.stringify(notePlace));
 await page.keyboard.type('Fresh note');
 await page.keyboard.press('Enter');
 await page.keyboard.type('second line');

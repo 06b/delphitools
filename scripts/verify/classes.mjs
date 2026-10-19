@@ -9,9 +9,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 // children carry the styling
 const UNSTYLED_CONTAINERS = new Set([
 	'dt-bc-rows',
+	'dt-cl-close', // CanonButton carries styling
+	'dt-cl-tab', // CanonButton carries styling
+	'dt-cl-tabs', // CanonGrid carries styling
 	'dt-docconv-option-text',
 	'dt-tc-table',
-	'dt-tabs',
+	'dt-wn-btn', // CanonButton carries styling
 	'sub-csm-section',
 	'sub-ed-panel-keys', // Cells groups, styled by .sub-cells
 	'sub-ed-stack',

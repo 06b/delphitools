@@ -3,6 +3,10 @@ import { launch, visit, check, sleep, finish } from './harness.mjs';
 const { browser, page } = await launch();
 
 const trigger = '.dt-notation-trigger';
+const popoverOpen = () =>
+	page.evaluate(() => !!document.querySelector('.dt-notation-popover:popover-open'));
+const focusedLabel = () =>
+	page.evaluate(() => document.activeElement?.textContent.trim());
 const swatchValue = () =>
 	page.$eval('.pg-col-value', (el) => el.textContent.trim());
 
@@ -16,6 +20,18 @@ check('swatches read as hex', /^#[\da-f]{6}$/i.test(await swatchValue()));
 
 await page.click(trigger);
 await sleep(250);
+check('the trigger opens the popover', await popoverOpen());
+check('focus lands on the current notation', (await focusedLabel()) === 'HEX', await focusedLabel());
+await page.keyboard.press('Escape');
+await sleep(250);
+check('Escape closes it', !(await popoverOpen()));
+check(
+	'and returns focus to the trigger',
+	await page.evaluate((sel) => document.activeElement === document.querySelector(sel), trigger),
+);
+await page.keyboard.press('Enter');
+await sleep(250);
+check('Enter on the trigger reopens it', await popoverOpen());
 const options = await page.$$eval('.dt-notation-option', (els) =>
 	els.map((el) => el.textContent.trim()),
 );
@@ -42,7 +58,7 @@ await page.evaluate(() => {
 		.click();
 });
 await sleep(300);
-check('choosing closes the popover', !(await page.$('.dt-notation-popover')));
+check('choosing closes the popover', !(await popoverOpen()));
 check(
 	'the trigger shows the new notation',
 	(await page.$eval(trigger, (el) => el.textContent.trim())) === 'OKLCH',

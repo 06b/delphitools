@@ -468,7 +468,7 @@ const lastBtn = await page.$eval('.dt-wn-btn.is-primary', (el) =>
 );
 check("the last slide ends on let's go", lastBtn === 'let\u2019s go', lastBtn);
 await page.click('.dt-wn-btn.is-primary');
-await sleep(200);
+await sleep(500);
 check('closing returns to the page', await page.$eval('.dt-wn:not(.dt-cl)', (el) => !el.open));
 const second = await page.$eval('.dt-hero-link', (el) =>
 	el.textContent.replace(/\s+/g, ' ').trim(),
@@ -507,7 +507,7 @@ check(
 	),
 );
 await page.click('.dt-cl-close');
-await sleep(200);
+await sleep(500);
 check(
 	'the changelog closes',
 	await page.$eval('.dt-cl', (el) => !el.open),

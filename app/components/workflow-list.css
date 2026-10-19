@@ -1,0 +1,67 @@
+.dt-wf-pick {
+	padding: 8px 16px;
+}
+
+.dt-wf-pick-trigger {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	inline-size: 100%;
+	min-block-size: 36px;
+	padding: 4px 8px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: var(--canon-text-footnote);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.dt-wf-pick-trigger:hover {
+	background: var(--canon-muted);
+}
+
+.dt-wf-pick-trigger:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 1px;
+}
+
+.dt-wf-pick-trigger:disabled {
+	opacity: 0.5;
+	cursor: default;
+	pointer-events: none;
+}
+
+.dt-wf-pick-trigger .dt-icon {
+	flex: none;
+	inline-size: 16px;
+	block-size: 16px;
+	color: var(--canon-primary);
+}
+
+.dt-wf-pick-value {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	text-align: start;
+	text-overflow: ellipsis;
+}
+
+.dt-wf-pick-placeholder {
+	color: var(--canon-muted-foreground);
+}
+
+.dt-wf-pick-trigger .dt-wf-pick-chevron {
+	color: inherit;
+	opacity: 0.5;
+}
+
+.canon-menu.dt-wf-pick-list {
+	max-block-size: 320px;
+	overflow-y: auto;
+}
+
+.dt-wf-pick-list .canon-menu-item-icon {
+	color: var(--canon-primary);
+}

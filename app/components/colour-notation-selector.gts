@@ -1,22 +1,23 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { service } from '@ember/service';
+import CanonPopover from 'delphicanon/components/canon-popover';
 import Icon from 'delphitools-v2/components/icon';
-import {
-	Popover,
-	PopoverTrigger,
-	PopoverContent,
-} from 'delphitools-v2/components/ui/popover';
 import { COLOUR_NOTATIONS } from 'delphitools-v2/lib/colour-notation';
 import type { ColourNotation } from 'delphitools-v2/lib/colour-notation';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import './colour-notation-selector.css';
+
+function focusCurrent(event: ToggleEvent) {
+	if (event.newState !== 'open') return;
+	(event.target as HTMLElement)
+		.querySelector<HTMLElement>('[aria-pressed="true"]')
+		?.focus({ preventScroll: true });
+}
 
 export default class ColourNotationSelector extends Component {
 	@service declare colourNotation: ColourNotationService;
-
-	@tracked isOpen = false;
 
 	get notations() {
 		return COLOUR_NOTATIONS.map((notation) => ({
@@ -33,34 +34,33 @@ export default class ColourNotationSelector extends Component {
 		);
 	}
 
-	setOpen = (open: boolean) => {
-		this.isOpen = open;
-	};
-
-	choose = (id: ColourNotation) => {
+	choose = (close: () => void, id: ColourNotation) => {
 		this.colourNotation.setNotation(id);
-		this.isOpen = false;
+		close();
 	};
 
 	<template>
-		<Popover @open={{this.isOpen}} @onOpenChange={{this.setOpen}}>
-			<PopoverTrigger @asChild={{true}} as |trigger|>
+		<CanonPopover
+			class="dt-notation-popover"
+			role="dialog"
+			aria-label="Colour Notation"
+			@placement="bottom-end"
+			{{on "toggle" focusCurrent}}
+		>
+			<:trigger as |p|>
 				<button
 					type="button"
 					class="dt-notation-trigger"
 					aria-label="Colour notation preference"
-					{{trigger.modifiers}}
+					{{p.trigger}}
 				>
 					<Icon @name="pipette" />
 					<span
 						class="dt-notation-current"
 					>{{this.currentLabel}}</span>
 				</button>
-			</PopoverTrigger>
-			<PopoverContent
-				class="dt-notation-popover"
-				@align="end"
-			>
+			</:trigger>
+			<:content as |p|>
 				<span class="dt-notation-label">Colour Notation</span>
 				<div class="dt-notation-grid">
 					{{#each
@@ -84,13 +84,14 @@ export default class ColourNotationSelector extends Component {
 								"click"
 								(fn
 									this.choose
+									p.close
 									notation.id
 								)
 							}}
 						>{{notation.label}}</button>
 					{{/each}}
 				</div>
-			</PopoverContent>
-		</Popover>
+			</:content>
+		</CanonPopover>
 	</template>
 }

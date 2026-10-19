@@ -241,22 +241,6 @@ flush bar: a cell with `border-left: 1px`, `align-self: stretch`.
 
 ---
 
-## 11. Tabs
-
-The tabs primitive is `app/components/ui/tabs.gts`, styled by `.dt-tabs-list` /
-`.dt-tabs-trigger` in `app.scss` (a flush segmented list: 1px frame over a
-`--border` background, triggers fill and share `data-[state="active"]` fill). It
-is already flush — do not re-skin the primitive per tool.
-
-A tool passes its own class through `...attributes`, which Glimmer merges with the
-primitive class, so `.dt-<tool>-tab` is **additive** to `.dt-tabs-trigger`. Use it
-only to add layout, most commonly a fixed height: several tools pin
-`.dt-<tool>-tab { display:flex; height: size(10); align-items:center;
-justify-content:center; }` so tab buttons match across tools. Give the list its
-column count (e.g. `grid-template-columns: repeat(4, 1fr)`).
-
----
-
 ## 12. Tables and repeated items
 
 One row per item: cells divided by `border-left`, rows by `border-top` (or

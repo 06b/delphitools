@@ -5,14 +5,11 @@ import { fn } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
 import { eq, not } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from 'delphitools-v2/components/ui/select';
+import type { ComponentLike } from '@glint/template';
+import CanonMenu, {
+	type CanonMenuItem,
+} from 'delphicanon/components/canon-menu';
+import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import {
 	ORDINALS,
 	SLOTS,
@@ -27,6 +24,28 @@ import {
 } from 'delphitools-v2/lib/workflows';
 import { getToolById, type Tool } from 'delphitools-v2/lib/tools';
 import type FlowService from 'delphitools-v2/services/flow';
+import './workflow-list.css';
+
+type PickItem = CanonMenuItem & { id: string };
+
+const toolIcons = new Map<string, ComponentLike>();
+
+function toolIcon(name: string): ComponentLike {
+	let icon = toolIcons.get(name);
+	if (!icon) {
+		icon = <template><IconSvg @name={{name}} /></template>;
+		toolIcons.set(name, icon);
+	}
+	return icon;
+}
+
+// the open menu starts on the current pick, as a native select does
+function focusCurrent(event: ToggleEvent) {
+	if (event.newState !== 'open') return;
+	(event.target as HTMLElement)
+		.querySelector<HTMLElement>('[aria-checked="true"]')
+		?.focus({ preventScroll: true });
+}
 
 const ROWS = WORKFLOWS.map((workflow) => {
 	const tools = workflowTools(workflow);
@@ -55,13 +74,18 @@ export default class WorkflowList extends Component<{
 				index,
 				ordinal: ORDINALS[index],
 				tool: chosen[index] ?? null,
-				value: this.picks[index] ?? '',
-				options:
-					index === 0
-						? START_TOOLS
-						: before
-							? nextTools(before)
-							: [],
+				items: (index === 0
+					? START_TOOLS
+					: before
+						? nextTools(before)
+						: []
+				).map((tool): PickItem => ({
+					id: tool.id,
+					title: tool.name,
+					kind: 'radio',
+					checked: tool.id === this.picks[index],
+					icon: toolIcon(tool.icon),
+				})),
 			};
 		});
 	}
@@ -75,8 +99,11 @@ export default class WorkflowList extends Component<{
 		return stepsPath(this.picks);
 	}
 
-	pick = (index: number, id: string) => {
-		this.picks = [...this.picks.slice(0, index), id];
+	pick = (index: number, item: CanonMenuItem) => {
+		this.picks = [
+			...this.picks.slice(0, index),
+			(item as PickItem).id,
+		];
 	};
 
 	start = (workflow: Workflow) => void this.flow.start(workflow);
@@ -167,56 +194,48 @@ export default class WorkflowList extends Component<{
 								<td
 									class="dt-wf-cell dt-wf-pick"
 								>
-									<Select
-										@value={{slot.value}}
-										@disabled={{eq
-											slot.options.length
-											0
-										}}
-										@onValueChange={{fn
+									<CanonMenu
+										class="dt-wf-pick-list"
+										@items={{slot.items}}
+										@onSelect={{fn
 											this.pick
 											slot.index
 										}}
+										{{on
+											"toggle"
+											focusCurrent
+										}}
+										as |menu|
 									>
-										<SelectTrigger
-										>
-											<SelectValue
-												class="dt-wf-pick-value"
-											>
-												{{#if
-													slot.tool
-												}}
-													<Icon
-														@name={{slot.tool.icon}}
-													/>
-													<span
-													>{{slot.tool.name}}</span>
-												{{else}}
-													<span
-														class="dt-wf-pick-placeholder"
-													>{{slot.ordinal}}</span>
-												{{/if}}
-											</SelectValue>
-										</SelectTrigger>
-										<SelectContent
-											class="dt-wf-pick-list"
-										>
-											{{#each
-												slot.options
-												key="id"
-												as |tool|
+										<button
+											type="button"
+											class="dt-wf-pick-trigger"
+											disabled={{eq
+												slot.items.length
+												0
 											}}
-												<SelectItem
-													@value={{tool.id}}
-												>
-													<Icon
-														@name={{tool.icon}}
-													/>
-													{{tool.name}}
-												</SelectItem>
-											{{/each}}
-										</SelectContent>
-									</Select>
+											{{menu.trigger}}
+										>
+											{{#if
+												slot.tool
+											}}
+												<Icon
+													@name={{slot.tool.icon}}
+												/>
+												<span
+													class="dt-wf-pick-value"
+												>{{slot.tool.name}}</span>
+											{{else}}
+												<span
+													class="dt-wf-pick-value dt-wf-pick-placeholder"
+												>{{slot.ordinal}}</span>
+											{{/if}}
+											<Icon
+												@name="chevron-down"
+												class="dt-wf-pick-chevron"
+											/>
+										</button>
+									</CanonMenu>
 								</td>
 							{{/each}}
 							<td class="dt-wf-cell">

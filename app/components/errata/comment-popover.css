@@ -1,7 +1,14 @@
-/* the note card beside its comment; floating-ui sets left and top */
-.err-note {
+/* the comment's screen rect, written each frame; the note anchors to it */
+.err-note-anchor {
 	position: fixed;
-	z-index: 40;
+	pointer-events: none;
+}
+
+.err-note {
+	inset: auto;
+	margin: 0;
+	padding: 0;
+	overflow: visible;
 	display: flex;
 	flex-direction: column;
 	inline-size: 240px;
@@ -11,7 +18,6 @@
 	color: var(--canon-foreground);
 	font-family: var(--canon-font);
 	box-shadow: var(--sub-shadow);
-	visibility: hidden;
 }
 
 .err-note-text {

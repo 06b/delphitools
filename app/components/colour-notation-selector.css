@@ -1,0 +1,78 @@
+.dt-notation-trigger {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	block-size: 32px;
+	padding-inline: 8px;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	cursor: pointer;
+}
+
+.dt-notation-trigger:hover {
+	background: var(--canon-muted);
+}
+
+.dt-notation-trigger .dt-icon {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+.dt-notation-current {
+	white-space: nowrap;
+}
+
+.dt-notation-popover {
+	inline-size: 256px;
+	padding: 8px;
+}
+
+.dt-notation-label {
+	display: block;
+	padding: 0 4px 8px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-medium);
+}
+
+.dt-notation-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--canon-hairline);
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-border);
+}
+
+.dt-notation-option {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-block-size: 52px;
+	padding: 8px;
+	border: 0;
+	background: var(--canon-card);
+	color: inherit;
+	font: inherit;
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-medium);
+	line-height: 1.2;
+	text-align: center;
+	cursor: pointer;
+}
+
+.dt-notation-option:hover {
+	background: var(--canon-muted);
+}
+
+.dt-notation-option.is-on {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.dt-notation-option:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}

@@ -1,15 +1,18 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { modifier } from 'ember-modifier';
 import { LinkTo } from '@ember/routing';
 import type RouterService from '@ember/routing/router-service';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonDialog from 'delphicanon/components/canon-dialog';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonSidebar from 'delphicanon/components/canon-sidebar';
 import CanonSidebarRow from 'delphicanon/components/canon-sidebar-row';
-import Dialog from 'delphitools-v2/components/ui/dialog';
-import Icon, { IconSvg } from 'delphitools-v2/components/icon';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import './app-sidebar.css';
 import AboutDelphitoolsBody from 'delphitools-v2/components/about-delphitools';
 import { toolCategories, featuredTools } from 'delphitools-v2/lib/tools';
 import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
@@ -119,6 +122,17 @@ export default class AppSidebar extends Component {
 
 	@tracked toolSearch = '';
 	@tracked docsSearch = '';
+	@tracked aboutOpen = false;
+
+	openAbout = (event: MouseEvent) => {
+		// webkit leaves a clicked button unfocused; the dialog returns focus to it
+		(event.currentTarget as HTMLElement).focus();
+		this.aboutOpen = true;
+	};
+
+	closeAbout = () => {
+		this.aboutOpen = false;
+	};
 
 	pride = PRIDE;
 	commitSha = COMMIT_SHA;
@@ -437,43 +451,37 @@ export default class AppSidebar extends Component {
 						<CanonHeading
 							@text="delphitools"
 						/>
-						<Dialog as |d|>
-							<CanonSidebarRow
-								@title="About"
-								@icon={{component
-									IconSvg
-									name="info"
-								}}
-								@onClick={{d.open}}
-								{{d.focusOnClose}}
-							/>
-							<d.Content
-								class="dt-dialog"
-							>
-								<header
-									class="dt-dialog-head"
-								>
-									<h2
-									>About
-										delphitools</h2>
-									<button
-										type="button"
-										class="dt-dialog-close"
-										aria-label="Close"
-										{{on
-											"click"
-											d.close
-										}}
-									>
-										<Icon
-											@name="x"
-										/>
-									</button>
-								</header>
+						<CanonSidebarRow
+							@title="About"
+							@icon={{component
+								IconSvg
+								name="info"
+							}}
+							{{on
+								"click"
+								this.openAbout
+							}}
+						/>
+						<CanonDialog
+							class="dt-about"
+							@open={{this.aboutOpen}}
+							@title="About delphitools"
+							@onClose={{this.closeAbout}}
+						>
+							<:default>
 								<AboutDelphitoolsBody
 								/>
-							</d.Content>
-						</Dialog>
+							</:default>
+							<:footer as |close|>
+								<CanonButton
+									@text="Close"
+									@onClick={{fn
+										close
+										""
+									}}
+								/>
+							</:footer>
+						</CanonDialog>
 						<NavRow
 							@name="Privacy"
 							@icon="shield-check"
