@@ -638,6 +638,10 @@ export function findPaperSize(id: string): PaperSize | undefined {
 	return ALL_SIZES.find((s) => s.id === id);
 }
 
+/** The custom side range in millimetres, as iOS. */
+export const CUSTOM_MIN_MM = 10;
+export const CUSTOM_MAX_MM = 5000;
+
 const customPattern = /^(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:mm)?$/i;
 
 /** A custom size id: `WxH` in millimetres, at most two decimals. */
@@ -649,8 +653,8 @@ export function customSizeId(widthMm: number, heightMm: number): string {
 /** A custom `WxH` millimetre id, each side within `min` to `max`. */
 export function parseCustomSize(
 	id: string,
-	min = 10,
-	max = 5000,
+	min = CUSTOM_MIN_MM,
+	max = CUSTOM_MAX_MM,
 ): { widthMm: number; heightMm: number } | undefined {
 	const found = customPattern.exec(id.trim());
 	if (!found) return undefined;
@@ -664,8 +668,8 @@ export function parseCustomSize(
 /** A catalogue id, or a custom `WxH` millimetre id within `min` to `max`. */
 export function paperSizeFor(
 	id: string,
-	min?: number,
-	max?: number,
+	min = CUSTOM_MIN_MM,
+	max = CUSTOM_MAX_MM,
 ): PaperSize | undefined {
 	const found = findPaperSize(id);
 	if (found) return found;

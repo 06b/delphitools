@@ -47,13 +47,7 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Pager from 'delphitools-v2/components/tools/media/pager';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { open, sizes, thumbEdge } from 'delphitools-v2/lib/pdfjs';
-import PaperPopover, {
-	type PaperChoice,
-} from 'delphitools-v2/components/tools/paper-sizes/popover';
-import {
-	choiceFor,
-	choiceId,
-} from 'delphitools-v2/components/tools/paper-sizes/paper';
+import PaperPopover from 'delphitools-v2/components/tools/paper-sizes/popover';
 import SheetPicture from 'delphitools-v2/components/tools/imposer/picture';
 import SignatureBlock, {
 	blockHeight,
@@ -325,10 +319,6 @@ export default class Imposer extends Component {
 		);
 	}
 
-	get paperChoice() {
-		return choiceFor(this.paperSizeId, 'infer');
-	}
-
 	get inferTitle() {
 		const inferred = this.inferredPaper?.label;
 		return inferred ? `Infer (${inferred})` : 'Infer from PDF';
@@ -488,8 +478,8 @@ export default class Imposer extends Component {
 		this.#resetNavigation();
 	};
 
-	setPaper = (choice: PaperChoice) => {
-		this.paperSizeId = choiceId(choice, 'infer');
+	setPaper = (id: string) => {
+		this.paperSizeId = id;
 		this.#invalidate();
 	};
 
@@ -1025,8 +1015,9 @@ export default class Imposer extends Component {
 					<CanonHeading @text="Paper" />
 					<PaperPopover
 						class="imp-paper-menu"
-						@selected={{this.paperChoice}}
+						@value={{this.paperSizeId}}
 						@extra={{this.inferTitle}}
+						@extraId="infer"
 						@min={{MIN_PAPER_MM}}
 						@max={{MAX_PAPER_MM}}
 						@label="Paper"

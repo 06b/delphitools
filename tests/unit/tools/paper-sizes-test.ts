@@ -1,4 +1,5 @@
 import { module, test } from 'qunit';
+import { parseCustomSize } from 'delphitools-v2/lib/paper-sizes';
 import {
 	areaRatio,
 	choiceFor,
@@ -6,7 +7,6 @@ import {
 	choiceTitle,
 	closest,
 	customChoice,
-	withinRange,
 	decimal,
 	dimensions,
 	eighths,
@@ -224,14 +224,18 @@ module('Unit | Tool | paper-sizes', function () {
 		assert.strictEqual(customChoice(parseQuery('')), undefined);
 	});
 
-	test('withinRange checks both sides', function (assert) {
-		const choice = (width: number, height: number) =>
-			({ kind: 'custom', width, height }) as const;
-		assert.true(withinRange(choice(85, 100), 10, 5000));
-		assert.true(withinRange(choice(10, 5000), 10, 5000));
-		assert.false(withinRange(choice(6000, 100), 10, 5000));
-		assert.false(withinRange(choice(85, 9.9), 10, 5000));
-		assert.false(withinRange(choice(40, 100), 50, 1000));
+	test('parseCustomSize checks both sides', function (assert) {
+		assert.deepEqual(parseCustomSize('85x100'), {
+			widthMm: 85,
+			heightMm: 100,
+		});
+		assert.ok(parseCustomSize('10x5000'));
+		assert.strictEqual(parseCustomSize('6000x100'), undefined);
+		assert.strictEqual(parseCustomSize('85x9.9'), undefined);
+		assert.strictEqual(
+			parseCustomSize('40x100', 50, 1000),
+			undefined,
+		);
 	});
 
 	test('choiceId and choiceFor round-trip a tool id', function (assert) {

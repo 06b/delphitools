@@ -23,13 +23,7 @@ import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
 import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
-import PaperPopover, {
-	type PaperChoice,
-} from 'delphitools-v2/components/tools/paper-sizes/popover';
-import {
-	choiceFor,
-	choiceId,
-} from 'delphitools-v2/components/tools/paper-sizes/paper';
+import PaperPopover from 'delphitools-v2/components/tools/paper-sizes/popover';
 import { normaliseRotation } from 'delphitools-v2/lib/pdf-pages';
 import {
 	cropFromInsets,
@@ -258,13 +252,9 @@ export default class PdfRotateCrop extends Component {
 		}));
 	}
 
-	get paperChoice() {
-		return choiceFor(this.papers[this.page]);
+	get paperId() {
+		return this.papers[this.page];
 	}
-
-	pickPaperChoice = (choice: PaperChoice) => {
-		if (choice.kind !== 'extra') this.pickPaper(choiceId(choice));
-	};
 
 	get noFile() {
 		return !this.loaded;
@@ -813,11 +803,11 @@ export default class PdfRotateCrop extends Component {
 					>
 						<PaperPopover
 							class="prc-paper-menu"
-							@selected={{this.paperChoice}}
+							@value={{this.paperId}}
 							@placeholder="None"
 							@labelledBy={{titleId}}
 							@disabled={{this.noFile}}
-							@onPick={{this.pickPaperChoice}}
+							@onPick={{this.pickPaper}}
 						/>
 					</CanonRow>
 					<CanonGrid class="prc-crop-actions">

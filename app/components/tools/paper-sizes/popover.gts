@@ -22,7 +22,13 @@ import 'delphicanon/components/canon-menu-cell.css';
 import 'delphicanon/components/canon-popover.css';
 import { allSeries } from 'delphitools-v2/components/tools/paper-sizes/data';
 import {
+	CUSTOM_MAX_MM,
+	CUSTOM_MIN_MM,
+	parseCustomSize,
+} from 'delphitools-v2/lib/paper-sizes';
+import {
 	allPicks,
+	choiceFor,
 	choiceId,
 	choiceTitle,
 	closest,
@@ -31,21 +37,21 @@ import {
 	matches,
 	parseQuery,
 	signed,
-	withinRange,
 	type PaperChoice,
 	type PaperPick,
 	type PaperQuery,
 } from 'delphitools-v2/components/tools/paper-sizes/paper';
-
-export type { PaperChoice };
 import Cell from 'delphitools-v2/components/tools/paper-sizes/cell';
 import './popover.css';
 
 interface Signature {
 	Args: {
-		selected?: PaperChoice;
+		/** A catalogue id, a custom `WxH` millimetre id, or `extraId`. */
+		value?: string;
 		/** Title of the caller's own choice above the list, as iOS `extra`. */
 		extra?: string;
+		/** The id `onPick` gets for the extra choice. */
+		extraId?: string;
 		/** Custom side range in millimetres; default iOS 10 to 5000. */
 		min?: number;
 		max?: number;
@@ -56,7 +62,7 @@ interface Signature {
 		disabled?: boolean;
 		/** Default bottom-start. */
 		placement?: CanonPlacement;
-		onPick: (choice: PaperChoice) => void;
+		onPick: (id: string) => void;
 	};
 	Element: HTMLButtonElement;
 }
@@ -79,16 +85,20 @@ export default class PaperPopover extends Component<Signature> {
 	#panel?: HTMLElement;
 
 	get min() {
-		return this.args.min ?? 10;
+		return this.args.min ?? CUSTOM_MIN_MM;
 	}
 
 	get max() {
-		return this.args.max ?? 5000;
+		return this.args.max ?? CUSTOM_MAX_MM;
+	}
+
+	get selected() {
+		return choiceFor(this.args.value, this.args.extraId);
 	}
 
 	get title() {
 		return (
-			choiceTitle(this.args.selected, this.args.extra) ??
+			choiceTitle(this.selected, this.args.extra) ??
 			this.args.placeholder ??
 			''
 		);
@@ -101,11 +111,11 @@ export default class PaperPopover extends Component<Signature> {
 	}
 
 	get extraSelected() {
-		return this.args.selected?.kind === 'extra';
+		return this.selected?.kind === 'extra';
 	}
 
 	get selectedId() {
-		const { selected } = this.args;
+		const { selected } = this;
 		return selected?.kind === 'paper' ? selected.id : undefined;
 	}
 
@@ -121,13 +131,16 @@ export default class PaperPopover extends Component<Signature> {
 		const { custom } = this;
 		return (
 			custom !== undefined &&
-			!withinRange(custom, this.min, this.max)
+			parseCustomSize(
+				choiceId(custom),
+				this.min,
+				this.max,
+			) === undefined
 		);
 	}
 
 	get customSelected() {
-		const { custom } = this;
-		const { selected } = this.args;
+		const { custom, selected } = this;
 		return (
 			custom !== undefined &&
 			selected?.kind === 'custom' &&
@@ -176,7 +189,7 @@ export default class PaperPopover extends Component<Signature> {
 	};
 
 	choose(choice: PaperChoice) {
-		this.args.onPick(choice);
+		this.args.onPick(choiceId(choice, this.args.extraId));
 		if (this.#panel) hide(this.#panel);
 	}
 
@@ -184,8 +197,7 @@ export default class PaperPopover extends Component<Signature> {
 		this.choose({ kind: 'paper', id: pick.size.id });
 	pickExtra = () => this.choose({ kind: 'extra' });
 	pickCustom = () => {
-		if (this.custom && !this.customOutside)
-			this.choose(this.custom);
+		if (this.custom) this.choose(this.custom);
 	};
 
 	enter = (event: KeyboardEvent) => {
@@ -198,7 +210,7 @@ export default class PaperPopover extends Component<Signature> {
 
 	/** A custom selection reopens with its size typed, so it shows as picked. */
 	#seed() {
-		const { selected } = this.args;
+		const { selected } = this;
 		if (selected?.kind === 'custom')
 			this.find(`${choiceId(selected)}mm`);
 	}

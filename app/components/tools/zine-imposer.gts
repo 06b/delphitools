@@ -18,13 +18,7 @@ import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
 import CanonSwitch from 'delphicanon/components/canon-switch';
 import CanonTiles from 'delphicanon/components/canon-tiles';
-import PaperPopover, {
-	type PaperChoice,
-} from 'delphitools-v2/components/tools/paper-sizes/popover';
-import {
-	choiceFor,
-	choiceId,
-} from 'delphitools-v2/components/tools/paper-sizes/paper';
+import PaperPopover from 'delphitools-v2/components/tools/paper-sizes/popover';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Slot from 'delphitools-v2/components/tools/media/slot';
@@ -357,13 +351,8 @@ export default class ZineImposer extends Component {
 
 	setSplit = (on: boolean) => this.#relayout(() => (this.split = on));
 
-	get paperChoice() {
-		return choiceFor(this.paper.id);
-	}
-
-	pickPaper = (choice: PaperChoice) => {
-		const id = choiceId(choice);
-		if (choice.kind === 'extra' || id === this.paperSizeId) return;
+	pickPaper = (id: string) => {
+		if (id === this.paperSizeId) return;
 		this.paperSizeId = id;
 		this.#changed();
 	};
@@ -755,7 +744,7 @@ export default class ZineImposer extends Component {
 					<CanonHeading @text="Paper" />
 					<PaperPopover
 						class="zi-paper-menu"
-						@selected={{this.paperChoice}}
+						@value={{this.paper.id}}
 						@label="Paper"
 						@onPick={{this.pickPaper}}
 					/>

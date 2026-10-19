@@ -37,13 +37,7 @@ import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Slot from 'delphitools-v2/components/tools/media/slot';
-import PaperPopover, {
-	type PaperChoice,
-} from 'delphitools-v2/components/tools/paper-sizes/popover';
-import {
-	choiceFor,
-	choiceId,
-} from 'delphitools-v2/components/tools/paper-sizes/paper';
+import PaperPopover from 'delphitools-v2/components/tools/paper-sizes/popover';
 import {
 	open,
 	sizes,
@@ -313,10 +307,6 @@ export default class ImageToPdf extends Component {
 		return this.toPdf ? 0 : 1;
 	}
 
-	get sizeChoice() {
-		return choiceFor(this.sizeId, MATCH_IMAGE_SIZE);
-	}
-
 	get orientationIndex() {
 		return ORIENTATIONS.indexOf(this.orientation);
 	}
@@ -520,8 +510,7 @@ export default class ImageToPdf extends Component {
 		];
 	};
 
-	pickSize = (choice: PaperChoice) => {
-		const id = choiceId(choice, MATCH_IMAGE_SIZE);
+	pickSize = (id: string) => {
 		if (id === this.sizeId) return;
 		this.sizeId = id;
 		this.#changed();
@@ -779,8 +768,9 @@ export default class ImageToPdf extends Component {
 						/>
 						<PaperPopover
 							class="i2p-size"
-							@selected={{this.sizeChoice}}
+							@value={{this.sizeId}}
 							@extra="Match image"
+							@extraId={{MATCH_IMAGE_SIZE}}
 							@label="Page size"
 							@disabled={{this.building}}
 							@onPick={{this.pickSize}}

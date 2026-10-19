@@ -342,14 +342,6 @@ export function customChoice(query: PaperQuery): CustomChoice | undefined {
 	};
 }
 
-export function withinRange(
-	{ width, height }: CustomChoice,
-	min: number,
-	max: number,
-): boolean {
-	return [width, height].every((side) => side >= min && side <= max);
-}
-
 /** A tool's size id as a choice: `extraId`, a custom `WxH` millimetre id, or a catalogue id. */
 export function choiceFor(
 	id: string | undefined,
