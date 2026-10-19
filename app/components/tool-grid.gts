@@ -40,11 +40,6 @@ const ToolGrid: TOC<ToolGridSignature> = <template>
 					<span
 						class="dt-cell-name"
 					>{{tool.name}}</span>
-					{{#if tool.new}}
-						<span
-							class="dt-cell-badge"
-						>New</span>
-					{{/if}}
 					<span
 						class="dt-cell-desc"
 					>{{tool.description}}</span>
@@ -65,11 +60,6 @@ const ToolGrid: TOC<ToolGridSignature> = <template>
 					<span
 						class="dt-cell-name"
 					>{{tool.name}}</span>
-					{{#if tool.new}}
-						<span
-							class="dt-cell-badge"
-						>New</span>
-					{{/if}}
 					<span
 						class="dt-cell-desc"
 					>{{tool.description}}</span>
@@ -97,11 +87,6 @@ const ToolGrid: TOC<ToolGridSignature> = <template>
 					<span
 						class="dt-cell-name"
 					>{{tool.name}}</span>
-					{{#if tool.new}}
-						<span
-							class="dt-cell-badge"
-						>New</span>
-					{{/if}}
 					<span
 						class="dt-cell-desc"
 					>{{tool.description}}</span>

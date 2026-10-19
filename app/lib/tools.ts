@@ -38,7 +38,6 @@ export interface Tool {
 	icon: IconName;
 	href: string;
 	beta?: boolean;
-	new?: boolean;
 	external?: boolean;
 	route?: string;
 	highlight?: boolean;
@@ -131,7 +130,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/colour-atlas',
 				atlas: true,
 				carryColour: true,
-				new: true,
 				canon: true,
 				expands: true,
 			},
@@ -254,7 +252,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-atlas',
 				atlas: true,
 				accepts: ['image/*'],
-				new: true,
 				beta: true,
 				canon: true,
 				expands: true,
@@ -348,7 +345,6 @@ export const toolCategories: ToolCategory[] = [
 					'image/avif',
 				],
 				accepts: ['image/*'],
-				new: true,
 			},
 			{
 				id: 'image-converter',
@@ -379,7 +375,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-deskewer',
 				produces: ['image/png'],
 				accepts: ['image/*'],
-				new: true,
 				canon: true,
 				expands: true,
 			},
@@ -391,7 +386,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-masker',
 				produces: ['image/png'],
 				accepts: ['image/*'],
-				new: true,
 				canon: true,
 				expands: true,
 			},
@@ -449,7 +443,6 @@ export const toolCategories: ToolCategory[] = [
 					'image/gif',
 				],
 				accepts: ['image/*'],
-				new: true,
 			},
 			{
 				id: 'paste-image',
@@ -508,7 +501,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/audio-atlas',
 				atlas: true,
 				accepts: AUDIO_ACCEPT,
-				new: true,
 				canon: true,
 				expands: true,
 			},
@@ -521,7 +513,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				atlas: true,
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'audio-extractor',
@@ -538,7 +529,6 @@ export const toolCategories: ToolCategory[] = [
 					'audio/flac',
 				],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'audio-normaliser',
@@ -549,7 +539,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				produces: ['audio/wav'],
 				accepts: AUDIO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'audio-trimmer',
@@ -561,7 +550,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				produces: ['audio/wav'],
 				accepts: AUDIO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'auto-subtitle',
@@ -573,7 +561,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				produces: ['.srt', '.vtt'],
 				accepts: [...AUDIO_ACCEPT, ...VIDEO_ACCEPT],
-				new: true,
 			},
 			{
 				id: 'frame-extractor',
@@ -586,7 +573,6 @@ export const toolCategories: ToolCategory[] = [
 				expands: true,
 				produces: ['image/png', 'application/zip'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'screen-recorder',
@@ -596,7 +582,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'monitor-up',
 				href: '/tools/screen-recorder',
 				produces: ['video/webm'],
-				new: true,
 				canon: true,
 			},
 			{
@@ -608,7 +593,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/subtitle-converter',
 				produces: ['.srt', '.vtt'],
 				accepts: SUBTITLE_ACCEPT,
-				new: true,
 				canon: true,
 			},
 			{
@@ -619,7 +603,6 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/subtitle-studio',
 				produces: ['video/webm'],
 				accepts: [...VIDEO_ACCEPT, ...SUBTITLE_ACCEPT],
-				new: true,
 				canon: true,
 			},
 			{
@@ -630,7 +613,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'clock',
 				href: '/tools/timecode-calc',
 				canon: true,
-				new: true,
 			},
 			{
 				id: 'video-muter',
@@ -641,7 +623,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				produces: ['video/mp4', 'video/webm'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'video-to-gif',
@@ -653,7 +634,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				produces: ['image/gif'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'video-trimmer',
@@ -664,7 +644,6 @@ export const toolCategories: ToolCategory[] = [
 				canon: true,
 				produces: ['video/mp4', 'video/webm'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'voice-recorder',
@@ -674,7 +653,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'mic',
 				href: '/tools/voice-recorder',
 				produces: ['audio/webm'],
-				new: true,
 				canon: true,
 			},
 			{
@@ -688,7 +666,6 @@ export const toolCategories: ToolCategory[] = [
 				expands: true,
 				produces: ['image/png', 'image/svg+xml'],
 				accepts: AUDIO_ACCEPT,
-				new: true,
 			},
 		],
 	},
@@ -937,7 +914,6 @@ export const toolCategories: ToolCategory[] = [
 					'Build a cron expression field by field or decode one',
 				icon: 'calendar-clock',
 				href: '/tools/cron-builder',
-				new: true,
 				canon: true,
 			},
 			{
@@ -947,7 +923,6 @@ export const toolCategories: ToolCategory[] = [
 					'Search HTTP status codes with phrases and spec references',
 				icon: 'server',
 				href: '/tools/http-status',
-				new: true,
 				canon: true,
 			},
 			{
@@ -958,7 +933,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'braces',
 				href: '/tools/json-formatter',
 				produces: ['application/json'],
-				new: true,
 				accepts: ['.json'],
 				canon: true,
 			},
@@ -969,7 +943,6 @@ export const toolCategories: ToolCategory[] = [
 					"Decode a JWT's header, payload & claims",
 				icon: 'key-square',
 				href: '/tools/jwt-decoder',
-				new: true,
 				canon: true,
 			},
 			{
@@ -995,7 +968,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'terminal',
 				href: '/tools/request-builder',
 				canon: true,
-				new: true,
 			},
 			{
 				id: 'tailwind-cheatsheet',
@@ -1013,7 +985,6 @@ export const toolCategories: ToolCategory[] = [
 					'Generate bulk UUID v4 or v7 and Nano IDs',
 				icon: 'fingerprint',
 				href: '/tools/uuid-genny',
-				new: true,
 				canon: true,
 			},
 		],
@@ -1050,7 +1021,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'key-square',
 				href: '/tools/password-genny',
 				canon: true,
-				new: true,
 			},
 			{
 				id: 'qr-genny',
@@ -1172,7 +1142,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'radio',
 				href: '/tools/morse-code',
 				produces: ['text/plain'],
-				new: true,
 				canon: true,
 			},
 			{
@@ -1182,7 +1151,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'grip-vertical',
 				href: '/tools/braille-converter',
 				produces: ['text/plain'],
-				new: true,
 				canon: true,
 			},
 			{
@@ -1192,7 +1160,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'ear',
 				href: '/tools/ipa-transcriber',
 				produces: ['text/plain'],
-				new: true,
 				canon: true,
 			},
 			{
@@ -1203,7 +1170,6 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'radio-tower',
 				href: '/tools/nato-phonetic',
 				produces: ['text/plain'],
-				new: true,
 				canon: true,
 			},
 		],

@@ -3402,22 +3402,6 @@ body {
 	font-size: crayon.font-size("sm");
 }
 
-// unlike is-new, always shown
-.dt-cell-badge {
-	position: absolute;
-	top: crayon.size(3);
-	inset-inline-end: crayon.size(3);
-	padding: crayon.size(0.5) crayon.size(1);
-	background: var(--foreground);
-	color: var(--background);
-	font-size: crayon.size(2.5);
-	opacity: 0.5;
-	font-weight: crayon.font-weight("medium");
-	letter-spacing: crayon.tracking("wide");
-	text-transform: uppercase;
-	white-space: nowrap;
-}
-
 .dt-cell-desc {
 	display: block;
 	margin-top: crayon.size(1);
