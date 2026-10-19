@@ -52,6 +52,11 @@ const Remove = <template><IconSvg @name="x" /></template>;
 const Eyedropper = <template><IconSvg @name="pipette" /></template>;
 
 // the document paste (filePaste) would load a drop-zone paste a second time
+// ∑CG: note under the image source row, says how to sample a colour
+//   spec: one line, at most 70 chars, sentence case, no period; click or tap moves the lens there, a drag moves it by the drag, arrow keys move one pixel, the Pick button under the lens adds the colour
+//   sample: "Drag or tap to move the lens, then Pick to keep the colour"
+const NOTE = '∑CG';
+
 const keepPaste = (event: Event) => event.stopPropagation();
 
 const p3Supported =
@@ -419,9 +424,7 @@ export default class PixelPicker extends Component {
 								@onClick={{this.clear}}
 							/>
 						</CanonRow>
-						<p class="pp-note">Click
-							anywhere on the image to
-							sample a colour</p>
+						<p class="pp-note">{{NOTE}}</p>
 					{{else}}
 						<CanonDropZone
 							class="pp-drop"
