@@ -40,7 +40,7 @@ import {
 	type ImpositionResult,
 	type PaperSize,
 } from 'delphitools-v2/lib/imposition';
-import { findPaperSize, parseCustomSize } from 'delphitools-v2/lib/paper-sizes';
+import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 import { formatBytes } from 'delphitools-v2/lib/pdf-compress';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
@@ -50,6 +50,10 @@ import { open, sizes, thumbEdge } from 'delphitools-v2/lib/pdfjs';
 import PaperPopover, {
 	type PaperChoice,
 } from 'delphitools-v2/components/tools/paper-sizes/popover';
+import {
+	choiceFor,
+	choiceId,
+} from 'delphitools-v2/components/tools/paper-sizes/paper';
 import SheetPicture from 'delphitools-v2/components/tools/imposer/picture';
 import SignatureBlock, {
 	blockHeight,
@@ -146,8 +150,6 @@ export default class Imposer extends Component {
 	@tracked customCols = 2;
 	@tracked signaturePages = DEFAULT_SIGNATURE_PAGES;
 	@tracked duplexFlip: 'long-edge' | 'short-edge' = 'long-edge';
-	@tracked customPaperW = 320;
-	@tracked customPaperH = 450;
 	@tracked blankPageCount = 12;
 
 	@tracked activeSheet = 0;
@@ -211,14 +213,10 @@ export default class Imposer extends Component {
 				Math.max(4, Math.trunc(pagesPerSignature)),
 			);
 		const paper = query.get('impPaper')?.toLowerCase();
-		const custom =
-			paper &&
-			parseCustomSize(paper, MIN_PAPER_MM, MAX_PAPER_MM);
-		if (custom) {
-			this.customPaperW = custom.widthMm;
-			this.customPaperH = custom.heightMm;
-			this.paperSizeId = 'custom';
-		} else if (paper) this.paperSizeId = paper;
+		if (paper)
+			this.paperSizeId =
+				paperSizeFor(paper, MIN_PAPER_MM, MAX_PAPER_MM)
+					?.id ?? paper;
 		const sheet = number('impSheet');
 		if (sheet !== undefined) this.activeSheet = Math.max(0, sheet);
 		this.isFlipped = query.has('impBack');
@@ -239,14 +237,13 @@ export default class Imposer extends Component {
 		const inferred = this.inferredPaper;
 		if (this.paperSizeId === 'infer' && inferred)
 			return { id: 'infer', ...inferred };
-		if (this.paperSizeId === 'custom')
-			return {
-				id: 'custom',
-				label: 'Custom',
-				widthMm: this.customPaperW,
-				heightMm: this.customPaperH,
-			};
-		return findPaperSize(this.paperSizeId) ?? FALLBACK_PAPER;
+		return (
+			paperSizeFor(
+				this.paperSizeId,
+				MIN_PAPER_MM,
+				MAX_PAPER_MM,
+			) ?? FALLBACK_PAPER
+		);
 	}
 
 	get duplexAware() {
@@ -328,19 +325,8 @@ export default class Imposer extends Component {
 		);
 	}
 
-	get paperChoice(): PaperChoice {
-		switch (this.paperSizeId) {
-			case 'infer':
-				return { kind: 'extra' };
-			case 'custom':
-				return {
-					kind: 'custom',
-					width: this.customPaperW,
-					height: this.customPaperH,
-				};
-			default:
-				return { kind: 'paper', id: this.paperSizeId };
-		}
+	get paperChoice() {
+		return choiceFor(this.paperSizeId, 'infer');
 	}
 
 	get inferTitle() {
@@ -503,16 +489,7 @@ export default class Imposer extends Component {
 	};
 
 	setPaper = (choice: PaperChoice) => {
-		if (choice.kind === 'custom') {
-			this.customPaperW = choice.width;
-			this.customPaperH = choice.height;
-		}
-		this.paperSizeId =
-			choice.kind === 'paper'
-				? choice.id
-				: choice.kind === 'extra'
-					? 'infer'
-					: 'custom';
+		this.paperSizeId = choiceId(choice, 'infer');
 		this.#invalidate();
 	};
 

@@ -398,7 +398,7 @@ const customTiles = (await state()).tiles;
 await page.click('.media-job-run');
 await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => {});
 await page.click('.media-job-save');
-const customSheet = await waitForDownload(/^imposed-four-up-booklet-custom\.pdf$/);
+const customSheet = await waitForDownload(/^imposed-four-up-booklet-85x100\.pdf$/);
 const customSize = customSheet && (await PDFDocument.load(customSheet.bytes)).getPage(0).getSize();
 const [tileW, tileH] = (/Sheet ([\d.]+) × ([\d.]+) mm/.exec(customTiles) ?? []).slice(1).map(Number);
 check(
