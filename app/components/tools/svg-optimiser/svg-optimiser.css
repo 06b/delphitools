@@ -17,12 +17,3 @@
 .so-file .canon-row-title {
 	overflow-wrap: anywhere;
 }
-
-/* kit place() sets data-inside after a style flush, so the label springs
-   in from the end on mount; Original is always full, so it never moves */
-.svg-optimiser
-	.canon-compression-scale-top
-	+ .canon-compression-scale-bar
-	.canon-compression-scale-label {
-	transition: none;
-}

@@ -65,7 +65,29 @@ await client.send('Browser.setDownloadBehavior', {
 	downloadPath: downloads,
 });
 
+// the Original label's offset in its bar, every frame from the first paint
+await page.evaluateOnNewDocument(() => {
+	window.__originalLabel = [];
+	const t0 = performance.now();
+	const tick = () => {
+		const bar = document.querySelector('.canon-compression-scale-bar');
+		const label = bar?.querySelector('.canon-compression-scale-label');
+		if (label)
+			window.__originalLabel.push(
+				Math.round(label.getBoundingClientRect().left - bar.getBoundingClientRect().left),
+			);
+		if (performance.now() - t0 < 3000) requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+});
 await visit(page, '/tools/pdf-compressor');
+await sleep(800);
+const original = await page.evaluate(() => [...new Set(window.__originalLabel)]);
+check(
+	'the Original bar sits full from the start, its label still',
+	original.length === 1 && original[0] === 10,
+	original.join(','),
+);
 check(
 	'the split fills the sheet',
 	await page.evaluate(
