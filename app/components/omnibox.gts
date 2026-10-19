@@ -9,6 +9,7 @@ import { htmlSafe } from '@ember/template';
 import type { SafeString } from '@ember/template';
 import { LinkTo } from '@ember/routing';
 import { modifier } from 'ember-modifier';
+import CanonJumpHeading from 'delphicanon/components/canon-jump-heading';
 import Icon from 'delphitools-v2/components/icon';
 import ToolGrid from 'delphitools-v2/components/tool-grid';
 import SuiteBox from 'delphitools-v2/components/suite-box';
@@ -526,12 +527,10 @@ export default class Omnibox extends Component<OmniboxSignature> {
 		>
 
 			<section class="dt-section">
-				<h2 class="dt-section-title">
-					Greatest Hits
-					<span
-						class="dt-section-count"
-					>{{homeFeatured.length}}</span>
-				</h2>
+				<CanonJumpHeading
+					@text="Greatest Hits"
+					@detail={{String homeFeatured.length}}
+				/>
 				<ToolGrid
 					@tools={{homeFeatured}}
 					class="is-featured"
@@ -539,12 +538,10 @@ export default class Omnibox extends Component<OmniboxSignature> {
 			</section>
 
 			<section class="dt-section">
-				<h2 class="dt-section-title">
-					Suites
-					<span
-						class="dt-section-count"
-					>{{suites.length}}</span>
-				</h2>
+				<CanonJumpHeading
+					@text="Suites"
+					@detail={{String suites.length}}
+				/>
 				<div class="dt-suites">
 					{{#each suites as |suite|}}
 						<SuiteBox @suite={{suite}} />
@@ -554,12 +551,12 @@ export default class Omnibox extends Component<OmniboxSignature> {
 
 			{{#each homeCategories as |category|}}
 				<section class="dt-section">
-					<h2 class="dt-section-title">
-						{{category.name}}
-						<span
-							class="dt-section-count"
-						>{{category.tools.length}}</span>
-					</h2>
+					<CanonJumpHeading
+						@text={{category.name}}
+						@detail={{String
+							category.tools.length
+						}}
+					/>
 					<ToolGrid @tools={{category.tools}} />
 				</section>
 			{{/each}}

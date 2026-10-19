@@ -91,7 +91,7 @@ check(
 	'Greatest Hits highlights Substrata and Workflows, links Workflows to its page, no bar',
 	await page.evaluate(() => {
 		const hits = [...document.querySelectorAll('.dt-section')].find((s) =>
-			/Greatest/.test(s.querySelector('.dt-section-title')?.textContent ?? ''),
+			/Greatest/.test(s.querySelector('.canon-jump-heading')?.textContent ?? ''),
 		);
 		const cells = [...(hits?.querySelectorAll('.dt-cell.is-highlight') ?? [])];
 		return (

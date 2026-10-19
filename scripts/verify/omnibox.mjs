@@ -459,4 +459,27 @@ check(
 	await page.evaluate(() => location.pathname),
 );
 
+await visit(page, '/');
+await sleep(800);
+await page.click('.canon-jump-heading-button');
+await sleep(800);
+await page.evaluate(() =>
+	[...document.querySelectorAll('.canon-jump-grid-tile')]
+		.find((t) => t.textContent.includes('PDF'))
+		.click(),
+);
+await sleep(2500);
+check(
+	'jump: a section heading opens the jump grid and scrolls to the pick',
+	await page.evaluate(() => {
+		const heading = [...document.querySelectorAll('.canon-jump-heading')].find(
+			(h) => h.dataset.canonJumpTitle === 'PDF',
+		);
+		const main = document.querySelector('.dt-main');
+		return (
+			Math.abs(heading.getBoundingClientRect().top - main.getBoundingClientRect().top) < 2
+		);
+	}),
+);
+
 await finish(browser);
