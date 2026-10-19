@@ -171,9 +171,21 @@ check(
 	(await page.$$('.brl-keyboard-dot[aria-pressed="true"]')).length === 0,
 );
 check('the result reads the cells', (await result(page)) === 'h h', await result(page));
+// f held while the panel closes; its keyup lands outside the panel
+await page.keyboard.down('f');
 await page.keyboard.press('Escape');
 await sleep(200);
 check('Escape closes the panel', !(await panelOpen()));
+await page.keyboard.up('f');
+await (await keyboardButton()).click();
+await sleep(200);
+await page.focus('.brl-keyboard-dot[aria-label="Dot 1"]');
+const beforeChord = await source();
+await page.keyboard.press('j');
+await sleep(50);
+check('a key held through closing does not block the next chord', (await source()) === `${beforeChord}⠈`, JSON.stringify(await source()));
+await page.keyboard.press('Escape');
+await sleep(200);
 await visit(page, '/tools/braille-converter');
 check('Auto with nothing typed offers the keyboard', !!(await (await keyboardButton()).asElement()));
 

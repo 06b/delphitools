@@ -98,14 +98,36 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 	};
 
 	keyup = (event: KeyboardEvent) => {
+		// a space keyup would also toggle the focused dot in firefox
+		if (event.key === ' ') event.preventDefault();
 		if (!this.#held.delete(event.key.toLowerCase())) return;
 		if (this.#held.size || !this.#chord.length) return;
 		this.args.onInsert(cell(this.#chord.join('')));
 		this.#chord = [];
 	};
 
+	// keys released outside the panel never send their keyup here
+	release = () => {
+		this.#held.clear();
+		this.#chord = [];
+	};
+
+	left = (event: FocusEvent) => {
+		const panel = event.currentTarget as HTMLElement;
+		if (!panel.contains(event.relatedTarget as Node | null))
+			this.release();
+	};
+
+	toggled = (event: ToggleEvent) => {
+		if (event.newState === 'closed') this.release();
+	};
+
 	<template>
-		<CanonPopover class="brl-keyboard" @placement="bottom-end">
+		<CanonPopover
+			class="brl-keyboard"
+			@placement="bottom-end"
+			{{on "toggle" this.toggled}}
+		>
 			<:trigger as |p|>
 				<CanonButton
 					@text="Keyboard"
@@ -122,6 +144,7 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 					aria-label="Braille keyboard"
 					{{on "keydown" this.keydown}}
 					{{on "keyup" this.keyup}}
+					{{on "focusout" this.left}}
 				>
 					<div class="brl-keyboard-cell">
 						<output
