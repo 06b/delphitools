@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import {
 	areaRatio,
+	choiceTitle,
 	closest,
 	decimal,
 	dimensions,
@@ -170,5 +171,29 @@ module('Unit | Tool | paper-sizes', function () {
 		);
 		assert.strictEqual(mediaBox('<< /Type /Page >>'), undefined);
 		assert.strictEqual(pageQuery([595.28, 841.89]), '210x297mm');
+	});
+
+	test('paper popover titles, as iOS Choice.title', function (assert) {
+		assert.strictEqual(
+			choiceTitle({ kind: 'paper', id: 'a4' }),
+			'A4 · 210 × 297 mm',
+		);
+		assert.strictEqual(
+			choiceTitle({
+				kind: 'custom',
+				width: 320,
+				height: 450.5,
+			}),
+			'Custom · 320 × 450.5 mm',
+		);
+		assert.strictEqual(
+			choiceTitle({ kind: 'extra' }, 'Match image'),
+			'Match image',
+		);
+		assert.strictEqual(
+			choiceTitle({ kind: 'paper', id: 'nope' }),
+			undefined,
+		);
+		assert.strictEqual(choiceTitle(undefined), undefined);
 	});
 });

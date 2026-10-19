@@ -2,10 +2,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import type Owner from '@ember/owner';
-import type { TOC } from '@ember/component/template-only';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
 import CanonFileCell from 'delphicanon/components/canon-file-cell';
@@ -18,8 +16,6 @@ import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import CanonTiles from 'delphicanon/components/canon-tiles';
-import press from 'delphicanon/modifiers/canon-press';
-import { reducedMotion, springEasing } from 'delphicanon/lib/motion';
 import {
 	allSeries,
 	type PaperSize,
@@ -42,6 +38,7 @@ import {
 	type PaperQuery,
 	type PaperUnit,
 } from 'delphitools-v2/components/tools/paper-sizes/paper';
+import Cell from 'delphitools-v2/components/tools/paper-sizes/cell';
 import Picture from 'delphitools-v2/components/tools/paper-sizes/picture';
 import './paper-sizes/paper-sizes.css';
 
@@ -68,68 +65,6 @@ const editable = (target: EventTarget | null) =>
 const findPlaceholder = 'A4 · 210×297 · 2480×3508@300dpi';
 const dpiLabels = dpis.map((dpi) => `${dpi} DPI`);
 const columns = 3;
-
-const badgeSpring = springEasing(0.6);
-
-/** The badge pops when a cell takes a slot. */
-const pop = modifier((badge: HTMLElement, [mark]: [number | undefined]) => {
-	const before = badge.dataset['mark'];
-	badge.dataset['mark'] = String(mark ?? '');
-	if (
-		before === undefined ||
-		!mark ||
-		before === String(mark) ||
-		reducedMotion()
-	)
-		return;
-	badge.animate([{ transform: 'scale(0.3)' }, { transform: 'none' }], {
-		duration: 400,
-		easing: badgeSpring,
-	});
-});
-
-interface CellSignature {
-	Args: {
-		size: PaperSize;
-		text: string;
-		mark?: number;
-		detail?: string;
-		onPick: () => void;
-	};
-}
-
-/** The sheet's long side fills a 40 px box. */
-function glyph(size: PaperSize) {
-	const long = Math.max(size.widthMM, size.heightMM, 1);
-	return htmlSafe(
-		`inline-size: ${Math.round((40 * size.widthMM) / long)}px; block-size: ${Math.round((40 * size.heightMM) / long)}px`,
-	);
-}
-
-const Cell: TOC<CellSignature> = <template>
-	<button
-		type="button"
-		class="paper-cell {{if @mark (concat 'paper-slot-' @mark)}}"
-		aria-current={{if @mark "true"}}
-		{{press}}
-		{{on "click" @onPick}}
-	>
-		<span class="paper-cell-box"><span
-				class="paper-cell-sheet"
-				style={{glyph @size}}
-			></span></span>
-		<span class="paper-cell-name">{{@size.name}}</span>
-		<span class="paper-cell-dimensions">{{@text}}</span>
-		{{#if @detail}}
-			<span class="paper-cell-detail">{{@detail}}</span>
-		{{/if}}
-		<span class="paper-cell-badge" {{pop @mark}}>{{@mark}}</span>
-	</button>
-</template>;
-
-function concat(...parts: unknown[]) {
-	return parts.join('');
-}
 
 async function pdfPoints(file: File): Promise<[number, number] | undefined> {
 	const bytes = new Uint8Array(await file.arrayBuffer());

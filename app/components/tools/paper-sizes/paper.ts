@@ -317,3 +317,33 @@ export function pageQuery([width, height]: [number, number]): string {
 	const mm = (points: number) => Math.round((points / 72) * mmPerInch);
 	return `${mm(width)}x${mm(height)}mm`;
 }
+
+/** What the paper popover picks: the caller's extra choice, a catalogue id, or a size in millimetres. */
+export type PaperChoice =
+	| { kind: 'extra' }
+	| { kind: 'paper'; id: string }
+	| { kind: 'custom'; width: number; height: number };
+
+/** The trigger's text for a choice (iOS PaperSizePickerViewController.Choice.title). */
+export function choiceTitle(
+	choice: PaperChoice | undefined,
+	extra?: string,
+): string | undefined {
+	switch (choice?.kind) {
+		case 'extra':
+			return extra;
+		case 'paper': {
+			const pick = allPicks.find(
+				(p) => p.size.id === choice.id,
+			);
+			return (
+				pick &&
+				`${pick.size.name} · ${dimensions(pick.size, 0, 300)}`
+			);
+		}
+		case 'custom':
+			return `Custom · ${decimal(choice.width)} × ${decimal(choice.height)} mm`;
+		default:
+			return undefined;
+	}
+}
