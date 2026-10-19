@@ -139,19 +139,20 @@ export default class ZoneCell extends Component<ZoneCellSignature> {
 						hidden
 					>{{@placeholder}}</option>
 				{{/unless}}
-				{{#each this.common as |choice|}}
+				{{#each this.common key="id" as |choice|}}
 					<option
 						value={{choice.id}}
 						selected={{choice.selected}}
 					>{{choice.text}}</option>
 				{{/each}}
-				{{#each this.groups as |group|}}
+				{{#each this.groups key="region" as |group|}}
 					{{#if group.region}}
 						<optgroup
 							label={{group.region}}
 						>
 							{{#each
 								group.entries
+								key="id"
 								as |choice|
 							}}
 								<option
@@ -162,7 +163,7 @@ export default class ZoneCell extends Component<ZoneCellSignature> {
 						</optgroup>
 					{{else}}
 						{{#each
-							group.entries
+							group.entries key="id"
 							as |choice|
 						}}
 							<option
