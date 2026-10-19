@@ -434,6 +434,49 @@ check(
 	`${s.title} ${s.paper} ${s.margins}`,
 );
 
+check(
+	'typing 85x100 in Crop to size picks Custom',
+	await pickPaper(page, '.prc-paper-menu', { custom: '85x100', enter: true }),
+);
+await sleep(300);
+s = await state();
+const customValue = /^(85 × 100|100 × 85) mm,/;
+check(
+	'Custom crops to 85 × 100 mm and the cell reads it',
+	s.paper === 'Custom · 85 × 100 mm' && customValue.test(s.value),
+	`${s.paper} ${s.value}`,
+);
+await page.click('.prc-paper-menu');
+await page.waitForSelector('.paper-popover:popover-open', { timeout: 3000 });
+await sleep(150);
+check(
+	'reopened, Custom shows selected',
+	(await page.$eval('.paper-popover:popover-open .paper-popover-custom', (el) =>
+		el.getAttribute('aria-current'),
+	)) === 'true',
+);
+await page.keyboard.press('Escape');
+clearDownloads();
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+await page.click('.media-job-save');
+const customOut = await waitForDownload(/-rotate-crop\.pdf$/);
+check('a custom crop exports', !!customOut);
+if (customOut) {
+	const box = (await PDFDocument.load(customOut.bytes)).getPage(0).getCropBox();
+	const sides = [box.width, box.height].sort((a, b) => a - b);
+	check(
+		'the crop box is 85 × 100 mm',
+		near(sides[0], 85 * MM) && near(sides[1], 100 * MM),
+		`${box.width.toFixed(1)}×${box.height.toFixed(1)}`,
+	);
+}
+await visit(page, '/tools/pdf-rotate-crop?rcSample&rcPaper=85x100');
+await page.waitForSelector('.media-crop-image', { timeout: 15000 });
+await sleep(300);
+s = await state();
+check('?rcPaper=85x100 crops to the custom size', s.paper === 'Custom · 85 × 100 mm', s.paper);
+
 const order = () =>
 	page.evaluate(() => {
 		const top = (s) => document.querySelector(s)?.getBoundingClientRect().top ?? NaN;

@@ -22,10 +22,14 @@ import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 import PaperPopover, {
 	type PaperChoice,
 } from 'delphitools-v2/components/tools/paper-sizes/popover';
+import {
+	choiceFor,
+	choiceId,
+} from 'delphitools-v2/components/tools/paper-sizes/paper';
 import { normaliseRotation } from 'delphitools-v2/lib/pdf-pages';
 import {
 	cropFromInsets,
@@ -254,13 +258,12 @@ export default class PdfRotateCrop extends Component {
 		}));
 	}
 
-	get paperChoice(): PaperChoice | undefined {
-		const id = this.papers[this.page];
-		return id ? { kind: 'paper', id } : undefined;
+	get paperChoice() {
+		return choiceFor(this.papers[this.page]);
 	}
 
 	pickPaperChoice = (choice: PaperChoice) => {
-		if (choice.kind === 'paper') this.pickPaper(choice.id);
+		if (choice.kind !== 'extra') this.pickPaper(choiceId(choice));
 	};
 
 	get noFile() {
@@ -369,7 +372,7 @@ export default class PdfRotateCrop extends Component {
 
 	/** paper turns for landscape */
 	#paperCrop(index: number, id: string) {
-		const paper = findPaperSize(id);
+		const paper = paperSizeFor(id);
 		if (!paper) return undefined;
 		const size = this.displaySize(index);
 		const width = paper.widthMm * MM_TO_POINTS;
@@ -517,8 +520,8 @@ export default class PdfRotateCrop extends Component {
 				0,
 			);
 		}
-		const paper = flags.get('rcPaper');
-		if (paper && findPaperSize(paper)) {
+		const paper = paperSizeFor(flags.get('rcPaper') ?? '')?.id;
+		if (paper) {
 			this.pickPaper(paper);
 			if (flags.get('rcNudge') === 'yes')
 				this.setMargin(
