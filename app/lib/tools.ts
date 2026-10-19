@@ -851,10 +851,7 @@ export const toolCategories: ToolCategory[] = [
 			{
 				id: 'pdf-to-images',
 				name: 'PDF to Images',
-				// ∑CG: tool description for PDF to Images (drawer, search, home grid, share card)
-				//   spec: ≤ 45 chars, sentence case, no period, same voice as sibling descriptions such as "Turn images into a PDF"; says a PDF's pages become image files
-				//   sample: "Turn PDF pages into PNG, JPEG or WebP images"
-				description: '∑CG',
+				description: 'Turn PDF pages into images',
 				icon: 'images',
 				href: '/tools/pdf-to-images',
 				component: 'image-to-pdf',
