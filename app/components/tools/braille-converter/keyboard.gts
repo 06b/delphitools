@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonPopover from 'delphicanon/components/canon-popover';
@@ -105,15 +104,6 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 		this.#chord = [];
 	};
 
-	perkins = modifier((panel: HTMLElement) => {
-		panel.addEventListener('keydown', this.keydown);
-		panel.addEventListener('keyup', this.keyup);
-		return () => {
-			panel.removeEventListener('keydown', this.keydown);
-			panel.removeEventListener('keyup', this.keyup);
-		};
-	});
-
 	<template>
 		<CanonPopover class="brl-keyboard" @placement="bottom-end">
 			<:trigger as |p|>
@@ -124,11 +114,14 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 				/>
 			</:trigger>
 			<:content>
+				{{! keys bubble up from the controls inside }}
+				{{! template-lint-disable no-invalid-interactive }}
 				<div
 					class="brl-keyboard-panel"
 					role="dialog"
 					aria-label="Braille keyboard"
-					{{this.perkins}}
+					{{on "keydown" this.keydown}}
+					{{on "keyup" this.keyup}}
 				>
 					<div class="brl-keyboard-cell">
 						<output

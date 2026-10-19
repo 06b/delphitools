@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
-import { modifier } from 'ember-modifier';
+import { on } from '@ember/modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonGrid from 'delphicanon/components/canon-grid';
@@ -226,30 +226,18 @@ export default class MorseCode extends Component {
 	};
 
 	// the keypad's own keys while focus is in it; Enter still presses the focused button
-	keyboard = modifier((keypad: HTMLElement) => {
-		const down = (event: KeyboardEvent) => {
-			const key = keyOfEvent[event.key];
-			if (
-				!key ||
-				event.metaKey ||
-				event.ctrlKey ||
-				event.altKey
-			)
-				return;
-			event.preventDefault();
-			this.press(key);
-		};
-		// a space keyup would also click the focused button
-		const up = (event: KeyboardEvent) => {
-			if (event.key === ' ') event.preventDefault();
-		};
-		keypad.addEventListener('keydown', down);
-		keypad.addEventListener('keyup', up);
-		return () => {
-			keypad.removeEventListener('keydown', down);
-			keypad.removeEventListener('keyup', up);
-		};
-	});
+	keypadDown = (event: KeyboardEvent) => {
+		const key = keyOfEvent[event.key];
+		if (!key || event.metaKey || event.ctrlKey || event.altKey)
+			return;
+		event.preventDefault();
+		this.press(key);
+	};
+
+	// a space keyup would also click the focused button
+	keypadUp = (event: KeyboardEvent) => {
+		if (event.key === ' ') event.preventDefault();
+	};
 
 	<template>
 		<CanonSplit
@@ -315,11 +303,14 @@ export default class MorseCode extends Component {
 			</:main>
 			<:footer>
 				{{#if this.keying}}
+					{{! keys bubble up from the buttons inside }}
+					{{! template-lint-disable no-invalid-interactive }}
 					<div
 						class="mc-keypad"
 						role="group"
 						aria-label="Keypad"
-						{{this.keyboard}}
+						{{on "keydown" this.keypadDown}}
+						{{on "keyup" this.keypadUp}}
 					>
 						<CanonGrid>
 							<CanonButton
