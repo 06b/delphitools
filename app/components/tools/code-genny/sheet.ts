@@ -106,9 +106,10 @@ export function sheetOf(type: BarcodeType, raw: Raw, look: Look): BarcodeSheet {
 		guards: new Set<number>(),
 	};
 	if ('pixs' in raw) {
-		const step = type === 'pdf417' ? pdfRows : 1;
+		// pixy counts rowmult; pixs holds each row once
+		const rows = raw.pixs.length / raw.pixx;
 		const modules: boolean[][] = [];
-		for (let y = 0; y < raw.pixy; y += step)
+		for (let y = 0; y < rows; y++)
 			modules.push(
 				Array.from(
 					{ length: raw.pixx },
@@ -120,7 +121,7 @@ export function sheetOf(type: BarcodeType, raw: Raw, look: Look): BarcodeSheet {
 		return {
 			...base,
 			modules,
-			rowHeight: step,
+			rowHeight: raw.pixy / rows,
 			sweep: type === 'azteccode' ? 'rings' : 'columns',
 			anchor: type === 'azteccode' ? 'centre' : 'leading',
 		};

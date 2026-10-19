@@ -29,7 +29,7 @@ module('Unit | Tool | code-genny', function () {
 		const pdf = sheetOf(
 			'pdf417',
 			{
-				pixs: [1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1],
+				pixs: [1, 0, 0, 1],
 				pixx: 2,
 				pixy: 6,
 			},
