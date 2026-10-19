@@ -106,6 +106,27 @@ b = await board();
 check('OG Type and Twitter Card land in the tags', tags.includes('og:type" content="article"') && tags.includes('twitter:card" content="summary"'));
 check('a summary card is the square thumbnail', !b.large);
 
+check(
+	'the input pane is half the split',
+	await page.evaluate(() => {
+		const side = document.querySelector('.meta-tag-genny .canon-split-sidebar').getBoundingClientRect().width;
+		const main = document.querySelector('.meta-tag-genny .canon-split-main').getBoundingClientRect().width;
+		return Math.abs(side - main) <= 2;
+	}),
+);
+check(
+	'Copy sits under the generated tags',
+	await page.evaluate(() => {
+		const button = [...document.querySelectorAll('.meta-tag-genny .canon-button')].find(
+			(el) => el.textContent.trim() === 'Copy',
+		);
+		const code = document.querySelector('.mt-code');
+		return (
+			!!button.closest('.canon-split-main') &&
+			button.getBoundingClientRect().top >= code.getBoundingClientRect().bottom
+		);
+	}),
+);
 await page.$$eval('.meta-tag-genny .canon-button', (els) =>
 	els.find((el) => el.textContent.trim() === 'Copy').click(),
 );

@@ -142,7 +142,7 @@ export default class MetaTagGennyTool extends Component {
 	copy = () => void this.toast.copy(this.tags);
 
 	<template>
-		<CanonSplit class="meta-tag-genny">
+		<CanonSplit class="meta-tag-genny" @halves={{true}}>
 			<:banner>
 				<CanonCanvas
 					@fitting={{true}}
@@ -319,15 +319,6 @@ export default class MetaTagGennyTool extends Component {
 						aria-label="Twitter Card"
 					/>
 				</CanonRows>
-				<CanonRows @framed={{true}}>
-					<CanonButton
-						@kind="primary"
-						@text="Copy"
-						@icon={{CopyIcon}}
-						@iconStyle="oversized"
-						@onClick={{this.copy}}
-					/>
-				</CanonRows>
 			</:sidebar>
 			<:main>
 				<CanonRows class="mt-search" @framed={{true}}>
@@ -344,6 +335,15 @@ export default class MetaTagGennyTool extends Component {
 						class="mt-code"
 						@code={{this.tags}}
 						@language="HTML"
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonButton
+						@kind="primary"
+						@text="Copy"
+						@icon={{CopyIcon}}
+						@iconStyle="oversized"
+						@onClick={{this.copy}}
 					/>
 				</CanonRows>
 			</:main>
