@@ -488,6 +488,22 @@ function scope(mode: AngleMode): Record<string, (...x: number[]) => number> {
 	};
 }
 
+/** The expression with each standalone `shown` answer swapped for its full-precision value. */
+export function withExact(
+	expression: string,
+	shown: string,
+	value: number,
+): string {
+	// the magnitude only, so a minus in front stays an operator
+	const digits = shown.replace(/^-/, '');
+	if (digits === String(Math.abs(value))) return expression;
+	const escaped = digits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return expression.replace(
+		new RegExp(`(?<![\\d.e])${escaped}(?![\\d.e])`, 'g'),
+		`(${String(Math.abs(value))})`,
+	);
+}
+
 /** The keypad's text in mathjs syntax. */
 export function prepare(expression: string): string {
 	return (

@@ -15,6 +15,7 @@ import {
 	text,
 	toggledSign,
 	typed,
+	withExact,
 	written,
 	type AngleMode,
 } from 'delphitools-v2/components/tools/sci-calc/entry';
@@ -335,5 +336,33 @@ module('Unit | Tool | sci-calc', function () {
 			shown(join('', '1e+20', 'factor') + '+1'),
 			'1e+20',
 		);
+	});
+
+	test('a carried or recalled answer reads at full precision', function (assert) {
+		const third = 1 / 3;
+		const exact = (raw: string) =>
+			shown(withExact(raw, formatNumber(third), third));
+		assert.strictEqual(formatNumber(third), '0.3333333333');
+		assert.strictEqual(exact('0.3333333333×3'), '1');
+		assert.strictEqual(exact('2+0.3333333333'), '2.333333333');
+		assert.strictEqual(
+			exact('10.33333333331'),
+			'10.33333333',
+			'a longer number stays as typed',
+		);
+		assert.strictEqual(exact('−0.3333333333×3'), '-1');
+		const minus = -2 / 3;
+		assert.strictEqual(
+			shown(
+				withExact(
+					'1−0.6666666667×3',
+					formatNumber(minus),
+					minus,
+				),
+			),
+			'-1',
+			'the minus stays an operator',
+		);
+		assert.strictEqual(withExact('4×5', '4', 4), '4×5');
 	});
 });

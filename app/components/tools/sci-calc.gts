@@ -36,6 +36,7 @@ import {
 	toggledSign,
 	typed,
 	written,
+	withExact,
 	type AngleMode,
 	type Kind,
 } from 'delphitools-v2/components/tools/sci-calc/entry';
@@ -187,12 +188,21 @@ export default class SciCalcTool extends Component {
 			: undefined;
 	}
 
+	/** Answers carried on or recalled read at full precision, not as shown. */
+	exact(text: string) {
+		return withExact(
+			text,
+			formatNumber(this.lastAnswer),
+			this.lastAnswer,
+		);
+	}
+
 	/** The value the expression would give now, its open brackets closed. */
 	preview(raw: string) {
 		if (!this.math) return undefined;
 		const value = calculate(
 			this.math,
-			raw + ')'.repeat(openParens(raw)),
+			this.exact(raw) + ')'.repeat(openParens(raw)),
 			this.angleMode,
 		);
 		return typeof value === 'number' && Number.isFinite(value)
@@ -226,7 +236,11 @@ export default class SciCalcTool extends Component {
 		}
 		this.expression += ')'.repeat(openParens(this.expression));
 		const typedText = this.expression;
-		const value = calculate(math, typedText, this.angleMode);
+		const value = calculate(
+			math,
+			this.exact(typedText),
+			this.angleMode,
+		);
 		if (typeof value === 'number' && !Number.isFinite(value)) {
 			const textOf = Number.isNaN(value)
 				? 'Error'

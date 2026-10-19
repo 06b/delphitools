@@ -212,6 +212,15 @@ await sleep(800);
 s = await state();
 check('launch keys', s.readout === '3.006628275', JSON.stringify(s));
 
+await visit(page, '/tools/sci-calc?sciKeys=1 ÷ 3 = × 3 =');
+await sleep(800);
+s = await state();
+check('a carried answer keeps full precision: 1 ÷ 3 = × 3 = is 1', s.readout === '1', JSON.stringify(s));
+await visit(page, '/tools/sci-calc?sciKeys=2 ÷ 3 = C Ans × 3 =');
+await sleep(800);
+s = await state();
+check('Ans keeps full precision', s.readout === '2', JSON.stringify(s));
+
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/sci-calc');
 await sleep(800);
