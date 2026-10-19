@@ -207,10 +207,16 @@ export default class Imposer extends Component {
 				Math.max(4, Math.trunc(pagesPerSignature)),
 			);
 		const paper = query.get('impPaper')?.toLowerCase();
-		if (paper)
-			this.paperSizeId =
-				paperSizeFor(paper, MIN_PAPER_MM, MAX_PAPER_MM)
-					?.id ?? paper;
+		const paperId =
+			paper === 'infer'
+				? paper
+				: paper &&
+					paperSizeFor(
+						paper,
+						MIN_PAPER_MM,
+						MAX_PAPER_MM,
+					)?.id;
+		if (paperId) this.paperSizeId = paperId;
 		const sheet = number('impSheet');
 		if (sheet !== undefined) this.activeSheet = Math.max(0, sheet);
 		this.isFlipped = query.has('impBack');
