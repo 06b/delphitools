@@ -1041,7 +1041,6 @@ export default class Imposer extends Component {
 						class="imp-paper-menu"
 						@selected={{this.paperChoice}}
 						@extra={{this.inferTitle}}
-						@custom={{true}}
 						@min={{50}}
 						@max={{1000}}
 						@label="Paper"

@@ -1,14 +1,13 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
-import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
 import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import { ChevronsUpDown } from 'delphicanon/lib/control-icons';
@@ -21,16 +20,18 @@ import {
 } from 'delphicanon/lib/popover';
 import 'delphicanon/components/canon-menu-cell.css';
 import 'delphicanon/components/canon-popover.css';
-import { IconSvg } from 'delphitools-v2/components/icon';
 import { allSeries } from 'delphitools-v2/components/tools/paper-sizes/data';
 import {
 	allPicks,
+	choiceId,
 	choiceTitle,
 	closest,
+	customChoice,
 	dimensions,
 	matches,
 	parseQuery,
 	signed,
+	withinRange,
 	type PaperChoice,
 	type PaperPick,
 	type PaperQuery,
@@ -45,8 +46,6 @@ interface Signature {
 		selected?: PaperChoice;
 		/** Title of the caller's own choice above the list, as iOS `extra`. */
 		extra?: string;
-		/** Shows the custom width and height section. */
-		custom?: boolean;
 		/** Custom side range in millimetres; default iOS 10 to 5000. */
 		min?: number;
 		max?: number;
@@ -65,21 +64,18 @@ interface Signature {
 const findPlaceholder = 'A4 · 210×297 · 8.5x11in';
 const columns = 3;
 const mm = (pick: PaperPick) => dimensions(pick.size, 0, 300);
-const Check = <template><IconSvg @name="check" /></template>;
 
 /**
  * The iOS paper size sheet as a popover on a menu-cell trigger: find a
- * size by name or dimensions, take the caller's extra choice, type a
- * custom size, or pick from every series. Escape or a click outside
- * closes it; a pick closes it too.
+ * size by name or dimensions, take the caller's extra choice, pick the
+ * typed size as a custom one, or pick from every series. Escape or a
+ * click outside closes it; a pick closes it too.
  */
 export default class PaperPopover extends Component<Signature> {
 	id = `${guidFor(this)}-paper`;
 	valueId = `${guidFor(this)}-paper-value`;
 	@tracked text = '';
 	@tracked query: PaperQuery = parseQuery('');
-	@tracked width = 210;
-	@tracked height = 297;
 	#panel?: HTMLElement;
 
 	get min() {
@@ -111,6 +107,32 @@ export default class PaperPopover extends Component<Signature> {
 	get selectedId() {
 		const { selected } = this.args;
 		return selected?.kind === 'paper' ? selected.id : undefined;
+	}
+
+	get custom() {
+		return customChoice(this.query);
+	}
+
+	get customTitle() {
+		return choiceTitle(this.custom);
+	}
+
+	get customOutside() {
+		const { custom } = this;
+		return (
+			custom !== undefined &&
+			!withinRange(custom, this.min, this.max)
+		);
+	}
+
+	get customSelected() {
+		const { custom } = this;
+		const { selected } = this.args;
+		return (
+			custom !== undefined &&
+			selected?.kind === 'custom' &&
+			choiceId(selected) === choiceId(custom)
+		);
 	}
 
 	cell = (pick: PaperPick, detail?: string) => ({
@@ -153,9 +175,6 @@ export default class PaperPopover extends Component<Signature> {
 		this.query = parseQuery(text);
 	};
 
-	setWidth = (value: number) => (this.width = value);
-	setHeight = (value: number) => (this.height = value);
-
 	choose(choice: PaperChoice) {
 		this.args.onPick(choice);
 		if (this.#panel) hide(this.#panel);
@@ -164,31 +183,24 @@ export default class PaperPopover extends Component<Signature> {
 	pick = (pick: PaperPick) =>
 		this.choose({ kind: 'paper', id: pick.size.id });
 	pickExtra = () => this.choose({ kind: 'extra' });
-	useCustom = () =>
-		this.choose({
-			kind: 'custom',
-			width: this.width,
-			height: this.height,
-		});
+	pickCustom = () => {
+		if (this.custom && !this.customOutside)
+			this.choose(this.custom);
+	};
 
-	/** The custom fields start at the selected size, A4 otherwise (iOS). */
+	enter = (event: KeyboardEvent) => {
+		if (event.key !== 'Enter' || event.isComposing) return;
+		if (!this.custom || this.customOutside) return;
+		// closing returns focus to the trigger, which the Enter would press
+		event.preventDefault();
+		this.pickCustom();
+	};
+
+	/** A custom selection reopens with its size typed, so it shows as picked. */
 	#seed() {
 		const { selected } = this.args;
-		if (selected?.kind === 'custom') {
-			this.width = selected.width;
-			this.height = selected.height;
-			return;
-		}
-		const pick =
-			selected?.kind === 'paper'
-				? allPicks.find(
-						(p) =>
-							p.size.id ===
-							selected.id,
-					)
-				: undefined;
-		this.width = pick?.size.widthMM ?? 210;
-		this.height = pick?.size.heightMM ?? 297;
+		if (selected?.kind === 'custom')
+			this.find(`${choiceId(selected)}mm`);
 	}
 
 	trigger = modifier((button: HTMLButtonElement) => {
@@ -258,6 +270,7 @@ export default class PaperPopover extends Component<Signature> {
 					@value={{this.text}}
 					@placeholder={{findPlaceholder}}
 					@onChange={{this.find}}
+					{{on "keydown" this.enter}}
 				/>
 			</CanonRows>
 			{{#if @extra}}
@@ -273,53 +286,22 @@ export default class PaperPopover extends Component<Signature> {
 					</CanonGrid>
 				</CanonRows>
 			{{/if}}
-			{{#if @custom}}
-				<CanonRows
-					class="paper-popover-custom"
-					@framed={{true}}
-				>
-					<CanonHeading @text="Custom" />
-					<CanonRow
-						@title="Width"
-						@form="flush"
-						as |titleId|
-					>
-						<CanonDecimalField
-							class="paper-popover-width"
-							@value={{this.width}}
-							@min={{this.min}}
-							@max={{this.max}}
-							@step={{1}}
-							@decimals={{1}}
-							@unit="mm"
-							@labelledBy={{titleId}}
-							@onChange={{this.setWidth}}
+			{{#if this.custom}}
+				<CanonRows @framed={{true}}>
+					<CanonGrid>
+						<CanonButton
+							class="paper-popover-custom"
+							aria-current={{if
+								this.customSelected
+								"true"
+							}}
+							@kind="segment"
+							@text={{this.customTitle}}
+							@selected={{this.customSelected}}
+							@disabled={{this.customOutside}}
+							@onClick={{this.pickCustom}}
 						/>
-					</CanonRow>
-					<CanonRow
-						@title="Height"
-						@form="flush"
-						as |titleId|
-					>
-						<CanonDecimalField
-							class="paper-popover-height"
-							@value={{this.height}}
-							@min={{this.min}}
-							@max={{this.max}}
-							@step={{1}}
-							@decimals={{1}}
-							@unit="mm"
-							@labelledBy={{titleId}}
-							@onChange={{this.setHeight}}
-						/>
-					</CanonRow>
-					<CanonButton
-						class="paper-popover-use"
-						@kind="primary"
-						@text="Use"
-						@icon={{Check}}
-						@onClick={{this.useCustom}}
-					/>
+					</CanonGrid>
 				</CanonRows>
 			{{/if}}
 			{{#if this.closest.length}}

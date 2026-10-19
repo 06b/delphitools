@@ -1,8 +1,12 @@
 import { module, test } from 'qunit';
 import {
 	areaRatio,
+	choiceFor,
+	choiceId,
 	choiceTitle,
 	closest,
+	customChoice,
+	withinRange,
 	decimal,
 	dimensions,
 	eighths,
@@ -18,6 +22,7 @@ import {
 	type PaperQuery,
 	type Rect,
 } from 'delphitools-v2/components/tools/paper-sizes/paper';
+import { customSizeId, paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 
 const inside = (outer: Rect, r: Rect) =>
 	r.x >= outer.x - 0.001 &&
@@ -195,5 +200,70 @@ module('Unit | Tool | paper-sizes', function () {
 			undefined,
 		);
 		assert.strictEqual(choiceTitle(undefined), undefined);
+	});
+
+	test('a size query offers a custom choice in millimetres', function (assert) {
+		const custom = customChoice(parseQuery('85x100'));
+		assert.deepEqual(custom, {
+			kind: 'custom',
+			width: 85,
+			height: 100,
+		});
+		assert.strictEqual(choiceTitle(custom), 'Custom · 85 × 100 mm');
+		assert.deepEqual(customChoice(parseQuery('8.5x11in')), {
+			kind: 'custom',
+			width: 215.9,
+			height: 279.4,
+		});
+		assert.deepEqual(customChoice(parseQuery('1000x1500@300dpi')), {
+			kind: 'custom',
+			width: 84.67,
+			height: 127,
+		});
+		assert.strictEqual(customChoice(parseQuery('a4')), undefined);
+		assert.strictEqual(customChoice(parseQuery('')), undefined);
+	});
+
+	test('withinRange checks both sides', function (assert) {
+		const choice = (width: number, height: number) =>
+			({ kind: 'custom', width, height }) as const;
+		assert.true(withinRange(choice(85, 100), 10, 5000));
+		assert.true(withinRange(choice(10, 5000), 10, 5000));
+		assert.false(withinRange(choice(6000, 100), 10, 5000));
+		assert.false(withinRange(choice(85, 9.9), 10, 5000));
+		assert.false(withinRange(choice(40, 100), 50, 1000));
+	});
+
+	test('choiceId and choiceFor round-trip a tool id', function (assert) {
+		const custom = {
+			kind: 'custom',
+			width: 84.67,
+			height: 127,
+		} as const;
+		assert.strictEqual(choiceId(custom), '84.67x127');
+		assert.deepEqual(choiceFor(choiceId(custom)), custom);
+		assert.strictEqual(choiceId({ kind: 'paper', id: 'a4' }), 'a4');
+		assert.deepEqual(choiceFor('a4'), { kind: 'paper', id: 'a4' });
+		assert.strictEqual(
+			choiceId({ kind: 'extra' }, 'match'),
+			'match',
+		);
+		assert.deepEqual(choiceFor('match', 'match'), {
+			kind: 'extra',
+		});
+		assert.strictEqual(choiceFor(undefined), undefined);
+	});
+
+	test('paperSizeFor takes catalogue ids and custom WxH millimetres', function (assert) {
+		assert.strictEqual(paperSizeFor('a4')?.widthMm, 210);
+		const custom = paperSizeFor('85x100');
+		assert.strictEqual(custom?.id, '85x100');
+		assert.strictEqual(custom?.widthMm, 85);
+		assert.strictEqual(custom?.heightMm, 100);
+		assert.strictEqual(paperSizeFor('85x100mm')?.id, '85x100');
+		assert.strictEqual(paperSizeFor('6000x100'), undefined);
+		assert.strictEqual(paperSizeFor('40x100', 50, 1000), undefined);
+		assert.strictEqual(paperSizeFor('nope'), undefined);
+		assert.strictEqual(customSizeId(84.6666, 127), '84.67x127');
 	});
 });

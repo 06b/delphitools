@@ -83,11 +83,23 @@ export async function openModule(page, title) {
 
 /**
  * Opens the paper popover on `trigger` and picks the size named `name`,
- * or the caller's extra choice when `name` is null. True when it closed.
+ * the caller's extra choice when `name` is null, or, for
+ * `{ custom: '85x100', enter }`, types the size into the find field and
+ * picks the Custom option (by Enter when `enter`). True when it closed.
  */
 export async function pickPaper(page, trigger, name) {
 	await page.click(trigger);
 	await page.waitForSelector('.paper-popover:popover-open', { timeout: 3000 });
+	if (name?.custom) {
+		await sleep(100);
+		await page.$eval('.paper-popover:popover-open .paper-find', (el) => (el.focus(), el.select()));
+		await page.keyboard.type(name.custom);
+		const shown = await page.$('.paper-popover:popover-open .paper-popover-custom:not(:disabled)');
+		if (name.enter) await page.keyboard.press('Enter');
+		else await shown?.click();
+		await sleep(250);
+		return !!shown && !(await page.$('.paper-popover:popover-open'));
+	}
 	const picked = await page.evaluate((n) => {
 		const panel = document.querySelector('.paper-popover:popover-open');
 		const target =

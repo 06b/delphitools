@@ -2,6 +2,11 @@ import {
 	allSeries,
 	type PaperSize,
 } from 'delphitools-v2/components/tools/paper-sizes/data';
+import {
+	customSizeId,
+	findPaperSize,
+	parseCustomSize,
+} from 'delphitools-v2/lib/paper-sizes';
 
 export interface PaperPick {
 	series: string;
@@ -323,6 +328,56 @@ export type PaperChoice =
 	| { kind: 'extra' }
 	| { kind: 'paper'; id: string }
 	| { kind: 'custom'; width: number; height: number };
+
+export type CustomChoice = Extract<PaperChoice, { kind: 'custom' }>;
+
+/** The custom choice a size query offers, in millimetres to two decimals. */
+export function customChoice(query: PaperQuery): CustomChoice | undefined {
+	if (query.kind !== 'size') return undefined;
+	const mm = (value: number) => Number(value.toFixed(2));
+	return {
+		kind: 'custom',
+		width: mm(query.width),
+		height: mm(query.height),
+	};
+}
+
+export function withinRange(
+	{ width, height }: CustomChoice,
+	min: number,
+	max: number,
+): boolean {
+	return [width, height].every((side) => side >= min && side <= max);
+}
+
+/** A tool's size id as a choice: `extraId`, a custom `WxH` millimetre id, or a catalogue id. */
+export function choiceFor(
+	id: string | undefined,
+	extraId?: string,
+): PaperChoice | undefined {
+	if (!id) return undefined;
+	if (id === extraId) return { kind: 'extra' };
+	const custom = parseCustomSize(id, 0, Infinity);
+	return custom && !findPaperSize(id)
+		? {
+				kind: 'custom',
+				width: custom.widthMm,
+				height: custom.heightMm,
+			}
+		: { kind: 'paper', id };
+}
+
+/** The size id a tool stores for a choice; the reverse of `choiceFor`. */
+export function choiceId(choice: PaperChoice, extraId = ''): string {
+	switch (choice.kind) {
+		case 'extra':
+			return extraId;
+		case 'paper':
+			return choice.id;
+		case 'custom':
+			return customSizeId(choice.width, choice.height);
+	}
+}
 
 /** The trigger's text for a choice (iOS PaperSizePickerViewController.Choice.title). */
 export function choiceTitle(

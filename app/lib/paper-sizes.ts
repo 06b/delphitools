@@ -637,3 +637,49 @@ const ALL_SIZES: PaperSize[] = (() => {
 export function findPaperSize(id: string): PaperSize | undefined {
 	return ALL_SIZES.find((s) => s.id === id);
 }
+
+const customPattern = /^(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:mm)?$/i;
+
+/** A custom size id: `WxH` in millimetres, at most two decimals. */
+export function customSizeId(widthMm: number, heightMm: number): string {
+	const mm = (value: number) => String(Number(value.toFixed(2)));
+	return `${mm(widthMm)}x${mm(heightMm)}`;
+}
+
+/** A custom `WxH` millimetre id, each side within `min` to `max`. */
+export function parseCustomSize(
+	id: string,
+	min = 10,
+	max = 5000,
+): { widthMm: number; heightMm: number } | undefined {
+	const found = customPattern.exec(id.trim());
+	if (!found) return undefined;
+	const [widthMm, heightMm] = [Number(found[1]), Number(found[2])];
+	const fits = (value: number) => value >= min && value <= max;
+	return fits(widthMm) && fits(heightMm)
+		? { widthMm, heightMm }
+		: undefined;
+}
+
+/** A catalogue id, or a custom `WxH` millimetre id within `min` to `max`. */
+export function paperSizeFor(
+	id: string,
+	min?: number,
+	max?: number,
+): PaperSize | undefined {
+	const found = findPaperSize(id);
+	if (found) return found;
+	const custom = parseCustomSize(id, min, max);
+	if (!custom) return undefined;
+	const { widthMm, heightMm } = custom;
+	return {
+		id: customSizeId(widthMm, heightMm),
+		label: 'Custom',
+		series: 'custom',
+		region: '',
+		widthMm,
+		heightMm,
+		widthIn: widthMm / INCH_TO_MM,
+		heightIn: heightMm / INCH_TO_MM,
+	};
+}
