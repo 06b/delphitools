@@ -14,7 +14,7 @@ import {
 	convert,
 	format,
 	pose,
-	settleEased,
+	easeOutCubic,
 	type Instrument,
 	type Pose,
 	type Unit,
@@ -150,7 +150,7 @@ export default class Picture extends Component<PictureSignature> {
 		const step = (now: number) => {
 			const progress = Math.min(1, (now - began) / settleMs);
 			// no spring: its overshoot made the weights jump
-			const eased = settleEased(progress);
+			const eased = easeOutCubic(progress);
 			this.shown = {
 				value:
 					start.value +

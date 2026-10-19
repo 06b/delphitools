@@ -254,7 +254,7 @@ export interface Pose {
 }
 
 /** The settle curve, 0 to 1: a cubic ease-out that never passes 1. */
-export function settleEased(progress: number): number {
+export function easeOutCubic(progress: number): number {
 	return 1 - (1 - Math.min(1, Math.max(0, progress))) ** 3;
 }
 

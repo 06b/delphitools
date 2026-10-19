@@ -7,7 +7,7 @@ import {
 	formula,
 	instrumentFor,
 	pose,
-	settleEased,
+	easeOutCubic,
 	tickLabel,
 	ticks,
 	weightsOf,
@@ -161,12 +161,12 @@ module('Unit | Tool | unit-converter', function () {
 		let last = 0;
 		let rising = true;
 		for (let i = 0; i <= 100; i++) {
-			const eased = settleEased(i / 100);
+			const eased = easeOutCubic(i / 100);
 			if (eased < last || eased > 1) rising = false;
 			last = eased;
 		}
 		assert.true(rising, 'never falls back, never passes 1');
-		assert.strictEqual(settleEased(0), 0);
-		assert.strictEqual(settleEased(1), 1);
+		assert.strictEqual(easeOutCubic(0), 0);
+		assert.strictEqual(easeOutCubic(1), 1);
 	});
 });
