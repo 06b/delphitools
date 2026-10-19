@@ -92,7 +92,10 @@
 	box-sizing: border-box;
 	inline-size: calc(var(--hs-pitch) - 3px);
 	block-size: calc(var(--hs-pitch) - 3px);
-	margin-block-end: 3px;
+	margin: 0 0 3px;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
 	background: color-mix(in srgb, var(--canon-muted) 40%, transparent);
 	color: color-mix(
 		in srgb,
@@ -102,9 +105,24 @@
 	font-family: var(--canon-mono-font);
 	font-size: max(9px, var(--hs-pitch) * 0.34);
 	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+	appearance: none;
 	transition:
 		background-color 200ms ease-out,
 		color 200ms ease-out;
+}
+
+@media (hover: hover) {
+	.hs-tile:hover {
+		outline: var(--canon-hairline) solid var(--canon-primary);
+		outline-offset: -1px;
+	}
+}
+
+.hs-tile:focus-visible {
+	position: relative;
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 1px;
 }
 
 .hs-tile--match {

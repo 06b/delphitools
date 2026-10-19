@@ -120,6 +120,7 @@ export default class HttpStatusTool extends Component {
 					<Chart
 						@selected={{this.chosen}}
 						@matches={{this.matches}}
+						@onSelect={{this.select}}
 					/>
 				</CanonCanvas>
 			</:banner>

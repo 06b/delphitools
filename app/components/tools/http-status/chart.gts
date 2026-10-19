@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
-import { array } from '@ember/helper';
+import { array, fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import CanonFigure from 'delphicanon/components/canon-figure';
 import {
 	HTTP_STATUSES,
@@ -13,6 +14,7 @@ interface ChartSignature {
 		selected: HttpStatus;
 		/** Codes the search and class leave in the list. */
 		matches: Set<number>;
+		onSelect: (code: number) => void;
 	};
 }
 
@@ -37,6 +39,7 @@ export default class Chart extends Component<ChartSignature> {
 			label: row.label,
 			tiles: row.statuses.map((status) => ({
 				code: status.code,
+				name: `${status.code} ${status.phrase}`,
 				lit: status.code === selected.code,
 				match: matches.has(status.code),
 				standard: status.registered === 'standard',
@@ -74,14 +77,16 @@ export default class Chart extends Component<ChartSignature> {
 					</p>
 				</div>
 			</div>
-			<div class="hs-chart-table" aria-hidden="true">
+			<div class="hs-chart-table">
 				{{#each this.rows as |row|}}
 					<span
 						class="hs-chart-class"
+						aria-hidden="true"
 					>{{row.label}}</span>
 					<div class="hs-chart-tiles">
 						{{#each row.tiles as |tile|}}
-							<span
+							<button
+								type="button"
 								class="hs-tile
 									{{if
 										tile.lit
@@ -95,7 +100,20 @@ export default class Chart extends Component<ChartSignature> {
 										tile.standard
 										'hs-tile--outside'
 									}}"
-							>{{tile.code}}</span>
+								aria-label={{tile.name}}
+								aria-pressed={{if
+									tile.lit
+									"true"
+									"false"
+								}}
+								{{on
+									"click"
+									(fn
+										@onSelect
+										tile.code
+									)
+								}}
+							>{{tile.code}}</button>
 						{{/each}}
 					</div>
 				{{/each}}

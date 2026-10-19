@@ -104,6 +104,27 @@ check(
 	await page.$eval('.hs-row-body--lit', (el) => el.getAttribute('aria-pressed') === 'true' && el.textContent.includes('305')),
 );
 
+await page.$$eval('.hs-tile', (els) =>
+	els.find((el) => el.textContent.trim() === '404')?.click(),
+);
+await sleep(300);
+b = await banner();
+check('a banner tile selects its code', b.code === '404' && b.lit.join() === '404', b.code);
+check(
+	'the tile is a named, pressed button',
+	await page.$eval(
+		'.hs-tile--lit',
+		(el) =>
+			el.tagName === 'BUTTON' &&
+			el.getAttribute('aria-pressed') === 'true' &&
+			el.getAttribute('aria-label') === '404 Not Found',
+	),
+);
+await page.$$eval('.hs-tile', (els) => els.find((el) => el.textContent.trim() === '201')?.focus());
+await page.keyboard.press('Enter');
+await sleep(300);
+check('Enter on a focused tile selects it', (await banner()).code === '201');
+
 await page.$$eval('.hs-row-copy', (els) =>
 	els.find((el) => el.getAttribute('aria-label') === 'Copy 404')?.click(),
 );
