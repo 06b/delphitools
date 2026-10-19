@@ -98,3 +98,14 @@
 .tc-zone-cell {
 	justify-content: space-between;
 }
+
+/* a mode change eases the band to its new height (iOS fitBand, 0.3 s) */
+.canon-canvas.tc-refit > .canon-canvas-content {
+	transition: block-size var(--canon-canvas-refit) ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.canon-canvas.tc-refit > .canon-canvas-content {
+		transition: none;
+	}
+}

@@ -256,11 +256,53 @@ check(
 	await (async () => {
 		const zones = (await state()).band;
 		await mode('Timestamp');
-		await sleep(100);
+		await sleep(450);
 		const stamp = (await state()).band;
 		return zones > stamp && stamp > 100;
 	})(),
 );
+
+const modeMotion = async () => {
+	const before = (await state()).band;
+	await mode('Timezone');
+	await sleep(120);
+	const r = await page.evaluate(() => ({
+		band: document.querySelector('.time-calc .canon-canvas').getBoundingClientRect().height,
+		fading: document.querySelector('.tc-drawing').getAnimations().length > 0,
+	}));
+	await sleep(400);
+	const after = (await state()).band;
+	await mode('Timestamp');
+	await sleep(450);
+	return { before, mid: r.band, after, fading: r.fading };
+};
+let motion = await modeMotion();
+check(
+	'a mode change eases the band and fades the new picture in',
+	motion.mid > motion.before && motion.mid < motion.after && motion.fading,
+	JSON.stringify(motion),
+);
+await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+motion = await modeMotion();
+check(
+	'reduced motion: the band jumps, no fade',
+	motion.mid === motion.after && !motion.fading,
+	JSON.stringify(motion),
+);
+await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+
+// live clock: the zone menus keep their elements while it ticks
+await visit(page, '/tools/time-calc?timeMode=timezone');
+const menus = () =>
+	page.evaluate(() => {
+		window.__menus ??= [...document.querySelectorAll('.tc-zone-cell select')];
+		window.__options ??= window.__menus.map((s) => s.options[5]);
+		const now = [...document.querySelectorAll('.tc-zone-cell select')];
+		return now.every((s, i) => s === window.__menus[i] && s.options[5] === window.__options[i]);
+	});
+await menus();
+await sleep(2200);
+check('the zone menus survive the clock ticking', await menus());
 
 check(
 	'mode is a keyboard radio group',

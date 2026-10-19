@@ -146,9 +146,11 @@ export default class TimeCalc extends Component {
 	/** An End picked on its own; unset, End is the start moved by the amount. */
 	@tracked endPicked?: Date;
 	@tracked width = 0;
+	@tracked refitting = false;
 	fieldPicker?: HTMLInputElement;
 	endPicker?: HTMLInputElement;
 	#clock?: ReturnType<typeof setInterval>;
+	#refit?: ReturnType<typeof setTimeout>;
 
 	// ?timeMode=timestamp|arithmetic|timezone ?timeEpoch= ?timeStart= ?timeZoneDate= (the field) ?timeEnd=
 	// ?timeFrom= ?timeTo= (zone ids) ?timeNow=<date> (a stopped clock): the iOS launch arguments
@@ -185,6 +187,7 @@ export default class TimeCalc extends Component {
 	willDestroy() {
 		super.willDestroy();
 		clearInterval(this.#clock);
+		clearTimeout(this.#refit);
 	}
 
 	get modeNames() {
@@ -419,7 +422,13 @@ export default class TimeCalc extends Component {
 		if (width !== this.width) this.width = width;
 	};
 
-	pickMode = (index: number) => (this.mode = modes[index] ?? 'timestamp');
+	pickMode = (index: number) => {
+		this.mode = modes[index] ?? 'timestamp';
+		// the band eases to its new height only on a mode change, as iOS fitBand
+		this.refitting = true;
+		clearTimeout(this.#refit);
+		this.#refit = setTimeout(() => (this.refitting = false), 350);
+	};
 
 	/** Focus stops the clock so the selection holds what is shown. */
 	focusField = (event: FocusEvent) => {
@@ -524,7 +533,10 @@ export default class TimeCalc extends Component {
 	<template>
 		<CanonSplit class="time-calc">
 			<:banner>
-				<CanonCanvas @height={{this.bandHeight}}>
+				<CanonCanvas
+					class={{if this.refitting "tc-refit"}}
+					@height={{this.bandHeight}}
+				>
 					<Picture
 						@scene={{this.scene}}
 						@now={{this.now}}
