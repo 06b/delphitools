@@ -12,7 +12,11 @@ export interface Source {
 	height: number;
 }
 
-function encode(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
+function encode(
+	canvas: HTMLCanvasElement,
+	type: string,
+	quality = 0.92,
+): Promise<Blob> {
 	return new Promise((resolve, reject) =>
 		canvas.toBlob(
 			(blob) =>
@@ -20,7 +24,7 @@ function encode(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
 					? resolve(blob)
 					: reject(new Error('encode failed')),
 			type,
-			0.92,
+			quality,
 		),
 	);
 }
@@ -76,10 +80,20 @@ export async function buildPdf(
 					);
 		const {
 			page: size,
+			trim,
 			area,
 			placement,
 		} = layout(source.width, source.height, options);
 		const page = doc.addPage([size.width, size.height]);
+		if (options.bleed) {
+			page.setTrimBox(
+				trim.x,
+				trim.y,
+				trim.width,
+				trim.height,
+			);
+			page.setBleedBox(0, 0, size.width, size.height);
+		}
 		page.pushOperators(
 			pushGraphicsState(),
 			rectangle(area.x, area.y, area.width, area.height),
@@ -93,17 +107,25 @@ export async function buildPdf(
 	return doc.save();
 }
 
-/** `scale` 1 is 72 DPI. */
-export async function pagePng(
+export type PageFormat = 'png' | 'jpeg' | 'webp';
+
+/** A page drawn at `dpi`; `quality` 0 to 1 for jpeg and webp. Safari encodes webp as png: read the blob's type. */
+export async function pageImage(
 	pdf: PDFDocumentProxy,
 	index: number,
-	scale: number,
+	dpi: number,
+	format: PageFormat,
+	quality: number,
 ): Promise<Blob> {
 	const page = await pdf.getPage(index + 1);
-	const viewport = page.getViewport({ scale });
+	const viewport = page.getViewport({ scale: dpi / 72 });
 	const canvas = document.createElement('canvas');
 	canvas.width = Math.ceil(viewport.width);
 	canvas.height = Math.ceil(viewport.height);
 	await page.render({ canvas, viewport }).promise;
-	return encode(canvas, 'image/png');
+	return encode(canvas, `image/${format}`, quality);
 }
+
+/** The file extension of an encoded page. */
+export const extensionOf = (blob: Blob) =>
+	blob.type === 'image/jpeg' ? 'jpg' : blob.type.replace('image/', '');

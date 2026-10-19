@@ -133,6 +133,7 @@ import iHighlighter from 'lucide-static/icons/highlighter.svg?raw';
 import iHome from 'lucide-static/icons/home.svg?raw';
 import iImage from 'lucide-static/icons/image.svg?raw';
 import iImagePlus from 'lucide-static/icons/image-plus.svg?raw';
+import iImages from 'lucide-static/icons/images.svg?raw';
 import iInfo from 'lucide-static/icons/info.svg?raw';
 import iItalic from 'lucide-static/icons/italic.svg?raw';
 import iKeyRound from 'lucide-static/icons/key-round.svg?raw';
@@ -395,6 +396,7 @@ export const icons: Record<string, string> = {
 	home: iHome,
 	image: iImage,
 	'image-plus': iImagePlus,
+	images: iImages,
 	info: iInfo,
 	italic: iItalic,
 	'key-round': iKeyRound,

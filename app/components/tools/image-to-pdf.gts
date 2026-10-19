@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type RouterService from '@ember/routing/router-service';
 import type Owner from '@ember/owner';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import CanonButton from 'delphicanon/components/canon-button';
@@ -16,8 +18,10 @@ import CanonPageStrip, {
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
 import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
@@ -50,9 +54,12 @@ import {
 } from 'delphitools-v2/components/tools/image-to-pdf/layout';
 import {
 	buildPdf,
-	pagePng,
+	extensionOf,
+	pageImage,
+	type PageFormat,
 } from 'delphitools-v2/components/tools/image-to-pdf/export';
 import './media/media.css';
+import './image-to-pdf/image-to-pdf.css';
 
 const IMAGE_ACCEPT = 'image/*';
 const PDF_ACCEPT = '.pdf,application/pdf';
@@ -63,10 +70,22 @@ const ORIENTATIONS: PageOrientation[] = ['auto', 'portrait', 'landscape'];
 const orientationLabels = ['Auto', 'Portrait', 'Landscape'];
 const FITS: FitMode[] = ['contain', 'cover', 'stretch'];
 const fitLabels = ['Fit', 'Fill', 'Stretch'];
-const MARGINS_MM = [0, 5, 10, 20];
-const marginLabels = MARGINS_MM.map((mm) => (mm === 0 ? 'None' : `${mm} mm`));
-const SCALES = [1, 2, 3];
-const scaleLabels = SCALES.map((s) => `${s * 72} DPI`);
+const MAX_MARGIN_MM = 30;
+const mmText = (mm: number) => `${mm} mm`;
+const MIN_DPI = 72;
+const MAX_DPI = 300;
+// 72, 96, 144, 150, 216 and 300 all land on the step
+const DPI_STEP = 6;
+const dpiText = (dpi: number) => `${dpi} DPI`;
+const FORMATS: PageFormat[] = ['png', 'jpeg', 'webp'];
+const formatLabels = ['PNG', 'JPEG', 'WebP'];
+// a 12 page scan: 3.6 MB of jpeg at 150 dpi, 10.4 MB of png at 144
+const DEFAULT_DPI = 150;
+const DEFAULT_FORMAT: PageFormat = 'jpeg';
+const DEFAULT_QUALITY = 0.85;
+const TO_PDF_ID = 'image-to-pdf';
+const TO_IMAGES_ID = 'pdf-to-images';
+const noop = () => undefined;
 const A4: PageSize = { width: 595.28, height: 841.89 };
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -174,16 +193,29 @@ function index(query: URLSearchParams, key: string, count: number) {
 		: undefined;
 }
 
-/** The port of ImageToPDFViewController: images into one PDF, or a PDF's pages into PNGs. */
+function ranged(query: URLSearchParams, key: string, min: number, max: number) {
+	const value = Number(query.get(key));
+	return query.has(key) && value >= min && value <= max
+		? value
+		: undefined;
+}
+
+/**
+ * The port of ImageToPDFViewController: images into one PDF, or a PDF's
+ * pages into images. Both tool entries load this component and the route's
+ * id picks the direction; the instance and its files outlive the switch.
+ */
 export default class ImageToPdf extends Component {
+	@service declare router: RouterService;
+
 	drop = new Drop(ACCEPT, (files) => this.take(files), true);
 
-	@tracked toPdf = true;
 	@tracked items: Item[] = [];
 	@tracked sizeId = 'a4';
 	@tracked orientation: PageOrientation = 'auto';
 	@tracked fit: FitMode = 'contain';
 	@tracked marginMm = 0;
+	@tracked bleed = false;
 	@tracked building = false;
 	@tracked progress = 0;
 	@tracked buildFailed = false;
@@ -192,12 +224,17 @@ export default class ImageToPdf extends Component {
 
 	@tracked pdfFile: File | null = null;
 	@tracked pdfPages: CanonPage[] = [];
-	@tracked scale = 2;
+	@tracked loading = false;
+	@tracked dpi = DEFAULT_DPI;
+	@tracked format: PageFormat = DEFAULT_FORMAT;
+	@tracked quality = DEFAULT_QUALITY;
 	@tracked rendering = false;
+	@tracked renderProgress = 0;
 	@tracked renderFailed = false;
 
 	#pdf?: PDFDocumentProxy;
 	#token = 0;
+	#run = 0;
 	#build = 0;
 	// serialises adds, keeps order
 	#adding: Promise<void> = Promise.resolve();
@@ -212,9 +249,16 @@ export default class ImageToPdf extends Component {
 		this.orientation =
 			ORIENTATIONS[index(query, 'i2pOrientation', 3) ?? 0]!;
 		this.fit = FITS[index(query, 'i2pFit', 3) ?? 0]!;
-		this.marginMm = MARGINS_MM[index(query, 'i2pMargin', 4) ?? 0]!;
-		this.scale = SCALES[index(query, 'i2pResolution', 3) ?? 1]!;
-		if (query.get('i2pDirection') === '1') this.toPdf = false;
+		this.marginMm =
+			ranged(query, 'i2pMargin', 0, MAX_MARGIN_MM) ?? 0;
+		this.bleed = query.get('i2pBleed') === '1';
+		this.dpi =
+			ranged(query, 'i2pResolution', MIN_DPI, MAX_DPI) ??
+			DEFAULT_DPI;
+		this.format = FORMATS[index(query, 'i2pFormat', 3) ?? 1]!;
+		this.quality =
+			(ranged(query, 'i2pQuality', 10, 100) ??
+				DEFAULT_QUALITY * 100) / 100;
 		if (query.has('i2pSample'))
 			void drawnSamples().then(async (files) => {
 				await this.add(files, 0);
@@ -228,6 +272,7 @@ export default class ImageToPdf extends Component {
 		super.willDestroy();
 		this.#token++;
 		this.#build++;
+		this.#run++;
 		for (const item of this.items) URL.revokeObjectURL(item.url);
 		this.#closePdf();
 	}
@@ -238,7 +283,23 @@ export default class ImageToPdf extends Component {
 			orientation: this.orientation,
 			fit: this.fit,
 			marginMm: this.marginMm,
+			bleed: this.bleed,
 		};
+	}
+
+	get toPdf() {
+		return (
+			this.router.currentRoute?.params?.['tool_id'] !==
+			TO_IMAGES_ID
+		);
+	}
+
+	get lossy() {
+		return this.format !== 'png';
+	}
+
+	get formatIndex() {
+		return FORMATS.indexOf(this.format);
 	}
 
 	get directionIndex() {
@@ -257,14 +318,6 @@ export default class ImageToPdf extends Component {
 
 	get fitIndex() {
 		return FITS.indexOf(this.fit);
-	}
-
-	get marginIndex() {
-		return MARGINS_MM.indexOf(this.marginMm);
-	}
-
-	get scaleIndex() {
-		return SCALES.indexOf(this.scale);
 	}
 
 	get matches() {
@@ -334,10 +387,10 @@ export default class ImageToPdf extends Component {
 		const pdf = files.find(isPdf);
 		const images = files.filter(isImage);
 		if (images.length) {
-			this.toPdf = true;
+			this.pickDirection(0);
 			void this.add(images, Infinity);
 		} else if (pdf) {
-			this.toPdf = false;
+			this.pickDirection(1);
 			void this.loadPdf(pdf);
 		}
 	};
@@ -345,7 +398,11 @@ export default class ImageToPdf extends Component {
 	paste = (file: File) => this.take([file]);
 
 	pickDirection = (index: number) => {
-		this.toPdf = index === 0;
+		if (index === this.directionIndex) return;
+		void this.router.transitionTo(
+			'tools.tool',
+			index === 0 ? TO_PDF_ID : TO_IMAGES_ID,
+		);
 	};
 
 	chooseImages = (files: File[]) =>
@@ -476,8 +533,13 @@ export default class ImageToPdf extends Component {
 		this.#changed();
 	};
 
-	pickMargin = (at: number) => {
-		this.marginMm = MARGINS_MM[at] ?? this.marginMm;
+	setMargin = (mm: number) => {
+		this.marginMm = mm;
+		this.#changed();
+	};
+
+	setBleed = (on: boolean) => {
+		this.bleed = on;
 		this.#changed();
 	};
 
@@ -532,33 +594,43 @@ export default class ImageToPdf extends Component {
 		this.clearPdf();
 		const token = this.#token;
 		this.pdfFile = file;
-		let pdf: PDFDocumentProxy;
+		this.loading = true;
 		try {
-			pdf = await open(await file.arrayBuffer());
-		} catch {
-			if (token === this.#token) this.renderFailed = true;
-			return;
+			let pdf: PDFDocumentProxy;
+			try {
+				pdf = await open(await file.arrayBuffer());
+			} catch {
+				if (token === this.#token)
+					this.renderFailed = true;
+				return;
+			}
+			if (token !== this.#token) return void pdf.destroy();
+			this.#pdf = pdf;
+			this.pdfPages = (await sizes(pdf)).map((size) => ({
+				size,
+			}));
+			if (token !== this.#token) return;
+			await thumbnails(
+				pdf,
+				() => token === this.#token,
+				(at, picture) => {
+					const next = [...this.pdfPages];
+					next[at] = { ...next[at]!, picture };
+					this.pdfPages = next;
+				},
+			);
+		} finally {
+			if (token === this.#token) this.loading = false;
 		}
-		if (token !== this.#token) return void pdf.destroy();
-		this.#pdf = pdf;
-		this.pdfPages = (await sizes(pdf)).map((size) => ({ size }));
-		if (token !== this.#token) return;
-		await thumbnails(
-			pdf,
-			() => token === this.#token,
-			(at, picture) => {
-				const next = [...this.pdfPages];
-				next[at] = { ...next[at]!, picture };
-				this.pdfPages = next;
-			},
-		);
 	}
 
 	clearPdf = () => {
 		this.#token++;
+		this.#run++;
 		this.#closePdf();
 		this.pdfFile = null;
 		this.pdfPages = [];
+		this.loading = false;
 		this.rendering = false;
 		this.renderFailed = false;
 	};
@@ -570,36 +642,71 @@ export default class ImageToPdf extends Component {
 		this.#pdf = undefined;
 	}
 
-	pickScale = (at: number) => {
-		this.scale = SCALES[at] ?? this.scale;
+	setDpi = (dpi: number) => {
+		this.dpi = dpi;
+	};
+
+	pickFormat = (at: number) => {
+		this.format = FORMATS[at] ?? this.format;
+	};
+
+	setQuality = (quality: number) => {
+		this.quality = quality;
 	};
 
 	get stem() {
 		return (this.pdfFile?.name ?? 'pages').replace(/\.pdf$/i, '');
 	}
 
-	async #render<T>(work: (pdf: PDFDocumentProxy) => Promise<T>) {
+	async #render<T>(
+		work: (
+			pdf: PDFDocumentProxy,
+			live: () => boolean,
+		) => Promise<T>,
+	) {
 		const pdf = this.#pdf;
 		if (!pdf || this.rendering) return undefined;
-		const token = this.#token;
+		const run = ++this.#run;
+		const live = () => run === this.#run;
 		this.rendering = true;
+		this.renderProgress = 0;
 		this.renderFailed = false;
 		try {
-			const result = await work(pdf);
-			return token === this.#token ? result : undefined;
+			const result = await work(pdf, live);
+			return live() ? result : undefined;
 		} catch {
-			if (token === this.#token) this.renderFailed = true;
+			if (live()) this.renderFailed = true;
 			return undefined;
 		} finally {
-			if (token === this.#token) this.rendering = false;
+			if (live()) this.rendering = false;
 		}
 	}
 
+	cancelRender = () => {
+		this.#run++;
+		this.rendering = false;
+	};
+
+	// read once: the sliders stay live during a run
+	#drawer() {
+		const { dpi, format, quality, stem } = this;
+		return async (pdf: PDFDocumentProxy, at: number) => {
+			const blob = await pageImage(
+				pdf,
+				at,
+				dpi,
+				format,
+				quality,
+			);
+			const name = `${stem}-page-${at + 1}.${extensionOf(blob)}`;
+			return { name, blob };
+		};
+	}
+
 	async savePage(at: number) {
-		const blob = await this.#render((pdf) =>
-			pagePng(pdf, at, this.scale),
-		);
-		if (blob) downloadBlob(blob, `${this.stem}-page-${at + 1}.png`);
+		const draw = this.#drawer();
+		const page = await this.#render((pdf) => draw(pdf, at));
+		if (page) downloadBlob(page.blob, page.name);
 	}
 
 	get zipName() {
@@ -607,14 +714,15 @@ export default class ImageToPdf extends Component {
 	}
 
 	pageFiles = async () => {
-		const { stem, scale } = this;
-		const files = await this.#render(async (pdf) => {
+		const draw = this.#drawer();
+		const files = await this.#render(async (pdf, live) => {
 			const pages = [];
-			for (let at = 0; at < pdf.numPages; at++)
-				pages.push({
-					name: `${stem}-page-${at + 1}.png`,
-					blob: await pagePng(pdf, at, scale),
-				});
+			for (let at = 0; at < pdf.numPages && live(); at++) {
+				pages.push(await draw(pdf, at));
+				if (live())
+					this.renderProgress =
+						(at + 1) / pdf.numPages;
+			}
 			return pages;
 		});
 		return files ?? [];
@@ -634,7 +742,11 @@ export default class ImageToPdf extends Component {
 					@height={{pageStripHeight}}
 					@background="var(--canon-muted)"
 				>
-					{{#if this.blank}}
+					{{#if this.loading}}
+						<CanonLoader
+							class="i2p-loader"
+						/>
+					{{else if this.blank}}
 						<CanonPageStrip
 							class="i2p-strip i2p-strip--blank"
 							@pages={{this.blankPages}}
@@ -696,13 +808,26 @@ export default class ImageToPdf extends Component {
 							@onChange={{this.pickFit}}
 						/>
 						<CanonHeading @text="Margin" />
-						<CanonSegmented
+						<CanonSlider
 							class="i2p-margin"
-							@items={{marginLabels}}
-							@selected={{this.marginIndex}}
-							@disabled={{this.building}}
-							@onChange={{this.pickMargin}}
+							@value={{this.marginMm}}
+							@max={{MAX_MARGIN_MM}}
+							@step={{1}}
+							@readout={{mmText}}
+							@label="Margin"
+							@onChange={{this.setMargin}}
 						/>
+						<CanonRow
+							class="i2p-bleed"
+							@title="Add 3mm bleed"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.bleed}}
+								@onChange={{this.setBleed}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
 					</CanonRows>
 					<CanonRows @framed={{true}}>
 						<Job
@@ -727,13 +852,41 @@ export default class ImageToPdf extends Component {
 						<CanonHeading
 							@text="Resolution"
 						/>
-						<CanonSegmented
-							class="i2p-scale"
-							@items={{scaleLabels}}
-							@selected={{this.scaleIndex}}
-							@disabled={{this.rendering}}
-							@onChange={{this.pickScale}}
+						<CanonSlider
+							class="i2p-dpi"
+							@value={{this.dpi}}
+							@min={{MIN_DPI}}
+							@max={{MAX_DPI}}
+							@step={{DPI_STEP}}
+							@readout={{dpiText}}
+							@label="Resolution"
+							@onChange={{this.setDpi}}
 						/>
+						<CanonHeading @text="Format" />
+						<CanonSegmented
+							class="i2p-format"
+							@items={{formatLabels}}
+							@selected={{this.formatIndex}}
+							@disabled={{this.rendering}}
+							@onChange={{this.pickFormat}}
+						/>
+						{{#if this.lossy}}
+							<CanonHeading
+								@text="Quality"
+							/>
+							<CanonSlider
+								class="i2p-quality"
+								@value={{this.quality}}
+								@min={{0.1}}
+								@max={{1}}
+								@step={{0.05}}
+								@label="Quality"
+								@onChange={{this.setQuality}}
+							/>
+						{{/if}}
+					</CanonRows>
+					<CanonRows @framed={{true}}>
+						{{! stays mounted: it saves once the pages are drawn }}
 						<DownloadAll
 							class="i2p-zip"
 							@files={{this.pageFiles}}
@@ -745,15 +898,18 @@ export default class ImageToPdf extends Component {
 							}}
 						/>
 						{{#if this.rendering}}
-							<CanonRow
-								class="i2p-busy"
-								@title="Processing…"
-							>
-								<CanonLoader
-									@cell={{5}}
-									@gap={{1}}
-								/>
-							</CanonRow>
+							{{! the busy half of the job block }}
+							<Job
+								@title="Download all"
+								@icon={{ExportIcon}}
+								@failure="Render failed"
+								@busy={{true}}
+								@progress={{this.renderProgress}}
+								@failed={{false}}
+								@onRun={{noop}}
+								@onCancel={{this.cancelRender}}
+								@onSave={{noop}}
+							/>
 						{{/if}}
 						{{#if this.renderFailed}}
 							<CanonStatus

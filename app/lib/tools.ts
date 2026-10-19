@@ -52,6 +52,8 @@ export interface Tool {
 	// same vocabulary as accepts
 	produces?: string[];
 	keywords?: string[];
+	// registry file when it is not the id; one component, two entries
+	component?: string;
 }
 
 export interface ToolCategory {
@@ -839,17 +841,31 @@ export const toolCategories: ToolCategory[] = [
 			{
 				id: 'image-to-pdf',
 				name: 'Images to PDF',
-				description:
-					'Turn images into a PDF, or pages into PNGs',
+				description: 'Turn images into a PDF',
 				icon: 'file-image',
 				href: '/tools/image-to-pdf',
 				canon: true,
+				produces: ['application/pdf'],
+				accepts: ['image/*'],
+			},
+			{
+				id: 'pdf-to-images',
+				name: 'PDF to Images',
+				// ∑CG: tool description for PDF to Images (drawer, search, home grid, share card)
+				//   spec: ≤ 45 chars, sentence case, no period, same voice as sibling descriptions such as "Turn images into a PDF"; says a PDF's pages become image files
+				//   sample: "Turn PDF pages into PNG, JPEG or WebP images"
+				description: '∑CG',
+				icon: 'images',
+				href: '/tools/pdf-to-images',
+				component: 'image-to-pdf',
+				canon: true,
 				produces: [
-					'application/pdf',
 					'image/png',
+					'image/jpeg',
+					'image/webp',
 					'application/zip',
 				],
-				accepts: ['image/*', '.pdf'],
+				accepts: ['.pdf'],
 			},
 			{
 				id: 'pdf-rotate-crop',

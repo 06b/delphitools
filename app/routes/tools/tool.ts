@@ -27,7 +27,9 @@ export default class ToolRoute extends Route<ToolModel> {
 		if (!tool) throw new Error(`Unknown tool: ${params.tool_id}`);
 		return {
 			tool,
-			component: await loadToolComponent(params.tool_id),
+			component: await loadToolComponent(
+				tool.component ?? tool.id,
+			),
 		};
 	}
 }

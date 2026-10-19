@@ -123,9 +123,8 @@ check(
 			document.querySelector('.i2p-sort-up').disabled &&
 			document.querySelector('.i2p-clear').disabled &&
 			!document.querySelector('.i2p-size').disabled &&
-			[
-				...document.querySelectorAll('.i2p-margin button'),
-			].every((b) => !b.disabled),
+			document.querySelector('.i2p-margin')?.getAttribute('aria-valuetext') === '0 mm' &&
+			document.querySelector('.i2p-bleed input')?.checked === false,
 	),
 );
 await clickText('.i2p-orientation', 'Landscape');
@@ -261,8 +260,14 @@ check(
 	'the page size cell reads Match image',
 	(await page.$eval('.i2p-size .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Match image',
 );
-await clickText('.i2p-margin', '10 mm');
+await page.focus('.i2p-margin');
+for (let n = 0; n < 11; n++) await page.keyboard.press('ArrowRight');
+await page.keyboard.press('ArrowLeft');
 await sleep(200);
+check(
+	'the margin slider steps 1 mm on the arrow keys, read out in mm',
+	(await page.$eval('.i2p-margin', (el) => el.getAttribute('aria-valuetext'))) === '10 mm',
+);
 check(
 	'a setting drops the result; match greys orientation and fit',
 	await page.evaluate(
@@ -292,10 +297,68 @@ if (matchFile) {
 			Math.abs(first.height - expected.height) < 1,
 		`${first.width.toFixed(1)}×${first.height.toFixed(1)} vs ${expected.width.toFixed(1)}×${expected.height.toFixed(1)}`,
 	);
+	check('no bleed: no trim box', !doc.getPage(0).node.TrimBox());
 }
 
-await clickText('.i2p-direction', 'PDF to Image');
+clearDownloads();
+await pickPaper(page, '.i2p-size', 'A4');
+await clickText('.i2p-fit', 'Fill');
+await page.focus('.i2p-margin');
+await page.keyboard.press('Home');
+await page.click('.i2p-bleed input');
 await sleep(200);
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+await page.click('.media-job-save');
+const bleedFile = await waitForDownload(/^images\.pdf$/);
+check('a bleed build downloads', !!bleedFile);
+if (bleedFile) {
+	const doc = await PDFDocument.load(bleedFile.bytes);
+	const tall = doc.getPage(1);
+	const bleed = 3 * MM_TO_PT;
+	const media = tall.getMediaBox();
+	const trim = tall.getTrimBox();
+	const bleedBox = tall.getBleedBox();
+	const near = (a, b) => Math.abs(a - b) < 0.05;
+	check(
+		'bleed: the media box is A4 plus 3 mm a side, TrimBox is A4 inset by the bleed, BleedBox is the media box',
+		near(media.width, A4[0] + bleed * 2) &&
+			near(media.height, A4[1] + bleed * 2) &&
+			near(trim.x, bleed) &&
+			near(trim.y, bleed) &&
+			near(trim.width, A4[0]) &&
+			near(trim.height, A4[1]) &&
+			near(bleedBox.width, media.width) &&
+			near(bleedBox.x, 0),
+		JSON.stringify({ media, trim, bleedBox }),
+	);
+}
+check(
+	'bleed: the strip shows the page with its bleed',
+	Math.abs((await stripState()).aspect - (A4[1] + 6 * MM_TO_PT) / (A4[0] + 6 * MM_TO_PT)) < 0.004,
+	(await stripState()).aspect.toFixed(4),
+);
+await page.click('.i2p-bleed input');
+await clickText('.i2p-fit', 'Fit');
+
+// the banner loader can be brief; record whether it showed
+await page.evaluate(() => {
+	window.__i2pSeen = { loader: false, bar: false };
+	new MutationObserver(() => {
+		if (document.querySelector('.canon-canvas .i2p-loader'))
+			window.__i2pSeen.loader = true;
+		if (document.querySelector('.i2p-zip ~ .media-job-bar, .media-job-bar'))
+			window.__i2pSeen.bar = true;
+	}).observe(document.body, { childList: true, subtree: true });
+});
+await clickText('.i2p-direction', 'PDF to Image');
+await sleep(400);
+check(
+	'the direction switch opens the PDF to Images entry',
+	(await page.evaluate(() => location.pathname)) === '/tools/pdf-to-images' &&
+		(await page.title()).includes('PDF to Images'),
+	await page.evaluate(() => location.pathname),
+);
 const pdfEmpty = await stripState();
 check(
 	'PDF to Image empty: blank A4, the Source slot, Download zip off',
@@ -324,6 +387,11 @@ const rendered = await page
 	.catch(() => false);
 check('the PDF shows one page per page', rendered);
 check(
+	'the loader sat in the banner while the PDF opened, gone after',
+	(await page.evaluate(() => window.__i2pSeen.loader)) &&
+		!(await page.$('.i2p-loader')),
+);
+check(
 	'the source row names the file',
 	await page.evaluate(() =>
 		document.querySelector('.i2p-source')?.textContent.includes('three.pdf'),
@@ -347,22 +415,50 @@ await page.evaluate(() => {
 });
 await sleep(300);
 await clickText('.i2p-strip .canon-page-strip-menu', 'Download');
-const png = await waitForDownload(/-page-1\.png$/);
-check('a page menu downloads one PNG', !!png, png?.name ?? 'nothing');
-if (png) {
-	const isPng = png.bytes
-		.subarray(0, 4)
-		.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-	const width = png.bytes.readUInt32BE(16);
+const jpeg = await waitForDownload(/-page-1\.jpg$/);
+check('a page menu downloads one JPEG by default', !!jpeg, jpeg?.name ?? 'nothing');
+if (jpeg) {
+	// sof0 or sof2: height then width after the precision byte
+	let at = 2;
+	let width = 0;
+	while (at < jpeg.bytes.length) {
+		const marker = jpeg.bytes[at + 1];
+		if (marker === 0xc0 || marker === 0xc2) {
+			width = jpeg.bytes.readUInt16BE(at + 7);
+			break;
+		}
+		at += 2 + jpeg.bytes.readUInt16BE(at + 2);
+	}
 	check(
-		'the PNG is 144 DPI by default',
-		isPng && Math.abs(width - A4[0] * 2) < 3,
+		'the JPEG is 150 DPI by default',
+		Math.abs(width - (A4[0] * 150) / 72) < 3,
 		`width ${width}`,
 	);
 }
+check(
+	'defaults: 150 DPI, JPEG, quality 85% shown',
+	await page.evaluate(
+		() =>
+			document.querySelector('.i2p-dpi').getAttribute('aria-valuetext') === '150 DPI' &&
+			document.querySelector('.i2p-format [aria-pressed=true], .i2p-format [aria-checked=true], .i2p-format [aria-selected=true]')?.textContent.trim() === 'JPEG' &&
+			document.querySelector('.i2p-quality').getAttribute('aria-valuetext') === '85%',
+	),
+);
 
 clearDownloads();
-await clickText('.i2p-scale', '72 DPI');
+await clickText('.i2p-format', 'PNG');
+await sleep(150);
+check('PNG hides the quality slider', !(await page.$('.i2p-quality')));
+await page.focus('.i2p-dpi');
+await page.keyboard.press('ArrowRight');
+const stepped = await page.$eval('.i2p-dpi', (el) => el.getAttribute('aria-valuetext'));
+await page.keyboard.press('Home');
+check(
+	'the resolution slider takes the arrow keys and Home',
+	stepped === '156 DPI' &&
+		(await page.$eval('.i2p-dpi', (el) => el.getAttribute('aria-valuetext'))) === '72 DPI',
+	stepped,
+);
 await page.waitForFunction(
 	() => !document.querySelector('.i2p-zip .media-download-all-zip').disabled,
 );
@@ -381,6 +477,11 @@ if (zip) {
 		entries.join(', '),
 	);
 }
+check(
+	'the zip build showed the job progress bar',
+	await page.evaluate(() => window.__i2pSeen.bar),
+);
+
 
 await page.evaluate(async () => {
 	const canvas = document.createElement('canvas');
@@ -398,9 +499,21 @@ await page.evaluate(async () => {
 });
 await sleep(800);
 check(
-	'a pasted image joins the queue in Image to PDF',
-	(await names()).join('|') === 'red-wide.png|blue-tall.png|pasted.png',
+	'a pasted image goes back to Images to PDF and joins the kept queue',
+	(await page.evaluate(() => location.pathname)) === '/tools/image-to-pdf' &&
+		(await names()).join('|') === 'red-wide.png|blue-tall.png|pasted.png',
 	(await names()).join('|'),
+);
+
+await visit(page, '/tools/pdf-to-images');
+check(
+	'the PDF to Images entry opens on the PDF side',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.i2p-pdf') &&
+			!document.querySelector('.i2p-images') &&
+			document.querySelector('.i2p-direction [aria-pressed=true], .i2p-direction [aria-checked=true], .i2p-direction [aria-selected=true]')?.textContent.trim() === 'PDF to Image',
+	),
 );
 
 await finish(browser);

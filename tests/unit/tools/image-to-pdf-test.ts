@@ -11,7 +11,10 @@ const A4: Options = {
 	orientation: 'auto',
 	fit: 'contain',
 	marginMm: 10,
+	bleed: false,
 };
+
+const BLEED_PT = (3 * 72) / 25.4;
 
 module('Unit | Tool | image-to-pdf', function () {
 	test('a wide image turns the page and sits inside the margin', function (assert) {
@@ -54,6 +57,49 @@ module('Unit | Tool | image-to-pdf', function () {
 		});
 		assert.strictEqual(Math.round(matching.size.width), 595);
 		assert.strictEqual(Math.round(matching.size.height), 842);
+	});
+
+	test('bleed grows the page 3 mm a side round an unchanged trim', function (assert) {
+		const plain = layout(3000, 4000, A4);
+		const bled = layout(3000, 4000, { ...A4, bleed: true });
+		assert.strictEqual(
+			bled.page.width,
+			plain.page.width + BLEED_PT * 2,
+		);
+		assert.strictEqual(bled.trim.x, BLEED_PT);
+		assert.strictEqual(bled.trim.width, plain.page.width);
+		assert.strictEqual(bled.trim.height, plain.page.height);
+		// the margin counts from the trim
+		assert.strictEqual(
+			Math.round((bled.area.x - BLEED_PT) * 100),
+			Math.round(plain.area.x * 100),
+		);
+		assert.strictEqual(plain.trim.x, 0);
+	});
+
+	test('with no margin a filling image runs into the bleed', function (assert) {
+		const fill = layout(3000, 4000, {
+			...A4,
+			marginMm: 0,
+			fit: 'cover',
+			bleed: true,
+		});
+		assert.deepEqual(fill.area, {
+			x: 0,
+			y: 0,
+			width: fill.page.width,
+			height: fill.page.height,
+		});
+		assert.true(fill.placement.x <= 0);
+		assert.true(fill.placement.y <= 0);
+		const match = layout(400, 200, {
+			...A4,
+			sizeId: 'match',
+			marginMm: 0,
+			bleed: true,
+		});
+		assert.true(match.placement.width >= match.page.width);
+		assert.true(match.placement.height >= match.page.height);
 	});
 
 	test('names sort in numeric order, case aside', function (assert) {

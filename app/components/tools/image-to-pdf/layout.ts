@@ -1,5 +1,6 @@
 import type { PageRect } from 'delphicanon/components/canon-page-strip';
 import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
+import { BLEED_MM } from 'delphitools-v2/components/tools/zine-imposer/images';
 import {
 	fitPlacement,
 	MATCH_IMAGE_SIZE,
@@ -13,45 +14,61 @@ export interface Options {
 	orientation: PageOrientation;
 	fit: FitMode;
 	marginMm: number;
+	bleed: boolean;
 }
 
 export interface Layout {
+	/** The media box: the trim plus the bleed on each side. */
 	page: { width: number; height: number };
+	trim: PageRect;
 	area: PageRect;
 	placement: PageRect;
 }
 
-/** PDF points, bottom-left origin; the same layout feeds the strip and the build (iOS ImageToPDFEngine.layout). */
+/**
+ * PDF points, bottom-left origin; the same layout feeds the strip and the
+ * build (iOS ImageToPDFEngine.layout). The margin is measured from the trim;
+ * with no margin, the area is the whole page, bleed included.
+ */
 export function layout(
 	width: number,
 	height: number,
 	options: Options,
 ): Layout {
 	const margin = options.marginMm * MM_TO_POINTS;
-	const page = pageSetupPt(
+	const bleed = options.bleed ? BLEED_MM * MM_TO_POINTS : 0;
+	const trim = pageSetupPt(
 		options.sizeId,
 		options.orientation,
 		width,
 		height,
 		margin,
 	);
-	const inner = {
-		width: Math.max(page.width - margin * 2, 1),
-		height: Math.max(page.height - margin * 2, 1),
+	const page = {
+		width: trim.width + bleed * 2,
+		height: trim.height + bleed * 2,
 	};
+	const inset = margin ? bleed + margin : 0;
+	const inner = {
+		width: Math.max(page.width - inset * 2, 1),
+		height: Math.max(page.height - inset * 2, 1),
+	};
+	// a matched page has the image's shape; cover runs it into the bleed
+	const matchFit = inset === 0 && bleed ? 'cover' : 'contain';
 	const placed = fitPlacement(
 		width,
 		height,
 		inner.width,
 		inner.height,
-		options.sizeId === MATCH_IMAGE_SIZE ? 'contain' : options.fit,
+		options.sizeId === MATCH_IMAGE_SIZE ? matchFit : options.fit,
 	);
 	return {
 		page,
-		area: { x: margin, y: margin, ...inner },
+		trim: { x: bleed, y: bleed, ...trim },
+		area: { x: inset, y: inset, ...inner },
 		placement: {
-			x: placed.x + margin,
-			y: placed.y + margin,
+			x: placed.x + inset,
+			y: placed.y + inset,
 			width: placed.width,
 			height: placed.height,
 		},
