@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { launch, visit, check, finish, sleep, pickPaper } from './harness.mjs';
 
 const A4 = [595.28, 841.89];
 const MM = 72 / 25.4;
@@ -92,7 +92,7 @@ const state = () =>
 			margins: [...document.querySelectorAll('.prc-margin input')].map(
 				(i) => i.value,
 			),
-			paperOff: q('.prc-paper-menu select')?.disabled,
+			paperOff: q('.prc-paper-menu')?.disabled,
 			paper: q('.prc-paper-menu .canon-menu-cell-title')?.textContent.trim(),
 			allOff: q('.prc-crop-all').disabled,
 			clearOff: q('.prc-crop-clear').disabled,
@@ -344,10 +344,7 @@ check(
 		(await page.$eval('.canon-page-strip-cell--lit', (e) => e.dataset.pageIndex)) === '1',
 	s.pager,
 );
-const a5 = await page.$eval('.prc-paper-menu select', (select) =>
-	[...select.options].find((o) => o.textContent.trim().startsWith('A5 ')).value,
-);
-await page.select('.prc-paper-menu select', a5);
+check('Crop to size opens the paper popover and A5 closes it', await pickPaper(page, '.prc-paper-menu', 'A5'));
 await sleep(300);
 s = await state();
 check(

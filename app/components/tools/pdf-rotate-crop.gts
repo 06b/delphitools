@@ -9,7 +9,6 @@ import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
 import CanonPageStrip, {
 	pageStripHeight,
 	type CanonPage,
@@ -23,7 +22,10 @@ import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
-import { findPaperSize, paperSizeGroups } from 'delphitools-v2/lib/paper-sizes';
+import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import PaperPopover, {
+	type PaperChoice,
+} from 'delphitools-v2/components/tools/paper-sizes/popover';
 import { normaliseRotation } from 'delphitools-v2/lib/pdf-pages';
 import {
 	cropFromInsets,
@@ -63,15 +65,6 @@ const EDGES: { edge: Edge; title: string }[] = [
 	{ edge: 'right', title: 'Right' },
 	{ edge: 'bottom', title: 'Bottom' },
 ];
-
-// PaperMenu lacks disabled option
-const PAPERS = paperSizeGroups
-	.filter((group) => group.id !== 'common')
-	.flatMap((group) => group.sizes);
-const PAPER_TITLES = PAPERS.map(
-	(size) =>
-		`${size.label} (${Math.round(size.widthMm)} × ${Math.round(size.heightMm)})`,
-);
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Left = <template><IconSvg @name="rotate-ccw" /></template>;
@@ -261,15 +254,13 @@ export default class PdfRotateCrop extends Component {
 		}));
 	}
 
-	get paperIndex(): number | undefined {
+	get paperChoice(): PaperChoice | undefined {
 		const id = this.papers[this.page];
-		const index = PAPERS.findIndex((size) => size.id === id);
-		return index < 0 ? undefined : index;
+		return id ? { kind: 'paper', id } : undefined;
 	}
 
-	pickPaperIndex = (index: number) => {
-		const size = PAPERS[index];
-		if (size) this.pickPaper(size.id);
+	pickPaperChoice = (choice: PaperChoice) => {
+		if (choice.kind === 'paper') this.pickPaper(choice.id);
 	};
 
 	get noFile() {
@@ -817,14 +808,13 @@ export default class PdfRotateCrop extends Component {
 						@form="flush"
 						as |titleId|
 					>
-						<CanonMenuCell
+						<PaperPopover
 							class="prc-paper-menu"
-							@items={{PAPER_TITLES}}
-							@selected={{this.paperIndex}}
+							@selected={{this.paperChoice}}
 							@placeholder="None"
 							@labelledBy={{titleId}}
 							@disabled={{this.noFile}}
-							@onChange={{this.pickPaperIndex}}
+							@onPick={{this.pickPaperChoice}}
 						/>
 					</CanonRow>
 					<CanonGrid class="prc-crop-actions">
