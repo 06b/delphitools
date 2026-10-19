@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { reducedMotion } from 'delphicanon/lib/motion';
@@ -16,6 +17,7 @@ interface StageSignature {
 	Args: {
 		item: CheatSheetItem;
 		category: CheatSheetCategory;
+		onJump: () => void;
 	};
 }
 
@@ -155,6 +157,12 @@ export default class Stage extends Component<StageSignature> {
 
 	<template>
 		<div class="tw-stage" {{this.animate @item.class}}>
+			<button
+				type="button"
+				class="tw-stage-jump"
+				aria-label={{@category.name}}
+				{{on "click" @onJump}}
+			></button>
 			<div class="tw-stage-specimen">{{this.picture}}</div>
 			<div class="tw-stage-text">
 				<p

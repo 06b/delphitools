@@ -11,6 +11,7 @@ import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
 import CanonJumpHeading from 'delphicanon/components/canon-jump-heading';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import { reducedMotion } from 'delphicanon/lib/motion';
 import type CanonToastService from 'delphicanon/services/canon-toast';
 import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import {
@@ -107,6 +108,18 @@ export default class TailwindCheatsheetTool extends Component {
 
 	copy = (name: string) => void this.toast.copy(name);
 
+	jump = () => {
+		const heading = document.querySelector<HTMLElement>(
+			`.tailwind-cheatsheet [data-tw-category="${CSS.escape(this.shown.category.name)}"]`,
+		);
+		if (!heading) return;
+		heading.scrollIntoView({
+			block: 'start',
+			behavior: reducedMotion() ? 'instant' : 'smooth',
+		});
+		heading.querySelector('button')?.focus({ preventScroll: true });
+	};
+
 	// a click places the caret after focus, so select on the next frame
 	selectAll = (event: FocusEvent) => {
 		const field = event.target;
@@ -125,6 +138,7 @@ export default class TailwindCheatsheetTool extends Component {
 					<Stage
 						@item={{this.shown.item}}
 						@category={{this.shown.category}}
+						@onJump={{this.jump}}
 					/>
 				</CanonCanvas>
 			</:banner>
@@ -168,6 +182,7 @@ export default class TailwindCheatsheetTool extends Component {
 						<CanonJumpHeading
 							@text={{group.heading}}
 							@detail={{group.detail}}
+							data-tw-category={{group.name}}
 						/>
 						<div class="tw-items">
 							{{#each

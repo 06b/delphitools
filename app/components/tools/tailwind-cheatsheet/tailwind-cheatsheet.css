@@ -20,6 +20,7 @@
 	--tw-area-w: calc(100cqi - var(--canon-panel-padding) * 2);
 	--tw-spec-w: min(var(--tw-area-h) * 88 / 60, var(--tw-area-w) * 0.42);
 
+	position: relative;
 	display: flex;
 	gap: 20px;
 	align-items: center;
@@ -32,6 +33,24 @@
 	color: var(--canon-foreground);
 	font-family: var(--canon-font);
 	container-type: size;
+}
+
+/* the whole stage jumps to its category's section */
+.tw-stage-jump {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	appearance: none;
+}
+
+.tw-stage-jump:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
 }
 
 .tw-stage-specimen {

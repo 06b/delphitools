@@ -161,9 +161,31 @@ check(
 			document.querySelector('.tw-stage-specimen path') !== null,
 	),
 );
+const jumpCheck = async (label) => {
+	await page.click('.tw-stage-jump');
+	await sleep(1500);
+	const state = await page.evaluate(() => {
+		const heading = document.querySelector('[data-tw-category="Backgrounds"]');
+		const body = document.querySelector('.tailwind-cheatsheet .canon-split-body');
+		const banner = document.querySelector('.tailwind-cheatsheet .canon-split-banner');
+		const top = heading.getBoundingClientRect().top;
+		return {
+			focused: document.activeElement === heading.querySelector('button'),
+			named: document.querySelector('.tw-stage-jump').getAttribute('aria-label'),
+			inView: top >= banner.getBoundingClientRect().bottom - 1 && top < body.getBoundingClientRect().bottom,
+			top: Math.round(top),
+		};
+	});
+	check(label, state.focused && state.inView && state.named === 'Backgrounds', JSON.stringify(state));
+};
+await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+await visit(page, '/tools/tailwind-cheatsheet?twSelect=bg-current');
+await jumpCheck('the stage jumps to its section and focuses the heading (reduced motion)');
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 
 await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/tailwind-cheatsheet?twSelect=bg-current');
+await jumpCheck('on a phone the stage jumps below the collapsed band');
 await visit(page, '/tools/tailwind-cheatsheet');
 check(
 	'a phone lists rows',
