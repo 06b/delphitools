@@ -60,6 +60,9 @@ export default class MorsePlayer {
 	#context?: AudioContext;
 	#source?: AudioBufferSourceNode;
 	#buffer?: AudioBuffer;
+	// keyed dit and dah at #keyedWpm
+	#keyed = new Map<string, AudioBuffer>();
+	#keyedWpm = 0;
 	#looping = false;
 	// context time at which the first pass began
 	#began = 0;
@@ -91,11 +94,20 @@ export default class MorsePlayer {
 
 	/** One keyed symbol's tone, beside any playback and leaving it be. */
 	key(symbol: string, wpm: number) {
-		const steps = timings(symbol, wpm);
-		if (!steps.length) return;
+		if (wpm !== this.#keyedWpm) {
+			this.#keyed.clear();
+			this.#keyedWpm = wpm;
+		}
 		this.#context ??= new AudioContext();
+		let buffer = this.#keyed.get(symbol);
+		if (!buffer) {
+			const steps = timings(symbol, wpm);
+			if (!steps.length) return;
+			buffer = render(this.#context, steps);
+			this.#keyed.set(symbol, buffer);
+		}
 		void this.#context.resume();
-		this.#sourceOf(render(this.#context, steps)).start();
+		this.#sourceOf(buffer).start();
 	}
 
 	#sourceOf(buffer: AudioBuffer) {
@@ -106,6 +118,7 @@ export default class MorsePlayer {
 		const source = context.createBufferSource();
 		source.buffer = buffer;
 		source.connect(gain);
+		source.addEventListener('ended', () => gain.disconnect());
 		return source;
 	}
 
