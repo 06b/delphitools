@@ -931,23 +931,6 @@ body {
 	margin-block-end: var(--canon-panel-padding);
 }
 
-// porting progress: tools already on the canon kit
-.dt-drawer .canon-sidebar-row[data-canon]::after {
-	content: "C" / "";
-	position: absolute;
-	inset-block: 0;
-	inset-inline-end: 8px;
-	display: flex;
-	align-items: center;
-	color: var(--canon-muted-foreground);
-	font-size: var(--canon-text-caption);
-	font-weight: var(--canon-weight-semibold);
-}
-
-.dt-drawer .canon-sidebar-row[data-canon][aria-current="page"]::after {
-	color: var(--canon-primary-foreground);
-}
-
 .dt-drawer .canon-heading {
 	padding-block: 16px 4px;
 	background: transparent;

@@ -49,7 +49,6 @@ interface NavRowSignature {
 		icon?: string;
 		href: string;
 		external?: boolean;
-		canon?: boolean;
 		description?: string;
 		/** Overrides the URL match, for a row that stands for many pages. */
 		current?: boolean;
@@ -105,7 +104,6 @@ class NavRow extends Component<NavRowSignature> {
 				@href={{@href}}
 				@selected={{this.selected}}
 				@onClick={{this.go}}
-				data-canon={{if @canon "true"}}
 				...attributes
 			/>
 			{{#if this.detail}}
@@ -412,7 +410,6 @@ export default class AppSidebar extends Component {
 								@name={{tool.name}}
 								@icon={{tool.icon}}
 								@href={{tool.href}}
-								@canon={{tool.canon}}
 								@description={{tool.description}}
 							/>
 						{{/each}}
@@ -431,7 +428,6 @@ export default class AppSidebar extends Component {
 								@icon={{tool.icon}}
 								@href={{tool.href}}
 								@external={{tool.external}}
-								@canon={{tool.canon}}
 								@description={{tool.description}}
 							/>
 						{{/each}}
