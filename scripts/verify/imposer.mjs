@@ -226,12 +226,12 @@ const popover = await page.evaluate(() => {
 		haspopup: trigger.getAttribute('aria-haspopup'),
 		findFocused: document.activeElement?.classList.contains('paper-find'),
 		ticked: [...panel.querySelectorAll('.paper-popover-list .paper-cell[aria-current="true"] .paper-cell-name')].map((el) => el.textContent.trim()),
-		custom: [...panel.querySelectorAll('.paper-popover-custom input')].map((el) => el.value),
+		custom: !!panel.querySelector('.paper-popover-custom'),
 	};
 });
 check(
-	'the paper cell opens a named dialog popover, find focused, A4 ticked, custom starts at A4',
-	popover.open && popover.role === 'dialog' && popover.name === 'Paper' && popover.expanded === 'true' && popover.haspopup === 'dialog' && popover.findFocused && popover.ticked.join() === 'A4' && popover.custom.join() === '210,297',
+	'the paper cell opens a named dialog popover, find focused, A4 ticked, no custom option yet',
+	popover.open && popover.role === 'dialog' && popover.name === 'Paper' && popover.expanded === 'true' && popover.haspopup === 'dialog' && popover.findFocused && popover.ticked.join() === 'A4' && !popover.custom,
 	JSON.stringify(popover),
 );
 await page.keyboard.type('a3');
@@ -248,25 +248,43 @@ check(
 );
 await page.click('.imp-paper-menu');
 await sleep(300);
-const setField = async (selector, value) => {
-	await page.$eval(selector, (el) => {
-		el.focus();
-		el.select();
-	});
-	await page.keyboard.type(value);
-	await page.keyboard.press('Enter');
-};
-await setField('.paper-popover-width input', '320');
-await setField('.paper-popover-height input', '450');
-await page.click('.paper-popover-use');
+await page.keyboard.type('40x100');
+await sleep(150);
+const outside = await page.$eval('.paper-popover:popover-open .paper-popover-custom', (el) => ({
+	disabled: el.disabled,
+	title: el.textContent.trim(),
+}));
+await page.keyboard.press('Enter');
+await sleep(200);
+check(
+	'40x100 is under the 50 mm minimum: Custom shows disabled and Enter keeps the popover open',
+	outside.disabled && outside.title === 'Custom · 40 × 100 mm' && !!(await page.$('.paper-popover:popover-open')),
+	JSON.stringify(outside),
+);
+await page.keyboard.press('Escape');
+await sleep(200);
+check(
+	'typing 85x100 and Enter picks Custom and closes the popover',
+	await pickPaper(page, '.imp-paper-menu', { custom: '85x100', enter: true }),
+);
 await settle();
 check(
-	'Custom: width and height in mm, Use closes the popover',
-	!(await page.$('.paper-popover:popover-open')) &&
-		(await state()).tiles.startsWith('Sheet 320 × 450 mm') &&
-		(await page.$eval('.imp-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 320 × 450 mm',
+	'Custom: the sheet is 85 × 100 mm and the cell reads it',
+	(await state()).tiles.startsWith('Sheet 85 × 100 mm') &&
+		(await page.$eval('.imp-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 85 × 100 mm',
 	(await state()).tiles,
 );
+await page.click('.imp-paper-menu');
+await sleep(300);
+check(
+	'reopened, the find field holds 85x100mm and Custom shows selected',
+	await page.evaluate(() => {
+		const panel = document.querySelector('.paper-popover:popover-open');
+		return panel.querySelector('.paper-find').value === '85x100mm' && panel.querySelector('.paper-popover-custom').getAttribute('aria-current') === 'true';
+	}),
+);
+await page.keyboard.press('Escape');
+await sleep(200);
 check('A3 paper', (await pickPaper(page, '.imp-paper-menu', 'A3')) && (await state()).tiles.startsWith('Sheet 297 × 420 mm'));
 check(
 	'scaling reads Fit, Fill, Actual size',
@@ -374,13 +392,35 @@ check(
 	`${lines.length} lines`,
 );
 
-await visit(page, '/tools/imposer?impLayout=1&impSignature=8&impPages=38');
+await pickPaper(page, '.imp-paper-menu', { custom: '85x100' });
+await settle();
+const customTiles = (await state()).tiles;
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => {});
+await page.click('.media-job-save');
+const customSheet = await waitForDownload(/^imposed-four-up-booklet-custom\.pdf$/);
+const customSize = customSheet && (await PDFDocument.load(customSheet.bytes)).getPage(0).getSize();
+const [tileW, tileH] = (/Sheet ([\d.]+) × ([\d.]+) mm/.exec(customTiles) ?? []).slice(1).map(Number);
+check(
+	'a custom export: the sheet in points matches the 85 × 100 mm tile',
+	!!customSize &&
+		[tileW, tileH].sort((a, b) => a - b).join() === '85,100' &&
+		Math.abs(customSize.width - (tileW / 25.4) * 72) < 0.1 &&
+		Math.abs(customSize.height - (tileH / 25.4) * 72) < 0.1,
+	`${customTiles} → ${customSize?.width.toFixed(2)} x ${customSize?.height.toFixed(2)}`,
+);
+
+await visit(page, '/tools/imposer?impLayout=1&impSignature=8&impPages=38&impPaper=85x100');
 await settle();
 s = await state();
 check(
 	'?impSignature=8 with 38 pages: five signatures',
 	s.signaturePages === '8' && s.block === '1–8, 9–16, 17–24, 25–32, 33–40' && s.detail === '38 pages · 2 blanks added',
 	JSON.stringify(s),
+);
+check(
+	'?impPaper=85x100 opens on the custom paper',
+	(await page.$eval('.imp-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 85 × 100 mm',
 );
 
 await page.setViewport({ width: 390, height: 844 });

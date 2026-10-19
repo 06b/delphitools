@@ -40,7 +40,7 @@ import {
 	type ImpositionResult,
 	type PaperSize,
 } from 'delphitools-v2/lib/imposition';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import { findPaperSize, parseCustomSize } from 'delphitools-v2/lib/paper-sizes';
 import { formatBytes } from 'delphitools-v2/lib/pdf-compress';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
@@ -92,6 +92,8 @@ const LAYOUT_IDS = IMPOSITION_LAYOUTS.map((layout) => layout.id);
 const LAYOUT_LABELS = LAYOUT_IDS.map((id) => NAMES[id] ?? id);
 const FOLDED = new Set(['saddle-stitch', 'perfect-bind', 'step-and-repeat']);
 const FALLBACK_PAPER = PAPER_SIZES[0]!;
+const MIN_PAPER_MM = 50;
+const MAX_PAPER_MM = 1000;
 /** px, ios renderStrip */
 const STRIP_HEIGHT = 140;
 // ios: one sheet's worth
@@ -208,8 +210,15 @@ export default class Imposer extends Component {
 				128,
 				Math.max(4, Math.trunc(pagesPerSignature)),
 			);
-		const paper = query.get('impPaper');
-		if (paper) this.paperSizeId = paper.toLowerCase();
+		const paper = query.get('impPaper')?.toLowerCase();
+		const custom =
+			paper &&
+			parseCustomSize(paper, MIN_PAPER_MM, MAX_PAPER_MM);
+		if (custom) {
+			this.customPaperW = custom.widthMm;
+			this.customPaperH = custom.heightMm;
+			this.paperSizeId = 'custom';
+		} else if (paper) this.paperSizeId = paper;
 		const sheet = number('impSheet');
 		if (sheet !== undefined) this.activeSheet = Math.max(0, sheet);
 		this.isFlipped = query.has('impBack');
@@ -1041,8 +1050,8 @@ export default class Imposer extends Component {
 						class="imp-paper-menu"
 						@selected={{this.paperChoice}}
 						@extra={{this.inferTitle}}
-						@min={{50}}
-						@max={{1000}}
+						@min={{MIN_PAPER_MM}}
+						@max={{MAX_PAPER_MM}}
 						@label="Paper"
 						@onPick={{this.setPaper}}
 					/>
