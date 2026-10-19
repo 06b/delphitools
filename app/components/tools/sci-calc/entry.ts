@@ -451,18 +451,37 @@ type MathModule = typeof import('mathjs');
 const degrees = (x: number) => (x * Math.PI) / 180;
 const radians = (x: number) => (x * 180) / Math.PI;
 
-function scope(mode: AngleMode): Record<string, (...x: number[]) => number> {
-	const base = {
-		log: Math.log10,
-		ln: Math.log,
-		root: (n: number, x: number) => Math.pow(x, 1 / n),
+/** Rounds the float residue of trig at whole angles: sin(180°) is 0, not 1.2e-16. The iOS cleanTrigResult. */
+function cleanTrig(value: number): number {
+	for (const exact of [0, 1, -1, 0.5, -0.5])
+		if (Math.abs(value - exact) < 1e-12) return exact;
+	return value;
+}
+
+/** An odd root of a negative number is real: ʸ√x of 3 and −8 is −2. */
+function root(n: number, x: number): number {
+	const odd = Number.isInteger(n) && Math.abs(n % 2) === 1;
+	return x < 0 && odd ? -Math.pow(-x, 1 / n) : Math.pow(x, 1 / n);
+}
+
+function trig(toRadians: (x: number) => number) {
+	return {
+		sin: (x: number) => cleanTrig(Math.sin(toRadians(x))),
+		cos: (x: number) => cleanTrig(Math.cos(toRadians(x))),
+		tan: (x: number) => {
+			const cosine = Math.cos(toRadians(x));
+			if (Math.abs(cosine) < 1e-12) return Infinity;
+			return cleanTrig(Math.sin(toRadians(x)) / cosine);
+		},
 	};
-	if (mode === 'rad') return base;
+}
+
+function scope(mode: AngleMode): Record<string, (...x: number[]) => number> {
+	const base = { log: Math.log10, ln: Math.log, root };
+	if (mode === 'rad') return { ...base, ...trig((x) => x) };
 	return {
 		...base,
-		sin: (x) => Math.sin(degrees(x)),
-		cos: (x) => Math.cos(degrees(x)),
-		tan: (x) => Math.tan(degrees(x)),
+		...trig(degrees),
 		asin: (x) => radians(Math.asin(x)),
 		acos: (x) => radians(Math.acos(x)),
 		atan: (x) => radians(Math.atan(x)),
@@ -471,12 +490,16 @@ function scope(mode: AngleMode): Record<string, (...x: number[]) => number> {
 
 /** The keypad's text in mathjs syntax. */
 export function prepare(expression: string): string {
-	return expression
-		.replaceAll('×', '*')
-		.replaceAll('÷', '/')
-		.replaceAll('−', '-')
-		.replaceAll('π', 'pi')
-		.replace(/\|([^|]+)\|/g, 'abs($1)');
+	return (
+		expression
+			.replaceAll('×', '*')
+			.replaceAll('÷', '/')
+			.replaceAll('−', '-')
+			.replaceAll('π', 'pi')
+			// mathjs reads a % before an operator or the end as percent
+			.replaceAll('%', ' mod ')
+			.replace(/\|([^|]+)\|/g, 'abs($1)')
+	);
 }
 
 /** A number, a mathjs value printed (a complex number, a unit), or undefined when the text is no value. */

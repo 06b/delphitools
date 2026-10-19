@@ -147,4 +147,20 @@ module('Unit | Tool | sci-calc', function () {
 		assert.strictEqual(at('sqrt(−1)'), 'i');
 		assert.strictEqual(at('2+'), undefined);
 	});
+
+	test('trig at whole angles, mod and odd roots of negatives', function (assert) {
+		const at = (text: string, mode: 'deg' | 'rad' = 'deg') =>
+			calculate(math, text, mode);
+		assert.strictEqual(at('sin(180)'), 0);
+		assert.strictEqual(at('cos(90)'), 0);
+		assert.strictEqual(at('tan(45)'), 1);
+		assert.strictEqual(at('tan(90)'), Infinity);
+		assert.strictEqual(at('sin(π)', 'rad'), 0);
+		assert.strictEqual(at('tan(π÷2)', 'rad'), Infinity);
+		assert.strictEqual(at('7%'), undefined);
+		assert.strictEqual(at('50%×2'), undefined);
+		assert.strictEqual(at('50%+1'), 0);
+		assert.strictEqual(at('root(3,−8)'), -2);
+		assert.true(Number.isNaN(at('root(2,−4)')));
+	});
 });
