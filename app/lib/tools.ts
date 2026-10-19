@@ -39,6 +39,8 @@ export interface Tool {
 	href: string;
 	beta?: boolean;
 	external?: boolean;
+	// opens the magazine at the page with this id
+	magazine?: boolean;
 	route?: string;
 	highlight?: boolean;
 	atlas?: boolean;
@@ -1186,6 +1188,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'smartphone',
 				href: 'https://apps.apple.com/us/app/delphitools/id6761313703',
 				external: true,
+				magazine: true,
 			},
 			{
 				id: 'cli',
@@ -1195,6 +1198,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'square-terminal',
 				href: 'https://github.com/1612elphi/delphitools-cli',
 				external: true,
+				magazine: true,
 			},
 			{
 				id: CANON_KIT_ID,
@@ -1204,6 +1208,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'component',
 				href: '/canon',
 				route: 'canon',
+				magazine: true,
 			},
 		],
 	},

@@ -19,6 +19,8 @@ import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
 import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
 import type SidebarService from 'delphitools-v2/services/sidebar';
+import type MagazineService from 'delphitools-v2/services/magazine';
+import { isPlainClick } from 'delphitools-v2/services/magazine';
 import {
 	navIdFor,
 	opensSection,
@@ -52,6 +54,8 @@ interface NavRowSignature {
 		icon?: string;
 		href: string;
 		external?: boolean;
+		/** Opens the magazine at this page id instead of following the link. */
+		magazine?: string;
 		description?: string;
 		/** Overrides the URL match, for a row that stands for many pages. */
 		current?: boolean;
@@ -61,6 +65,7 @@ interface NavRowSignature {
 
 class NavRow extends Component<NavRowSignature> {
 	@service declare router: RouterService;
+	@service declare magazine: MagazineService;
 
 	get selected() {
 		return (
@@ -75,6 +80,12 @@ class NavRow extends Component<NavRowSignature> {
 
 	// canon rows are plain links
 	go = (event: MouseEvent) => {
+		if (this.args.magazine) {
+			if (!isPlainClick(event)) return;
+			event.preventDefault();
+			this.magazine.open(this.args.magazine);
+			return;
+		}
 		if (
 			this.args.external ||
 			event.button !== 0 ||
@@ -441,7 +452,15 @@ export default class AppSidebar extends Component {
 								@name={{tool.name}}
 								@icon={{tool.icon}}
 								@href={{tool.href}}
-								@external={{tool.external}}
+								@external={{if
+									tool.magazine
+									false
+									tool.external
+								}}
+								@magazine={{if
+									tool.magazine
+									tool.id
+								}}
 								@description={{tool.description}}
 							/>
 						{{/each}}

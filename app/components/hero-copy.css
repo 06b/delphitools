@@ -145,3 +145,36 @@
 		transform: none;
 	}
 }
+
+.dt-hero-magazine {
+	display: inline;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	cursor: pointer;
+	font: inherit;
+	pointer-events: auto;
+	text-decoration: underline dotted;
+	text-underline-offset: 4px;
+}
+
+.dt-hero-magazine .dt-icon {
+	display: inline-block;
+	width: 1.1em;
+	height: 1.1em;
+	margin-inline-start: 6px;
+	vertical-align: -0.2em;
+}
+
+.dt-hero-magazine:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+@media (hover: hover) {
+	.dt-hero-magazine:hover {
+		color: var(--canon-primary);
+		text-decoration-style: solid;
+	}
+}

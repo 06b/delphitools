@@ -1,9 +1,12 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import { LinkTo } from '@ember/routing';
 import { htmlSafe } from '@ember/template';
 import { BUILT_WITH } from 'delphitools-v2/components/about-delphitools';
+import Icon from 'delphitools-v2/components/icon';
+import type MagazineService from 'delphitools-v2/services/magazine';
 import './hero-copy.css';
 
 const EMBER_ICON = htmlSafe(
@@ -49,7 +52,11 @@ const STACK = [
 ];
 
 export default class HeroCopy extends Component {
+	@service declare magazine: MagazineService;
+
 	@tracked flipped = false;
+
+	openMagazine = () => this.magazine.open();
 
 	toggle = () => {
 		this.flipped = !this.flipped;
@@ -81,6 +88,20 @@ export default class HeroCopy extends Component {
 							A collection of small,
 							low stakes and low
 							effort tools.
+						</p>
+						<p>
+							<button
+								type="button"
+								class="dt-hero-magazine"
+								{{on
+									"click"
+									this.openMagazine
+								}}
+							>Now available on
+								iPhone, iPad and
+								your terminal!<Icon
+									@name="book-open"
+								/></button>
 						</p>
 						<p>
 							No logins, no paywalls,
