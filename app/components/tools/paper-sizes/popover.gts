@@ -210,11 +210,14 @@ export default class PaperPopover extends Component<Signature> {
 		this.pickCustom();
 	};
 
-	/** A custom selection reopens with its size typed, so it shows as picked. */
+	/** Opens with a custom selection's size typed, so it shows as picked, else with the find field empty. */
 	#seed() {
 		const { selected } = this;
-		if (selected?.kind === 'custom')
-			this.find(`${choiceId(selected)}mm`);
+		this.find(
+			selected?.kind === 'custom'
+				? `${choiceId(selected)}mm`
+				: '',
+		);
 	}
 
 	trigger = modifier((button: HTMLButtonElement) => {

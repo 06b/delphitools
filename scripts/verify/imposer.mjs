@@ -423,6 +423,26 @@ check(
 	(await page.$eval('.imp-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 85 × 100 mm',
 );
 
+await visit(page, '/tools/imposer?impPaper=nope');
+await settle();
+const unknownTitle = await page.$eval('.imp-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim());
+check('?impPaper=nope keeps the default paper on the trigger', unknownTitle.startsWith('A4'), unknownTitle);
+await page.click('.imp-paper-menu');
+await page.waitForSelector('.paper-popover:popover-open');
+await sleep(100);
+await page.keyboard.type('zzzz');
+await page.keyboard.press('Escape');
+await sleep(200);
+await page.click('.imp-paper-menu');
+await page.waitForSelector('.paper-popover:popover-open');
+await sleep(150);
+const reopened = await page.$eval('.paper-popover:popover-open', (panel) => ({
+	find: panel.querySelector('.paper-find').value,
+	cells: panel.querySelectorAll('.paper-popover-list .paper-cell').length,
+}));
+check('an abandoned search reopens with the find field empty', reopened.find === '' && reopened.cells > 0, JSON.stringify(reopened));
+await page.keyboard.press('Escape');
+
 await page.setViewport({ width: 390, height: 844 });
 await sleep(500);
 check(
