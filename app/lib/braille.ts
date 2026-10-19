@@ -2,7 +2,8 @@
 
 const BLANK = 0x2800;
 
-function cell(dots: string): string {
+/** The cell with the given dots raised: 125 is ⠓. */
+export function cell(dots: string): string {
 	let mask = 0;
 	for (const dot of dots) mask |= 1 << (Number(dot) - 1);
 	return String.fromCharCode(BLANK + mask);

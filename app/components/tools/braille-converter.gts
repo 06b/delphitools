@@ -8,6 +8,7 @@ import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSplit from 'delphicanon/components/canon-split';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import { glyphRows } from 'delphicanon/lib/glyph-rows';
+import Keyboard from 'delphitools-v2/components/tools/braille-converter/keyboard';
 import Embossing, {
 	bandHeight,
 	collapsedHeight,
@@ -127,6 +128,19 @@ export default class BrailleConverter extends Component {
 		this.input = text;
 	};
 
+	// To text, or Auto before the input reads as text
+	get keyboard() {
+		return this.toText || (this.mode === 0 && !this.input.trim());
+	}
+
+	insert = (text: string) => {
+		this.input += text;
+	};
+
+	deleteLast = () => {
+		this.input = [...this.input].slice(0, -1).join('');
+	};
+
 	setMode = (mode: number) => {
 		this.mode = mode;
 	};
@@ -151,7 +165,14 @@ export default class BrailleConverter extends Component {
 						@heading={{this.sourceHeading}}
 						@text={{this.input}}
 						@onChange={{this.setInput}}
-					/>
+					>
+						{{#if this.keyboard}}
+							<Keyboard
+								@onInsert={{this.insert}}
+								@onDelete={{this.deleteLast}}
+							/>
+						{{/if}}
+					</Source>
 					<CanonHeading @text="Mode" />
 					<CanonSegmented
 						aria-label="Mode"

@@ -89,3 +89,99 @@
 		background: var(--canon-accent-bg);
 	}
 }
+
+/* the keyboard panel: the cell being built, its six dots, then the actions */
+.canon-popover.brl-keyboard {
+	inline-size: min(320px, calc(100vw - 32px));
+	padding: var(--canon-frame);
+	border: 0;
+	background: var(--canon-foreground);
+}
+
+.brl-keyboard-panel {
+	display: grid;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.brl-keyboard-cell {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	padding: 8px var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.brl-keyboard-glyph {
+	font-family: system-ui, sans-serif;
+	font-size: 56px;
+	line-height: 1;
+}
+
+.brl-keyboard-dots {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* dots 1 2 3 down the left column, 4 5 6 down the right, as in the cell */
+.brl-keyboard-toggles {
+	display: grid;
+	grid-template-rows: repeat(3, 56px);
+	grid-template-columns: repeat(2, 1fr);
+	grid-auto-flow: column;
+	gap: var(--canon-hairline);
+}
+
+.brl-keyboard-dot {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.brl-keyboard-dot:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.brl-keyboard-pip {
+	inline-size: 18px;
+	block-size: 18px;
+	border: 2px solid var(--canon-muted-foreground);
+	border-radius: 50%;
+}
+
+.brl-keyboard-dot[aria-pressed="true"] .brl-keyboard-pip {
+	border-color: var(--canon-primary);
+	background: var(--canon-primary);
+}
+
+.brl-keyboard-number {
+	font-size: 17px;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.brl-keyboard-key {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	text-transform: uppercase;
+}
+
+@media (hover: hover) {
+	.brl-keyboard-dot:hover {
+		background: var(--canon-accent-bg);
+	}
+}

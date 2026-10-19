@@ -14,6 +14,8 @@ interface SourceSignature {
 		label?: string;
 		onChange: (text: string) => void;
 	};
+	/** More buttons after Paste and Clear. */
+	Blocks: { default: [] };
 }
 
 const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
@@ -54,6 +56,7 @@ export default class Source extends Component<SourceSignature> {
 				@disabled={{if @text false true}}
 				@onClick={{this.clear}}
 			/>
+			{{yield}}
 		</CanonGrid>
 	</template>
 }

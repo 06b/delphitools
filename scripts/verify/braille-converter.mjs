@@ -110,6 +110,73 @@ check(
 	(await page.$$eval('.brl-glyph--cell circle', (els) => els.length)) === 8,
 );
 
+// the braille keyboard
+const source = () => page.$eval('.tt-source', (el) => el.value);
+const keyboardButton = () =>
+	page.evaluateHandle(() =>
+		[...document.querySelectorAll('.braille-converter button')].find(
+			(b) => b.textContent.trim() === 'Keyboard',
+		),
+	);
+const panelOpen = () =>
+	page.$eval('.brl-keyboard', (el) => el.matches(':popover-open'));
+await visit(page, '/tools/braille-converter?brailleMode=1');
+check('To braille has no keyboard', !(await (await keyboardButton()).asElement()));
+await visit(page, '/tools/braille-converter?brailleMode=2');
+await (await keyboardButton()).click();
+await sleep(300);
+check('Keyboard opens the panel', await panelOpen());
+check(
+	'focus starts on dot 1',
+	await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Dot 1'),
+);
+const dot = (n) =>
+	page.$eval(`.brl-keyboard-dot[aria-label="Dot ${n}"]`, (b) => b.click());
+await dot(1);
+await dot(2);
+await dot(5);
+await sleep(50);
+check(
+	'toggled dots build the cell',
+	(await page.$eval('.brl-keyboard-glyph', (el) => el.textContent)) === '⠓',
+);
+await page.$$eval('.brl-keyboard button', (buttons) =>
+	buttons.find((b) => b.textContent.trim() === 'Insert').click(),
+);
+await sleep(50);
+check('Insert adds the cell', (await source()) === '⠓', await source());
+check('and clears the dots', (await page.$$('.brl-keyboard-dot[aria-pressed="true"]')).length === 0);
+await page.$$eval('.brl-keyboard button', (buttons) =>
+	buttons.find((b) => b.textContent.trim() === 'Space').click(),
+);
+await sleep(50);
+check('Space adds a space', (await source()) === '⠓ ', JSON.stringify(await source()));
+await page.focus('.brl-keyboard-dot[aria-label="Dot 1"]');
+// a Perkins chord: d f k held together give dots 1 2 5
+await page.keyboard.down('f');
+await page.keyboard.down('d');
+await page.keyboard.down('k');
+await page.keyboard.up('f');
+await page.keyboard.up('d');
+check('a chord waits for every key to lift', (await source()) === '⠓ ');
+await page.keyboard.up('k');
+await sleep(50);
+check('then inserts its cell', (await source()) === '⠓ ⠓', await source());
+await page.keyboard.press(' ');
+await page.keyboard.press('Backspace');
+await sleep(50);
+check('Space and Backspace keys', (await source()) === '⠓ ⠓', JSON.stringify(await source()));
+check(
+	'the space key does not toggle the focused dot',
+	(await page.$$('.brl-keyboard-dot[aria-pressed="true"]')).length === 0,
+);
+check('the result reads the cells', (await result(page)) === 'h h', await result(page));
+await page.keyboard.press('Escape');
+await sleep(200);
+check('Escape closes the panel', !(await panelOpen()));
+await visit(page, '/tools/braille-converter');
+check('Auto with nothing typed offers the keyboard', !!(await (await keyboardButton()).asElement()));
+
 await checkNarrow(page, '/tools/braille-converter?brailleText=Hello%20World');
 await sleep(50);
 

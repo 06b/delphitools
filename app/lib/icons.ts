@@ -1,5 +1,4 @@
 import iAlertCircle from 'lucide-static/icons/alert-circle.svg?raw';
-import iAlertTriangle from 'lucide-static/icons/alert-triangle.svg?raw';
 import iAlignCenter from 'lucide-static/icons/align-center.svg?raw';
 import iAlignCenterHorizontal from 'lucide-static/icons/align-center-horizontal.svg?raw';
 import iAlignCenterVertical from 'lucide-static/icons/align-center-vertical.svg?raw';
@@ -139,6 +138,7 @@ import iInfo from 'lucide-static/icons/info.svg?raw';
 import iItalic from 'lucide-static/icons/italic.svg?raw';
 import iKeyRound from 'lucide-static/icons/key-round.svg?raw';
 import iKeySquare from 'lucide-static/icons/key-square.svg?raw';
+import iKeyboard from 'lucide-static/icons/keyboard.svg?raw';
 import iLanguages from 'lucide-static/icons/languages.svg?raw';
 import iLasso from 'lucide-static/icons/lasso.svg?raw';
 import iLayers from 'lucide-static/icons/layers.svg?raw';
@@ -217,6 +217,7 @@ import iSkipForward from 'lucide-static/icons/skip-forward.svg?raw';
 import iSlash from 'lucide-static/icons/slash.svg?raw';
 import iSlidersHorizontal from 'lucide-static/icons/sliders-horizontal.svg?raw';
 import iSmartphone from 'lucide-static/icons/smartphone.svg?raw';
+import iSpace from 'lucide-static/icons/space.svg?raw';
 import iSparkle from 'lucide-static/icons/sparkle.svg?raw';
 import iSparkles from 'lucide-static/icons/sparkles.svg?raw';
 import iSpline from 'lucide-static/icons/spline.svg?raw';
@@ -251,7 +252,6 @@ import iUpload from 'lucide-static/icons/upload.svg?raw';
 import iVariable from 'lucide-static/icons/variable.svg?raw';
 import iVectorSquare from 'lucide-static/icons/vector-square.svg?raw';
 import iVolumeX from 'lucide-static/icons/volume-x.svg?raw';
-import iWand2 from 'lucide-static/icons/wand-2.svg?raw';
 import iWandSparkles from 'lucide-static/icons/wand-sparkles.svg?raw';
 import iWind from 'lucide-static/icons/wind.svg?raw';
 import iWorkflow from 'lucide-static/icons/workflow.svg?raw';
@@ -262,7 +262,6 @@ import iZoomOut from 'lucide-static/icons/zoom-out.svg?raw';
 
 export const icons: Record<string, string> = {
 	'alert-circle': iAlertCircle,
-	'alert-triangle': iAlertTriangle,
 	'align-center': iAlignCenter,
 	'align-center-horizontal': iAlignCenterHorizontal,
 	'align-center-vertical': iAlignCenterVertical,
@@ -402,6 +401,7 @@ export const icons: Record<string, string> = {
 	italic: iItalic,
 	'key-round': iKeyRound,
 	'key-square': iKeySquare,
+	keyboard: iKeyboard,
 	languages: iLanguages,
 	lasso: iLasso,
 	layers: iLayers,
@@ -480,6 +480,7 @@ export const icons: Record<string, string> = {
 	slash: iSlash,
 	'sliders-horizontal': iSlidersHorizontal,
 	smartphone: iSmartphone,
+	space: iSpace,
 	sparkle: iSparkle,
 	sparkles: iSparkles,
 	spline: iSpline,
@@ -514,7 +515,6 @@ export const icons: Record<string, string> = {
 	variable: iVariable,
 	'vector-square': iVectorSquare,
 	'volume-x': iVolumeX,
-	'wand-2': iWand2,
 	'wand-sparkles': iWandSparkles,
 	wind: iWind,
 	workflow: iWorkflow,

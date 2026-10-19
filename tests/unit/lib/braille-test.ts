@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import {
+	cell,
 	dots,
 	fromBraille,
 	looksLikeBraille,
@@ -65,6 +66,12 @@ module('Unit | lib | braille', function () {
 		assert.strictEqual(dots('⣿'), '1-2-3-4-5-6-7-8');
 		assert.strictEqual(dots('⠀'), '');
 		assert.strictEqual(dots('a'), '');
+	});
+
+	test('cell', function (assert) {
+		assert.strictEqual(cell('125'), '⠓');
+		assert.strictEqual(cell('521'), '⠓');
+		assert.strictEqual(cell(''), '⠀');
 	});
 
 	test('looksLikeBraille', function (assert) {
