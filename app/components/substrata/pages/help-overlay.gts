@@ -34,14 +34,8 @@ const NOTES: Record<string, string> = {
 	Text: 'Tap the canvas to add editable text',
 	Shape: 'Drag on the canvas to draw a shape object',
 	Select: 'Pick pixels to move, copy or clear',
-	// ∑CG: help overlay note under "Draw", the web's brush and pencil markup tool
-	//   spec: one line, at most 50 chars, sentence case, no period, says what the tool draws
-	//   sample: "Freehand brush and pencil strokes as a layer"
-	Draw: '∑CG',
-	// ∑CG: help overlay note under "Colour", the colour key at the bottom of the column
-	//   spec: one line, at most 50 chars, sentence case, the web has no brush to clean
-	//   sample: "Pick the colour for new text, shapes and strokes"
-	Colour: '∑CG',
+	Draw: 'Freehand brush and pencil strokes as a layer',
+	Colour: 'Pick the colour for new text, shapes and strokes',
 };
 
 // iOS HelpCopy.hint and .next

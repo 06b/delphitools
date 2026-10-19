@@ -54,10 +54,8 @@ const PANDOC_URL = `https://github.com/jgm/pandoc/tree/${PANDOC_VERSION}`;
 const dash = '—';
 // the print styles leave the page edge to the printer
 const PREVIEW_CSS = '<style>body { padding: 24px 28px; }</style>';
-// ∑CG: footer note in the last settings panel, read right before the "Pandoc 3.9" link and its licence
-//   spec: at most 220 chars, plain and factual, says nothing leaves the browser and the Pandoc engine downloads only for conversions that need it; ends so the Pandoc link reads on from it
-//   sample: "Conversion runs entirely in your browser — your documents are never uploaded. On first use the ~16 MB Pandoc engine is fetched from a CDN and cached for the rest of your visit. Powered by"
-const ABOUT = '∑CG';
+const ABOUT =
+	'Conversion runs entirely in your browser — your documents are never uploaded. On first use the ~50 MB Pandoc engine is fetched from a CDN and cached for the rest of your visit. Powered by';
 /** iOS CanonCodeBlock(maxHeight: 360) */
 const CODE_HEIGHT = 360;
 

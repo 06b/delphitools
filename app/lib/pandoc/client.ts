@@ -30,10 +30,10 @@ export function getEngineState(): EngineState {
 function workerError(event: Event): Error {
 	event.preventDefault();
 	const message = event instanceof ErrorEvent ? event.message : '';
-	// ∑CG: error shown under Convert when the Pandoc worker script fails to load or crashes
-	//   spec: one or two sentences, at most 120 chars, says the converter engine could not start and that reloading the page may help
-	//   sample: "The Pandoc engine could not start. Reload the page and try again."
-	return new Error(message || '∑CG');
+	return new Error(
+		message ||
+			'The Pandoc engine could not start. Reload the page and try again.',
+	);
 }
 
 function ensureWorker(): Worker {
