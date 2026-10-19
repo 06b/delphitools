@@ -11,6 +11,7 @@ import AppSidebar from 'delphitools-v2/components/app-sidebar';
 import AppTab from 'delphitools-v2/components/app-tab';
 import ColourNotationSelector from 'delphitools-v2/components/colour-notation-selector';
 import FlowState from 'delphitools-v2/components/flow-state';
+import MagazineOverlay from 'delphitools-v2/components/magazine/overlay';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import {
 	CANON_KIT_ID,
@@ -158,5 +159,6 @@ export default class ApplicationTemplate extends Component {
 				</div>
 			</div>
 		{{/if}}
+		<MagazineOverlay />
 	</template>
 }

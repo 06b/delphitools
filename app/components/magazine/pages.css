@@ -1,0 +1,171 @@
+/* printed paper: the same ink in both themes */
+.dt-mag-page {
+	--dt-mag-ink: var(--canon-colour-solid-ink-dark);
+	--dt-mag-soft-ink: color-mix(
+		in srgb,
+		var(--dt-mag-ink) 60%,
+		transparent
+	);
+
+	position: relative;
+	display: flex;
+	overflow: hidden;
+	box-sizing: border-box;
+	flex-direction: column;
+	width: 600px;
+	height: 780px;
+	padding: 48px;
+	background: var(--canon-paper);
+	color: var(--dt-mag-ink);
+	font-family: var(--canon-font);
+	font-size: 18px;
+	line-height: 1.35;
+	white-space: normal;
+}
+
+.dt-mag-page h2,
+.dt-mag-page p,
+.dt-mag-page ol,
+.dt-mag-page pre {
+	margin: 0;
+}
+
+.dt-mag-masthead {
+	font-size: 76px;
+	font-weight: var(--canon-weight-bold);
+	letter-spacing: -0.02em;
+	line-height: 0.9;
+}
+
+.dt-mag-cover,
+.dt-mag-product,
+.dt-mag-contents {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 20px;
+}
+
+.dt-mag-issue {
+	display: flex;
+	justify-content: space-between;
+	padding-bottom: 8px;
+	border-bottom: var(--canon-frame) solid var(--dt-mag-ink);
+	font-size: 16px;
+	font-weight: var(--canon-weight-semibold);
+	text-transform: uppercase;
+}
+
+.dt-mag-cover-art {
+	display: grid;
+	flex: 1;
+	align-content: center;
+	gap: 24px;
+	grid-template-columns: repeat(2, 1fr);
+	justify-items: center;
+}
+
+.dt-mag-cover-art img {
+	width: 160px;
+	height: 160px;
+}
+
+.dt-mag-headline {
+	font-size: 48px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+	text-align: right;
+}
+
+.dt-mag-title {
+	font-size: 44px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+}
+
+.dt-mag-kicker {
+	color: var(--dt-mag-soft-ink);
+	font-size: 16px;
+	font-weight: var(--canon-weight-semibold);
+	text-transform: uppercase;
+}
+
+.dt-mag-description {
+	color: var(--dt-mag-soft-ink);
+	font-size: 20px;
+}
+
+.dt-mag-art {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+}
+
+.dt-mag-art img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.dt-mag-art-icon {
+	width: 200px;
+	height: 200px;
+}
+
+.dt-mag-links {
+	display: flex;
+	gap: 12px;
+}
+
+.dt-mag-link {
+	padding: 10px 20px;
+	border: var(--canon-frame) solid var(--dt-mag-ink);
+	color: var(--dt-mag-ink);
+	font-weight: var(--canon-weight-semibold);
+	text-decoration: none;
+}
+
+.dt-mag-toc {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	gap: 4px;
+	list-style: none;
+}
+
+.dt-mag-toc li {
+	display: flex;
+	align-items: baseline;
+	padding-block: 8px;
+	border-bottom: var(--canon-hairline) solid var(--dt-mag-soft-ink);
+	gap: 16px;
+}
+
+.dt-mag-toc-num {
+	min-width: 2ch;
+	font-weight: var(--canon-weight-bold);
+}
+
+.dt-mag-toc .dt-mag-link {
+	padding: 0;
+	border: 0;
+}
+
+.dt-mag-terminal {
+	flex: 1;
+	padding: 20px;
+	background: var(--dt-mag-ink);
+	color: var(--canon-paper);
+	font-family: var(--canon-mono-font);
+	font-size: 13px;
+	line-height: 1.4;
+	white-space: pre;
+}
+
+.dt-mag-back {
+	display: flex;
+	flex: 1;
+	align-items: flex-end;
+}

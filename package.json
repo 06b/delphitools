@@ -82,6 +82,7 @@
 		"@rollup/plugin-babel": "^7.1.0",
 		"@types/qunit": "^2.19.14",
 		"@types/rsvp": "^4.0.9",
+		"@types/three": "0.186.0",
 		"babel-plugin-ember-template-compilation": "^4.0.0",
 		"concurrently": "^9.2.3",
 		"decorator-transforms": "^2.3.2",
@@ -144,6 +145,7 @@
 		"mathjs": "^15.2.0",
 		"mediabunny": "^1.55.2",
 		"mediainfo.js": "^0.3.7",
+		"modern-screenshot": "4.7.0",
 		"mupdf": "^1.28.0",
 		"pdf-lib": "^1.17.1",
 		"pdfjs-dist": "^5.7.284",
@@ -167,6 +169,7 @@
 		"sass-embedded": "^1.100.0",
 		"satori": "^0.29.0",
 		"svgo": "^4.0.2",
+		"three": "0.186.1",
 		"tracked-built-ins": "^4.1.2"
 	}
 }
