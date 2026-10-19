@@ -108,6 +108,11 @@
 	block-size: 8px;
 }
 
+.media-job-result .canon-row-label,
+.media-job-result .canon-row-text {
+	min-inline-size: 0;
+}
+
 .media-job-result .canon-row-title {
 	overflow: hidden;
 	text-overflow: ellipsis;
