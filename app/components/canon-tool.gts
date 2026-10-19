@@ -106,6 +106,10 @@ export default class CanonTool extends Component<CanonToolSignature> {
 		},
 	);
 
+	get stickerId() {
+		return this.args.tool.component ?? this.args.tool.id;
+	}
+
 	get expanded() {
 		return this.expandedIds.has(this.args.tool.id);
 	}
@@ -139,7 +143,7 @@ export default class CanonTool extends Component<CanonToolSignature> {
 					this.stickerSlot insertBefore=null
 				~}}
 					<PeelSticker
-						@tool={{@tool.id}}
+						@tool={{this.stickerId}}
 						@label={{@tool.name}}
 					/>
 				{{~/in-element~}}
