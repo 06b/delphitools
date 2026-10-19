@@ -6,6 +6,7 @@ import { modifier } from 'ember-modifier';
 import type { PDFDocument } from 'pdf-lib';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonPageStrip, {
@@ -40,6 +41,7 @@ import {
 	type Size,
 } from 'delphitools-v2/components/tools/pdf-organiser/plan';
 import './media/media.css';
+import './pdf-organiser/pdf-organiser.css';
 
 const ACCEPT = '.pdf,application/pdf';
 const modes = ['By ranges', 'Every page'];
@@ -48,6 +50,8 @@ const dropTypes = ['application/pdf'];
 const Trash = <template><IconSvg @name="trash-2" /></template>;
 const Merge = <template><IconSvg @name="file-stack" /></template>;
 const Cut = <template><IconSvg @name="scissors-line-dashed" /></template>;
+const Left = <template><IconSvg @name="rotate-ccw" /></template>;
+const Right = <template><IconSvg @name="rotate-cw" /></template>;
 
 interface Source {
 	id: number;
@@ -99,9 +103,12 @@ export default class PdfOrganiser extends Component {
 	@tracked merged: Merged | null = null;
 	@tracked splitting = false;
 	@tracked splitFailed = false;
+	/** entry ids the rotate buttons act on */
+	@tracked picked: number[] = [];
 
 	#strip?: HTMLElement;
 	#job = 0;
+	#extend = false;
 
 	willDestroy() {
 		super.willDestroy();
@@ -281,6 +288,9 @@ export default class PdfOrganiser extends Component {
 	// stale merge, ios job.reset
 	#change(entries: Entry[]) {
 		this.entries = entries;
+		this.picked = this.picked.filter((id) =>
+			entries.some((entry) => entry.id === id),
+		);
 		this.#job++;
 		this.merged = null;
 		this.merging = false;
@@ -354,8 +364,81 @@ export default class PdfOrganiser extends Component {
 		);
 	}
 
-	// press opens page menu
+	get pickedIndices() {
+		return this.entries.flatMap((entry, index) =>
+			this.picked.includes(entry.id) ? [index] : [],
+		);
+	}
+
+	get lastPicked() {
+		const id = this.picked.at(-1);
+		const index = this.entries.findIndex(
+			(entry) => entry.id === id,
+		);
+		return index < 0 ? undefined : index;
+	}
+
+	get nothingPicked() {
+		return this.busy || this.pickedIndices.length === 0;
+	}
+
+	get noPages() {
+		return this.busy || this.entries.length === 0;
+	}
+
+	rotate = (delta: number, all: boolean) => {
+		if (this.busy) return;
+		this.#change(
+			this.entries.map((entry) =>
+				all || this.picked.includes(entry.id)
+					? {
+							...entry,
+							rotation: normaliseRotation(
+								entry.rotation +
+									delta,
+							),
+						}
+					: entry,
+			),
+		);
+	};
+
+	// the kit strip lights one page; the rest of a selection is marked here.
+	// The kit rebuilds its cells on its own state changes, so marks follow
+	// every rebuild
+	markPicked = modifier((strip: HTMLElement, [indices]: [number[]]) => {
+		const mark = () => {
+			for (const cell of strip.querySelectorAll<HTMLElement>(
+				'[data-page-index]',
+			))
+				cell.toggleAttribute(
+					'data-picked',
+					indices.includes(
+						Number(
+							cell.dataset[
+								'pageIndex'
+							],
+						),
+					),
+				);
+		};
+		mark();
+		const observer = new MutationObserver(mark);
+		observer.observe(strip, { childList: true, subtree: true });
+		return () => observer.disconnect();
+	});
+
+	// a plain press picks one page and opens its menu; Shift, Cmd or Ctrl add to the pick
 	select = (index: number) => {
+		const id = this.entries[index]?.id;
+		if (id === undefined) return;
+		if (this.#extend) {
+			this.picked = this.picked.includes(id)
+				? this.picked.filter((picked) => picked !== id)
+				: [...this.picked, id];
+			return;
+		}
+		this.picked = [id];
 		this.#button(index)?.dispatchEvent(
 			new MouseEvent('contextmenu', {
 				bubbles: true,
@@ -388,8 +471,19 @@ export default class PdfOrganiser extends Component {
 				)?.focus(),
 			);
 		};
+		// onSelect gets no event; read the keys before the kit's click handler
+		const onClick = (event: MouseEvent) => {
+			this.#extend =
+				event.shiftKey ||
+				event.metaKey ||
+				event.ctrlKey;
+		};
 		strip.addEventListener('keydown', onKey);
-		return () => strip.removeEventListener('keydown', onKey);
+		strip.addEventListener('click', onClick, true);
+		return () => {
+			strip.removeEventListener('keydown', onKey);
+			strip.removeEventListener('click', onClick, true);
+		};
 	});
 
 	pickMode = (index: number) => {
@@ -522,8 +616,12 @@ export default class PdfOrganiser extends Component {
 							@onMove={{this.move}}
 							@onDrop={{this.insert}}
 							@onSelect={{this.select}}
+							@selected={{this.lastPicked}}
 							@menu={{this.menu}}
 							{{this.stripKeys}}
+							{{this.markPicked
+								this.pickedIndices
+							}}
 						/>
 					{{else}}
 						<CanonPageStrip
@@ -588,6 +686,69 @@ export default class PdfOrganiser extends Component {
 						@over={{this.drop.over}}
 						@onFiles={{this.add}}
 					/>
+				</CanonRows>
+				<CanonRows @framed={{true}} class="porg-rotate">
+					<CanonHeading @text="Rotate" />
+					<CanonRow
+						class="porg-rotate-picked"
+						@title="Selected"
+						@form="flush"
+					>
+						<CanonGrid>
+							<CanonButton
+								@kind="cell"
+								@icon={{Left}}
+								@label="Rotate left"
+								@disabled={{this.nothingPicked}}
+								@onClick={{fn
+									this.rotate
+									-90
+									false
+								}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@icon={{Right}}
+								@label="Rotate right"
+								@disabled={{this.nothingPicked}}
+								@onClick={{fn
+									this.rotate
+									90
+									false
+								}}
+							/>
+						</CanonGrid>
+					</CanonRow>
+					<CanonRow
+						class="porg-rotate-all"
+						@title="All pages"
+						@form="flush"
+					>
+						<CanonGrid>
+							<CanonButton
+								@kind="cell"
+								@icon={{Left}}
+								@label="Rotate left"
+								@disabled={{this.noPages}}
+								@onClick={{fn
+									this.rotate
+									-90
+									true
+								}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@icon={{Right}}
+								@label="Rotate right"
+								@disabled={{this.noPages}}
+								@onClick={{fn
+									this.rotate
+									90
+									true
+								}}
+							/>
+						</CanonGrid>
+					</CanonRow>
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Merge" />

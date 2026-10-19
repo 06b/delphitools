@@ -204,6 +204,53 @@ check(
 	`${before.toFixed(3)} → ${after.toFixed(3)}`,
 );
 
+const turn = async (row, side) => {
+	await page.click(
+		`.porg-rotate-${row} button[aria-label="Rotate ${side}"]`,
+	);
+	await sleep(150);
+};
+const picked = () =>
+	page.$$eval('.porg-strip [data-picked]', (els) =>
+		els.map((el) => el.dataset.pageIndex).join(','),
+	);
+check('the pressed page is the selection', (await picked()) === '0', await picked());
+await turn('picked', 'right');
+const half = await ratio(0);
+await turn('picked', 'left');
+check(
+	'Rotate right and Rotate left turn the selected page',
+	half < 1 && (await ratio(0)) > 1 && (await ratio(1)) < 1,
+	`${half.toFixed(3)}, ${(await ratio(0)).toFixed(3)}`,
+);
+await page.keyboard.down('Shift');
+await page.click('.porg-strip [data-page-index="1"] .canon-page-strip-page');
+await page.keyboard.up('Shift');
+await sleep(150);
+check(
+	'Shift-click adds a page without opening the menu',
+	(await picked()) === '0,1' &&
+		!(await page.$('.canon-page-strip-menu:popover-open')),
+	await picked(),
+);
+await turn('picked', 'right');
+const both = [await ratio(0), await ratio(1), await ratio(2)];
+await turn('picked', 'left');
+check(
+	'the selection turns together, the rest stays',
+	both[0] < 1 && both[1] > 1 && both[2] < 1 &&
+		(await ratio(0)) > 1 && (await ratio(1)) < 1,
+	both.map((r) => r.toFixed(3)).join(','),
+);
+await turn('all', 'right');
+const all = [await ratio(0), await ratio(2), await ratio(4)];
+await turn('all', 'left');
+check(
+	'All pages turns every page',
+	all[0] < 1 && all[1] > 1 && all[2] > 1 && (await ratio(4)) < 1,
+	all.map((r) => r.toFixed(3)).join(','),
+);
+
 await page.focus('.porg-strip [data-page-index="4"] .canon-page-strip-page');
 await page.keyboard.press('Delete');
 check('Delete on a focused page removes it', await waitCount(4));
