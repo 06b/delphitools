@@ -7,7 +7,6 @@ import type Owner from '@ember/owner';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
-import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonNumberField from 'delphicanon/components/canon-number-field';
 import CanonPageStrip, {
@@ -48,7 +47,9 @@ import Job from 'delphitools-v2/components/tools/media/job';
 import Pager from 'delphitools-v2/components/tools/media/pager';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { open, sizes, thumbEdge } from 'delphitools-v2/lib/pdfjs';
-import PaperMenu from 'delphitools-v2/components/tools/imposer/paper';
+import PaperPopover, {
+	type PaperChoice,
+} from 'delphitools-v2/components/tools/paper-sizes/popover';
 import SheetPicture from 'delphitools-v2/components/tools/imposer/picture';
 import SignatureBlock, {
 	blockHeight,
@@ -73,7 +74,7 @@ import './imposer/imposer.css';
 const ACCEPT = '.pdf,application/pdf';
 const COPIES = [2, 4, 6, 8, 9];
 const SCALINGS: Fit[] = ['fit', 'fill', 'actual'];
-const SCALING_LABELS = ['Fit (no crop)', 'Fill (may crop)', 'Actual size'];
+const SCALING_LABELS = ['Fit', 'Fill', 'Actual size'];
 const FLIPS = ['long-edge', 'short-edge'] as const;
 const FLIP_LABELS = ['Long edge', 'Short edge'];
 const ORIENTATIONS = ['portrait', 'landscape'] as const;
@@ -318,8 +319,24 @@ export default class Imposer extends Component {
 		);
 	}
 
-	get isCustomPaper() {
-		return this.paperSizeId === 'custom';
+	get paperChoice(): PaperChoice {
+		switch (this.paperSizeId) {
+			case 'infer':
+				return { kind: 'extra' };
+			case 'custom':
+				return {
+					kind: 'custom',
+					width: this.customPaperW,
+					height: this.customPaperH,
+				};
+			default:
+				return { kind: 'paper', id: this.paperSizeId };
+		}
+	}
+
+	get inferTitle() {
+		const inferred = this.inferredPaper?.label;
+		return inferred ? `Infer (${inferred})` : 'Infer from PDF';
 	}
 
 	get orientationIndex() {
@@ -476,18 +493,17 @@ export default class Imposer extends Component {
 		this.#resetNavigation();
 	};
 
-	setPaper = (id: string) => {
-		this.paperSizeId = id;
-		this.#invalidate();
-	};
-
-	setPaperW = (value: number) => {
-		this.customPaperW = value;
-		this.#invalidate();
-	};
-
-	setPaperH = (value: number) => {
-		this.customPaperH = value;
+	setPaper = (choice: PaperChoice) => {
+		if (choice.kind === 'custom') {
+			this.customPaperW = choice.width;
+			this.customPaperH = choice.height;
+		}
+		this.paperSizeId =
+			choice.kind === 'paper'
+				? choice.id
+				: choice.kind === 'extra'
+					? 'infer'
+					: 'custom';
 		this.#invalidate();
 	};
 
@@ -1021,49 +1037,16 @@ export default class Imposer extends Component {
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Paper" />
-					<PaperMenu
+					<PaperPopover
 						class="imp-paper-menu"
-						@value={{this.paperSizeId}}
-						@inferred={{this.inferredPaper.label}}
+						@selected={{this.paperChoice}}
+						@extra={{this.inferTitle}}
+						@custom={{true}}
+						@min={{50}}
+						@max={{1000}}
 						@label="Paper"
-						@onChange={{this.setPaper}}
+						@onPick={{this.setPaper}}
 					/>
-					{{#if this.isCustomPaper}}
-						<CanonRow
-							class="imp-paper-w"
-							@title="Width"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.customPaperW}}
-								@min={{50}}
-								@max={{1000}}
-								@step={{1}}
-								@decimals={{1}}
-								@unit="mm"
-								@labelledBy={{titleId}}
-								@onChange={{this.setPaperW}}
-							/>
-						</CanonRow>
-						<CanonRow
-							class="imp-paper-h"
-							@title="Height"
-							@form="flush"
-							as |titleId|
-						>
-							<CanonDecimalField
-								@value={{this.customPaperH}}
-								@min={{50}}
-								@max={{1000}}
-								@step={{1}}
-								@decimals={{1}}
-								@unit="mm"
-								@labelledBy={{titleId}}
-								@onChange={{this.setPaperH}}
-							/>
-						</CanonRow>
-					{{/if}}
 					<CanonHeading @text="Orientation" />
 					<CanonSegmented
 						class="imp-orientation"

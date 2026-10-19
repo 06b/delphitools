@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PDFDocument } from 'pdf-lib';
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { launch, visit, check, finish, sleep, pickPaper } from './harness.mjs';
 
 const source = await PDFDocument.create();
 for (let n = 0; n < 4; n++) source.addPage([595.28, 841.89]);
@@ -213,19 +213,65 @@ await pick('.imp-orientation', 'Portrait');
 await settle();
 check('portrait sheet', (await state()).tiles.startsWith('Sheet 210 × 297 mm'));
 
-await page.select('.imp-paper-menu select', String(await page.$eval('.imp-paper-menu select', (el) => el.options.length - 1)));
+await page.click('.imp-paper-menu');
+await sleep(300);
+const popover = await page.evaluate(() => {
+	const trigger = document.querySelector('.imp-paper-menu');
+	const panel = document.querySelector('.paper-popover');
+	return {
+		open: panel.matches(':popover-open'),
+		role: panel.getAttribute('role'),
+		name: panel.getAttribute('aria-label'),
+		expanded: trigger.getAttribute('aria-expanded'),
+		haspopup: trigger.getAttribute('aria-haspopup'),
+		findFocused: document.activeElement?.classList.contains('paper-find'),
+		ticked: [...panel.querySelectorAll('.paper-popover-list .paper-cell[aria-current="true"] .paper-cell-name')].map((el) => el.textContent.trim()),
+		custom: [...panel.querySelectorAll('.paper-popover-custom input')].map((el) => el.value),
+	};
+});
+check(
+	'the paper cell opens a named dialog popover, find focused, A4 ticked, custom starts at A4',
+	popover.open && popover.role === 'dialog' && popover.name === 'Paper' && popover.expanded === 'true' && popover.haspopup === 'dialog' && popover.findFocused && popover.ticked.join() === 'A4' && popover.custom.join() === '210,297',
+	JSON.stringify(popover),
+);
+await page.keyboard.type('a3');
+await sleep(200);
+check(
+	'find narrows the sizes by name',
+	await page.evaluate(() => [...document.querySelectorAll('.paper-popover-list .paper-cell-name')].some((el) => el.textContent.trim() === 'A3') && !document.querySelector('.paper-popover-list .paper-cell-name')?.textContent.startsWith('B')),
+);
+await page.keyboard.press('Escape');
+await sleep(200);
+check(
+	'Escape closes it and focus goes back to the paper cell',
+	await page.evaluate(() => !document.querySelector('.paper-popover:popover-open') && document.activeElement?.classList.contains('imp-paper-menu')),
+);
+await page.click('.imp-paper-menu');
+await sleep(300);
+const setField = async (selector, value) => {
+	await page.$eval(selector, (el) => {
+		el.focus();
+		el.select();
+	});
+	await page.keyboard.type(value);
+	await page.keyboard.press('Enter');
+};
+await setField('.paper-popover-width input', '320');
+await setField('.paper-popover-height input', '450');
+await page.click('.paper-popover-use');
 await settle();
 check(
-	'Custom paper shows width and height in mm',
-	!!(await page.$('.imp-paper-w')) && !!(await page.$('.imp-paper-h')) && (await state()).tiles.startsWith('Sheet 320 × 450 mm'),
+	'Custom: width and height in mm, Use closes the popover',
+	!(await page.$('.paper-popover:popover-open')) &&
+		(await state()).tiles.startsWith('Sheet 320 × 450 mm') &&
+		(await page.$eval('.imp-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 320 × 450 mm',
 	(await state()).tiles,
 );
-const a3 = await page.$eval('.imp-paper-menu select', (el) =>
-	[...el.options].find((o) => o.textContent.startsWith('A3 '))?.value,
+check('A3 paper', (await pickPaper(page, '.imp-paper-menu', 'A3')) && (await state()).tiles.startsWith('Sheet 297 × 420 mm'));
+check(
+	'scaling reads Fit, Fill, Actual size',
+	(await page.$$eval('.imp-scaling [role="radio"]', (els) => els.map((el) => el.textContent.trim()).join())) === 'Fit,Fill,Actual size',
 );
-await page.select('.imp-paper-menu select', a3);
-await settle();
-check('A3 paper', (await state()).tiles.startsWith('Sheet 297 × 420 mm') && !(await page.$('.imp-paper-w')));
 
 await page.click('.imp-guide-toggle');
 check(
@@ -272,10 +318,14 @@ await page.waitForFunction(() => !!document.querySelector('.imp-source'), { time
 await sleep(1500);
 s = await state();
 check('the Files cell opens the picker; 4 pages on one sheet', s.source === 'four.pdf' && s.sides === 2 && s.detail === '4 pages', JSON.stringify(s));
+await page.click('.imp-paper-menu');
+await sleep(300);
 check(
-	'the paper menu offers the size the PDF was set on',
-	await page.$eval('.imp-paper-menu select', (el) => el.options[0].textContent === 'Infer (A4 (210 × 297 mm))'),
+	'the paper popover offers the size the PDF was set on',
+	await page.$eval('.paper-popover-extra', (el) => el.textContent.trim() === 'Infer (A4 (210 × 297 mm))'),
 );
+await page.keyboard.press('Escape');
+await sleep(200);
 
 await page.click('.media-job-run');
 await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => {});
@@ -314,6 +364,17 @@ check(
 	'390 px: no sideways scroll',
 	await page.evaluate(() => document.querySelector('.dt-main').scrollWidth <= document.querySelector('.dt-main').clientWidth),
 );
+await page.$eval('.imp-paper-menu', (el) => el.scrollIntoView({ block: 'center' }));
+await page.click('.imp-paper-menu');
+await sleep(300);
+check(
+	'390 px: the paper popover fits the width',
+	await page.$eval('.paper-popover', (el) => {
+		const box = el.getBoundingClientRect();
+		return el.matches(':popover-open') && box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
+	}),
+);
+await page.keyboard.press('Escape');
 check(
 	'390 px: the sheet comes before the settings',
 	await page.evaluate(
