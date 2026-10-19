@@ -488,20 +488,25 @@ function scope(mode: AngleMode): Record<string, (...x: number[]) => number> {
 	};
 }
 
-/** The expression with each standalone `shown` answer swapped for its full-precision value. */
-export function withExact(
-	expression: string,
-	shown: string,
-	value: number,
-): string {
-	// the magnitude only, so a minus in front stays an operator
-	const digits = shown.replace(/^-/, '');
-	if (digits === String(Math.abs(value))) return expression;
-	const escaped = digits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-	return expression.replace(
-		new RegExp(`(?<![\\d.e])${escaped}(?![\\d.e])`, 'g'),
-		`(${String(Math.abs(value))})`,
-	);
+/** An answer as it sits in the expression: shown rounded at `at`, worth `value`. */
+export interface Carried {
+	at: number;
+	text: string;
+	value: number;
+}
+
+/** The expression with each carried answer still intact swapped for its full-precision value. */
+export function withExact(expression: string, carried: Carried[]): string {
+	return [...carried]
+		.sort((a, b) => b.at - a.at)
+		.reduce(
+			(text, { at, text: shown, value }) =>
+				text.slice(at, at + shown.length) === shown &&
+				!/[\d.e]/.test(text.charAt(at + shown.length))
+					? `${text.slice(0, at)}(${String(value)})${text.slice(at + shown.length)}`
+					: text,
+			expression,
+		);
 }
 
 /** The keypad's text in mathjs syntax. */

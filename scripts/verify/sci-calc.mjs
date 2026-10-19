@@ -220,6 +220,10 @@ await visit(page, '/tools/sci-calc?sciKeys=2 ÷ 3 = C Ans × 3 =');
 await sleep(800);
 s = await state();
 check('Ans keeps full precision', s.readout === '2', JSON.stringify(s));
+await visit(page, '/tools/sci-calc?sciKeys=√ 2 ) x² = C 5 − 2 − 3 =');
+await sleep(800);
+s = await state();
+check('typed digits matching an earlier answer stay as typed', s.readout === '0', JSON.stringify(s));
 
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/sci-calc');

@@ -37,6 +37,7 @@ import {
 	typed,
 	written,
 	withExact,
+	type Carried,
 	type AngleMode,
 	type Kind,
 } from 'delphitools-v2/components/tools/sci-calc/entry';
@@ -100,6 +101,7 @@ export default class SciCalcTool extends Component {
 	@tracked angleMode: AngleMode = 'deg';
 	@tracked history: TapeEntry[] = [];
 	@tracked lastAnswer = 0;
+	#carried: Carried[] = [];
 	/** The value the expression gave last; an unfinished one keeps it. */
 	@tracked lastPreview?: string;
 	@tracked math?: MathModule;
@@ -190,11 +192,7 @@ export default class SciCalcTool extends Component {
 
 	/** Answers carried on or recalled read at full precision, not as shown. */
 	exact(text: string) {
-		return withExact(
-			text,
-			formatNumber(this.lastAnswer),
-			this.lastAnswer,
-		);
+		return withExact(text, this.#carried);
 	}
 
 	/** The value the expression would give now, its open brackets closed. */
@@ -223,6 +221,7 @@ export default class SciCalcTool extends Component {
 			this.phase.kind === 'result' && of !== 'other'
 				? ''
 				: this.expression;
+		if (!base) this.#carried = [];
 		this.expression = join(base, value, of);
 		this.phase = { kind: 'entry' };
 	}
@@ -268,6 +267,10 @@ export default class SciCalcTool extends Component {
 			...this.history.slice(0, historyLimit - 1),
 		];
 		this.expression = result;
+		this.#carried =
+			typeof value === 'number'
+				? [{ at: 0, text: result, value }]
+				: [];
 		this.phase = { kind: 'result', typed: typedText };
 	}
 
@@ -285,6 +288,7 @@ export default class SciCalcTool extends Component {
 				break;
 			case 'C':
 				this.expression = '';
+				this.#carried = [];
 				this.phase = { kind: 'entry' };
 				break;
 			case '⌫':
@@ -310,12 +314,21 @@ export default class SciCalcTool extends Component {
 				this.phase = { kind: 'entry' };
 				break;
 			}
-			case 'Ans':
-				this.insert(
-					formatNumber(this.lastAnswer),
-					'factor',
-				);
+			case 'Ans': {
+				const shown = formatNumber(this.lastAnswer);
+				this.insert(shown, 'factor');
+				this.#carried = [
+					...this.#carried,
+					{
+						at:
+							this.expression.length -
+							shown.length,
+						text: shown,
+						value: this.lastAnswer,
+					},
+				];
 				break;
+			}
 			default:
 				this.insert(text(key), kind(key));
 		}

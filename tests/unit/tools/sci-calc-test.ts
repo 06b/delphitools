@@ -340,29 +340,49 @@ module('Unit | Tool | sci-calc', function () {
 
 	test('a carried or recalled answer reads at full precision', function (assert) {
 		const third = 1 / 3;
-		const exact = (raw: string) =>
-			shown(withExact(raw, formatNumber(third), third));
+		const at = (position: number) => [
+			{
+				at: position,
+				text: formatNumber(third),
+				value: third,
+			},
+		];
 		assert.strictEqual(formatNumber(third), '0.3333333333');
-		assert.strictEqual(exact('0.3333333333×3'), '1');
-		assert.strictEqual(exact('2+0.3333333333'), '2.333333333');
 		assert.strictEqual(
-			exact('10.33333333331'),
-			'10.33333333',
-			'a longer number stays as typed',
+			shown(withExact('0.3333333333×3', at(0))),
+			'1',
 		);
-		assert.strictEqual(exact('−0.3333333333×3'), '-1');
+		assert.strictEqual(
+			shown(withExact('2+0.3333333333', at(2))),
+			'2.333333333',
+		);
+		assert.strictEqual(
+			withExact('0.33333333335', at(0)),
+			'0.33333333335',
+			'digits typed onto the answer leave it as shown',
+		);
+		assert.strictEqual(
+			withExact('0.3333333333×3', []),
+			'0.3333333333×3',
+			'typed digits that match an answer stay as typed',
+		);
 		const minus = -2 / 3;
 		assert.strictEqual(
 			shown(
-				withExact(
-					'1−0.6666666667×3',
-					formatNumber(minus),
-					minus,
-				),
+				withExact('1+-0.6666666667×3', [
+					{
+						at: 2,
+						text: '-0.6666666667',
+						value: minus,
+					},
+				]),
 			),
 			'-1',
-			'the minus stays an operator',
 		);
-		assert.strictEqual(withExact('4×5', '4', 4), '4×5');
+		assert.strictEqual(
+			withExact('3×1', [{ at: 0, text: '2', value: 2 }]),
+			'3×1',
+			'a span no longer in place is skipped',
+		);
 	});
 });
