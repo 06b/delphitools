@@ -269,17 +269,19 @@ const modeMotion = async () => {
 	const r = await page.evaluate(() => ({
 		band: document.querySelector('.time-calc .canon-canvas').getBoundingClientRect().height,
 		fading: document.querySelector('.tc-drawing').getAnimations().length > 0,
+		eases: document.querySelector('.time-calc .canon-canvas').classList.contains('canon-canvas--eases'),
 	}));
 	await sleep(400);
 	const after = (await state()).band;
+	const settled = await page.evaluate(() => !document.querySelector('.time-calc .canon-canvas--eases'));
 	await mode('Timestamp');
 	await sleep(450);
-	return { before, mid: r.band, after, fading: r.fading };
+	return { before, mid: r.band, after, fading: r.fading, eases: r.eases, settled };
 };
 let motion = await modeMotion();
 check(
 	'a mode change eases the band and fades the new picture in',
-	motion.mid > motion.before && motion.mid < motion.after && motion.fading,
+	motion.mid > motion.before && motion.mid < motion.after && motion.fading && motion.eases && motion.settled,
 	JSON.stringify(motion),
 );
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);

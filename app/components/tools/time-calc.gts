@@ -57,6 +57,18 @@ const unitNames = units.map((u) => u.label);
 const dash = '—';
 const maxZones = 6;
 const addZonePlaceholder = 'Add timezone...';
+// the class stays past the transition's last frame
+const FRAME_MS = 50;
+
+/** The kit's band ease (`--canon-canvas-refit`) in ms; iOS fitBand is 0.3 s. */
+function refitMs() {
+	const value = getComputedStyle(document.documentElement)
+		.getPropertyValue('--canon-canvas-refit')
+		.trim();
+	const time = parseFloat(value);
+	if (!Number.isFinite(time)) return 300;
+	return value.endsWith('ms') ? time : time * 1000;
+}
 
 const ClockIcon = <template><IconSvg @name="clock" /></template>;
 const PasteIcon = <template><IconSvg @name="clipboard-paste" /></template>;
@@ -427,7 +439,10 @@ export default class TimeCalc extends Component {
 		// the band eases to its new height only on a mode change, as iOS fitBand
 		this.refitting = true;
 		clearTimeout(this.#refit);
-		this.#refit = setTimeout(() => (this.refitting = false), 350);
+		this.#refit = setTimeout(
+			() => (this.refitting = false),
+			refitMs() + FRAME_MS,
+		);
 	};
 
 	/** Focus stops the clock so the selection holds what is shown. */
@@ -534,7 +549,10 @@ export default class TimeCalc extends Component {
 		<CanonSplit class="time-calc">
 			<:banner>
 				<CanonCanvas
-					class={{if this.refitting "tc-refit"}}
+					class={{if
+						this.refitting
+						"canon-canvas--eases"
+					}}
 					@height={{this.bandHeight}}
 				>
 					<Picture
