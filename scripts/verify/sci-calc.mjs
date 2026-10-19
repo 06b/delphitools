@@ -80,6 +80,12 @@ check('an operator carries the result on', s.expression === '43+2' && s.readout 
 await keys('C', 'sin', '3', '0', '=');
 s = await state();
 check('degrees: sin 30 is 0.5', s.readout === '0.5', s.readout);
+await keys('C', 'sin', '1', '8', '0', '=');
+s = await state();
+check('sin 180 is exactly 0', s.readout === '0', s.readout);
+await keys('C', '7', 'mod', '=');
+s = await state();
+check('a dangling mod is an error, not percent', s.readout === 'Error', s.readout);
 await page.evaluate(() =>
 	[...document.querySelectorAll('.sci-modes button')]
 		.find((b) => b.textContent.trim() === 'RAD')
