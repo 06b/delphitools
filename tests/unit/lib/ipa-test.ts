@@ -18,6 +18,7 @@ module('Unit | lib | ipa', function () {
 			{
 				type: 'word',
 				value: 'hello',
+				symbols: ['h', 'ə', 'ˈ', 'l', 'oʊ'],
 				ipa: 'həˈloʊ',
 				guess: false,
 			},
@@ -25,6 +26,7 @@ module('Unit | lib | ipa', function () {
 			{
 				type: 'word',
 				value: 'world',
+				symbols: ['w', 'ɚ', 'l', 'd'],
 				ipa: 'wɚld',
 				guess: false,
 			},
