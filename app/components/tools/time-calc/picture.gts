@@ -183,14 +183,13 @@ export default class Picture extends Component<PictureSignature> {
 					.join(' ');
 	}
 
-	/** A new pose of the same kind springs there; a new kind jumps and fades in. */
 	settle = modifier((element: HTMLElement) => {
 		const target = this.target;
 		const key = JSON.stringify(target);
 		const kind = this.args.scene.kind;
 		const turned = kind !== this.#kind;
 		this.#kind = kind;
-		// iOS cross-dissolves 0.25 s; the old drawing is already gone, so only the new one fades
+		// old drawing already gone
 		if (turned && this.shown && !still())
 			for (const layer of element.querySelectorAll(
 				'.tc-drawing, .tc-readout',

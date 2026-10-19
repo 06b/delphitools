@@ -107,7 +107,7 @@ export default class PdfOrganiser extends Component {
 	@tracked merged: Merged | null = null;
 	@tracked splitting = false;
 	@tracked splitFailed = false;
-	/** entry ids the rotate buttons act on */
+	/** entry ids, not indices */
 	@tracked picked: number[] = [];
 
 	#strip?: HTMLElement;
@@ -409,9 +409,7 @@ export default class PdfOrganiser extends Component {
 		);
 	};
 
-	// the kit strip lights one page; the rest of a selection is marked here.
-	// The kit rebuilds its cells on its own state changes, so marks follow
-	// every rebuild
+	// reapply after kit rebuilds
 	markPicked = modifier((strip: HTMLElement, [indices]: [number[]]) => {
 		const picked = new Set(indices);
 		const mark = () => {
@@ -436,7 +434,6 @@ export default class PdfOrganiser extends Component {
 		return () => observer.disconnect();
 	});
 
-	// a plain press picks one page and opens its menu; Shift, Cmd or Ctrl add to the pick
 	select = (index: number) => {
 		const id = this.entries[index]?.id;
 		if (id === undefined) return;
@@ -479,7 +476,7 @@ export default class PdfOrganiser extends Component {
 				)?.focus(),
 			);
 		};
-		// onSelect gets no event; read the keys before the kit's click handler
+		// kit onSelect lacks event
 		const onClick = (event: MouseEvent) => {
 			this.#extend =
 				event.shiftKey ||

@@ -69,7 +69,7 @@ module('Unit | Tool | image-to-pdf', function () {
 		assert.strictEqual(bled.trim.x, BLEED_PT);
 		assert.strictEqual(bled.trim.width, plain.page.width);
 		assert.strictEqual(bled.trim.height, plain.page.height);
-		// the margin counts from the trim
+		// margin counts from trim
 		assert.strictEqual(
 			Math.round((bled.area.x - BLEED_PT) * 100),
 			Math.round(plain.area.x * 100),

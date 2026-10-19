@@ -57,10 +57,10 @@ const unitNames = units.map((u) => u.label);
 const dash = '—';
 const maxZones = 6;
 const addZonePlaceholder = 'Add timezone...';
-// the class stays past the transition's last frame
+// outlast transition's last frame
 const FRAME_MS = 50;
 
-/** The kit's band ease (`--canon-canvas-refit`) in ms; iOS fitBand is 0.3 s. */
+/** kit band ease, ms */
 function refitMs() {
 	const value = getComputedStyle(document.documentElement)
 		.getPropertyValue('--canon-canvas-refit')
@@ -436,7 +436,7 @@ export default class TimeCalc extends Component {
 
 	pickMode = (index: number) => {
 		this.mode = modes[index] ?? 'timestamp';
-		// the band eases to its new height only on a mode change, as iOS fitBand
+		// only mode changes ease
 		this.refitting = true;
 		clearTimeout(this.#refit);
 		this.#refit = setTimeout(

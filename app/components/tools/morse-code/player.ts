@@ -60,7 +60,6 @@ export default class MorsePlayer {
 	#context?: AudioContext;
 	#source?: AudioBufferSourceNode;
 	#buffer?: AudioBuffer;
-	// keyed dit and dah at #keyedWpm
 	#keyed = new Map<string, AudioBuffer>();
 	#keyedWpm = 0;
 	#looping = false;
@@ -92,7 +91,7 @@ export default class MorsePlayer {
 		this.#start(0);
 	}
 
-	/** One keyed symbol's tone, beside any playback and leaving it be. */
+	/** does not stop playback */
 	key(symbol: string, wpm: number) {
 		if (wpm !== this.#keyedWpm) {
 			this.#keyed.clear();

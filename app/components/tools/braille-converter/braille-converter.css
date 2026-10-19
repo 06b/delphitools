@@ -90,7 +90,6 @@
 	}
 }
 
-/* the keyboard panel: the cell being built, its six dots, then the actions */
 .canon-popover.brl-keyboard {
 	inline-size: min(320px, calc(100vw - 32px));
 	padding: var(--canon-frame);
@@ -124,7 +123,7 @@
 	font-weight: var(--canon-weight-semibold);
 }
 
-/* dots 1 2 3 down the left column, 4 5 6 down the right, as in the cell */
+/* braille cell dot order */
 .brl-keyboard-toggles {
 	display: grid;
 	grid-template-rows: repeat(3, 56px);

@@ -16,7 +16,7 @@ const issue = (
 	page?: number,
 ): PreflightIssue => ({ severity, category: 'document', message: '', page });
 
-// 16 x 16 px
+// 16x16 px png
 const PNG =
 	'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGP8z0AaYBzVMKph+GoAAMjXAiFqhH3bAAAAAElFTkSuQmCC';
 

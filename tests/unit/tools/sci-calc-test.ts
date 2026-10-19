@@ -25,14 +25,13 @@ const plain = (raw: string) =>
 		.map((p) => p.text)
 		.join('');
 
-/** The expression a run of key presses builds. */
 const keys = (...pressed: string[]) =>
 	pressed.reduce(
 		(expression, key) => join(expression, text(key), kind(key)),
 		'',
 	);
 
-/** What = puts on the display, as SciCalcTool.evaluate does. */
+/** mirrors SciCalcTool.evaluate */
 function shown(raw: string, mode: AngleMode = 'deg'): string {
 	const value = calculate(math, raw + ')'.repeat(openParens(raw)), mode);
 	if (value === undefined) return 'Error';
@@ -246,7 +245,7 @@ module('Unit | Tool | sci-calc', function () {
 		assert.strictEqual(shown('170!'), '7.25742e+306');
 		assert.strictEqual(shown('171!'), '∞');
 		assert.strictEqual(shown('(−1)!'), 'Error');
-		// mathjs extends factorial with gamma; iOS gives an error
+		// mathjs gamma; ios errors
 		assert.strictEqual(shown('0.5!'), '0.8862269255');
 	});
 
@@ -277,7 +276,7 @@ module('Unit | Tool | sci-calc', function () {
 	test('evaluator: mod', function (assert) {
 		assert.strictEqual(shown('7%3'), '1');
 		assert.strictEqual(shown('5.5%2'), '1.5');
-		// floored, as mathjs mod; iOS truncates to −1
+		// mathjs floors; ios truncates
 		assert.strictEqual(shown('−7%3'), '2');
 		assert.strictEqual(shown('7%'), 'Error');
 	});

@@ -128,7 +128,6 @@ export default class BrailleConverter extends Component {
 		this.input = text;
 	};
 
-	// To text, or Auto before the input reads as text
 	get keyboard() {
 		return this.toText || (this.mode === 0 && !this.input.trim());
 	}

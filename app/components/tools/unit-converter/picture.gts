@@ -149,7 +149,7 @@ export default class Picture extends Component<PictureSignature> {
 		const began = performance.now();
 		const step = (now: number) => {
 			const progress = Math.min(1, (now - began) / settleMs);
-			// no spring: its overshoot made the weights jump
+			// spring overshoot jumped weights
 			const eased = easeOutCubic(progress);
 			this.shown = {
 				value:

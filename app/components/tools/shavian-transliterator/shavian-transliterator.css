@@ -19,11 +19,7 @@
 	);
 }
 
-/*
- * The gloss ruling. The Noto Sans Shavian box is 1.36em (ascent 1.07,
- * descent 0.29); its x-height is 0.546em, its tall letters 0.771em, its deep
- * ones 0.235em.
- */
+/* noto sans shavian metrics */
 .shavian-transliterator .gl-gloss {
 	block-size: 1.36em;
 	background:

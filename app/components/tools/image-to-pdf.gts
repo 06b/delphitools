@@ -72,12 +72,12 @@ const MAX_MARGIN_MM = 30;
 const mmText = (mm: number) => `${mm} mm`;
 const MIN_DPI = 72;
 const MAX_DPI = 300;
-// 72, 96, 144, 150, 216 and 300 all land on the step
+// step divides common dpis
 const DPI_STEP = 6;
 const dpiText = (dpi: number) => `${dpi} DPI`;
 const FORMATS: PageFormat[] = ['png', 'jpeg', 'webp'];
 const formatLabels = ['PNG', 'JPEG', 'WebP'];
-// a 12 page scan: 3.6 MB of jpeg at 150 dpi, 10.4 MB of png at 144
+// jpeg scans 3x smaller
 const DEFAULT_DPI = 150;
 const DEFAULT_FORMAT: PageFormat = 'jpeg';
 const DEFAULT_QUALITY = 0.85;
@@ -683,7 +683,7 @@ export default class ImageToPdf extends Component {
 		this.rendering = false;
 	};
 
-	// read once: the sliders stay live during a run
+	// sliders stay live mid-run
 	#drawer() {
 		const { dpi, format, quality, stem } = this;
 		return async (pdf: PDFDocumentProxy, at: number) => {
@@ -883,7 +883,7 @@ export default class ImageToPdf extends Component {
 						{{/if}}
 					</CanonRows>
 					<CanonRows @framed={{true}}>
-						{{! stays mounted: it saves once the pages are drawn }}
+						{{! saves after pages draw }}
 						<DownloadAll
 							class="i2p-zip"
 							@files={{this.pageFiles}}

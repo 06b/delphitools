@@ -67,7 +67,7 @@ export const carryEdits = (old: IpaToken[], next: IpaToken[]) =>
 		(t) => t.type === 'word' && !!t.edited,
 	);
 
-// named by its Shavian keyword, a term of art
+// names are shavian keywords
 const letterSound = (letter: { ipa: string; name: string }): Sound => ({
 	glyph: letter.ipa,
 	name: letter.name,

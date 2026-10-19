@@ -63,7 +63,7 @@ export default class IpaTranscriber extends Component {
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
-		// ?ipaText= ?ipaWord=<1-based>: the iOS launch argument and a picked word
+		// ipaWord is 1-based
 		const query = new URLSearchParams(window.location.search);
 		const text = query.get('ipaText');
 		if (text !== null) this.input = text;
@@ -96,7 +96,6 @@ export default class IpaTranscriber extends Component {
 		}
 	}
 
-	// edited words keep their symbols
 	#transcribe() {
 		const { core, full } = this;
 		this.tokens = carryEdits(
@@ -211,7 +210,7 @@ export default class IpaTranscriber extends Component {
 	setInput = (text: string) => {
 		this.input = text;
 		this.selected = null;
-		// before the core tier, nothing to transcribe with
+		// core tier not loaded
 		if (!this.loading) this.#transcribe();
 	};
 
@@ -224,7 +223,7 @@ export default class IpaTranscriber extends Component {
 	};
 
 	measured = (height: number) => {
-		// 2 px rule under the picture
+		// 2px rule below picture
 		if (height + 2 !== this.pictureHeight)
 			this.pictureHeight = height + 2;
 	};

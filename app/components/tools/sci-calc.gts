@@ -190,7 +190,7 @@ export default class SciCalcTool extends Component {
 			: undefined;
 	}
 
-	/** Answers carried on or recalled read at full precision, not as shown. */
+	/** full precision, not display */
 	exact(text: string) {
 		return withExact(text, this.#carried);
 	}

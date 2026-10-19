@@ -13,7 +13,6 @@ interface SourceSignature {
 		label?: string;
 		onChange: (text: string) => void;
 	};
-	/** More buttons after Paste and Clear. */
 	Blocks: { default: [] };
 }
 

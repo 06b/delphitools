@@ -919,8 +919,7 @@ body {
 	font-family: var(--canon-mono-font);
 }
 
-// kit place() sets data-inside after a style flush, so the Original label
-// springs in from the bar's end on mount; its share is always 1
+// kit sets data-inside late
 .canon-compression-scale-top
 	+ .canon-compression-scale-bar
 	.canon-compression-scale-label {

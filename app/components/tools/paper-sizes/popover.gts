@@ -46,21 +46,19 @@ import './popover.css';
 
 interface Signature {
 	Args: {
-		/** A catalogue id, a custom `WxH` millimetre id, or `extraId`. */
+		/** catalogue, WxH or extraId */
 		value?: string;
-		/** Title of the caller's own choice above the list, as iOS `extra`. */
+		/** title of extra choice */
 		extra?: string;
-		/** The id `onPick` gets for the extra choice. */
 		extraId?: string;
-		/** Custom side range in millimetres; default iOS 10 to 5000. */
+		/** millimetres, default 10–5000 */
 		min?: number;
 		max?: number;
-		/** Trigger title while nothing is selected. */
 		placeholder?: string;
 		label?: string;
 		labelledBy?: string;
 		disabled?: boolean;
-		/** Default bottom-start. */
+		/** default bottom-start */
 		placement?: CanonPlacement;
 		onPick: (id: string) => void;
 	};
@@ -205,12 +203,12 @@ export default class PaperPopover extends Component<Signature> {
 	enter = (event: KeyboardEvent) => {
 		if (event.key !== 'Enter' || event.isComposing) return;
 		if (!this.custom || this.customOutside) return;
-		// closing returns focus to the trigger, which the Enter would press
+		// enter would press trigger
 		event.preventDefault();
 		this.pickCustom();
 	};
 
-	/** Opens with a custom selection's size typed, so it shows as picked, else with the find field empty. */
+	/** custom size shows picked */
 	#seed() {
 		const { selected } = this;
 		this.find(

@@ -16,7 +16,6 @@ interface KeyboardSignature {
 	};
 }
 
-/** Perkins keys: dots 1 2 3 under the left hand, 4 5 6 under the right. */
 const perkins: Record<string, number> = {
 	f: 1,
 	d: 2,
@@ -80,7 +79,7 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 
 	space = () => this.args.onInsert(' ');
 
-	// a chord inserts once every one of its keys is up
+	// chord inserts on release
 	keydown = (event: KeyboardEvent) => {
 		if (event.ctrlKey || event.metaKey || event.altKey) return;
 		const dot = perkins[event.key.toLowerCase()];
@@ -98,7 +97,7 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 	};
 
 	keyup = (event: KeyboardEvent) => {
-		// a space keyup would also toggle the focused dot in firefox
+		// firefox: space keyup toggles
 		if (event.key === ' ') event.preventDefault();
 		if (!this.#held.delete(event.key.toLowerCase())) return;
 		if (this.#held.size || !this.#chord.length) return;
@@ -106,7 +105,7 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 		this.#chord = [];
 	};
 
-	// keys released outside the panel never send their keyup here
+	// outside keyups never arrive
 	release = () => {
 		this.#held.clear();
 		this.#chord = [];
@@ -136,7 +135,7 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 				/>
 			</:trigger>
 			<:content>
-				{{! keys bubble up from the controls inside }}
+				{{! keys bubble from controls }}
 				{{! template-lint-disable no-invalid-interactive }}
 				<div
 					class="brl-keyboard-panel"
@@ -160,7 +159,7 @@ export default class BrailleKeyboard extends Component<KeyboardSignature> {
 							this.toggles
 							as |toggle|
 						}}
-							{{! canon-popover focuses its autofocus child }}
+							{{! canon-popover focuses autofocus }}
 							{{! template-lint-disable no-autofocus-attribute }}
 							<button
 								type="button"

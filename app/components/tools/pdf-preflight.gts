@@ -73,7 +73,6 @@ export default class PdfPreflight extends Component {
 	@tracked page: number | null = null;
 	@tracked preview = '';
 	@tracked boxes: PageBoxMark[] = [];
-	/** the pressed finding, outlined on the preview */
 	@tracked flagged: PreflightIssue | null = null;
 
 	#pdf: PDFDocumentProxy | null = null;
@@ -305,7 +304,7 @@ export default class PdfPreflight extends Component {
 		this.flagged = issue;
 	};
 
-	// the preview is in the other pane; bring it to the finding
+	// preview is other pane
 	revealFlags = modifier((paper: HTMLElement, [count]: [number]) => {
 		if (count) paper.scrollIntoView({ block: 'nearest' });
 	});

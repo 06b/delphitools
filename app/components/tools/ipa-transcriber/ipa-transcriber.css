@@ -1,5 +1,5 @@
 .ipa-transcriber {
-	/* iOS sets the IPA in the system serif */
+	/* ios uses system serif */
 	--ipa-serif: ui-serif, "Iowan Old Style", "Charter", georgia, serif;
 	--gl-font: var(--ipa-serif);
 }

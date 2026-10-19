@@ -107,7 +107,7 @@ export default class MorseCode extends Component {
 		);
 	}
 
-	// Auto shows it on an empty input too, so backspacing to empty keeps it
+	// keeps keypad when emptied
 	get keying() {
 		return this.decoding || (this.direction === 0 && !this.input);
 	}
@@ -225,7 +225,7 @@ export default class MorseCode extends Component {
 		if (key === 'dah') this.player.key('-', this.wpm);
 	};
 
-	// the keypad's own keys while focus is in it; Enter still presses the focused button
+	// enter presses focused button
 	keypadDown = (event: KeyboardEvent) => {
 		const key = keyOfEvent[event.key];
 		if (!key || event.metaKey || event.ctrlKey || event.altKey)
@@ -234,7 +234,7 @@ export default class MorseCode extends Component {
 		this.press(key);
 	};
 
-	// a space keyup would also click the focused button
+	// space keyup clicks button
 	keypadUp = (event: KeyboardEvent) => {
 		if (event.key === ' ') event.preventDefault();
 	};
@@ -303,7 +303,7 @@ export default class MorseCode extends Component {
 			</:main>
 			<:footer>
 				{{#if this.keying}}
-					{{! keys bubble up from the buttons inside }}
+					{{! keys bubble from buttons }}
 					{{! template-lint-disable no-invalid-interactive }}
 					<div
 						class="mc-keypad"

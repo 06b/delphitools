@@ -1,9 +1,5 @@
-/*
- * The gloss editor and its word block. The tool sets --gl-font, the face of
- * the gloss, the letter cells and the menu glyphs.
- */
+/* tool sets --gl-font */
 
-/* picture */
 .gl-picture {
 	display: flex;
 	flex-direction: column;
@@ -45,7 +41,7 @@
 	overflow: hidden auto;
 }
 
-/* each line holds the gloss band over its spelling, in the line's upper leading */
+/* gloss in upper leading */
 .gl-picture-text {
 	padding-block: 8px var(--canon-panel-padding);
 	color: var(--canon-foreground);
@@ -61,7 +57,6 @@
 	}
 }
 
-/* buttons above the textarea */
 .gl-picture-text .media-marked-marks {
 	pointer-events: none;
 }
@@ -80,7 +75,7 @@
 	position: relative;
 }
 
-/* the editor's fit() sets --gl-shift, --gl-fit and the width */
+/* fit() sets these vars */
 .gl-gloss {
 	position: absolute;
 	z-index: 2;
@@ -136,7 +131,6 @@
 	text-underline-offset: 5px;
 }
 
-/* word block */
 .gl-word-block {
 	animation: gl-appear 0.2s ease-out;
 }
@@ -203,7 +197,7 @@
 	text-align: center;
 }
 
-/* the alphabet submenus are taller than a screen */
+/* submenus exceed screen height */
 .gl-letter-menu .canon-menu {
 	max-block-size: min(70vh, 640px);
 	overflow-y: auto;

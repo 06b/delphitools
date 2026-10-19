@@ -52,7 +52,7 @@ export interface Tool {
 	// same vocabulary as accepts
 	produces?: string[];
 	keywords?: string[];
-	// registry file when it is not the id; one component, two entries
+	// registry file when not id
 	component?: string;
 }
 

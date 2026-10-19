@@ -52,7 +52,7 @@ export function layout(
 		width: Math.max(page.width - inset * 2, 1),
 		height: Math.max(page.height - inset * 2, 1),
 	};
-	// a matched page has the image's shape; cover runs it into the bleed
+	// matched page covers bleed
 	const matchFit = inset === 0 && bleed ? 'cover' : 'contain';
 	const placed = fitPlacement(
 		width,

@@ -21,19 +21,16 @@ export interface WordLetter {
 interface GlossWordSignature {
 	Args: {
 		latin: string;
-		/** Under the spelling: the word's sound. */
 		detail: string;
 		letters: WordLetter[];
 		alphabet: (Sound | null)[];
 		onClose: () => void;
 	};
-	/** Rows after the letters. */
 	Blocks: { default: [] };
 }
 
 const CloseIcon = <template><IconSvg @name="x" /></template>;
 
-// the block is the first section of the pane; bring it into view as it opens
 const reveal = modifier((block: HTMLElement) => {
 	block.scrollIntoView({ block: 'nearest' });
 });

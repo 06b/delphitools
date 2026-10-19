@@ -304,7 +304,6 @@ export default class AlgebraCalcTool extends Component {
 
 	keypadChanged = (text: string) => (this.expression = text);
 
-	/** A typed character opens the keypad and replaces the expression, as typing over a selected field does; Backspace edits it. */
 	typeInField = (event: KeyboardEvent) => {
 		if (event.ctrlKey || event.metaKey || event.altKey) return;
 		const key = keyForKeyboard(event.key);

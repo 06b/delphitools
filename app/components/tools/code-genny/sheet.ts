@@ -106,7 +106,7 @@ export function sheetOf(type: BarcodeType, raw: Raw, look: Look): BarcodeSheet {
 		guards: new Set<number>(),
 	};
 	if ('pixs' in raw) {
-		// pixy counts rowmult; pixs holds each row once
+		// pixy counts rowmult rows
 		const rows = raw.pixs.length / raw.pixx;
 		const modules: boolean[][] = [];
 		for (let y = 0; y < rows; y++)

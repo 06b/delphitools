@@ -9,7 +9,6 @@ import './cell.css';
 
 const badgeSpring = springEasing(0.6);
 
-/** The badge pops when a cell takes a slot. */
 const pop = modifier((badge: HTMLElement, [mark]: [number | undefined]) => {
 	const before = badge.dataset['mark'];
 	badge.dataset['mark'] = String(mark ?? '');
@@ -31,14 +30,14 @@ interface CellSignature {
 		size: PaperSize;
 		text: string;
 		mark?: number;
-		/** The badge shows a tick, not the slot number (iOS PaperSizeList.ticks). */
+		/** tick replaces slot number */
 		tick?: boolean;
 		detail?: string;
 		onPick: () => void;
 	};
 }
 
-/** The sheet's long side fills a 40 px box. */
+/** fits a 40px box */
 function glyph(size: PaperSize) {
 	const long = Math.max(size.widthMM, size.heightMM, 1);
 	return htmlSafe(

@@ -251,7 +251,7 @@ module('Unit | Lib | imposition', function () {
 				(c) =>
 					`${c.pageNumber}${c.rotation ? '↓' : ''}`,
 			);
-		// grid order: top left, top right, bottom left, bottom right
+		// row-major from top left
 		assert.deepEqual(read(sheets[0]!.front), [
 			'13↓',
 			'4↓',
@@ -365,7 +365,6 @@ module('Unit | Lib | imposition', function () {
 										bottom,
 									marginMm,
 								);
-							// neighbours in a row or column sit one gutter apart
 							const gutters =
 								cells.every(
 									(a) =>
@@ -494,7 +493,7 @@ module('Unit | Lib | imposition', function () {
 			cells[1]!.x - (cells[0]!.x + cells[0]!.width);
 		const centre = (cells: PagePlacement[]) =>
 			(cells[1]!.x + cells[0]!.x + cells[0]!.width) / 2;
-		// 4 sheets: 6, 4, 2, 0 mm, the first clamped at the 5 mm margin
+		// first clamped at margin
 		assert.deepEqual(
 			sheets.map((sheet) => spine(sheet.front)),
 			[12, 10, 6, 2],

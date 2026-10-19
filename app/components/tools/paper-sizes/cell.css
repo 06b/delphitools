@@ -10,7 +10,6 @@
 	--paper-slot-fill: 6%;
 }
 
-/* the size cells */
 .paper-cell {
 	position: relative;
 	display: flex;

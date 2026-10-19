@@ -17,7 +17,7 @@ interface GlossLetterSignature {
 	Args: {
 		sound: Sound;
 		alternatives: Sound[];
-		/** What Insert offers; a null between groups draws a separator. */
+		/** null draws a separator */
 		alphabet: (Sound | null)[];
 		edits: LetterEdits;
 	};
@@ -29,7 +29,7 @@ type Entry = CanonMenuEntry & {
 	remove?: boolean;
 };
 
-// the system font may lack the glyphs; a menu icon is the glyph in the gloss face
+// system font lacks glyphs
 const glyphs = new Map<string, ComponentLike>();
 function glyphIcon(glyph: string): ComponentLike {
 	let icon = glyphs.get(glyph);
@@ -45,7 +45,7 @@ function glyphIcon(glyph: string): ComponentLike {
 const titled = (sound: Sound) =>
 	sound.name ? `${sound.name} /${sound.ipa}/` : `/${sound.ipa}/`;
 
-// every letter of a word shares its alphabet's insert menus
+// menus shared per alphabet
 const insertMenus = new WeakMap<
 	(Sound | null)[],
 	{ before: Entry[]; after: Entry[] }
@@ -84,7 +84,7 @@ export default class GlossLetter extends Component<GlossLetterSignature> {
 		return titled(this.args.sound);
 	}
 
-	// the IPA tools write the sound itself
+	// ipa glyph is sound
 	get showsIpa() {
 		return this.args.sound.ipa !== this.args.sound.glyph;
 	}

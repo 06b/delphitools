@@ -6,7 +6,7 @@ interface PasteClearSignature {
 	Args: {
 		text: string;
 		onChange: (text: string) => void;
-		/** Icon-only cell buttons, for a picture head. */
+		/** icon-only cell buttons */
 		cells?: boolean;
 	};
 }

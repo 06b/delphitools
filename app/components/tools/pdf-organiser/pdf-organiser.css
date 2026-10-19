@@ -1,4 +1,3 @@
-/* the rest of a selection, lit as the kit lights its one page */
 .porg-strip [data-picked] .canon-page-strip-paper::after {
 	box-shadow: inset 0 0 0 var(--canon-frame) var(--canon-primary);
 }
