@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { isDestroying } from '@ember/destroyable';
 import CanonButton from 'delphicanon/components/canon-button';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import { JobProgress } from 'delphitools-v2/components/tools/media/job';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { zipFiles, type NamedBlob } from 'delphitools-v2/lib/zip-files';
@@ -10,6 +11,8 @@ import './download-all.css';
 
 const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 const Archive = <template><IconSvg @name="archive" /></template>;
+
+const isSet = (value: unknown) => value !== undefined;
 
 // chrome drops some of a burst of anchor downloads
 const GAP_MS = 150;
@@ -23,6 +26,10 @@ export interface DownloadAllSignature {
 		/** As CanonButton's kind for Download all; default primary. */
 		kind?: 'primary' | 'secondary';
 		disabled?: boolean;
+		/** 0 to 1 while the caller builds the files; shows Job's busy rows below the buttons. */
+		progress?: number;
+		/** Shows Cancel while `progress` is set. */
+		onCancel?: () => void;
 	};
 	Element: HTMLDivElement;
 }
@@ -82,5 +89,11 @@ export default class DownloadAll extends Component<DownloadAllSignature> {
 				@onClick={{this.zip}}
 			/>
 		</div>
+		{{#if (isSet @progress)}}
+			<JobProgress
+				@progress={{@progress}}
+				@onCancel={{@onCancel}}
+			/>
+		{{/if}}
 	</template>
 }

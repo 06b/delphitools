@@ -83,7 +83,6 @@ const DEFAULT_FORMAT: PageFormat = 'jpeg';
 const DEFAULT_QUALITY = 0.85;
 const TO_PDF_ID = 'image-to-pdf';
 const TO_IMAGES_ID = 'pdf-to-images';
-const noop = () => undefined;
 const A4: PageSize = { width: 595.28, height: 841.89 };
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -675,6 +674,10 @@ export default class ImageToPdf extends Component {
 		}
 	}
 
+	get zipProgress() {
+		return this.rendering ? this.renderProgress : undefined;
+	}
+
 	cancelRender = () => {
 		this.#run++;
 		this.rendering = false;
@@ -890,21 +893,9 @@ export default class ImageToPdf extends Component {
 								false
 								true
 							}}
+							@progress={{this.zipProgress}}
+							@onCancel={{this.cancelRender}}
 						/>
-						{{#if this.rendering}}
-							{{! the busy half of the job block }}
-							<Job
-								@title="Download all"
-								@icon={{ExportIcon}}
-								@failure="Render failed"
-								@busy={{true}}
-								@progress={{this.renderProgress}}
-								@failed={{false}}
-								@onRun={{noop}}
-								@onCancel={{this.cancelRender}}
-								@onSave={{noop}}
-							/>
-						{{/if}}
 						{{#if this.renderFailed}}
 							<CanonStatus
 								class="i2p-render-failed"

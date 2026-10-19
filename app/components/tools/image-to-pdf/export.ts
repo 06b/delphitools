@@ -122,8 +122,13 @@ export async function pageImage(
 	const canvas = document.createElement('canvas');
 	canvas.width = Math.ceil(viewport.width);
 	canvas.height = Math.ceil(viewport.height);
-	await page.render({ canvas, viewport }).promise;
-	return encode(canvas, `image/${format}`, quality);
+	try {
+		await page.render({ canvas, viewport }).promise;
+		return await encode(canvas, `image/${format}`, quality);
+	} finally {
+		canvas.width = canvas.height = 0;
+		page.cleanup();
+	}
 }
 
 /** The file extension of an encoded page. */
