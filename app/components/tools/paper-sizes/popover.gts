@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
@@ -70,6 +70,11 @@ interface Signature {
 const findPlaceholder = 'A4 · 210×297 · 8.5x11in';
 const columns = 3;
 const mm = (pick: PaperPick) => dimensions(pick.size, 0, 300);
+const picksBySeries = allSeries.map(({ id, name }) => ({
+	id,
+	name,
+	picks: allPicks.filter((pick) => pick.series === id),
+}));
 
 /**
  * The iOS paper size sheet as a popover on a menu-cell trigger: find a
@@ -82,6 +87,7 @@ export default class PaperPopover extends Component<Signature> {
 	valueId = `${guidFor(this)}-paper-value`;
 	@tracked text = '';
 	@tracked query: PaperQuery = parseQuery('');
+	@tracked open = false;
 	#panel?: HTMLElement;
 
 	get min() {
@@ -156,6 +162,7 @@ export default class PaperPopover extends Component<Signature> {
 		detail,
 	});
 
+	@cached
 	get closest() {
 		const { query } = this;
 		if (query.kind !== 'size') return [];
@@ -168,18 +175,13 @@ export default class PaperPopover extends Component<Signature> {
 		);
 	}
 
+	@cached
 	get series() {
-		return allSeries.flatMap((series) => {
-			const cells = allPicks
-				.filter(
-					(pick) =>
-						pick.series === series.id &&
-						matches(this.query, pick),
-				)
+		return picksBySeries.flatMap(({ id, name, picks }) => {
+			const cells = picks
+				.filter((pick) => matches(this.query, pick))
 				.map((pick) => this.cell(pick));
-			return cells.length
-				? [{ id: series.id, name: series.name, cells }]
-				: [];
+			return cells.length ? [{ id, name, cells }] : [];
 		});
 	}
 
@@ -224,7 +226,8 @@ export default class PaperPopover extends Component<Signature> {
 			haspopup: 'dialog',
 		});
 		const opening = (event: ToggleEvent) => {
-			if (event.newState === 'open') this.#seed();
+			this.open = event.newState === 'open';
+			if (this.open) this.#seed();
 		};
 		const opened = () => {
 			if (!isOpen(panel)) return;
@@ -316,53 +319,67 @@ export default class PaperPopover extends Component<Signature> {
 					</CanonGrid>
 				</CanonRows>
 			{{/if}}
-			{{#if this.closest.length}}
-				<CanonRows @framed={{true}}>
-					<CanonHeading @text="Closest" />
-					<CanonGrid @columns={{columns}}>
-						{{#each
-							this.closest key="key"
-							as |cell|
-						}}
-							<Cell
-								@size={{cell.pick.size}}
-								@text={{cell.text}}
-								@mark={{cell.mark}}
-								@tick={{true}}
-								@detail={{cell.detail}}
-								@onPick={{fn
-									this.pick
-									cell.pick
-								}}
-							/>
-						{{/each}}
-					</CanonGrid>
+			{{#if this.open}}
+				{{#if this.closest.length}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Closest" />
+						<CanonGrid @columns={{columns}}>
+							{{#each
+								this.closest
+								key="key"
+								as |cell|
+							}}
+								<Cell
+									@size={{cell.pick.size}}
+									@text={{cell.text}}
+									@mark={{cell.mark}}
+									@tick={{true}}
+									@detail={{cell.detail}}
+									@onPick={{fn
+										this.pick
+										cell.pick
+									}}
+								/>
+							{{/each}}
+						</CanonGrid>
+					</CanonRows>
+				{{/if}}
+				<CanonRows
+					class="paper-popover-list"
+					@framed={{true}}
+				>
+					{{#each
+						this.series key="id"
+						as |series|
+					}}
+						<CanonHeading
+							@text={{series.name}}
+						/>
+						<CanonGrid @columns={{columns}}>
+							{{#each
+								series.cells
+								key="key"
+								as |cell|
+							}}
+								<Cell
+									@size={{cell.pick.size}}
+									@text={{cell.text}}
+									@mark={{cell.mark}}
+									@tick={{true}}
+									@onPick={{fn
+										this.pick
+										cell.pick
+									}}
+								/>
+							{{/each}}
+						</CanonGrid>
+					{{else}}
+						<CanonEmptyRow
+							@text="No match"
+						/>
+					{{/each}}
 				</CanonRows>
 			{{/if}}
-			<CanonRows class="paper-popover-list" @framed={{true}}>
-				{{#each this.series key="id" as |series|}}
-					<CanonHeading @text={{series.name}} />
-					<CanonGrid @columns={{columns}}>
-						{{#each
-							series.cells key="key"
-							as |cell|
-						}}
-							<Cell
-								@size={{cell.pick.size}}
-								@text={{cell.text}}
-								@mark={{cell.mark}}
-								@tick={{true}}
-								@onPick={{fn
-									this.pick
-									cell.pick
-								}}
-							/>
-						{{/each}}
-					</CanonGrid>
-				{{else}}
-					<CanonEmptyRow @text="No match" />
-				{{/each}}
-			</CanonRows>
 		</div>
 	</template>
 }
