@@ -21,13 +21,17 @@ import CanonTiles from 'delphicanon/components/canon-tiles';
 import PaperPopover, {
 	type PaperChoice,
 } from 'delphitools-v2/components/tools/paper-sizes/popover';
+import {
+	choiceFor,
+	choiceId,
+} from 'delphitools-v2/components/tools/paper-sizes/paper';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import Job from 'delphitools-v2/components/tools/media/job';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import { PAPER_SIZES } from 'delphitools-v2/lib/imposition';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 import {
 	ZINE_FOLDS,
 	buildFoldLayout,
@@ -119,8 +123,8 @@ export default class ZineImposer extends Component {
 		if (PANELS.includes(panels)) this.panels = panels;
 		if (query.has('zineDouble')) this.doubleSided = true;
 		if (query.has('zineSplit')) this.split = true;
-		const paper = query.get('zinePaper');
-		if (paper && findPaperSize(paper)) this.paperSizeId = paper;
+		const paper = paperSizeFor(query.get('zinePaper') ?? '');
+		if (paper) this.paperSizeId = paper.id;
 		this.images = resize([], this.layout.pageCount);
 		const lit = Number(query.get('zineLit'));
 		const sample = Number(query.get('zineSample'));
@@ -191,7 +195,7 @@ export default class ZineImposer extends Component {
 	}
 
 	get paper() {
-		return findPaperSize(this.paperSizeId) ?? FALLBACK_PAPER;
+		return paperSizeFor(this.paperSizeId) ?? FALLBACK_PAPER;
 	}
 
 	// print landscape, rotate size
@@ -353,14 +357,14 @@ export default class ZineImposer extends Component {
 
 	setSplit = (on: boolean) => this.#relayout(() => (this.split = on));
 
-	get paperChoice(): PaperChoice {
-		return { kind: 'paper', id: this.paper.id };
+	get paperChoice() {
+		return choiceFor(this.paper.id);
 	}
 
 	pickPaper = (choice: PaperChoice) => {
-		if (choice.kind !== 'paper' || choice.id === this.paperSizeId)
-			return;
-		this.paperSizeId = choice.id;
+		const id = choiceId(choice);
+		if (choice.kind === 'extra' || id === this.paperSizeId) return;
+		this.paperSizeId = id;
 		this.#changed();
 	};
 

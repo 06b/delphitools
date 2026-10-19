@@ -234,6 +234,42 @@ check(
 	(await page.$eval('.zi-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'A3 · 297 × 420 mm',
 );
 
+check('typing 85x100 picks Custom', await pickPaper(page, '.zi-paper-menu', { custom: '85x100' }));
+await sleep(200);
+s = await state(page);
+check('the custom sheet tile is 100 × 85 mm, landscape', s.tiles[0] === '100 × 85 mm', s.tiles[0]);
+check(
+	'the paper cell reads the custom size',
+	(await page.$eval('.zi-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 85 × 100 mm',
+);
+await page.click('.zi-paper-menu');
+await page.waitForSelector('.paper-popover:popover-open', { timeout: 3000 });
+await sleep(150);
+check(
+	'reopened, Custom shows selected',
+	(await page.$eval('.paper-popover:popover-open .paper-popover-custom', (el) => el.getAttribute('aria-current'))) === 'true',
+);
+await page.keyboard.press('Escape');
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => null);
+await page.click('.media-job-save');
+const custom = await waitForDownload(/^zine-accordion-85x100-duplex-bleed\.pdf$/);
+check('a custom paper zine exports', !!custom, custom?.name ?? 'no file');
+if (custom) {
+	const size = (await PDFDocument.load(custom.bytes)).getPage(0).getSize();
+	const mm = 72 / 25.4;
+	check(
+		'the sheet is 100 × 85 mm plus 3 mm bleed a side',
+		Math.abs(size.width - 106 * mm) < 0.1 && Math.abs(size.height - 91 * mm) < 0.1,
+		`${size.width.toFixed(2)} x ${size.height.toFixed(2)}`,
+	);
+}
+await visit(page, '/tools/zine-imposer?zinePaper=85x100');
+check(
+	'?zinePaper=85x100 opens on the custom paper',
+	(await page.$eval('.zi-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Custom · 85 × 100 mm',
+);
+
 await page.setViewport({ width: 390, height: 844 });
 await sleep(400);
 check(
