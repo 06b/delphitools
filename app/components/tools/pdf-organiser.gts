@@ -52,6 +52,10 @@ const Merge = <template><IconSvg @name="file-stack" /></template>;
 const Cut = <template><IconSvg @name="scissors-line-dashed" /></template>;
 const Left = <template><IconSvg @name="rotate-ccw" /></template>;
 const Right = <template><IconSvg @name="rotate-cw" /></template>;
+const ROTATE_ROWS = [
+	{ class: 'porg-rotate-picked', title: 'Selected', all: false },
+	{ class: 'porg-rotate-all', title: 'All pages', all: true },
+];
 
 interface Source {
 	id: number;
@@ -365,8 +369,9 @@ export default class PdfOrganiser extends Component {
 	}
 
 	get pickedIndices() {
+		const picked = new Set(this.picked);
 		return this.entries.flatMap((entry, index) =>
-			this.picked.includes(entry.id) ? [index] : [],
+			picked.has(entry.id) ? [index] : [],
 		);
 	}
 
@@ -388,9 +393,10 @@ export default class PdfOrganiser extends Component {
 
 	rotate = (delta: number, all: boolean) => {
 		if (this.busy) return;
+		const picked = new Set(this.picked);
 		this.#change(
 			this.entries.map((entry) =>
-				all || this.picked.includes(entry.id)
+				all || picked.has(entry.id)
 					? {
 							...entry,
 							rotation: normaliseRotation(
@@ -407,13 +413,14 @@ export default class PdfOrganiser extends Component {
 	// The kit rebuilds its cells on its own state changes, so marks follow
 	// every rebuild
 	markPicked = modifier((strip: HTMLElement, [indices]: [number[]]) => {
+		const picked = new Set(indices);
 		const mark = () => {
 			for (const cell of strip.querySelectorAll<HTMLElement>(
 				'[data-page-index]',
 			))
 				cell.toggleAttribute(
 					'data-picked',
-					indices.includes(
+					picked.has(
 						Number(
 							cell.dataset[
 								'pageIndex'
@@ -423,6 +430,7 @@ export default class PdfOrganiser extends Component {
 				);
 		};
 		mark();
+		if (!picked.size) return;
 		const observer = new MutationObserver(mark);
 		observer.observe(strip, { childList: true, subtree: true });
 		return () => observer.disconnect();
@@ -689,66 +697,46 @@ export default class PdfOrganiser extends Component {
 				</CanonRows>
 				<CanonRows @framed={{true}} class="porg-rotate">
 					<CanonHeading @text="Rotate" />
-					<CanonRow
-						class="porg-rotate-picked"
-						@title="Selected"
-						@form="flush"
-					>
-						<CanonGrid>
-							<CanonButton
-								@kind="cell"
-								@icon={{Left}}
-								@label="Rotate left"
-								@disabled={{this.nothingPicked}}
-								@onClick={{fn
-									this.rotate
-									-90
-									false
-								}}
-							/>
-							<CanonButton
-								@kind="cell"
-								@icon={{Right}}
-								@label="Rotate right"
-								@disabled={{this.nothingPicked}}
-								@onClick={{fn
-									this.rotate
-									90
-									false
-								}}
-							/>
-						</CanonGrid>
-					</CanonRow>
-					<CanonRow
-						class="porg-rotate-all"
-						@title="All pages"
-						@form="flush"
-					>
-						<CanonGrid>
-							<CanonButton
-								@kind="cell"
-								@icon={{Left}}
-								@label="Rotate left"
-								@disabled={{this.noPages}}
-								@onClick={{fn
-									this.rotate
-									-90
-									true
-								}}
-							/>
-							<CanonButton
-								@kind="cell"
-								@icon={{Right}}
-								@label="Rotate right"
-								@disabled={{this.noPages}}
-								@onClick={{fn
-									this.rotate
-									90
-									true
-								}}
-							/>
-						</CanonGrid>
-					</CanonRow>
+					{{#each ROTATE_ROWS as |row|}}
+						<CanonRow
+							class={{row.class}}
+							@title={{row.title}}
+							@form="flush"
+						>
+							<CanonGrid>
+								<CanonButton
+									@kind="cell"
+									@icon={{Left}}
+									@label="Rotate left"
+									@disabled={{if
+										row.all
+										this.noPages
+										this.nothingPicked
+									}}
+									@onClick={{fn
+										this.rotate
+										-90
+										row.all
+									}}
+								/>
+								<CanonButton
+									@kind="cell"
+									@icon={{Right}}
+									@label="Rotate right"
+									@disabled={{if
+										row.all
+										this.noPages
+										this.nothingPicked
+									}}
+									@onClick={{fn
+										this.rotate
+										90
+										row.all
+									}}
+								/>
+							</CanonGrid>
+						</CanonRow>
+					{{/each}}
 				</CanonRows>
 				<CanonRows @framed={{true}}>
 					<CanonHeading @text="Merge" />
