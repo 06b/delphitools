@@ -4,6 +4,7 @@ import type { TOC } from '@ember/component/template-only';
 import Icon from 'delphitools-v2/components/icon';
 import { icons } from 'delphitools-v2/lib/icons';
 import type { Suite } from 'delphitools-v2/lib/tools';
+import './suite-box.css';
 
 // two copies of the run; the track loops at -50%
 const RUN = [0, 1, 2, 3, 4, 5];

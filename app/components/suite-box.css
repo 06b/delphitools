@@ -1,0 +1,171 @@
+.dt-suites {
+	display: grid;
+	padding: var(--canon-hairline);
+	background: var(--canon-border);
+	gap: var(--canon-hairline);
+	grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 700px) {
+	.dt-suites {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.dt-suite {
+	--suite-ink: var(--canon-primary);
+
+	display: flex;
+	overflow: hidden;
+	min-height: 224px;
+	flex-direction: column-reverse;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-decoration: none;
+}
+
+@media (hover: hover) {
+	.dt-suite:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.dt-suite:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.dt-suite.is-errata {
+	--suite-ink: #b96f08;
+}
+
+.dark .dt-suite.is-errata {
+	--suite-ink: #db9334;
+}
+
+.dt-suite-band {
+	display: block;
+	overflow: hidden;
+	padding-block: 4px;
+	background: var(--suite-ink);
+	color: var(--canon-card);
+	font-size: 10px;
+	font-weight: var(--canon-weight-medium);
+	letter-spacing: 0.025em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+/* end padding equals the gap, so -50% is exactly one copy */
+.dt-suite-track {
+	display: inline-flex;
+	align-items: center;
+	padding-inline-end: 12px;
+	animation: dt-suite-marquee 48s linear infinite reverse;
+	gap: 12px;
+}
+
+.dt-suite-track .dt-icon {
+	width: 8px;
+	height: 8px;
+	opacity: 0.6;
+}
+
+@keyframes dt-suite-marquee {
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dt-suite-track {
+		animation: none;
+	}
+}
+
+.dt-suite-face {
+	position: relative;
+	display: grid;
+	flex: 1;
+	padding: 20px 20px 20px 0;
+	gap: 8px 20px;
+	grid-template:
+		"name word" 1fr
+		"name desc" auto
+		"name chips" auto / auto 1fr;
+}
+
+.dt-suite-name {
+	padding-block: 12px;
+	border-left: var(--canon-hairline) solid var(--canon-border);
+	color: var(--suite-ink);
+	font-size: 30px;
+	font-weight: var(--canon-weight-bold);
+	grid-area: name;
+	line-height: 1;
+	rotate: 180deg;
+	text-align: end;
+	writing-mode: vertical-rl;
+}
+
+.dt-suite-desc {
+	max-width: 30ch;
+	font-size: var(--canon-text-subheadline);
+	grid-area: desc;
+	line-height: 1.3;
+	opacity: 0.75;
+}
+
+.dt-suite-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-self: end;
+	gap: 4px;
+	grid-area: chips;
+}
+
+.dt-suite-chip {
+	padding: 2px 6px;
+	border: var(--canon-hairline) solid
+		color-mix(in srgb, currentcolor 40%, transparent);
+	font-size: 10px;
+	letter-spacing: 0.025em;
+	text-transform: uppercase;
+}
+
+/* feathered in from the left */
+.dt-suite-pattern {
+	position: absolute;
+	background: var(--suite-ink);
+	inset: 0;
+	mask-composite: intersect;
+	mask-image:
+		linear-gradient(to right, transparent 40%, black),
+		var(--suite-pattern);
+	mask-repeat: no-repeat, repeat;
+	mask-size:
+		100% 100%,
+		56px 48px;
+	opacity: 0.3;
+	pointer-events: none;
+}
+
+.dt-suite-word {
+	align-self: end;
+	color: var(--suite-ink);
+	font-size: 36px;
+	font-weight: var(--canon-weight-bold);
+	grid-area: word;
+	letter-spacing: -0.025em;
+	line-height: 1;
+	opacity: 0.12;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+@container (min-width: 700px) {
+	.dt-suite-word {
+		font-size: 48px;
+	}
+}

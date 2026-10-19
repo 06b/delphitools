@@ -5,6 +5,7 @@ import { htmlSafe } from '@ember/template';
 import { concat, hash } from '@ember/helper';
 import { and } from 'ember-truth-helpers';
 import type { TOC } from '@ember/component/template-only';
+import './sticker-wall.css';
 
 interface Sticker {
 	file: string;
