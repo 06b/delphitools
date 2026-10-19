@@ -19,6 +19,11 @@ module('Unit | Lib | tool-search', function () {
 		);
 	});
 
+	test('a US spelling finds the colour tools', function (assert) {
+		assert.true(hits('color').includes('colour-converter'));
+		assert.true(hits('color blindness').includes('colorblind-sim'));
+	});
+
 	test('finds tools by a file type they accept', function (assert) {
 		assert.true(hits('md').includes('doc-converter'));
 		assert.true(hits('.md').includes('doc-converter'));

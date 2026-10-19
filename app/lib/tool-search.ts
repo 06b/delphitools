@@ -26,6 +26,7 @@ function lists(types: string[] | undefined, ext: string): boolean {
 function compact(text: string): string {
 	return text
 		.toLowerCase()
+		.replace(/color/g, 'colour')
 		.replace(/([a-z])2(?=[a-z])/g, '$1to')
 		.replace(/[^a-z0-9]/g, '');
 }
