@@ -20,7 +20,9 @@ import {
 	stressRuns,
 	swapping,
 } from 'delphitools-v2/components/tools/ipa-transcriber/gloss';
-import GlossEditor from 'delphitools-v2/components/tools/text-tool/gloss-editor';
+import GlossEditor, {
+	collapsedHeight,
+} from 'delphitools-v2/components/tools/text-tool/gloss-editor';
 import type { Sound } from 'delphitools-v2/components/tools/text-tool/gloss-pieces';
 import GlossWord, {
 	type WordLetter,
@@ -42,7 +44,6 @@ import './ipa-transcriber/ipa-transcriber.css';
 const defaultText = 'Mankind, be vigilant; we loved you.';
 const coreOnlyStatus = 'Core dictionary only, uncommon words are guessed';
 const dash = '—';
-const collapsedHeight = 96;
 
 type DictStatus = 'loading-core' | 'loading-full' | 'core-only' | 'ready';
 
@@ -125,10 +126,6 @@ export default class IpaTranscriber extends Component {
 
 	get coreOnly() {
 		return this.dictStatus === 'core-only';
-	}
-
-	get alphabet() {
-		return alphabet;
 	}
 
 	get words() {
@@ -272,7 +269,7 @@ export default class IpaTranscriber extends Component {
 						@latin={{this.word.value}}
 						@detail={{this.wordIpa}}
 						@letters={{this.letters}}
-						@alphabet={{this.alphabet}}
+						@alphabet={{alphabet}}
 						@onClose={{this.close}}
 					/>
 				{{/if}}

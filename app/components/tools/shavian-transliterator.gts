@@ -29,7 +29,9 @@ import {
 	withMarker,
 	type Marker,
 } from 'delphitools-v2/components/tools/shavian-transliterator/gloss';
-import GlossEditor from 'delphitools-v2/components/tools/text-tool/gloss-editor';
+import GlossEditor, {
+	collapsedHeight,
+} from 'delphitools-v2/components/tools/text-tool/gloss-editor';
 import type { Sound } from 'delphitools-v2/components/tools/text-tool/gloss-pieces';
 import GlossWord, {
 	type WordLetter,
@@ -58,7 +60,6 @@ const coreOnlyStatus = 'Core dictionary only, uncommon words are guessed';
 // iOS ShavianMarkerTip
 const markerTip =
 	'A namer dot · marks a proper noun. An acroring ⸰ marks an initialism (like FBI), an acroarc ꤮ an acronym said as a word (like NASA).';
-const collapsedHeight = 96;
 
 type DictStatus = 'loading-core' | 'loading-full' | 'core-only' | 'ready';
 
@@ -173,10 +174,6 @@ export default class ShavianTransliterator extends Component {
 
 	get exportText() {
 		return passAlong('Export Gloss');
-	}
-
-	get alphabet() {
-		return alphabet;
 	}
 
 	get pieces() {
@@ -304,7 +301,7 @@ export default class ShavianTransliterator extends Component {
 						@latin={{this.word.latin}}
 						@detail={{this.wordIpa}}
 						@letters={{this.letters}}
-						@alphabet={{this.alphabet}}
+						@alphabet={{alphabet}}
 						@onClose={{this.close}}
 					>
 						<CanonRow

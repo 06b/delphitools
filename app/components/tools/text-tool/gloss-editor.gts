@@ -2,12 +2,11 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import CanonButton from 'delphicanon/components/canon-button';
-import { IconSvg } from 'delphitools-v2/components/icon';
 import MarkedEditor, {
 	reportHeight,
 } from 'delphitools-v2/components/tools/media/marked-editor';
 import type { GlossPiece } from 'delphitools-v2/components/tools/text-tool/gloss-pieces';
+import PasteClear from 'delphitools-v2/components/tools/text-tool/paste-clear';
 import './gloss.css';
 
 interface GlossEditorSignature {
@@ -26,8 +25,8 @@ interface GlossEditorSignature {
 	Blocks: { gloss: [piece: GlossPiece] };
 }
 
-const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
-const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
+/** Height of the gloss picture once collapsed, in px. */
+export const collapsedHeight = 96;
 
 /**
  * Sets each gloss in the band over the text. A word and the punctuation touching it
@@ -110,8 +109,12 @@ function fit(text: HTMLElement) {
 // ponytail: reads every word on each change; a pasted book re-fits in one pass
 const fitGlosses = modifier((text: HTMLElement, [pieces]: [GlossPiece[]]) => {
 	void pieces;
+	let live = true;
 	fit(text);
-	void document.fonts.ready.then(() => fit(text));
+	if (document.fonts.status !== 'loaded')
+		void document.fonts.ready.then(() => {
+			if (live) fit(text);
+		});
 	let width = text.offsetWidth;
 	const observer = new ResizeObserver(() => {
 		if (text.offsetWidth === width) return;
@@ -119,7 +122,10 @@ const fitGlosses = modifier((text: HTMLElement, [pieces]: [GlossPiece[]]) => {
 		fit(text);
 	});
 	observer.observe(text);
-	return () => observer.disconnect();
+	return () => {
+		live = false;
+		observer.disconnect();
+	};
 });
 
 /**
@@ -133,36 +139,15 @@ export default class GlossEditor extends Component<GlossEditorSignature> {
 		return this.args.text.endsWith('\n');
 	}
 
-	paste = async () => {
-		const text = await navigator.clipboard
-			.readText()
-			.catch(() => '');
-		if (text && !this.isDestroying) this.args.onInput(text);
-	};
-
-	clear = () => this.args.onInput('');
-
 	<template>
 		<div class="gl-picture">
 			<div class="gl-picture-head">
 				<span class="gl-picture-heading">English</span>
 				<span class="gl-picture-tools">
-					<CanonButton
-						@kind="cell"
-						@label="Paste"
-						@icon={{PasteIcon}}
-						@onClick={{this.paste}}
-					/>
-					<CanonButton
-						@kind="cell"
-						@label="Clear"
-						@icon={{ClearIcon}}
-						@disabled={{if
-							@text
-							false
-							true
-						}}
-						@onClick={{this.clear}}
+					<PasteClear
+						@text={{@text}}
+						@onChange={{@onInput}}
+						@cells={{true}}
 					/>
 				</span>
 			</div>
@@ -178,7 +163,10 @@ export default class GlossEditor extends Component<GlossEditorSignature> {
 					{{reportHeight @onHeight}}
 					{{fitGlosses @pieces}}
 				>
-					{{~#each @pieces as |piece|~}}
+					{{~#each
+						@pieces key="@index"
+						as |piece|
+					~}}
 						{{~#if (isWord piece)~}}
 							<span
 								class="gl-word
