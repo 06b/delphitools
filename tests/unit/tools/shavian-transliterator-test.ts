@@ -113,7 +113,6 @@ module('Unit | Tool | shavian-transliterator', function () {
 		const [cat] = tokenise('cat');
 		const swapped = swapping(cat!.gloss!, 0, {
 			shavian: '𐑜',
-			name: 'gag',
 			ipa: 'ɡ',
 		})!;
 		assert.strictEqual(swapped.shavian, '𐑜𐑨𐑑');
@@ -142,7 +141,7 @@ module('Unit | Tool | shavian-transliterator', function () {
 			],
 		);
 		assert.strictEqual(
-			pieces[1]?.shavian,
+			pieces[1]?.gloss,
 			',',
 			'a mark glosses as itself',
 		);

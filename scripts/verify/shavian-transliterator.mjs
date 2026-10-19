@@ -7,6 +7,12 @@
 
 import { launch, visit, check, finish, sleep, captureObjectUrl } from './harness.mjs';
 import { grantClipboard, result } from './text-tool.mjs';
+import {
+	glosses as glossesOf,
+	overlaps as overlapsOf,
+	pick as pickOf,
+	setText as setTextOf,
+} from './gloss-tool.mjs';
 
 const { browser, page } = await launch();
 await grantClipboard(page);
@@ -37,38 +43,14 @@ await sleep(300);
 check('the full dictionary loads', settled);
 check('and no core-only warning shows', !(await page.$('.canon-status')));
 
-const glosses = () =>
-	page.$$eval('.sh-word:not(.sh-word--mark)', (els) =>
-		els.map((w) => ({
-			latin: w.querySelector('[aria-hidden]')?.textContent,
-			shavian: w.querySelector('.sh-gloss')?.textContent,
-			guess: w.classList.contains('sh-word--guess'),
-			lit: w.classList.contains('sh-word--lit'),
-		})),
-	);
 const tiles = () =>
 	page.$$eval('.canon-tiles-value', (els) =>
 		els.map((e) => e.textContent.trim()).join(','),
 	);
-const setText = async (text) => {
-	await page.$eval(
-		'.media-marked-source',
-		(el, value) => {
-			el.value = value;
-			el.dispatchEvent(new Event('input', { bubbles: true }));
-		},
-		text,
-	);
-	await sleep(80);
-};
-const pick = async (latin) => {
-	await page.$$eval(
-		'.sh-gloss',
-		(els, l) => els.find((e) => e.getAttribute('aria-label') === l)?.click(),
-		latin,
-	);
-	await sleep(150);
-};
+const glosses = () => glossesOf(page);
+const setText = (text) => setTextOf(page, text);
+const pick = (latin) => pickOf(page, latin);
+const overlaps = () => overlapsOf(page);
 
 const editor = await page.evaluate(() => {
 	const area = document.querySelector('.media-marked-source');
@@ -97,7 +79,7 @@ check(
 	'the Shavian face renders Shavian',
 	await page.evaluate(async () => {
 		await document.fonts.ready;
-		const gloss = document.querySelector('.sh-gloss');
+		const gloss = document.querySelector('.gl-gloss');
 		return (
 			getComputedStyle(gloss).fontFamily.includes('Noto Sans Shavian') &&
 			document.fonts.check("20px 'Noto Sans Shavian'", '𐑐')
@@ -105,40 +87,6 @@ check(
 	}),
 );
 
-// every glyph box (spelling and band) of one word or punctuation mark
-// against those of every other
-const overlaps = () =>
-	page.evaluate(() => {
-		const boxes = [];
-		const add = (node, owner) => {
-			const text = node.textContent;
-			let at = 0;
-			for (const char of text) {
-				const range = document.createRange();
-				range.setStart(node, at);
-				range.setEnd(node, at + char.length);
-				at += char.length;
-				if (!char.trim()) continue;
-				const r = range.getBoundingClientRect();
-				boxes.push({ owner, char, l: r.left, r: r.right, t: r.top, b: r.bottom });
-			}
-		};
-		const walk = (el, owner) => {
-			for (const node of el.childNodes)
-				node.nodeType === 3 ? add(node, owner) : walk(node, owner);
-		};
-		document.querySelectorAll('.sh-word').forEach((word, i) => walk(word, i));
-		const hits = [];
-		for (const a of boxes)
-			for (const b of boxes)
-				if (
-					a.owner < b.owner &&
-					Math.min(a.r, b.r) - Math.max(a.l, b.l) > 0.5 &&
-					Math.min(a.b, b.b) - Math.max(a.t, b.t) > 0.5
-				)
-					hits.push(`${a.char}/${b.char}`);
-		return { glyphs: boxes.length, hits };
-	});
 const wideOverlaps = await overlaps();
 check(
 	'1400 px: no glyph box overlaps one of another word',
@@ -149,8 +97,8 @@ check(
 let words = await glosses();
 check(
 	'every word of the default sentence is glossed from the dictionary',
-	words.length === 6 && words.every((w) => !w.guess && w.shavian),
-	words.map((w) => `${w.latin}:${w.shavian}`).join(' '),
+	words.length === 6 && words.every((w) => !w.guess && w.gloss),
+	words.map((w) => `${w.latin}:${w.gloss}`).join(' '),
 );
 check('tiles count words, dictionary, guessed', (await tiles()).startsWith('6,6,0,'), await tiles());
 check(
@@ -162,9 +110,9 @@ check(
 // "vigilant" is outside 7.5k core; heuristic can't reach dʒ from g
 await pick('vigilant');
 const picked = await page.evaluate(() => ({
-	block: !!document.querySelector('.sh-word-block'),
-	word: document.querySelector('.sh-word-row')?.textContent.replace(/\s+/g, ' ').trim(),
-	letters: document.querySelectorAll('.sh-letter').length,
+	block: !!document.querySelector('.gl-word-block'),
+	word: document.querySelector('.gl-word-row')?.textContent.replace(/\s+/g, ' ').trim(),
+	letters: document.querySelectorAll('.gl-letter').length,
 }));
 check('a Shavian word opens its word block', picked.block);
 check(
@@ -176,18 +124,18 @@ check('one cell per letter', picked.letters === 8, `${picked.letters}`);
 words = await glosses();
 check('the picked word is lit', words.find((w) => w.lit)?.latin === 'vigilant');
 
-await page.$$eval('.sh-word-block .canon-segmented button', (els) => els[1].click());
+await page.$$eval('.gl-word-block .canon-segmented button', (els) => els[1].click());
 await sleep(100);
 check('Namer marks the word', (await result(page)).includes('·𐑝'), await result(page));
 
 // the first letter's menu: an alternative, then insert and remove
 const letters = () =>
-	page.$$eval('.sh-letter-glyph', (els) => els.map((e) => e.textContent).join(''));
+	page.$$eval('.gl-letter-glyph', (els) => els.map((e) => e.textContent).join(''));
 const before = await letters();
-await page.click('.sh-letter');
+await page.click('.gl-letter');
 await sleep(150);
 const menu = await page.evaluate(() => {
-	const panel = document.querySelector('.sh-letter-menu:popover-open');
+	const panel = document.querySelector('.gl-letter-menu:popover-open');
 	return [...(panel?.children ?? [])]
 		.filter((e) => e.classList.contains('canon-menu-item'))
 		.map((e) => e.textContent.replace(/\s+/g, ' ').trim());
@@ -201,27 +149,27 @@ check(
 		menu[4]?.endsWith('fee /f/'),
 	menu.join(' | '),
 );
-await page.$$eval('.sh-letter-menu:popover-open > .canon-menu-item', (els) =>
+await page.$$eval('.gl-letter-menu:popover-open > .canon-menu-item', (els) =>
 	els.find((e) => e.textContent.includes('fee'))?.click(),
 );
 await sleep(150);
 check('an alternative swaps the letter', (await letters()) === '𐑓' + before.slice(2), await letters());
 check('and the output follows', (await result(page)).includes('·𐑓𐑦'), await result(page));
 
-await page.click('.sh-letter');
+await page.click('.gl-letter');
 await sleep(150);
-await page.$$eval('.sh-letter-menu:popover-open > .canon-menu-item', (els) =>
+await page.$$eval('.gl-letter-menu:popover-open > .canon-menu-item', (els) =>
 	els.find((e) => e.textContent.trim() === 'Insert after')?.click(),
 );
 await sleep(150);
-await page.$$eval('.sh-letter-menu .canon-menu:popover-open .canon-menu-item', (els) =>
+await page.$$eval('.gl-letter-menu .canon-menu:popover-open .canon-menu-item', (els) =>
 	els.find((e) => e.textContent.includes('ado /ə/'))?.click(),
 );
 await sleep(150);
 check('Insert after adds a letter', (await letters()).startsWith('𐑓𐑩𐑦'), await letters());
-await page.$$eval('.sh-letter', (els) => els[1].click());
+await page.$$eval('.gl-letter', (els) => els[1].click());
 await sleep(150);
-await page.$$eval('.sh-letter-menu:popover-open > .canon-menu-item', (els) =>
+await page.$$eval('.gl-letter-menu:popover-open > .canon-menu-item', (els) =>
 	els.find((e) => e.textContent.trim() === 'Remove')?.click(),
 );
 await sleep(150);
@@ -235,11 +183,11 @@ await sleep(100);
 words = await glosses();
 check(
 	'typing is live and glosses the new word',
-	words.at(-1)?.latin === 'Shaw' && !!words.at(-1)?.shavian,
+	words.at(-1)?.latin === 'Shaw' && !!words.at(-1)?.gloss,
 	words.at(-1)?.latin,
 );
 check('the edited word keeps its edits', (await result(page)).includes('·𐑓𐑦'), await result(page));
-check('and the word block closes', !(await page.$('.sh-word-block')));
+check('and the word block closes', !(await page.$('.gl-word-block')));
 
 await setText('hello blorptastic');
 words = await glosses();
@@ -292,7 +240,7 @@ check(
 check('the tiles go to dashes', (await tiles()) === '—,—,—,—');
 
 await page.evaluate(() => navigator.clipboard.writeText('the cat'));
-await page.$$eval('.sh-picture-tools button', (els) =>
+await page.$$eval('.gl-picture-tools button', (els) =>
 	els.find((b) => b.getAttribute('aria-label') === 'Paste')?.click(),
 );
 await sleep(150);
@@ -300,7 +248,7 @@ check('Paste fills the editor', (await page.$eval('.media-marked-source', (el) =
 check('and it transliterates', (await result(page)) === '𐑞 𐑒𐑨𐑑', await result(page));
 
 await visit(page, '/tools/shavian-transliterator?shavianText=Shaw%20wrote%20NATO&shavianWord=3&shavianMarker=3');
-await page.waitForSelector('.sh-word-block');
+await page.waitForSelector('.gl-word-block');
 check(
 	'?shavianText= ?shavianWord= ?shavianMarker= set the text, word and marker',
 	(await result(page)) === '𐑖𐑷 𐑮𐑴𐑑 ꤮𐑯𐑱𐑑𐑴',

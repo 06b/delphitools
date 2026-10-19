@@ -1,11 +1,9 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
-import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonGrid from 'delphicanon/components/canon-grid';
-import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonLoader from 'delphicanon/components/canon-loader';
 import CanonRow from 'delphicanon/components/canon-row';
 import CanonRows from 'delphicanon/components/canon-rows';
@@ -15,23 +13,27 @@ import CanonStatus from 'delphicanon/components/canon-status';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import CanonTooltip from 'delphicanon/components/canon-tooltip';
 import { IconSvg } from 'delphitools-v2/components/icon';
-import Editor from 'delphitools-v2/components/tools/shavian-transliterator/editor';
 import { exportGloss } from 'delphitools-v2/components/tools/shavian-transliterator/export';
 import {
+	alphabet,
 	carryEdits,
 	editWord,
 	inserting,
 	isGuess,
 	markers,
+	piecesOf,
 	removing,
+	soundOf,
 	swapping,
 	tilesOf,
 	withMarker,
 	type Marker,
 } from 'delphitools-v2/components/tools/shavian-transliterator/gloss';
-import Letter, {
-	type LetterEdits,
-} from 'delphitools-v2/components/tools/shavian-transliterator/letter';
+import GlossEditor from 'delphitools-v2/components/tools/text-tool/gloss-editor';
+import type { Sound } from 'delphitools-v2/components/tools/text-tool/gloss-pieces';
+import GlossWord, {
+	type WordLetter,
+} from 'delphitools-v2/components/tools/text-tool/gloss-word';
 import Result from 'delphitools-v2/components/tools/text-tool/result';
 import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import type { Alternative } from 'delphitools-v2/lib/shavian/alternatives';
@@ -39,7 +41,7 @@ import {
 	loadCoreDictionary,
 	loadFullDictionary,
 } from 'delphitools-v2/lib/shavian/dictionary';
-import type { ShavianLetter } from 'delphitools-v2/lib/shavian/phoneme-map';
+import { getShavianLetter } from 'delphitools-v2/lib/shavian/phoneme-map';
 import {
 	glossToText,
 	markerPrefix,
@@ -48,7 +50,6 @@ import {
 	setFullDictionary,
 	tokenise,
 	type GlossToken,
-	type Phoneme,
 } from 'delphitools-v2/lib/shavian/transliterate';
 import './shavian-transliterator/shavian-transliterator.css';
 
@@ -61,14 +62,8 @@ const collapsedHeight = 96;
 
 type DictStatus = 'loading-core' | 'loading-full' | 'core-only' | 'ready';
 
-const CloseIcon = <template><IconSvg @name="x" /></template>;
 const InfoIcon = <template><IconSvg @name="info" /></template>;
 const DownloadIcon = <template><IconSvg @name={{(downloadIcon)}} /></template>;
-
-// the block is the first section of the pane; bring it into view as it opens
-const reveal = modifier((block: HTMLElement) => {
-	block.scrollIntoView({ block: 'nearest' });
-});
 
 /** The port of ShavianTransliteratorViewController and its view model. */
 export default class ShavianTransliterator extends Component {
@@ -180,24 +175,40 @@ export default class ShavianTransliterator extends Component {
 		return passAlong('Export Gloss');
 	}
 
+	get alphabet() {
+		return alphabet;
+	}
+
+	get pieces() {
+		return piecesOf(this.input, this.tokens);
+	}
+
 	@cached
-	get letters(): { key: string; phoneme: Phoneme; edits: LetterEdits }[] {
+	get letters(): WordLetter[] {
 		const count = this.word?.phonemes.length ?? 0;
+		const letterOf = (sound: Sound) => ({
+			shavian: sound.glyph,
+			ipa: sound.ipa,
+		});
 		return (this.word?.phonemes ?? []).map((phoneme, at) => ({
 			key: `${this.selected}-${at}-${phoneme.shavian}`,
-			phoneme,
+			sound: {
+				glyph: phoneme.shavian,
+				name:
+					getShavianLetter(phoneme.shavian)
+						?.name ?? '',
+				ipa: phoneme.ipa,
+			},
+			alternatives: phoneme.alternatives.map(soundOf),
 			edits: {
-				pick: (alternative: Alternative) =>
-					this.#swap(at, alternative),
-				insert: (
-					after: boolean,
-					letter: ShavianLetter,
-				) =>
+				pick: (sound: Sound) =>
+					this.#swap(at, letterOf(sound)),
+				insert: (after: boolean, sound: Sound) =>
 					this.#edit((w) =>
 						inserting(
 							w,
 							after ? at + 1 : at,
-							letter,
+							letterOf(sound),
 						),
 					),
 				remove:
@@ -236,7 +247,7 @@ export default class ShavianTransliterator extends Component {
 		this.tokens = editWord(this.tokens, this.selected, edit);
 	}
 
-	#swap(at: number, alternative: Alternative) {
+	#swap(at: number, alternative: Pick<Alternative, 'shavian' | 'ipa'>) {
 		this.#edit((w) => swapping(w, at, alternative));
 	}
 
@@ -277,9 +288,9 @@ export default class ShavianTransliterator extends Component {
 		>
 			<:sidebar>
 				<CanonCanvas @height={{this.pictureHeight}}>
-					<Editor
+					<GlossEditor
 						@text={{this.input}}
-						@tokens={{this.tokens}}
+						@pieces={{this.pieces}}
 						@selected={{this.selected}}
 						@onInput={{this.setInput}}
 						@onWord={{this.pick}}
@@ -289,40 +300,13 @@ export default class ShavianTransliterator extends Component {
 			</:sidebar>
 			<:main>
 				{{#if this.word}}
-					<CanonRows
-						class="sh-word-block"
-						@framed={{true}}
-						{{reveal}}
+					<GlossWord
+						@latin={{this.word.latin}}
+						@detail={{this.wordIpa}}
+						@letters={{this.letters}}
+						@alphabet={{this.alphabet}}
+						@onClose={{this.close}}
 					>
-						<CanonHeading @text="Word" />
-						<CanonRow
-							class="sh-word-row"
-							@title={{this.word.latin}}
-							@detail={{this.wordIpa}}
-							@form="flush"
-						>
-							<CanonButton
-								@kind="cell"
-								@icon={{CloseIcon}}
-								@label="Close"
-								@onClick={{this.close}}
-							/>
-						</CanonRow>
-						<CanonGrid
-							class="sh-letters"
-							@columns={{5}}
-						>
-							{{#each
-								this.letters
-								key="key"
-								as |letter|
-							}}
-								<Letter
-									@phoneme={{letter.phoneme}}
-									@edits={{letter.edits}}
-								/>
-							{{/each}}
-						</CanonGrid>
 						<CanonRow
 							@title="Marker"
 							@form="flush"
@@ -346,7 +330,7 @@ export default class ShavianTransliterator extends Component {
 							@columns={{2}}
 							@onChange={{this.setMarker}}
 						/>
-					</CanonRows>
+					</GlossWord>
 				{{/if}}
 				<Result
 					class="sh-result"

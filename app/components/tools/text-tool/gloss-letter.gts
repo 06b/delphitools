@@ -1,0 +1,141 @@
+import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
+import CanonMenu, {
+	type CanonMenuEntry,
+	type CanonMenuItem,
+} from 'delphicanon/components/canon-menu';
+import type { Sound } from 'delphitools-v2/components/tools/text-tool/gloss-pieces';
+
+export interface LetterEdits {
+	pick: (sound: Sound) => void;
+	insert: (after: boolean, sound: Sound) => void;
+	/** None for the sole letter of a word. */
+	remove?: () => void;
+}
+
+interface GlossLetterSignature {
+	Args: {
+		sound: Sound;
+		alternatives: Sound[];
+		/** What Insert offers; a null between groups draws a separator. */
+		alphabet: (Sound | null)[];
+		edits: LetterEdits;
+	};
+}
+
+type Entry = CanonMenuEntry & { run?: () => void };
+
+// the system font may lack the glyphs; a menu icon is the glyph in the gloss face
+const glyphs = new Map<string, ComponentLike>();
+function glyphIcon(glyph: string): ComponentLike {
+	let icon = glyphs.get(glyph);
+	if (!icon) {
+		icon = <template>
+			<span class="gl-menu-glyph">{{glyph}}</span>
+		</template>;
+		glyphs.set(glyph, icon);
+	}
+	return icon;
+}
+
+const titled = (sound: Sound) =>
+	sound.name ? `${sound.name} /${sound.ipa}/` : `/${sound.ipa}/`;
+
+/**
+ * iOS ShavianLetterCell: one letter of the picked word, its name and sound
+ * under it; its menu inserts a letter before or after, removes it, or swaps
+ * it for one of its alternatives.
+ */
+export default class GlossLetter extends Component<GlossLetterSignature> {
+	get label() {
+		return titled(this.args.sound);
+	}
+
+	// the IPA tools write the sound itself
+	get showsIpa() {
+		return this.args.sound.ipa !== this.args.sound.glyph;
+	}
+
+	alphabet(pick: (sound: Sound) => void): Entry[] {
+		return this.args.alphabet.map((sound): Entry =>
+			sound
+				? {
+						title: titled(sound),
+						icon: glyphIcon(sound.glyph),
+						run: () => pick(sound),
+					}
+				: { kind: 'separator' },
+		);
+	}
+
+	get items(): Entry[] {
+		const { sound, alternatives, edits } = this.args;
+		return [
+			{
+				title: 'Insert before',
+				items: this.alphabet((s) =>
+					edits.insert(false, s),
+				),
+			},
+			{
+				title: 'Insert after',
+				items: this.alphabet((s) =>
+					edits.insert(true, s),
+				),
+			},
+			{
+				title: 'Remove',
+				destructive: true,
+				disabled: !edits.remove,
+				run: edits.remove,
+			},
+			{ kind: 'separator' },
+			{
+				title: this.label,
+				kind: 'radio',
+				checked: true,
+				icon: glyphIcon(sound.glyph),
+			},
+			...alternatives.map((alternative): Entry => ({
+				title: titled(alternative),
+				kind: 'radio',
+				checked: false,
+				icon: glyphIcon(alternative.glyph),
+				run: () => edits.pick(alternative),
+			})),
+		];
+	}
+
+	select = (item: CanonMenuItem) => (item as Entry).run?.();
+
+	<template>
+		<CanonMenu
+			class="gl-letter-menu"
+			@items={{this.items}}
+			@onSelect={{this.select}}
+			as |menu|
+		>
+			<button
+				type="button"
+				class="gl-letter"
+				aria-label={{this.label}}
+				{{menu.trigger}}
+			>
+				<span
+					class="gl-letter-glyph"
+					aria-hidden="true"
+				>{{@sound.glyph}}</span>
+				<span
+					class="gl-letter-name"
+					aria-hidden="true"
+				>{{@sound.name}}</span>
+				{{#if this.showsIpa}}
+					<span
+						class="gl-letter-ipa"
+						aria-hidden="true"
+					>/{{@sound.ipa}}/</span>
+				{{/if}}
+			</button>
+		</CanonMenu>
+	</template>
+}

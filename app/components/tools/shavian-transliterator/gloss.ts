@@ -1,8 +1,17 @@
 import {
+	covering,
+	type GlossPiece,
+	type Sound,
+} from 'delphitools-v2/components/tools/text-tool/gloss-pieces';
+import { carryEdits as carry } from 'delphitools-v2/lib/carry-edits';
+import {
 	getAlternatives,
 	type Alternative,
 } from 'delphitools-v2/lib/shavian/alternatives';
-import type { ShavianLetter } from 'delphitools-v2/lib/shavian/phoneme-map';
+import {
+	SHAVIAN_LETTERS,
+	type ShavianLetter,
+} from 'delphitools-v2/lib/shavian/phoneme-map';
 import {
 	markerPrefix,
 	type GlossToken,
@@ -55,7 +64,7 @@ export const withMarker = (word: GlossWord, marker: Marker) =>
 export function swapping(
 	word: GlossWord,
 	at: number,
-	alternative: Alternative,
+	alternative: Pick<Alternative, 'shavian' | 'ipa'>,
 ): GlossWord | undefined {
 	if (!word.phonemes[at]) return undefined;
 	const phonemes = [...word.phonemes];
@@ -70,7 +79,7 @@ export function swapping(
 export function inserting(
 	word: GlossWord,
 	at: number,
-	letter: ShavianLetter,
+	letter: Pick<ShavianLetter, 'shavian' | 'ipa'>,
 ): GlossWord {
 	const phonemes = [...word.phonemes];
 	phonemes.splice(Math.min(Math.max(0, at), phonemes.length), 0, {
@@ -90,45 +99,16 @@ export function removing(word: GlossWord, at: number): GlossWord | undefined {
 	});
 }
 
-/**
- * iOS ShavianEngine.carryEdits: after the text changes, the words that still
- * match at the start and at the end keep their letter edits and markers.
- */
-export function carryEdits(
-	old: GlossToken[],
-	next: GlossToken[],
-): GlossToken[] {
-	const before = old.flatMap((t) => (t.gloss ? [t.gloss] : []));
-	const slots = next.flatMap((t, i) => (t.gloss ? [i] : []));
-	const out = [...next];
-	const latin = (slot: number) => next[slot]!.gloss!.latin;
-	const carry = (gloss: GlossWord, slot: number) => {
-		if (gloss.userEdited || gloss.marker !== 'none')
-			out[slot] = { ...next[slot]!, gloss };
-	};
-	const shared = Math.min(before.length, slots.length);
-	let prefix = 0;
-	while (
-		prefix < shared &&
-		before[prefix]!.latin === latin(slots[prefix]!)
-	) {
-		carry(before[prefix]!, slots[prefix]!);
-		prefix += 1;
-	}
-	let suffix = 0;
-	while (
-		suffix < shared - prefix &&
-		before[before.length - 1 - suffix]!.latin ===
-			latin(slots[slots.length - 1 - suffix]!)
-	) {
-		carry(
-			before[before.length - 1 - suffix]!,
-			slots[slots.length - 1 - suffix]!,
-		);
-		suffix += 1;
-	}
-	return out;
-}
+/** The words still in place keep their letter edits and markers. */
+export const carryEdits = (old: GlossToken[], next: GlossToken[]) =>
+	carry(
+		old,
+		next,
+		(t) => t.gloss?.latin,
+		(t) =>
+			!!t.gloss &&
+			(t.gloss.userEdited || t.gloss.marker !== 'none'),
+	);
 
 const dash = '—';
 
@@ -155,46 +135,41 @@ export function tilesOf(tokens: GlossToken[]) {
 	];
 }
 
-export interface Piece {
-	kind: 'word' | 'punctuation' | 'whitespace';
-	text: string;
-	/** Token index of a word. */
-	index: number;
-	marker: string;
-	shavian: string;
-	guess: boolean;
+/** The editor's runs: every character of `text`, each word with its Shavian. */
+export function piecesOf(text: string, tokens: GlossToken[]): GlossPiece[] {
+	return covering(
+		text,
+		tokens.map((token, index) => {
+			const { gloss } = token;
+			return {
+				kind: token.type,
+				text: token.value,
+				index,
+				marker: gloss ? markerPrefix(gloss.marker) : '',
+				gloss: gloss
+					? gloss.phonemes
+							.map((p) => p.shavian)
+							.join('')
+					: token.type === 'punctuation'
+						? token.value
+						: '',
+				guess: gloss ? isGuess(gloss) : false,
+			};
+		}),
+	);
 }
 
-/** The editor's runs: every character of `text`, each word with its Shavian. */
-export function piecesOf(text: string, tokens: GlossToken[]): Piece[] {
-	const plain = (): Piece[] =>
-		text
-			? [
-					{
-						kind: 'whitespace',
-						text,
-						index: -1,
-						marker: '',
-						shavian: '',
-						guess: false,
-					},
-				]
-			: [];
-	// tokens of an older text would gloss the wrong words
-	if (tokens.map((t) => t.value).join('') !== text) return plain();
-	return tokens.map((token, index) => {
-		const { gloss } = token;
-		return {
-			kind: token.type,
-			text: token.value,
-			index,
-			marker: gloss ? markerPrefix(gloss.marker) : '',
-			shavian: gloss
-				? gloss.phonemes.map((p) => p.shavian).join('')
-				: token.type === 'punctuation'
-					? token.value
-					: '',
-			guess: gloss ? isGuess(gloss) : false,
-		};
-	});
-}
+export const soundOf = (letter: Alternative): Sound => ({
+	glyph: letter.shavian,
+	name: letter.name,
+	ipa: letter.ipa,
+});
+
+/** What Insert offers: the consonants, then the vowels. */
+export const alphabet: (Sound | null)[] = [
+	...SHAVIAN_LETTERS.filter((l) => l.category === 'consonant').map(
+		soundOf,
+	),
+	null,
+	...SHAVIAN_LETTERS.filter((l) => l.category === 'vowel').map(soundOf),
+];
