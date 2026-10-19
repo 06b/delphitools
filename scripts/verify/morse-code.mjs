@@ -136,6 +136,64 @@ await page.$$eval('.canon-segmented button', (buttons) =>
 await checkPaste(page, '-- --- .-. ... .');
 check('the pasted morse decodes', (await result(page)) === 'MORSE');
 
+await typeSource(page, 'hello');
+check('typed text hides the keypad', !(await page.$('.mc-keypad')));
+
+await visit(page, '/tools/morse-code?morseMode=2&morseQuiet');
+const source = () => page.$eval('.tt-source', (el) => el.value);
+const keys = await page.$$eval('.mc-keypad button', (els) =>
+	els.map((b) => `${b.getAttribute('aria-label')}:${b.getAttribute('aria-keyshortcuts')}`),
+);
+check(
+	'Decode shows the keypad: Dit, Dah, the gaps and Backspace, named with their keys',
+	keys.join(' ') === 'Dit:. Dah:- Letter gap:Space Word gap:/ Backspace:Backspace',
+	keys.join(' '),
+);
+await page.evaluate(() => {
+	window.__tones = 0;
+	const start = AudioBufferSourceNode.prototype.start;
+	AudioBufferSourceNode.prototype.start = function (...a) {
+		window.__tones += 1;
+		return start.apply(this, a);
+	};
+});
+const tap = (label) =>
+	page.$$eval(
+		'.mc-keypad button',
+		(els, l) => els.find((b) => b.getAttribute('aria-label') === l)?.click(),
+		label,
+	);
+for (const label of ['Dit', 'Dit', 'Dit', 'Letter gap', 'Dah', 'Dah', 'Dah', 'Word gap', 'Dit'])
+	await tap(label);
+await sleep(100);
+check('the keypad buttons key Morse', (await source()) === '... --- / .', await source());
+check('each dit and dah sounds', (await page.evaluate(() => window.__tones)) === 7);
+check('and the result decodes it', (await result(page)) === 'SO E', await result(page));
+await tap('Backspace');
+await tap('Backspace');
+check('Backspace takes a symbol, then a whole gap', (await source()) === '... ---', await source());
+
+await page.focus('.mc-keypad button');
+for (const key of ['Space', 'Period', 'Minus', 'Slash', 'Backspace', 'Space']) await page.keyboard.press(key);
+await sleep(50);
+check(
+	'with focus in the keypad, . - space / and Backspace key it',
+	(await source()) === '... --- .- ',
+	JSON.stringify(await source()),
+);
+await page.$$eval('.mc-keypad button', (els) =>
+	els.find((b) => b.getAttribute('aria-label') === 'Backspace')?.focus(),
+);
+await page.keyboard.press('Enter');
+await sleep(50);
+check('Enter presses the focused key', (await source()) === '... --- .-', JSON.stringify(await source()));
+
+await page.$$eval('.canon-segmented button', (buttons) =>
+	buttons.find((x) => x.textContent.trim() === 'Auto')?.click(),
+);
+await setSource(page, '');
+check('Auto on an empty input keeps the keypad', !!(await page.$('.mc-keypad')));
+
 await visit(page, '/tools/morse-code?morseText=PARIS&morseWpm=25&morseLoop&morseQuiet');
 check(
 	'?morseWpm= and ?morseLoop set up the player',

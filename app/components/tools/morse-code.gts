@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type Owner from '@ember/owner';
+import { fn } from '@ember/helper';
+import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonGrid from 'delphicanon/components/canon-grid';
@@ -13,6 +15,11 @@ import CanonSegmented from 'delphicanon/components/canon-segmented';
 import CanonSlider from 'delphicanon/components/canon-slider';
 import CanonSplit from 'delphicanon/components/canon-split';
 import { IconSvg } from 'delphitools-v2/components/icon';
+import {
+	keyOfEvent,
+	pressKey,
+	type MorseKey,
+} from 'delphitools-v2/components/tools/morse-code/keypad';
 import MorsePlayer from 'delphitools-v2/components/tools/morse-code/player';
 import Tape, {
 	collapsedStrip,
@@ -31,6 +38,11 @@ const PlayIcon = <template><IconSvg @name="play" /></template>;
 const PauseIcon = <template><IconSvg @name="pause" /></template>;
 const StopIcon = <template><IconSvg @name="square" /></template>;
 const LoopIcon = <template><IconSvg @name="repeat" /></template>;
+const DitIcon = <template><IconSvg @name="dot" /></template>;
+const DahIcon = <template><IconSvg @name="minus" /></template>;
+const LetterGapIcon = <template><IconSvg @name="space" /></template>;
+const WordGapIcon = <template><IconSvg @name="slash" /></template>;
+const BackspaceIcon = <template><IconSvg @name="delete" /></template>;
 
 const wpmText = (value: number) => `${Math.round(value)} WPM`;
 
@@ -93,6 +105,11 @@ export default class MorseCode extends Component {
 			this.direction === 2 ||
 			(this.direction === 0 && looksLikeMorse(this.input))
 		);
+	}
+
+	// Auto shows it on an empty input too, so backspacing to empty keeps it
+	get keying() {
+		return this.decoding || (this.direction === 0 && !this.input);
 	}
 
 	get converted() {
@@ -200,6 +217,40 @@ export default class MorseCode extends Component {
 		this.player.looping = this.looping;
 	};
 
+	press = (key: MorseKey) => {
+		const next = pressKey(this.input, key);
+		if (next === this.input) return;
+		this.setInput(next);
+		if (key === 'dit') this.player.key('.', this.wpm);
+		if (key === 'dah') this.player.key('-', this.wpm);
+	};
+
+	// the keypad's own keys while focus is in it; Enter still presses the focused button
+	keyboard = modifier((keypad: HTMLElement) => {
+		const down = (event: KeyboardEvent) => {
+			const key = keyOfEvent[event.key];
+			if (
+				!key ||
+				event.metaKey ||
+				event.ctrlKey ||
+				event.altKey
+			)
+				return;
+			event.preventDefault();
+			this.press(key);
+		};
+		// a space keyup would also click the focused button
+		const up = (event: KeyboardEvent) => {
+			if (event.key === ' ') event.preventDefault();
+		};
+		keypad.addEventListener('keydown', down);
+		keypad.addEventListener('keyup', up);
+		return () => {
+			keypad.removeEventListener('keydown', down);
+			keypad.removeEventListener('keyup', up);
+		};
+	});
+
 	<template>
 		<CanonSplit
 			class="morse-code"
@@ -263,6 +314,72 @@ export default class MorseCode extends Component {
 				/>
 			</:main>
 			<:footer>
+				{{#if this.keying}}
+					<div
+						class="mc-keypad"
+						role="group"
+						aria-label="Keypad"
+						{{this.keyboard}}
+					>
+						<CanonGrid>
+							<CanonButton
+								class="mc-key"
+								@text="Dit"
+								@icon={{DitIcon}}
+								@onClick={{fn
+									this.press
+									"dit"
+								}}
+								aria-keyshortcuts="."
+							/>
+							<CanonButton
+								class="mc-key"
+								@text="Dah"
+								@icon={{DahIcon}}
+								@onClick={{fn
+									this.press
+									"dah"
+								}}
+								aria-keyshortcuts="-"
+							/>
+						</CanonGrid>
+						<CanonGrid>
+							<CanonButton
+								@text="Letter gap"
+								@icon={{LetterGapIcon}}
+								@onClick={{fn
+									this.press
+									"letter"
+								}}
+								aria-keyshortcuts="Space"
+							/>
+							<CanonButton
+								@text="Word gap"
+								@icon={{WordGapIcon}}
+								@onClick={{fn
+									this.press
+									"word"
+								}}
+								aria-keyshortcuts="/"
+							/>
+							<CanonButton
+								@text="Backspace"
+								@icon={{BackspaceIcon}}
+								@repeats={{true}}
+								@disabled={{if
+									this.input
+									false
+									true
+								}}
+								@onClick={{fn
+									this.press
+									"back"
+								}}
+								aria-keyshortcuts="Backspace"
+							/>
+						</CanonGrid>
+					</div>
+				{{/if}}
 				<CanonGrid class="mc-transport">
 					<CanonButton
 						class="mc-loop"

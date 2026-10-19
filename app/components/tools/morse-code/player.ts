@@ -89,17 +89,32 @@ export default class MorsePlayer {
 		this.#start(0);
 	}
 
-	#start(played: number) {
-		const context = this.#context;
-		const buffer = this.#buffer;
-		if (!context || !buffer) return;
+	/** One keyed symbol's tone, beside any playback and leaving it be. */
+	key(symbol: string, wpm: number) {
+		const steps = timings(symbol, wpm);
+		if (!steps.length) return;
+		this.#context ??= new AudioContext();
+		void this.#context.resume();
+		this.#sourceOf(render(this.#context, steps)).start();
+	}
+
+	#sourceOf(buffer: AudioBuffer) {
+		const context = this.#context!;
 		const gain = context.createGain();
 		gain.gain.value = this.volume;
 		gain.connect(context.destination);
 		const source = context.createBufferSource();
 		source.buffer = buffer;
-		source.loop = this.#looping;
 		source.connect(gain);
+		return source;
+	}
+
+	#start(played: number) {
+		const context = this.#context;
+		const buffer = this.#buffer;
+		if (!context || !buffer) return;
+		const source = this.#sourceOf(buffer);
+		source.loop = this.#looping;
 		source.onended = () => {
 			if (this.#source !== source) return;
 			this.stop();

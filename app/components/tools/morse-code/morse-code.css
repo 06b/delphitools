@@ -78,3 +78,14 @@
 	font-family: var(--canon-mono-font);
 	font-size: 17px;
 }
+
+.mc-keypad {
+	display: grid;
+	gap: var(--canon-frame);
+	margin-block-end: var(--canon-frame);
+}
+
+.mc-key {
+	min-block-size: 72px;
+	font-size: var(--canon-text-title2);
+}

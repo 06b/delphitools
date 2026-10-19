@@ -6,8 +6,32 @@ import {
 	tapeOf,
 	units,
 } from 'delphitools-v2/components/tools/morse-code/layout';
+import { pressKey } from 'delphitools-v2/components/tools/morse-code/keypad';
 
 module('Unit | Tool | morse-code', function () {
+	test('pressKey: dits and dahs append', function (assert) {
+		assert.strictEqual(pressKey('', 'dit'), '.');
+		assert.strictEqual(pressKey('.', 'dah'), '.-');
+		assert.strictEqual(pressKey('.- ', 'dit'), '.- .');
+	});
+
+	test('pressKey: gaps never lead or double', function (assert) {
+		assert.strictEqual(pressKey('', 'letter'), '');
+		assert.strictEqual(pressKey('', 'word'), '');
+		assert.strictEqual(pressKey('.-', 'letter'), '.- ');
+		assert.strictEqual(pressKey('.- ', 'letter'), '.- ');
+		assert.strictEqual(pressKey('.- ', 'word'), '.- / ');
+		assert.strictEqual(pressKey('.- / ', 'letter'), '.- / ');
+		assert.strictEqual(pressKey('.- / ', 'word'), '.- / ');
+	});
+
+	test('pressKey: backspace takes a symbol or a whole gap', function (assert) {
+		assert.strictEqual(pressKey('.-', 'back'), '.');
+		assert.strictEqual(pressKey('.- ', 'back'), '.-');
+		assert.strictEqual(pressKey('.- / ', 'back'), '.-');
+		assert.strictEqual(pressKey('', 'back'), '');
+	});
+
 	test('units: a dot 1, a dash 3, a unit between', function (assert) {
 		assert.strictEqual(units('.'), 1);
 		assert.strictEqual(units('-'), 3);
