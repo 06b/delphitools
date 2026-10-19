@@ -106,10 +106,9 @@
 .sh-gloss {
 	position: absolute;
 	z-index: 2;
-	inset-block-end: calc(100% - 0.24em);
+	inset-block-end: 100%;
 	inset-inline-start: 0;
 	box-sizing: border-box;
-	min-inline-size: calc(100% + 0.6em);
 	block-size: 1.36em;
 	margin: 0;
 	padding: 0;
@@ -139,7 +138,7 @@
 	text-align: start;
 	pointer-events: auto;
 	cursor: pointer;
-	transform: scaleX(var(--sh-fit, 1));
+	transform: translateX(var(--sh-shift, 0)) scaleX(var(--sh-fit, 1));
 	transform-origin: 0 0;
 }
 

@@ -105,6 +105,47 @@ check(
 	}),
 );
 
+// every glyph box (spelling and band) of one word or punctuation mark
+// against those of every other
+const overlaps = () =>
+	page.evaluate(() => {
+		const boxes = [];
+		const add = (node, owner) => {
+			const text = node.textContent;
+			let at = 0;
+			for (const char of text) {
+				const range = document.createRange();
+				range.setStart(node, at);
+				range.setEnd(node, at + char.length);
+				at += char.length;
+				if (!char.trim()) continue;
+				const r = range.getBoundingClientRect();
+				boxes.push({ owner, char, l: r.left, r: r.right, t: r.top, b: r.bottom });
+			}
+		};
+		const walk = (el, owner) => {
+			for (const node of el.childNodes)
+				node.nodeType === 3 ? add(node, owner) : walk(node, owner);
+		};
+		document.querySelectorAll('.sh-word').forEach((word, i) => walk(word, i));
+		const hits = [];
+		for (const a of boxes)
+			for (const b of boxes)
+				if (
+					a.owner < b.owner &&
+					Math.min(a.r, b.r) - Math.max(a.l, b.l) > 0.5 &&
+					Math.min(a.b, b.b) - Math.max(a.t, b.t) > 0.5
+				)
+					hits.push(`${a.char}/${b.char}`);
+		return { glyphs: boxes.length, hits };
+	});
+const wideOverlaps = await overlaps();
+check(
+	'1400 px: no glyph box overlaps one of another word',
+	wideOverlaps.glyphs > 40 && !wideOverlaps.hits.length,
+	`${wideOverlaps.glyphs} glyphs; ${wideOverlaps.hits.join(' ')}`,
+);
+
 let words = await glosses();
 check(
 	'every word of the default sentence is glossed from the dictionary',
@@ -267,8 +308,23 @@ check(
 );
 
 await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/shavian-transliterator');
+await page.waitForFunction(() => !document.querySelector('.sh-loading'), { timeout: 30000 });
+await sleep(300);
+const narrowOverlaps = await overlaps();
+check(
+	'390 px: no glyph box overlaps one of another word',
+	narrowOverlaps.glyphs > 40 && !narrowOverlaps.hits.length,
+	`${narrowOverlaps.glyphs} glyphs; ${narrowOverlaps.hits.join(' ')}`,
+);
 await visit(page, '/tools/shavian-transliterator?shavianText=' + encodeURIComponent('Mankind, be vigilant; we loved you. '.repeat(6)));
 await sleep(500);
+const wrapped = await overlaps();
+check(
+	'390 px, six lines: no glyph box overlaps one of another word',
+	!wrapped.hits.length,
+	wrapped.hits.join(' '),
+);
 const narrow = await page.evaluate(() => {
 	const body = document.querySelector('.canon-split-body');
 	const picture = document.querySelector('.canon-split-sidebar .canon-canvas');

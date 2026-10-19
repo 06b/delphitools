@@ -29,25 +29,82 @@ interface EditorSignature {
 const PasteIcon = <template><IconSvg @name="clipboard" /></template>;
 const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
 
-// a Shavian word may run this far into the space after its spelling
-const slack = 10;
-// narrower than this it overlaps its neighbour instead
-const leastFit = 0.75;
-
+/**
+ * Sets each gloss in the Shavian band. A word and the punctuation touching it
+ * are one run: each gloss starts at its spelling or after the gloss before it,
+ * whichever is later, and a run that would reach the next run (or the line
+ * end) is narrowed to fit.
+ */
 function fit(text: HTMLElement) {
 	const words = [...text.querySelectorAll<HTMLElement>('.sh-word')];
-	const widths = words.map((word) => {
-		const gloss = word.querySelector<HTMLElement>('.sh-gloss');
-		return [word.offsetWidth, gloss?.scrollWidth ?? 0] as const;
+	const glosses = words.map((w) =>
+		w.querySelector<HTMLElement>('.sh-gloss')!,
+	);
+	for (const gloss of glosses) gloss.style.inlineSize = '';
+	const style = getComputedStyle(text);
+	const lineEnd =
+		text.getBoundingClientRect().right -
+		parseFloat(style.paddingRight);
+	// the band's ruling runs this far past a spelling into the space
+	const tail = 0.6 * parseFloat(style.fontSize);
+	const boxes = words.map((word, i) => {
+		const rect = word.getBoundingClientRect();
+		return {
+			left: rect.left,
+			right: rect.right,
+			top: Math.round(rect.top),
+			needs: glosses[i]!.scrollWidth,
+		};
 	});
-	words.forEach((word, i) => {
-		const [room, needs] = widths[i]!;
+	const gap = 2;
+	let start = 0;
+	while (start < words.length) {
+		let end = start + 1;
+		while (
+			end < words.length &&
+			words[end - 1]!.nextElementSibling === words[end] &&
+			boxes[end]!.top === boxes[start]!.top
+		)
+			end += 1;
+		const next = boxes[end];
+		const limit =
+			next && next.top === boxes[start]!.top
+				? next.left - gap
+				: lineEnd;
+		const origin = boxes[start]!.left;
+		const at: number[] = [];
+		let reach = origin;
+		for (let i = start; i < end; i += 1) {
+			at.push(Math.max(boxes[i]!.left, reach));
+			reach = at.at(-1)! + boxes[i]!.needs;
+		}
+		const last = boxes[end - 1]!;
 		const scale =
-			needs > room + slack
-				? Math.max(leastFit, (room + slack) / needs)
-				: 1;
-		word.style.setProperty('--sh-fit', String(scale));
-	});
+			reach > limit ? (limit - origin) / (reach - origin) : 1;
+		const place = (x: number) => origin + (x - origin) * scale;
+		for (let i = start; i < end; i += 1) {
+			const x = place(at[i - start]!);
+			const until =
+				i + 1 < end
+					? place(at[i + 1 - start]!)
+					: Math.min(
+							limit,
+							Math.max(
+								place(reach),
+								last.right +
+									tail,
+							),
+						);
+			const gloss = glosses[i]!;
+			gloss.style.setProperty(
+				'--sh-shift',
+				`${x - boxes[i]!.left}px`,
+			);
+			gloss.style.setProperty('--sh-fit', String(scale));
+			gloss.style.inlineSize = `${(until - x) / scale}px`;
+		}
+		start = end;
+	}
 }
 
 // ponytail: reads every word on each change; a pasted book re-fits in one pass
