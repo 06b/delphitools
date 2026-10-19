@@ -1,5 +1,5 @@
 import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 
 // avoids import cycle
 export { normaliseRotation } from 'delphitools-v2/lib/imposition';
@@ -88,7 +88,7 @@ export function pageSetupPt(
 		};
 	}
 
-	const size = findPaperSize(sizeId);
+	const size = paperSizeFor(sizeId);
 	if (!size) throw new Error(`unknown size "${sizeId}"`);
 
 	const landscape =

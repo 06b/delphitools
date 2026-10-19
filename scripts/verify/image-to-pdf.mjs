@@ -341,6 +341,45 @@ check(
 await page.click('.i2p-bleed input');
 await clickText('.i2p-fit', 'Fit');
 
+clearDownloads();
+check('typing 85x100 in the find field picks Custom', await pickPaper(page, '.i2p-size', { custom: '85x100' }));
+check(
+	'the page size cell reads the custom size',
+	(await page.$eval('.i2p-size .canon-menu-cell-title', (el) => el.textContent.trim())) ===
+		'Custom · 85 × 100 mm',
+);
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+await page.click('.media-job-save');
+const customFile = await waitForDownload(/^images\.pdf$/);
+check('a custom size build downloads', !!customFile);
+if (customFile) {
+	const doc = await PDFDocument.load(customFile.bytes);
+	const [wide, tall] = doc.getPages().map((p) => p.getSize());
+	const [w, h] = [85 * MM_TO_PT, 100 * MM_TO_PT];
+	const near = (a, b) => Math.abs(a - b) < 0.05;
+	check(
+		'custom: 85 × 100 mm pages in points, the wide image turned',
+		near(wide.width, h) && near(wide.height, w) && near(tall.width, w) && near(tall.height, h),
+		`${wide.width.toFixed(2)}×${wide.height.toFixed(2)}, ${tall.width.toFixed(2)}×${tall.height.toFixed(2)}`,
+	);
+}
+await page.click('.i2p-size');
+await page.waitForSelector('.paper-popover:popover-open', { timeout: 3000 });
+await sleep(150);
+check(
+	'reopened, the find field holds the custom size and Custom shows selected',
+	await page.evaluate(() => {
+		const panel = document.querySelector('.paper-popover:popover-open');
+		return (
+			panel.querySelector('.paper-find').value === '85x100mm' &&
+			panel.querySelector('.paper-popover-custom')?.getAttribute('aria-current') === 'true'
+		);
+	}),
+);
+await page.keyboard.press('Escape');
+await pickPaper(page, '.i2p-size', 'A4');
+
 // the banner loader can be brief; record whether it showed
 await page.evaluate(() => {
 	window.__i2pSeen = { loader: false, bar: false };
@@ -503,6 +542,13 @@ check(
 	(await page.evaluate(() => location.pathname)) === '/tools/image-to-pdf' &&
 		(await names()).join('|') === 'red-wide.png|blue-tall.png|pasted.png',
 	(await names()).join('|'),
+);
+
+await visit(page, '/tools/image-to-pdf?i2pSize=85x100');
+check(
+	'?i2pSize=85x100 opens on the custom size',
+	(await page.$eval('.i2p-size .canon-menu-cell-title', (el) => el.textContent.trim())) ===
+		'Custom · 85 × 100 mm',
 );
 
 await visit(page, '/tools/pdf-to-images');

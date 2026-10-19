@@ -27,7 +27,7 @@ import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 import {
 	MATCH_IMAGE_SIZE,
 	type FitMode,
@@ -40,6 +40,10 @@ import Slot from 'delphitools-v2/components/tools/media/slot';
 import PaperPopover, {
 	type PaperChoice,
 } from 'delphitools-v2/components/tools/paper-sizes/popover';
+import {
+	choiceFor,
+	choiceId,
+} from 'delphitools-v2/components/tools/paper-sizes/paper';
 import {
 	open,
 	sizes,
@@ -244,8 +248,9 @@ export default class ImageToPdf extends Component {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
 		const size = query.get('i2pSize');
-		if (size && (size === MATCH_IMAGE_SIZE || findPaperSize(size)))
-			this.sizeId = size;
+		if (size === MATCH_IMAGE_SIZE) this.sizeId = size;
+		else if (size)
+			this.sizeId = paperSizeFor(size)?.id ?? this.sizeId;
 		this.orientation =
 			ORIENTATIONS[index(query, 'i2pOrientation', 3) ?? 0]!;
 		this.fit = FITS[index(query, 'i2pFit', 3) ?? 0]!;
@@ -306,10 +311,8 @@ export default class ImageToPdf extends Component {
 		return this.toPdf ? 0 : 1;
 	}
 
-	get sizeChoice(): PaperChoice {
-		return this.sizeId === MATCH_IMAGE_SIZE
-			? { kind: 'extra' }
-			: { kind: 'paper', id: this.sizeId };
+	get sizeChoice() {
+		return choiceFor(this.sizeId, MATCH_IMAGE_SIZE);
 	}
 
 	get orientationIndex() {
@@ -516,8 +519,7 @@ export default class ImageToPdf extends Component {
 	};
 
 	pickSize = (choice: PaperChoice) => {
-		const id =
-			choice.kind === 'paper' ? choice.id : MATCH_IMAGE_SIZE;
+		const id = choiceId(choice, MATCH_IMAGE_SIZE);
 		if (id === this.sizeId) return;
 		this.sizeId = id;
 		this.#changed();
