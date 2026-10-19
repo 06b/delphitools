@@ -248,9 +248,11 @@ export default class ImageToPdf extends Component {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
 		const size = query.get('i2pSize');
-		if (size === MATCH_IMAGE_SIZE) this.sizeId = size;
-		else if (size)
-			this.sizeId = paperSizeFor(size)?.id ?? this.sizeId;
+		const paper =
+			size === MATCH_IMAGE_SIZE
+				? size
+				: paperSizeFor(size ?? '')?.id;
+		if (paper) this.sizeId = paper;
 		this.orientation =
 			ORIENTATIONS[index(query, 'i2pOrientation', 3) ?? 0]!;
 		this.fit = FITS[index(query, 'i2pFit', 3) ?? 0]!;
