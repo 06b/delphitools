@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PDFDocument } from 'pdf-lib';
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { launch, visit, check, finish, sleep, pickPaper } from './harness.mjs';
 
 const downloads = mkdtempSync(join(tmpdir(), 'dt-zine-dl-'));
 
@@ -225,10 +225,14 @@ if (duplex) {
 	check('two pages, 6mm larger', doc.getPageCount() === 2 && Math.abs(size.width - (841.89 + 17.008)) < 1, `${doc.getPageCount()} pages, ${size.width.toFixed(1)}`);
 }
 
-await page.select('.zi-paper-menu select', await page.$eval('.zi-paper-menu select', (sel) => [...sel.options].find((o) => o.textContent.startsWith('A3'))?.value));
+check('the paper popover picks A3', await pickPaper(page, '.zi-paper-menu', 'A3'));
 await sleep(200);
 s = await state(page);
 check('a paper pick changes the sheet tile', s.tiles[0] === '420 × 297 mm', s.tiles[0]);
+check(
+	'the paper cell names the pick',
+	(await page.$eval('.zi-paper-menu .canon-menu-cell-title', (el) => el.textContent.trim())) === 'A3 · 297 × 420 mm',
+);
 
 await page.setViewport({ width: 390, height: 844 });
 await sleep(400);
