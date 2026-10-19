@@ -99,3 +99,9 @@
 .mw-find-count {
 	flex: none;
 }
+
+/* wide: editor 70 %, tools 30 %; 390 px keeps "Remove Line Numbers" whole */
+.dt-canon-tool .markdown-writer.canon-split--halves > .canon-split-body {
+	--canon-split-columns: minmax(0, 7fr) var(--canon-hairline)
+		minmax(min(390px, 50%), 3fr);
+}

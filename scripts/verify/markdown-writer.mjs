@@ -94,6 +94,21 @@ check(
 			document.querySelector('.markdown-writer').getBoundingClientRect().height,
 	),
 );
+const panes = await page.evaluate(() => {
+	const width = (s) => document.querySelector(`.markdown-writer ${s}`).getBoundingClientRect().width;
+	return { editor: width('.canon-split-sidebar'), tools: width('.canon-split-main') };
+});
+check(
+	'wide: the editor takes about 70 %, the tools keep 390 px',
+	panes.editor / (panes.editor + panes.tools) >= 0.66 && panes.tools >= 389,
+	JSON.stringify(panes),
+);
+check(
+	'no tool button label is cut off',
+	await page.$$eval('.markdown-writer .canon-split-main .canon-button', (els) =>
+		els.every((el) => [...el.querySelectorAll('*')].every((c) => c.scrollWidth <= c.clientWidth + 1)),
+	),
+);
 const editor = await page.evaluate(() => {
 	const area = document.querySelector('.media-marked-source');
 	const pane = document.querySelector('.canon-split-sidebar').getBoundingClientRect();
