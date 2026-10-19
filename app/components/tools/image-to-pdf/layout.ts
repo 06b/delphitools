@@ -1,6 +1,5 @@
 import type { PageRect } from 'delphicanon/components/canon-page-strip';
-import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
-import { BLEED_MM } from 'delphitools-v2/components/tools/zine-imposer/images';
+import { BLEED_MM, MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
 import {
 	fitPlacement,
 	MATCH_IMAGE_SIZE,

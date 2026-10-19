@@ -34,7 +34,11 @@ import {
 	subscribePage,
 } from 'delphitools-v2/lib/errata/store';
 import { closeMode, onMode } from 'delphitools-v2/lib/errata/ui';
-import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
+import {
+	BLEED_MM,
+	MM_TO_POINTS,
+	PAPER_SIZES,
+} from 'delphitools-v2/lib/imposition';
 import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 import './page-size-panel.css';
@@ -58,8 +62,6 @@ const RESAMPLES = [
 	{ value: 'fit', label: 'Fit page' },
 	{ value: 'fill', label: 'Fill page' },
 ] as const;
-
-const BLEED_MM = 3;
 
 function mm(points: number): string {
 	return (points / MM_TO_POINTS).toFixed(1).replace(/\.0$/, '');

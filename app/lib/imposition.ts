@@ -11,6 +11,8 @@ import {
 } from 'pdf-lib';
 
 export const MM_TO_POINTS = 72 / 25.4;
+// 3mm uk/eu; us 1/8in
+export const BLEED_MM = 3;
 
 export interface PaperSize {
 	id: string;

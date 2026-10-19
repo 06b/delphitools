@@ -1,6 +1,6 @@
 import type { PDFDocument } from 'pdf-lib';
 import type { PageRect } from 'delphicanon/components/canon-page-strip';
-import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
+import { BLEED_MM, MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
 import { loadPdfDocument, renderPage } from 'delphitools-v2/lib/pdfjs';
 import type { ZineFoldLayout } from 'delphitools-v2/lib/zine-folds';
 
@@ -18,9 +18,6 @@ export interface ZineImage {
 }
 
 export const ACCEPT = 'image/*,.pdf,application/pdf';
-
-// 3mm uk/eu; us 1/8in
-export const BLEED_MM = 3;
 
 const PDF_DPI = 300;
 // ponytail: raster cap, embed vector pages (crop box, /Rotate) if print quality needs it
