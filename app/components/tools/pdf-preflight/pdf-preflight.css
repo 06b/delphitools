@@ -2,35 +2,6 @@
 	font-variant-numeric: tabular-nums;
 }
 
-.pf-taxiway {
-	display: flex;
-	gap: 10px;
-	align-items: center;
-	padding: 10px var(--canon-panel-padding);
-	background: var(--canon-card);
-	color: var(--canon-muted-foreground);
-	font-size: var(--canon-text-footnote);
-	line-height: 1.3;
-	text-decoration: none;
-}
-
-.pf-taxiway strong {
-	color: var(--canon-foreground);
-	font-weight: var(--canon-weight-semibold);
-}
-
-.pf-taxiway svg {
-	flex: none;
-	inline-size: 16px;
-	block-size: 16px;
-}
-
-.pf-taxiway:hover,
-.pf-taxiway:focus-visible {
-	outline: none;
-	background: var(--canon-accent-bg);
-}
-
 .pf-preview {
 	display: grid;
 	place-items: center;

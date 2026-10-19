@@ -416,20 +416,6 @@ export default class PdfPreflight extends Component {
 					<CanonTiles
 						@items={{this.properties}}
 					/>
-					<a
-						class="pf-taxiway"
-						href="https://rmv.fyi/projects/taxiway"
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						<span>Need more?
-							<strong>Taxiway</strong>
-							is a free native macOS
-							app with 55 checks,
-							automated fixes, and
-							full PDF inspection.</span>
-						<Icon @name="external-link" />
-					</a>
 				</CanonRows>
 				{{#if this.pageInfo}}
 					<CanonRows

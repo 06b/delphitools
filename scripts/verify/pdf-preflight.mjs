@@ -74,6 +74,10 @@ check(
 	dashes.length === 4 + 6 + 5 && dashes.every((v) => v === '—'),
 	dashes.join(' '),
 );
+check(
+	'no callout for the discontinued Taxiway app',
+	!(await page.$('a[href*="taxiway"]')) && !/taxiway/i.test(await page.$eval('.pdf-preflight', (el) => el.textContent)),
+);
 const emptyTop = await page.$eval('.pf-checks', (el) => el.getBoundingClientRect().top);
 
 const choose = async (file) => {

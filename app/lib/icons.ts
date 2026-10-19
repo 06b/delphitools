@@ -93,7 +93,6 @@ import iEclipse from 'lucide-static/icons/eclipse.svg?raw';
 import iEllipsis from 'lucide-static/icons/ellipsis.svg?raw';
 import iEraser from 'lucide-static/icons/eraser.svg?raw';
 import iExpand from 'lucide-static/icons/expand.svg?raw';
-import iExternalLink from 'lucide-static/icons/external-link.svg?raw';
 import iEye from 'lucide-static/icons/eye.svg?raw';
 import iEyeOff from 'lucide-static/icons/eye-off.svg?raw';
 import iFile from 'lucide-static/icons/file.svg?raw';
@@ -356,7 +355,6 @@ export const icons: Record<string, string> = {
 	ellipsis: iEllipsis,
 	eraser: iEraser,
 	expand: iExpand,
-	'external-link': iExternalLink,
 	eye: iEye,
 	'eye-off': iEyeOff,
 	file: iFile,
