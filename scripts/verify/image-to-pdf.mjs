@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import JSZip from 'jszip';
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { launch, visit, check, finish, sleep, pickPaper } from './harness.mjs';
 
 const A4 = [595.28, 841.89];
 const MM_TO_PT = 72 / 25.4;
@@ -122,7 +122,7 @@ check(
 			document.querySelector('.media-job-run').disabled &&
 			document.querySelector('.i2p-sort-up').disabled &&
 			document.querySelector('.i2p-clear').disabled &&
-			!document.querySelector('.i2p-size select').disabled &&
+			!document.querySelector('.i2p-size').disabled &&
 			[
 				...document.querySelectorAll('.i2p-margin button'),
 			].every((b) => !b.disabled),
@@ -256,7 +256,11 @@ if (built) {
 }
 
 clearDownloads();
-await page.select('.i2p-size select', '0');
+check('Match image is the popover\'s extra choice', await pickPaper(page, '.i2p-size', null));
+check(
+	'the page size cell reads Match image',
+	(await page.$eval('.i2p-size .canon-menu-cell-title', (el) => el.textContent.trim())) === 'Match image',
+);
 await clickText('.i2p-margin', '10 mm');
 await sleep(200);
 check(

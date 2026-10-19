@@ -1,4 +1,5 @@
-import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
+import { MM_TO_POINTS } from 'delphitools-v2/lib/imposition';
+import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 
 // avoids import cycle
 export { normaliseRotation } from 'delphitools-v2/lib/imposition';
@@ -19,11 +20,6 @@ export interface PageSetup {
 }
 
 export const MATCH_IMAGE_SIZE = 'match';
-
-export const PAGE_SIZE_OPTIONS: { id: string; label: string }[] = [
-	{ id: MATCH_IMAGE_SIZE, label: 'Match image' },
-	...PAPER_SIZES.map((size) => ({ id: size.id, label: size.label })),
-];
 
 export const PX_TO_POINTS = 72 / 96;
 
@@ -92,7 +88,7 @@ export function pageSetupPt(
 		};
 	}
 
-	const size = PAPER_SIZES.find((entry) => entry.id === sizeId);
+	const size = findPaperSize(sizeId);
 	if (!size) throw new Error(`unknown size "${sizeId}"`);
 
 	const landscape =

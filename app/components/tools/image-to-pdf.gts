@@ -8,7 +8,6 @@ import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
 import CanonLoader from 'delphicanon/components/canon-loader';
-import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
 import CanonPageStrip, {
 	pageStripHeight,
 	type CanonPage,
@@ -24,9 +23,9 @@ import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
+import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
 import {
 	MATCH_IMAGE_SIZE,
-	PAGE_SIZE_OPTIONS,
 	type FitMode,
 	type PageOrientation,
 } from 'delphitools-v2/lib/pdf-pages';
@@ -34,6 +33,9 @@ import Drop from 'delphitools-v2/components/tools/media/drop';
 import Job from 'delphitools-v2/components/tools/media/job';
 import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
 import Slot from 'delphitools-v2/components/tools/media/slot';
+import PaperPopover, {
+	type PaperChoice,
+} from 'delphitools-v2/components/tools/paper-sizes/popover';
 import {
 	open,
 	sizes,
@@ -65,7 +67,6 @@ const MARGINS_MM = [0, 5, 10, 20];
 const marginLabels = MARGINS_MM.map((mm) => (mm === 0 ? 'None' : `${mm} mm`));
 const SCALES = [1, 2, 3];
 const scaleLabels = SCALES.map((s) => `${s * 72} DPI`);
-const sizeLabels = PAGE_SIZE_OPTIONS.map((o) => o.label);
 const A4: PageSize = { width: 595.28, height: 841.89 };
 
 const Trash = <template><IconSvg @name="trash-2" /></template>;
@@ -206,7 +207,7 @@ export default class ImageToPdf extends Component {
 		super(owner, args);
 		const query = new URLSearchParams(window.location.search);
 		const size = query.get('i2pSize');
-		if (size && PAGE_SIZE_OPTIONS.some((o) => o.id === size))
+		if (size && (size === MATCH_IMAGE_SIZE || findPaperSize(size)))
 			this.sizeId = size;
 		this.orientation =
 			ORIENTATIONS[index(query, 'i2pOrientation', 3) ?? 0]!;
@@ -244,8 +245,10 @@ export default class ImageToPdf extends Component {
 		return this.toPdf ? 0 : 1;
 	}
 
-	get sizeIndex() {
-		return PAGE_SIZE_OPTIONS.findIndex((o) => o.id === this.sizeId);
+	get sizeChoice(): PaperChoice {
+		return this.sizeId === MATCH_IMAGE_SIZE
+			? { kind: 'extra' }
+			: { kind: 'paper', id: this.sizeId };
 	}
 
 	get orientationIndex() {
@@ -455,9 +458,10 @@ export default class ImageToPdf extends Component {
 		];
 	};
 
-	pickSize = (at: number) => {
-		const id = PAGE_SIZE_OPTIONS[at]?.id;
-		if (!id || id === this.sizeId) return;
+	pickSize = (choice: PaperChoice) => {
+		const id =
+			choice.kind === 'paper' ? choice.id : MATCH_IMAGE_SIZE;
+		if (id === this.sizeId) return;
 		this.sizeId = id;
 		this.#changed();
 	};
@@ -657,13 +661,13 @@ export default class ImageToPdf extends Component {
 						<CanonHeading
 							@text="Page size"
 						/>
-						<CanonMenuCell
+						<PaperPopover
 							class="i2p-size"
-							@items={{sizeLabels}}
-							@selected={{this.sizeIndex}}
+							@selected={{this.sizeChoice}}
+							@extra="Match image"
 							@label="Page size"
 							@disabled={{this.building}}
-							@onChange={{this.pickSize}}
+							@onPick={{this.pickSize}}
 						/>
 						<CanonHeading
 							@text="Orientation"

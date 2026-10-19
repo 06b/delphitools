@@ -164,7 +164,7 @@ module('Unit | Lib | pdf-pages', function () {
 
 		test('rejects an unknown size id', function (assert) {
 			assert.throws(() =>
-				pageSetupPt('b5', 'auto', 100, 100, 0),
+				pageSetupPt('nope', 'auto', 100, 100, 0),
 			);
 		});
 	});
