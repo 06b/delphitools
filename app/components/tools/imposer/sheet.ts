@@ -1,11 +1,9 @@
 import {
 	cropMarks,
-	type MarkLine as Line,
+	type MarkLine,
 	type PagePlacement,
 	type SheetDefinition,
 } from 'delphitools-v2/lib/imposition';
-
-export type { Line };
 
 export type Fit = 'fit' | 'fill' | 'actual';
 
@@ -14,8 +12,8 @@ export interface PrintSheet {
 	width: number;
 	height: number;
 	cells: PagePlacement[];
-	creases: Line[];
-	marks: Line[];
+	creases: MarkLine[];
+	marks: MarkLine[];
 	back: boolean;
 }
 
@@ -61,8 +59,6 @@ export function creases(layoutId: string, width: number, height: number) {
 	}
 }
 
-export const marks = cropMarks;
-
 export function printSheet(
 	placements: PagePlacement[],
 	options: {
@@ -73,13 +69,13 @@ export function printSheet(
 		back: boolean;
 	},
 ): PrintSheet {
-	const { layoutId, width, height, cropMarks, back } = options;
+	const { layoutId, width, height, back } = options;
 	return {
 		width,
 		height,
 		cells: placements,
 		creases: creases(layoutId, width, height),
-		marks: cropMarks ? marks(placements) : [],
+		marks: options.cropMarks ? cropMarks(placements) : [],
 		back,
 	};
 }

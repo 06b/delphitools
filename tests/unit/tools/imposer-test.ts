@@ -1,12 +1,12 @@
 import { module, test } from 'qunit';
 import {
+	cropMarks,
 	DEFAULT_IMPOSITION_CONFIG,
 	getLayoutById,
 	type ImpositionConfig,
 } from 'delphitools-v2/lib/imposition';
 import {
 	creases,
-	marks,
 	millimetres,
 	printSheet,
 	signatures,
@@ -88,7 +88,7 @@ module('Unit | Tool | imposer', function () {
 			...config,
 			customGrid: [3, 3],
 		});
-		const lines = marks(result.sheets[0]!.front);
+		const lines = cropMarks(result.sheets[0]!.front);
 		// 9 cells, 12 outer edge segments, 2 marks each
 		assert.strictEqual(lines.length, 24);
 	});
