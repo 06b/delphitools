@@ -41,11 +41,6 @@ export const SYNTAX: [label: string, syntax: string][] = [
 	['Absolute', 'abs(x)'],
 ];
 
-export const PLACEHOLDERS: Record<'solve' | 'other', string> = {
-	solve: 'e.g., x^2 - 4 = 0',
-	other: 'e.g., (x+1)^2 - x^2',
-};
-
 export function needsVariable(operation: Operation): boolean {
 	return (
 		operation === 'solve' ||

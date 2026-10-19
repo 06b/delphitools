@@ -4,12 +4,13 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type Owner from '@ember/owner';
-import { modifier } from 'ember-modifier';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import CanonHeading from 'delphicanon/components/canon-heading';
-import CanonMathInput from 'delphicanon/components/canon-math-input';
+import CanonMathField, {
+	CanonMathFieldHandle,
+} from 'delphicanon/components/canon-math-field';
 import CanonMathKey from 'delphicanon/components/canon-math-key';
 import CanonMathView from 'delphicanon/components/canon-math-view';
 import CanonRow from 'delphicanon/components/canon-row';
@@ -21,6 +22,7 @@ import CanonTextCell from 'delphicanon/components/canon-text-cell';
 import CanonTiles from 'delphicanon/components/canon-tiles';
 import CanonValueLine from 'delphicanon/components/canon-value-line';
 import type { Key } from 'delphicanon/lib/math/expression';
+import { keyForKeyboard } from 'delphicanon/lib/math/keypad';
 import { N, parse, present, same, type Node } from 'delphicanon/lib/math/node';
 import press from 'delphicanon/modifiers/canon-press';
 import type CanonToastService from 'delphicanon/services/canon-toast';
@@ -28,7 +30,6 @@ import { IconSvg } from 'delphitools-v2/components/icon';
 import {
 	EXAMPLES,
 	OPERATIONS,
-	PLACEHOLDERS,
 	SYNTAX,
 	compute,
 	needsVariable,
@@ -88,8 +89,7 @@ export default class AlgebraCalcTool extends Component {
 	@tracked operation: Operation = 'simplify';
 	@tracked math?: MathModule;
 	@tracked promoted = 0;
-	@tracked keypadKeys?: Key[];
-	field?: HTMLInputElement;
+	handle = new CanonMathFieldHandle();
 
 	// ?algExpr= ?algOp=<simplify|expand|factor|solve|derivative|integral> ?algVar=: the iOS launch flags
 	constructor(owner: Owner, args: object) {
@@ -157,12 +157,6 @@ export default class AlgebraCalcTool extends Component {
 
 	get resultTitle() {
 		return OPERATIONS[this.operationIndex]!.result;
-	}
-
-	get placeholder() {
-		return this.operation === 'solve'
-			? PLACEHOLDERS.solve
-			: PLACEHOLDERS.other;
 	}
 
 	get showsVariable() {
@@ -300,32 +294,25 @@ export default class AlgebraCalcTool extends Component {
 		return outcome.output;
 	}
 
-	type = (event: Event) =>
-		(this.expression = (event.target as HTMLInputElement).value);
-
-	// a click places the caret after focus, so select on the next frame
-	selectAll = (event: FocusEvent) => {
-		const field = event.target;
-		if (field instanceof HTMLInputElement)
-			requestAnimationFrame(() => field.select());
-	};
-
-	registerField = (element: HTMLInputElement) => (this.field = element);
-
 	setVariable = (text: string) => (this.variableText = text.slice(0, 2));
 
 	choose = (index: number) => (this.operation = operationIds[index]!);
 
 	useExample = (expression: string) => (this.expression = expression);
 
-	openKeypad = (key: Key) => (this.keypadKeys = [key]);
+	openKeypad = (key: Key) => this.handle.edit([key]);
 
 	keypadChanged = (text: string) => (this.expression = text);
 
-	keypadClosed = (text: string) => {
-		this.expression = text;
-		this.keypadKeys = undefined;
-		this.field?.focus({ preventScroll: true });
+	/** A typed character opens the keypad and replaces the expression, as typing over a selected field does; Backspace edits it. */
+	typeInField = (event: KeyboardEvent) => {
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
+		const key = keyForKeyboard(event.key);
+		if (!key || ['left', 'right', 'up', 'down'].includes(key.kind))
+			return;
+		event.preventDefault();
+		if (key.kind !== 'delete') this.expression = '';
+		this.handle.edit([key]);
 	};
 
 	useAsInput = () => {
@@ -341,7 +328,7 @@ export default class AlgebraCalcTool extends Component {
 	};
 
 	<template>
-		<CanonSplit class="algebra-calc">
+		<CanonSplit class="algebra-calc" @halves={{true}}>
 			<:banner>
 				<CanonCanvas @height={{canvasHeight}}>
 					<Picture
@@ -354,19 +341,19 @@ export default class AlgebraCalcTool extends Component {
 			</:banner>
 			<:sidebar>
 				<CanonRows @framed={{true}}>
-					<input
-						type="text"
+					<CanonMathField
 						class="alg-field"
-						aria-label="Expression"
-						placeholder={{this.placeholder}}
-						autocomplete="off"
-						autocapitalize="off"
-						spellcheck="false"
-						enterkeyhint="done"
-						value={{this.expression}}
-						{{on "input" this.type}}
-						{{on "focusin" this.selectAll}}
-						{{register this.registerField}}
+						@text={{this.expression}}
+						@variable={{this.variable}}
+						@placeholder={{this.ghost}}
+						@size={{30}}
+						@handle={{this.handle}}
+						@onChange={{this.keypadChanged}}
+						@onCompletion={{this.keypadChanged}}
+						{{on
+							"keydown"
+							this.typeInField
+						}}
 					/>
 					{{#if this.failure}}
 						<CanonStatus
@@ -411,16 +398,6 @@ export default class AlgebraCalcTool extends Component {
 						@onChange={{this.choose}}
 					/>
 				</CanonRows>
-				{{#if this.keypadKeys}}
-					<CanonMathInput
-						@text={{this.expression}}
-						@variable={{this.variable}}
-						@keys={{this.keypadKeys}}
-						@source={{this.field}}
-						@onChange={{this.keypadChanged}}
-						@onClose={{this.keypadClosed}}
-					/>
-				{{/if}}
 			</:sidebar>
 			<:main>
 				<CanonRows @framed={{true}}>
@@ -515,12 +492,3 @@ export default class AlgebraCalcTool extends Component {
 		</CanonSplit>
 	</template>
 }
-
-const register = modifier(
-	(
-		element: HTMLInputElement,
-		[callback]: [(element: HTMLInputElement) => void],
-	) => {
-		callback(element);
-	},
-);

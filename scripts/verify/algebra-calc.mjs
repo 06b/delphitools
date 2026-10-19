@@ -14,7 +14,10 @@ await page
 const field = '.alg-field';
 const state = () =>
 	page.evaluate(() => ({
-		field: document.querySelector('.alg-field').value,
+		field: document
+			.querySelector('.alg-field svg[role="img"]')
+			?.getAttribute('aria-label'),
+		panel: !!document.querySelector('dialog.canon-math-input[open]'),
 		heading: document
 			.querySelector('.canon-split-main .canon-heading')
 			?.textContent.trim(),
@@ -38,12 +41,17 @@ const clickText = (scope, text) =>
 		scope,
 		text,
 	);
-const retype = async (text) => {
+// each part is typed, then ArrowRight leaves a power or fraction
+const retype = async (...parts) => {
 	await page.evaluate(() => document.activeElement?.blur());
-	await page.click(field);
-	await sleep(80);
-	await page.keyboard.type(text);
+	await page.focus(field);
+	for (const [index, part] of parts.entries()) {
+		if (index) await page.keyboard.press('ArrowRight');
+		await page.keyboard.type(part);
+	}
 	await sleep(50);
+	await page.keyboard.press('Enter');
+	await sleep(400);
 };
 
 await visit(page, '/tools/algebra-calc');
@@ -63,36 +71,59 @@ const layout = await page.evaluate(() => {
 	const first = document.querySelector('.canon-split-sidebar .canon-rows > *');
 	return {
 		first: first === input,
-		size: parseFloat(getComputedStyle(input).fontSize),
+		size: input.querySelector('svg').getBoundingClientRect().height,
 		height: input.getBoundingClientRect().height,
 	};
 });
 check('the expression field opens the settings pane', layout.first);
-check('large, at primary height', layout.size >= 28 && layout.height >= 68, `${layout.size}px ${layout.height}px`);
+check('large, at primary height', layout.size >= 24 && layout.height >= 68, `${layout.size}px ${layout.height}px`);
+const panes = await page.evaluate(() =>
+	['sidebar', 'main'].map((p) =>
+		Math.round(document.querySelector(`.algebra-calc .canon-split-${p}`).getBoundingClientRect().width),
+	),
+);
+check('the panes split 50/50', Math.abs(panes[0] - panes[1]) <= 2, panes.join(' '));
 let s = await state();
 check('empty: the placeholder example shows faint in the picture', s.glyphs > 0 && s.picture.includes('(x+1)^2 - x^2'), s.picture);
 
-await retype('(x+1)^2 - x^2');
+await page.focus(field);
+await page.keyboard.type('(x+1)^2');
+await sleep(300);
+s = await state();
+check('typing on the field opens the keypad panel', s.panel);
+await page.keyboard.press('ArrowRight');
+await page.keyboard.type('-x^2');
+await sleep(50);
 s = await state();
 check('simplify answers as you type', s.lines[0]?.includes('2 * x + 1') || s.lines[0]?.includes('2x + 1') || s.lines[0]?.includes('2 x + 1'), s.lines.join(' | '));
 check('the result heading names the operation', s.heading === 'Simplified', s.heading);
 
-await page.evaluate(() => document.activeElement?.blur());
-await page.click(field);
-await sleep(80);
+await page.keyboard.press('Enter');
+await sleep(400);
+s = await state();
+check('Enter closes the panel', !s.panel);
 check(
-	'focus selects the whole expression',
-	await page.evaluate(() => {
-		const f = document.querySelector('.alg-field');
-		return f.selectionStart === 0 && f.selectionEnd === f.value.length;
-	}),
+	'and focus returns to the field',
+	await page.evaluate(() => document.activeElement?.classList.contains('alg-field')),
 );
+await page.keyboard.type('7');
+await sleep(300);
+s = await state();
+check('a character typed on the field replaces the expression', s.panel && s.field === '7', s.field);
+await page.keyboard.press('Escape');
+await sleep(400);
+await page.click(field);
+await sleep(400);
+s = await state();
+check('a click opens the panel on the expression', s.panel && s.field === '7', s.field);
+await page.keyboard.press('Escape');
+await sleep(400);
 
 await clickText('.algebra-calc [aria-label="Operation"]', 'Solve');
-await retype('x^2 - 4 = 0');
+await retype('x^2', '-4=0');
 s = await state();
 check('solve lists each root', s.lines.length === 2 && s.lines[0].includes('2') && s.lines[1].includes('-2'), s.lines.join(' | '));
-check('the picture sets the working', s.picture.startsWith('x^2 - 4 = 0'), s.picture);
+check('the picture sets the working', s.picture.replaceAll(' ', '').startsWith('x^2-4=0'), s.picture);
 check(
 	'the variable row shows for solve',
 	await page.evaluate(() =>
@@ -111,6 +142,7 @@ await retype('x^3');
 s = await state();
 check('d/dx differentiates', s.lines[0]?.includes('3 * x ^ 2'), s.lines.join());
 await clickText('.algebra-calc .canon-split-main', 'Use as input');
+check('the result morphs into the input', await page.evaluate(() => document.getAnimations().length > 0));
 await sleep(50);
 s = await state();
 check('Use as input puts the result in the field', s.field === '3 * x ^ 2' && s.lines[0]?.includes('6 * x'), `${s.field} ${s.lines}`);

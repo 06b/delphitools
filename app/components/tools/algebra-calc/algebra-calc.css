@@ -29,32 +29,8 @@
 }
 
 /* the expression: the tool's main value, large */
-.alg-field {
-	box-sizing: border-box;
-	inline-size: 100%;
+.canon-math-field.alg-field {
 	min-block-size: var(--canon-primary-height);
-	margin: 0;
-	padding: 0 var(--canon-panel-padding);
-	border: 0;
-	border-radius: 0;
-	background: var(--canon-card);
-	color: var(--canon-foreground);
-	caret-color: var(--canon-primary);
-	font-family: var(--canon-mono-font);
-	font-size: var(--canon-text-big-number);
-	font-weight: var(--canon-weight-semibold);
-	outline: none;
-	appearance: none;
-}
-
-.alg-field::placeholder {
-	color: var(--canon-muted-foreground);
-	font-size: var(--canon-text-title2);
-	opacity: 1;
-}
-
-.alg-field:focus-visible {
-	box-shadow: inset 0 0 0 2px var(--canon-primary);
 }
 
 .alg-variable {
