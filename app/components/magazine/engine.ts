@@ -91,7 +91,14 @@ const COVER_BEND = 0.35;
 const TURN_MS = 760;
 const FAST_TURN_MS = 420;
 const DRAG_SLOP_PX = 6;
-const TILT = (16 * Math.PI) / 180;
+const TILT = (4 * Math.PI) / 180;
+const DEG = Math.PI / 180;
+// resting angle on the desk, per mode; open spreads straighten
+const REST_TURN = { spread: -7 * DEG, single: -2.5 * DEG };
+const OPEN_TURN = -1 * DEG;
+const TOSS_MS = 900;
+const TOSS_LIFT = 0.3;
+const TOSS_SPIN = -21 * DEG;
 const FOV = 30;
 const PAPER = '#ffffff';
 
@@ -217,7 +224,7 @@ export function createEngine(options: EngineOptions) {
 	);
 	table.position.z = -0.001;
 	table.receiveShadow = true;
-	magazine.add(table);
+	scene.add(table);
 
 	const contactTexture = contactShadow();
 	const contacts = [1, -1].map((side) => {
@@ -506,8 +513,8 @@ export function createEngine(options: EngineOptions) {
 		mode === 'spread' ? Math.ceil(page / 2) : page;
 
 	// camera
-	const view = { x: W / 2, width: W, intro: 1.3 };
-	const tilt = { x: 0, y: 0, tx: 0, ty: 0 };
+	const view = { x: W / 2, width: W, intro: 1 };
+	const toss = { start: performance.now(), t: 0 };
 	let size = { width: 1, height: 1 };
 
 	function framing() {
@@ -534,6 +541,28 @@ export function createEngine(options: EngineOptions) {
 		camera.lookAt(view.x, 0, 0);
 		sun.target.position.set(view.x, 0, 0);
 		sun.position.set(view.x - 0.9, 1.3, 2.6);
+	}
+
+	// lands at 45% of the toss, then slides and turns to rest
+	function placeMagazine(now: number) {
+		toss.t = options.reducedMotion
+			? 1
+			: Math.min(1, (now - toss.start) / TOSS_MS);
+		const slide = 1 - easeOut(toss.t);
+		const fall = Math.max(0, 1 - toss.t / 0.45);
+		const angle =
+			REST_TURN[mode] +
+			(OPEN_TURN - REST_TURN[mode]) * openness +
+			TOSS_SPIN * slide;
+		const pivot = view.x;
+		magazine.rotation.set(0, 0, angle);
+		magazine.position.set(
+			pivot - pivot * Math.cos(angle) + 0.7 * W * slide,
+			-pivot * Math.sin(angle) - 1.2 * H * slide,
+			TOSS_LIFT * fall * fall,
+		);
+		for (const contact of contacts)
+			contact.material.opacity = 0.45 * (1 - fall);
 	}
 
 	function resize() {
@@ -752,9 +781,6 @@ export function createEngine(options: EngineOptions) {
 	};
 
 	const onPointerMove = (event: PointerEvent) => {
-		const rect = canvas.getBoundingClientRect();
-		tilt.tx = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-		tilt.ty = ((event.clientY - rect.top) / rect.height) * 2 - 1;
 		dirty = true;
 		if (!press) {
 			const hit = pick(event);
@@ -906,8 +932,7 @@ export function createEngine(options: EngineOptions) {
 			Math.abs(view.width - goal.width) > 1e-4 ||
 			Math.abs(view.intro - 1) > 1e-4 ||
 			Math.abs(openness - (closed ? 0 : 1)) > 1e-3 ||
-			Math.abs(tilt.x - tilt.tx * (closed ? 1 : 0)) > 1e-4 ||
-			Math.abs(tilt.y - tilt.ty * (closed ? 1 : 0)) > 1e-4;
+			toss.t < 1;
 		if (!dirty && !animating && !moving) return;
 		const started = performance.now();
 		dirty = false;
@@ -916,12 +941,7 @@ export function createEngine(options: EngineOptions) {
 		view.width += (goal.width - view.width) * settleRate;
 		view.intro += (1 - view.intro) * settleRate;
 		openness += ((closed ? 0 : 1) - openness) * settleRate;
-		if (!options.reducedMotion) {
-			const k = closed ? 1 : 0;
-			tilt.x += (tilt.tx * k - tilt.x) * settleRate;
-			tilt.y += (tilt.ty * k - tilt.y) * settleRate;
-			magazine.rotation.set(tilt.y * 0.07, tilt.x * 0.09, 0);
-		}
+		placeMagazine(now);
 		placeCamera();
 		const rightCount = leaves.filter(
 			(leaf) =>
