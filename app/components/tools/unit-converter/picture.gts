@@ -14,6 +14,7 @@ import {
 	convert,
 	format,
 	pose,
+	settleEased,
 	type Instrument,
 	type Pose,
 	type Unit,
@@ -49,7 +50,7 @@ function still() {
  * UnitConverterPicture: the quantity on an instrument graduated twice, in
  * the from unit (ink) and in the result unit (primary), with the converted
  * figure beside it. Each category has its own instrument; all of them ease
- * to a new value with one overshoot.
+ * out to a new value without overshoot.
  */
 export default class Picture extends Component<PictureSignature> {
 	@tracked size = { width: 0, height: 0 };
@@ -148,14 +149,8 @@ export default class Picture extends Component<PictureSignature> {
 		const began = performance.now();
 		const step = (now: number) => {
 			const progress = Math.min(1, (now - began) / settleMs);
-			// damped spring, one overshoot
-			const eased =
-				progress === 1
-					? 1
-					: 1 -
-						Math.exp(-7 * progress) *
-							Math.cos(9 * progress);
-			const zoom = Math.min(1, eased);
+			// no spring: its overshoot made the weights jump
+			const eased = settleEased(progress);
 			this.shown = {
 				value:
 					start.value +
@@ -166,7 +161,7 @@ export default class Picture extends Component<PictureSignature> {
 					Math.log(start.span) +
 						(Math.log(target.span) -
 							Math.log(start.span)) *
-							zoom,
+							eased,
 				),
 			};
 			if (progress < 1)

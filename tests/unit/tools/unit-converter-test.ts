@@ -7,6 +7,7 @@ import {
 	formula,
 	instrumentFor,
 	pose,
+	settleEased,
 	tickLabel,
 	ticks,
 	weightsOf,
@@ -154,5 +155,18 @@ module('Unit | Tool | unit-converter', function () {
 				`${category.name} has no NaN`,
 			);
 		}
+	});
+
+	test('the settle curve rises without overshoot', function (assert) {
+		let last = 0;
+		let rising = true;
+		for (let i = 0; i <= 100; i++) {
+			const eased = settleEased(i / 100);
+			if (eased < last || eased > 1) rising = false;
+			last = eased;
+		}
+		assert.true(rising, 'never falls back, never passes 1');
+		assert.strictEqual(settleEased(0), 0);
+		assert.strictEqual(settleEased(1), 1);
 	});
 });

@@ -253,6 +253,11 @@ export interface Pose {
 	span: number;
 }
 
+/** The settle curve, 0 to 1: a cubic ease-out that never passes 1. */
+export function settleEased(progress: number): number {
+	return 1 - (1 - Math.min(1, Math.max(0, progress))) ** 3;
+}
+
 /** Where the scale runs: the value sits between 36 % and 90 % of a 1-2-5 length; a thermometer shows a window around it. */
 export function pose(
 	instrument: Instrument,
