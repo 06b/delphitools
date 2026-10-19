@@ -23,7 +23,11 @@ interface GlossLetterSignature {
 	};
 }
 
-type Entry = CanonMenuEntry & { run?: () => void };
+type Entry = CanonMenuEntry & {
+	insert?: { after: boolean; sound: Sound };
+	swap?: Sound;
+	remove?: boolean;
+};
 
 // the system font may lack the glyphs; a menu icon is the glyph in the gloss face
 const glyphs = new Map<string, ComponentLike>();
@@ -41,6 +45,35 @@ function glyphIcon(glyph: string): ComponentLike {
 const titled = (sound: Sound) =>
 	sound.name ? `${sound.name} /${sound.ipa}/` : `/${sound.ipa}/`;
 
+// every letter of a word shares its alphabet's insert menus
+const insertMenus = new WeakMap<
+	(Sound | null)[],
+	{ before: Entry[]; after: Entry[] }
+>();
+function insertMenu(alphabet: (Sound | null)[], after: boolean): Entry[] {
+	let menus = insertMenus.get(alphabet);
+	if (!menus) {
+		const list = (side: boolean) =>
+			alphabet.map((sound): Entry =>
+				sound
+					? {
+							title: titled(sound),
+							icon: glyphIcon(
+								sound.glyph,
+							),
+							insert: {
+								after: side,
+								sound,
+							},
+						}
+					: { kind: 'separator' },
+			);
+		menus = { before: list(false), after: list(true) };
+		insertMenus.set(alphabet, menus);
+	}
+	return after ? menus.after : menus.before;
+}
+
 /**
  * iOS ShavianLetterCell: one letter of the picked word, its name and sound
  * under it; its menu inserts a letter before or after, removes it, or swaps
@@ -56,38 +89,22 @@ export default class GlossLetter extends Component<GlossLetterSignature> {
 		return this.args.sound.ipa !== this.args.sound.glyph;
 	}
 
-	alphabet(pick: (sound: Sound) => void): Entry[] {
-		return this.args.alphabet.map((sound): Entry =>
-			sound
-				? {
-						title: titled(sound),
-						icon: glyphIcon(sound.glyph),
-						run: () => pick(sound),
-					}
-				: { kind: 'separator' },
-		);
-	}
-
 	get items(): Entry[] {
 		const { sound, alternatives, edits } = this.args;
 		return [
 			{
 				title: 'Insert before',
-				items: this.alphabet((s) =>
-					edits.insert(false, s),
-				),
+				items: insertMenu(this.args.alphabet, false),
 			},
 			{
 				title: 'Insert after',
-				items: this.alphabet((s) =>
-					edits.insert(true, s),
-				),
+				items: insertMenu(this.args.alphabet, true),
 			},
 			{
 				title: 'Remove',
 				destructive: true,
 				disabled: !edits.remove,
-				run: edits.remove,
+				remove: true,
 			},
 			{ kind: 'separator' },
 			{
@@ -101,12 +118,18 @@ export default class GlossLetter extends Component<GlossLetterSignature> {
 				kind: 'radio',
 				checked: false,
 				icon: glyphIcon(alternative.glyph),
-				run: () => edits.pick(alternative),
+				swap: alternative,
 			})),
 		];
 	}
 
-	select = (item: CanonMenuItem) => (item as Entry).run?.();
+	select = (item: CanonMenuItem) => {
+		const { insert, swap, remove } = item as Entry;
+		const { edits } = this.args;
+		if (insert) edits.insert(insert.after, insert.sound);
+		else if (swap) edits.pick(swap);
+		else if (remove) edits.remove?.();
+	};
 
 	<template>
 		<CanonMenu
