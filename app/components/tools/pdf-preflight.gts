@@ -4,6 +4,7 @@ import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import CanonButton from 'delphicanon/components/canon-button';
 import CanonCanvas from 'delphicanon/components/canon-canvas';
@@ -26,6 +27,7 @@ import {
 	formatSize,
 	runPreflight,
 	type FontInfo,
+	type PreflightIssue,
 	type PreflightReport,
 } from 'delphitools-v2/lib/pdf-preflight';
 import Drop from 'delphitools-v2/components/tools/media/drop';
@@ -45,6 +47,7 @@ import {
 	onPage,
 	pageMarks,
 	propertyTiles,
+	rectInsets,
 	resultTiles,
 	verdict,
 } from 'delphitools-v2/components/tools/pdf-preflight/report';
@@ -70,6 +73,8 @@ export default class PdfPreflight extends Component {
 	@tracked page: number | null = null;
 	@tracked preview = '';
 	@tracked boxes: PageBoxMark[] = [];
+	/** the pressed finding, outlined on the preview */
+	@tracked flagged: PreflightIssue | null = null;
 
 	#pdf: PDFDocumentProxy | null = null;
 	// bumps per file
@@ -273,18 +278,37 @@ export default class PdfPreflight extends Component {
 		}
 	}
 
+	get flags() {
+		const size =
+			this.page === null ? null : this.pages[this.page]?.size;
+		return size
+			? rectInsets(this.flagged?.rects, size).map((style) =>
+					htmlSafe(style),
+				)
+			: [];
+	}
+
 	select = (index: number | null) => {
 		const page = index === this.page ? null : index;
 		this.page = page;
+		this.flagged = null;
 		void this.#showPage(page);
 	};
 
 	selectStrip = (index: number) => this.select(index);
 	allPages = () => this.select(null);
 
-	showIssue = (page: number | undefined) => {
-		if (page && page - 1 !== this.page) this.select(page - 1);
+	showIssue = (issue: PreflightIssue) => {
+		const { page } = issue;
+		if (!page) return;
+		if (page - 1 !== this.page) this.select(page - 1);
+		this.flagged = issue;
 	};
+
+	// the preview is in the other pane; bring it to the finding
+	revealFlags = modifier((paper: HTMLElement, [count]: [number]) => {
+		if (count) paper.scrollIntoView({ block: 'nearest' });
+	});
 
 	async #showPage(page: number | null) {
 		const shown = ++this.#shown;
@@ -439,6 +463,9 @@ export default class PdfPreflight extends Component {
 							<div
 								class="pf-paper"
 								style={{this.paperStyle}}
+								{{this.revealFlags
+									this.flags.length
+								}}
 							>
 								{{#if
 									this.preview
@@ -456,6 +483,15 @@ export default class PdfPreflight extends Component {
 									<span
 										class="pf-box pf-box--{{box.kind}}"
 										style={{box.style}}
+									></span>
+								{{/each}}
+								{{#each
+									this.flags
+									as |flag|
+								}}
+									<span
+										class="pf-flag"
+										style={{flag}}
 									></span>
 								{{/each}}
 							</div>
@@ -539,7 +575,7 @@ export default class PdfPreflight extends Component {
 									"click"
 									(fn
 										this.showIssue
-										issue.page
+										issue
 									)
 								}}
 							>

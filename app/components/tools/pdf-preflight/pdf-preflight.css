@@ -43,6 +43,14 @@
 	--pf-box: var(--canon-copied);
 }
 
+.pf-flag {
+	position: absolute;
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: 2px;
+	background: color-mix(in srgb, var(--canon-primary) 15%, transparent);
+	pointer-events: none;
+}
+
 .pf-legend {
 	display: flex;
 	flex-wrap: wrap;

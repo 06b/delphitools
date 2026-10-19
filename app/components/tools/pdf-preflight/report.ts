@@ -4,6 +4,7 @@ import {
 	formatSize,
 	plural,
 	ptsToMm,
+	type PageBox,
 	type PageInfo,
 	type PreflightIssue,
 	type PreflightReport,
@@ -154,4 +155,18 @@ export function insetOf(
 	const right = 1 - Math.max(x1!, x2!) / width;
 	const bottom = 1 - Math.max(y1!, y2!) / height;
 	return `inset: ${pct(top)} ${pct(right)} ${pct(bottom)} ${pct(left)}`;
+}
+
+/** A finding's rects, viewport points at scale 1, as insets on a page of that viewport size. */
+export function rectInsets(
+	rects: PageBox[] | undefined,
+	size: { width: number; height: number },
+) {
+	return (rects ?? []).map((r) =>
+		insetOf(
+			[r.x, r.y, r.x + r.width, r.y + r.height],
+			size.width,
+			size.height,
+		),
+	);
 }

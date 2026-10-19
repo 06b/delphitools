@@ -7,6 +7,7 @@ import {
 	formatSize,
 	groupByPage,
 	imagePlacements,
+	runPreflight,
 	type PreflightIssue,
 } from 'delphitools-v2/lib/pdf-preflight';
 
@@ -14,6 +15,10 @@ const issue = (
 	severity: PreflightIssue['severity'],
 	page?: number,
 ): PreflightIssue => ({ severity, category: 'document', message: '', page });
+
+// 16 x 16 px
+const PNG =
+	'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGP8z0AaYBzVMKph+GoAAMjXAiFqhH3bAAAAAElFTkSuQmCC';
 
 module('Unit | lib | pdf-preflight', function () {
 	test('formatSize', function (assert) {
@@ -174,6 +179,33 @@ module('Unit | lib | pdf-preflight', function () {
 		assert.deepEqual(placed.get('e'), [
 			{ x: 0, y: 0, width: 4, height: 4 },
 			{ x: 100, y: 100, width: 4, height: 4 },
+		]);
+	});
+
+	test('runPreflight places a low resolution image on its page', async function (assert) {
+		const doc = await PDFDocument.create();
+		const png = await doc.embedPng(
+			Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0)),
+		);
+		doc.addPage([600, 800]).drawImage(png, {
+			x: 100,
+			y: 200,
+			width: 50,
+			height: 60,
+		});
+		const bytes = await doc.save();
+		const { report, pdfDoc } = await runPreflight(
+			bytes.slice().buffer,
+			'a.pdf',
+			bytes.length,
+		);
+		void pdfDoc?.destroy();
+		const found = report.issues.find((i) =>
+			i.message.startsWith('Very low resolution image'),
+		);
+		assert.strictEqual(found?.page, 1);
+		assert.deepEqual(found?.rects, [
+			{ x: 100, y: 540, width: 50, height: 60 },
 		]);
 	});
 });

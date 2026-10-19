@@ -14,6 +14,16 @@ for (const [n, size] of [
 ].entries()) {
 	const page = doc.addPage(size);
 	page.drawText(`Page ${n + 1}`, { x: 40, y: 40, size: 36, font });
+	if (n === 1) {
+		// 16 x 16 px, far below 72 dpi on A4
+		const png = await doc.embedPng(
+			Buffer.from(
+				'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGP8z0AaYBzVMKph+GoAAMjXAiFqhH3bAAAAAElFTkSuQmCC',
+				'base64',
+			),
+		);
+		page.drawImage(png, { x: 119, y: 421, width: 238, height: 168.4 });
+	}
 	if (n === 0) {
 		page.setBleedBox(0, 0, ...size);
 		page.setTrimBox(9, 9, size[0] - 18, size[1] - 18);
@@ -110,7 +120,8 @@ check(
 	JSON.stringify(loaded),
 );
 const results = await values('.pf-result');
-check('result tiles fill in', results[0] === '✓ Pass' && results.slice(1).every((v) => /^\d+$/.test(v)), results.join(' '));
+// the low resolution image is an error
+check('result tiles fill in', results[0] === '✕ Fail' && results.slice(1).every((v) => /^\d+$/.test(v)), results.join(' '));
 const checks = await values('.pf-checks');
 check('every check has a result', checks.length === 6 && !checks.includes('—'), checks.join(' '));
 check(
@@ -161,6 +172,43 @@ check(
 	target >= 0 &&
 		(await page.$eval('.pf-page-row .canon-row-title', (el) => el.textContent.trim()).catch(() => '')) === 'Page 3',
 );
+
+await page.evaluate(() =>
+	[...document.querySelectorAll('.pf-page-row button')].find((b) => b.textContent.trim() === 'All pages').click(),
+);
+await sleep(200);
+await page.$$eval('.pf-issue', (els) =>
+	els.find((el) => /Very low resolution image/.test(el.textContent))?.click(),
+);
+await sleep(200);
+const flag = await page
+	.$eval('.pf-flag', (el) => {
+		const paper = el.parentElement.getBoundingClientRect();
+		const box = el.getBoundingClientRect();
+		const share = (v, of) => Math.round((v / of) * 100);
+		return {
+			page: document.querySelector('.pf-page-row .canon-row-title')?.textContent.trim(),
+			left: share(box.left - paper.left, paper.width),
+			top: share(box.top - paper.top, paper.height),
+			width: share(box.width, paper.width),
+			height: share(box.height, paper.height),
+			seen: box.top >= 0 && box.bottom <= innerHeight,
+		};
+	})
+	.catch(() => null);
+check(
+	'a low resolution image finding opens its page and outlines the image there',
+	flag?.page === 'Page 2' &&
+		flag.left === 20 &&
+		flag.top === 30 &&
+		flag.width === 40 &&
+		flag.height === 20 &&
+		flag.seen,
+	JSON.stringify(flag),
+);
+await page.click('.pf-strip [data-page-index="0"] .canon-page-strip-page');
+await sleep(200);
+check('another page drops the outline', !(await page.$('.pf-flag')));
 
 await page.evaluate((base64) => {
 	const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));

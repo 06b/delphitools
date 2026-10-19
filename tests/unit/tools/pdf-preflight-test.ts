@@ -7,6 +7,7 @@ import {
 	insetOf,
 	onPage,
 	pageMarks,
+	rectInsets,
 	resultTiles,
 	verdict,
 } from 'delphitools-v2/components/tools/pdf-preflight/report';
@@ -84,6 +85,20 @@ module('Unit | Tool | pdf-preflight', function () {
 		assert.strictEqual(
 			insetOf([10, 80, 90, 20], 100, 100),
 			'inset: 20% 10% 20% 10%',
+		);
+	});
+
+	test('rectInsets places a finding on its page', function (assert) {
+		assert.deepEqual(
+			rectInsets(
+				[{ x: 100, y: 540, width: 50, height: 60 }],
+				{ width: 600, height: 800 },
+			),
+			['inset: 67.5% 75% 25% 16.667%'],
+		);
+		assert.deepEqual(
+			rectInsets(undefined, { width: 600, height: 800 }),
+			[],
 		);
 	});
 });
