@@ -3,7 +3,7 @@
 import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDocument, decodePDFRawStream } from 'pdf-lib';
 import { launch, visit, check, finish, sleep, pickPaper } from './harness.mjs';
 
 const source = await PDFDocument.create();
@@ -348,6 +348,31 @@ await page.click('.media-job-run');
 await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => {});
 const bound = await page.$eval('.media-job-result', (el) => el.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
 check('perfect bind exports both sheets of the signature', /imposed-perfect-bind-a3\.pdf 4 pages · /.test(bound), bound);
+
+// the PDF's crop marks: 10 pt from each outer trim corner, as the preview draws them
+await page.click('.imp-marks [role="switch"]');
+await pick('.imp-layouts', '4-up Booklet');
+await settle();
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 }).catch(() => {});
+await page.click('.media-job-save');
+const booklet = await waitForDownload(/^imposed-four-up-booklet-a3\.pdf$/);
+let lines = [];
+if (booklet) {
+	const front = (await PDFDocument.load(booklet.bytes)).getPage(0);
+	const contents = front.node.Contents();
+	const streams = contents instanceof PDFArray ? contents.asArray().map((ref) => front.doc.context.lookup(ref)) : [contents];
+	const text = streams.map((stream) => new TextDecoder().decode(decodePDFRawStream(stream).decode())).join('\n');
+	lines = [...text.matchAll(/([\d.-]+) ([\d.-]+) m\s+([\d.-]+) ([\d.-]+) l/g)].map((m) => m.slice(1, 5).map(Number));
+}
+const sheetPt = [420 / 25.4 * 72, 297 / 25.4 * 72];
+check(
+	'4-up export: 16 crop marks, each 10 pt and on the sheet',
+	lines.length === 16 &&
+		lines.every(([x1, y1, x2, y2]) => Math.abs(Math.hypot(x2 - x1, y2 - y1) - 10) < 0.01 && (x1 === x2 || y1 === y2)) &&
+		lines.every((l) => l.every((v, i) => v >= 0 && v <= sheetPt[i % 2])),
+	`${lines.length} lines`,
+);
 
 await visit(page, '/tools/imposer?impLayout=1&impSignature=8&impPages=38');
 await settle();

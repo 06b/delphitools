@@ -408,21 +408,20 @@ function calculateFourUpBooklet(
 		const N = totalPages;
 		const base = s * 4;
 
+		// 8-page right-angle fold, head to head; nested sheets
 		const frontPages = [
+			pageOrBlank(N - base - 3),
+			pageOrBlank(base + 4),
 			pageOrBlank(N - base),
-			pageOrBlank(N - base - 1),
 			pageOrBlank(base + 1),
-			pageOrBlank(base + 2),
 		];
-		const frontRotations = [180, 180, 0, 0];
-
 		const backPages = [
 			pageOrBlank(base + 3),
-			pageOrBlank(base + 4),
 			pageOrBlank(N - base - 2),
-			pageOrBlank(N - base - 3),
+			pageOrBlank(base + 2),
+			pageOrBlank(N - base - 1),
 		];
-		const backRotations = [0, 0, 180, 180];
+		const rotations = [180, 180, 0, 0];
 
 		sheets.push({
 			sheetNumber: s + 1,
@@ -435,7 +434,7 @@ function calculateFourUpBooklet(
 				config.marginMm,
 				config.gutterMm,
 				'front',
-				frontRotations,
+				rotations,
 			),
 			back: buildGrid(
 				backPages,
@@ -446,7 +445,7 @@ function calculateFourUpBooklet(
 				config.marginMm,
 				config.gutterMm,
 				'back',
-				backRotations,
+				rotations,
 			),
 		});
 	}
@@ -813,33 +812,42 @@ export function drawPlacementsOnPage(
 	}
 }
 
-function drawPdfMarkH(
-	page: PDFPage,
-	x: number,
-	y: number,
-	dir: number,
-	offset: number,
-	len: number,
-) {
-	page.drawLine({
-		start: { x: x + dir * offset, y },
-		end: { x: x + dir * (offset + len), y },
-		thickness: 0.25,
-	});
+/** Millimetres, top-left origin. */
+export interface MarkLine {
+	x1: number;
+	y1: number;
+	x2: number;
+	y2: number;
 }
 
-function drawPdfMarkV(
-	page: PDFPage,
-	x: number,
-	y: number,
-	dir: number,
-	offset: number,
-	len: number,
-) {
-	page.drawLine({
-		start: { x, y: y + dir * offset },
-		end: { x, y: y + dir * (offset + len) },
-		thickness: 0.25,
+/** Corner marks on the outer edges, 10 pt long from the trim corner, as iOS; the preview and the PDF both draw these. */
+export function cropMarks(placements: PagePlacement[]): MarkLine[] {
+	const length = 10 / MM_TO_POINTS;
+	const edges = getOuterEdges(placements);
+	return placements.flatMap((p, i) => {
+		const e = edges[i]!;
+		const [left, top] = [p.x, p.y];
+		const [right, bottom] = [p.x + p.width, p.y + p.height];
+		const lines: MarkLine[] = [];
+		const line = (x1: number, y1: number, x2: number, y2: number) =>
+			lines.push({ x1, y1, x2, y2 });
+		if (e.left) {
+			line(left - length, top, left, top);
+			line(left - length, bottom, left, bottom);
+		}
+		if (e.right) {
+			line(right, top, right + length, top);
+			line(right, bottom, right + length, bottom);
+		}
+		if (e.top) {
+			line(left, top - length, left, top);
+			line(right, top - length, right, top);
+		}
+		if (e.bottom) {
+			line(left, bottom, left, bottom + length);
+			line(right, bottom, right, bottom + length);
+		}
+		return lines;
 	});
 }
 
@@ -848,31 +856,18 @@ export function drawCropMarksOnPdfPage(
 	placements: PagePlacement[],
 	sheetHPt: number,
 ) {
-	const markLen = 18;
-	const offset = 3;
-
-	const edges = getOuterEdges(placements);
-
-	placements.forEach((p, i) => {
-		const e = edges[i];
-		if (!e) return;
-
-		const x1 = p.x * MM_TO_POINTS;
-		const x2 = (p.x + p.width) * MM_TO_POINTS;
-		const y1Pdf = sheetHPt - p.y * MM_TO_POINTS;
-		const y2Pdf = sheetHPt - (p.y + p.height) * MM_TO_POINTS;
-
-		if (e.left) drawPdfMarkH(page, x1, y1Pdf, -1, offset, markLen);
-		if (e.top) drawPdfMarkV(page, x1, y1Pdf, 1, offset, markLen);
-		if (e.right) drawPdfMarkH(page, x2, y1Pdf, 1, offset, markLen);
-		if (e.top) drawPdfMarkV(page, x2, y1Pdf, 1, offset, markLen);
-		if (e.left) drawPdfMarkH(page, x1, y2Pdf, -1, offset, markLen);
-		if (e.bottom)
-			drawPdfMarkV(page, x1, y2Pdf, -1, offset, markLen);
-		if (e.right) drawPdfMarkH(page, x2, y2Pdf, 1, offset, markLen);
-		if (e.bottom)
-			drawPdfMarkV(page, x2, y2Pdf, -1, offset, markLen);
-	});
+	for (const line of cropMarks(placements))
+		page.drawLine({
+			start: {
+				x: line.x1 * MM_TO_POINTS,
+				y: sheetHPt - line.y1 * MM_TO_POINTS,
+			},
+			end: {
+				x: line.x2 * MM_TO_POINTS,
+				y: sheetHPt - line.y2 * MM_TO_POINTS,
+			},
+			thickness: 0.25,
+		});
 }
 
 // embedpage ignores rotate, cropbox

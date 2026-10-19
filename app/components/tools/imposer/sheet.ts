@@ -1,17 +1,11 @@
 import {
-	MM_TO_POINTS,
-	getOuterEdges,
+	cropMarks,
+	type MarkLine as Line,
 	type PagePlacement,
 	type SheetDefinition,
 } from 'delphitools-v2/lib/imposition';
 
-/** Millimetres, top-left origin. */
-export interface Line {
-	x1: number;
-	y1: number;
-	x2: number;
-	y2: number;
-}
+export type { Line };
 
 export type Fit = 'fit' | 'fill' | 'actual';
 
@@ -52,14 +46,13 @@ function rgba([r, g, b]: readonly number[], alpha = 1) {
 	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** Matches the PDF writer's fold lines. */
+/** Preview-only fold lines; step and repeat is cut, not folded. */
 export function creases(layoutId: string, width: number, height: number) {
 	const across = { x1: width / 2, y1: 0, x2: width / 2, y2: height };
 	const down = { x1: 0, y1: height / 2, x2: width, y2: height / 2 };
 	switch (layoutId) {
 		case 'saddle-stitch':
 		case 'perfect-bind':
-		case 'step-and-repeat':
 			return [across];
 		case 'four-up-booklet':
 			return [across, down];
@@ -68,36 +61,7 @@ export function creases(layoutId: string, width: number, height: number) {
 	}
 }
 
-/** Corner marks on the outer edges, 10 pt long, as iOS. */
-export function marks(placements: PagePlacement[]): Line[] {
-	const length = 10 / MM_TO_POINTS;
-	const edges = getOuterEdges(placements);
-	return placements.flatMap((p, i) => {
-		const e = edges[i]!;
-		const [left, top] = [p.x, p.y];
-		const [right, bottom] = [p.x + p.width, p.y + p.height];
-		const lines: Line[] = [];
-		const line = (x1: number, y1: number, x2: number, y2: number) =>
-			lines.push({ x1, y1, x2, y2 });
-		if (e.left) {
-			line(left - length, top, left, top);
-			line(left - length, bottom, left, bottom);
-		}
-		if (e.right) {
-			line(right, top, right + length, top);
-			line(right, bottom, right + length, bottom);
-		}
-		if (e.top) {
-			line(left, top - length, left, top);
-			line(right, top - length, right, top);
-		}
-		if (e.bottom) {
-			line(left, bottom, left, bottom + length);
-			line(right, bottom, right, bottom + length);
-		}
-		return lines;
-	});
-}
+export const marks = cropMarks;
 
 export function printSheet(
 	placements: PagePlacement[],

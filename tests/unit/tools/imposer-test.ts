@@ -68,10 +68,10 @@ module('Unit | Tool | imposer', function () {
 		assert.strictEqual(front.marks.length, 0);
 	});
 
-	test('folds follow the PDF writer', function (assert) {
+	test('folds only where the sheet folds', function (assert) {
 		assert.strictEqual(
 			creases('step-and-repeat', 10, 20).length,
-			1,
+			0,
 		);
 		assert.deepEqual(creases('saddle-stitch', 10, 20)[0], {
 			x1: 5,

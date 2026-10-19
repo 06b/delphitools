@@ -1,12 +1,15 @@
 import { module, test } from 'qunit';
 import {
 	DEFAULT_IMPOSITION_CONFIG,
+	IMPOSITION_LAYOUTS,
+	cropMarks,
 	effectiveSheetH,
 	effectiveSheetW,
 	getLayoutById,
 	placeInCell,
 	turnsTopOverBottom,
 	type ImpositionConfig,
+	type PagePlacement,
 } from 'delphitools-v2/lib/imposition';
 
 const bind = (pages: number, signaturePages = 16) =>
@@ -117,7 +120,11 @@ module('Unit | Lib | imposition', function () {
 	});
 
 	test('backs register behind fronts', function (assert) {
-		for (const layoutId of ['saddle-stitch', 'perfect-bind'])
+		for (const layoutId of [
+			'saddle-stitch',
+			'perfect-bind',
+			'four-up-booklet',
+		])
 			for (const orientation of [
 				'portrait',
 				'landscape',
@@ -226,6 +233,286 @@ module('Unit | Lib | imposition', function () {
 				...landscape,
 				duplexFlip: 'short-edge',
 			}),
+		);
+	});
+
+	test('4-up booklet: the 8-page right-angle fold, sheets nested', function (assert) {
+		const config: ImpositionConfig = {
+			...DEFAULT_IMPOSITION_CONFIG,
+			layoutId: 'four-up-booklet',
+			duplexFlip: 'short-edge',
+		};
+		const sheets = getLayoutById('four-up-booklet')!.calculate(
+			16,
+			config,
+		).sheets;
+		const read = (cells: PagePlacement[]) =>
+			cells.map(
+				(c) =>
+					`${c.pageNumber}${c.rotation ? '↓' : ''}`,
+			);
+		// grid order: top left, top right, bottom left, bottom right
+		assert.deepEqual(read(sheets[0]!.front), [
+			'13↓',
+			'4↓',
+			'16',
+			'1',
+		]);
+		assert.deepEqual(read(sheets[0]!.back), [
+			'3↓',
+			'14↓',
+			'2',
+			'15',
+		]);
+		assert.deepEqual(read(sheets[1]!.front), [
+			'9↓',
+			'8↓',
+			'12',
+			'5',
+		]);
+		assert.deepEqual(read(sheets[1]!.back), [
+			'7↓',
+			'10↓',
+			'6',
+			'11',
+		]);
+	});
+
+	test('every layout keeps margins, gutters and marks on the sheet', function (assert) {
+		const marginMm = 10;
+		const gutterMm = 4;
+		const near = (a: number, b: number) => Math.abs(a - b) < 0.01;
+		for (const layout of IMPOSITION_LAYOUTS)
+			for (const orientation of [
+				'portrait',
+				'landscape',
+			] as const)
+				for (const duplexFlip of [
+					'long-edge',
+					'short-edge',
+				] as const) {
+					const config: ImpositionConfig = {
+						...DEFAULT_IMPOSITION_CONFIG,
+						layoutId: layout.id,
+						orientation,
+						duplexFlip,
+						marginMm,
+						gutterMm,
+						creepMm: 0,
+						nUp: 6,
+						customGrid: [3, 2],
+						signaturePages: 8,
+					};
+					const width = effectiveSheetW(
+						config.paperSize,
+						orientation,
+					);
+					const height = effectiveSheetH(
+						config.paperSize,
+						orientation,
+					);
+					const label = `${layout.id} ${orientation} ${duplexFlip}`;
+					for (const sheet of layout.calculate(
+						16,
+						config,
+					).sheets)
+						for (const cells of [
+							sheet.front,
+							sheet.back,
+						]) {
+							const left = Math.min(
+								...cells.map(
+									(c) =>
+										c.x,
+								),
+							);
+							const top = Math.min(
+								...cells.map(
+									(c) =>
+										c.y,
+								),
+							);
+							const right = Math.max(
+								...cells.map(
+									(c) =>
+										c.x +
+										c.width,
+								),
+							);
+							const bottom = Math.max(
+								...cells.map(
+									(c) =>
+										c.y +
+										c.height,
+								),
+							);
+							const margins =
+								near(
+									left,
+									marginMm,
+								) &&
+								near(
+									top,
+									marginMm,
+								) &&
+								near(
+									width -
+										right,
+									marginMm,
+								) &&
+								near(
+									height -
+										bottom,
+									marginMm,
+								);
+							// neighbours in a row or column sit one gutter apart
+							const gutters =
+								cells.every(
+									(a) =>
+										cells.every(
+											(
+												b,
+											) =>
+												a ===
+													b ||
+												!(
+													near(
+														a.y,
+														b.y,
+													) &&
+													b.x >
+														a.x
+												) ||
+												b.x -
+													(a.x +
+														a.width) >
+													gutterMm -
+														0.01,
+										),
+								);
+							const corners = new Set(
+								cells.flatMap(
+									(c) =>
+										[
+											[
+												c.x,
+												c.y,
+											],
+											[
+												c.x +
+													c.width,
+												c.y,
+											],
+											[
+												c.x,
+												c.y +
+													c.height,
+											],
+											[
+												c.x +
+													c.width,
+												c.y +
+													c.height,
+											],
+										].map(
+											([
+												x,
+												y,
+											]) =>
+												`${x!.toFixed(2)},${y!.toFixed(2)}`,
+										),
+								),
+							);
+							const marks = cropMarks(
+								cells,
+							).every(
+								(m) =>
+									corners.has(
+										`${m.x2.toFixed(2)},${m.y2.toFixed(2)}`,
+									) ||
+									corners.has(
+										`${m.x1.toFixed(2)},${m.y1.toFixed(2)}`,
+									),
+							);
+							const inside =
+								cropMarks(
+									cells,
+								).every(
+									(m) =>
+										Math.min(
+											m.x1,
+											m.x2,
+										) >=
+											0 &&
+										Math.max(
+											m.x1,
+											m.x2,
+										) <=
+											width &&
+										Math.min(
+											m.y1,
+											m.y2,
+										) >=
+											0 &&
+										Math.max(
+											m.y1,
+											m.y2,
+										) <=
+											height,
+								);
+							assert.deepEqual(
+								{
+									margins,
+									gutters,
+									marks,
+									inside,
+								},
+								{
+									margins: true,
+									gutters: true,
+									marks: true,
+									inside: true,
+								},
+								label,
+							);
+						}
+				}
+	});
+
+	test('creep moves outer sheets out from the spine, clamped at the margin', function (assert) {
+		const config: ImpositionConfig = {
+			...DEFAULT_IMPOSITION_CONFIG,
+			marginMm: 5,
+			gutterMm: 2,
+			creepMm: 2,
+		};
+		const sheets = getLayoutById('saddle-stitch')!.calculate(
+			16,
+			config,
+		).sheets;
+		const spine = (cells: PagePlacement[]) =>
+			cells[1]!.x - (cells[0]!.x + cells[0]!.width);
+		const centre = (cells: PagePlacement[]) =>
+			(cells[1]!.x + cells[0]!.x + cells[0]!.width) / 2;
+		// 4 sheets: 6, 4, 2, 0 mm, the first clamped at the 5 mm margin
+		assert.deepEqual(
+			sheets.map((sheet) => spine(sheet.front)),
+			[12, 10, 6, 2],
+		);
+		assert.true(
+			sheets.every(
+				(sheet) =>
+					Math.abs(
+						centre(sheet.front) - 297 / 2,
+					) < 0.01 &&
+					Math.abs(centre(sheet.back) - 297 / 2) <
+						0.01,
+			),
+			'the spine stays on the fold',
+		);
+		assert.true(
+			sheets.every((sheet) => sheet.front[0]!.x >= 0),
+			'no page leaves the sheet',
 		);
 	});
 });
