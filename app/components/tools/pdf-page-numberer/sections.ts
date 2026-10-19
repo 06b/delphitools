@@ -1,4 +1,8 @@
-import type { NumberSection, NumeralStyle } from 'delphitools-v2/lib/pdf-stamp';
+import {
+	formatNumeral,
+	type NumberSection,
+	type NumeralStyle,
+} from 'delphitools-v2/lib/pdf-stamp';
 
 export interface Section extends NumberSection {
 	id: number;
@@ -93,5 +97,24 @@ export function parseSections(spec: string): Section[] {
 				Number.isFinite(startAt) ? startAt : 1,
 			),
 		];
+	});
+}
+
+/** A list label per section of `ordered`: its pages, then the first three numerals, as the iOS track lane reads. */
+export function sectionLabels(ordered: Section[], count: number) {
+	return ordered.map((s, index) => {
+		const next = ordered[index + 1];
+		const to = Math.max(
+			s.fromPage,
+			next ? next.fromPage - 1 : count,
+		);
+		const pages =
+			to > s.fromPage
+				? `${s.fromPage}–${to}`
+				: `${s.fromPage}`;
+		const run = [0, 1, 2]
+			.map((k) => formatNumeral(s.startAt + k, s.style))
+			.join(', ');
+		return `p. ${pages} · ${run}`;
 	});
 }

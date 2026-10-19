@@ -6,6 +6,7 @@ import {
 	parseSections,
 	section,
 	sectionAt,
+	sectionLabels,
 	splitAt,
 } from 'delphitools-v2/components/tools/pdf-page-numberer/sections';
 import {
@@ -82,6 +83,19 @@ module('Unit | Tool | pdf-page-numberer', function () {
 				[4, 'arabic', 5],
 			],
 		);
+	});
+
+	test('sectionLabels reads pages and the first numerals', function (assert) {
+		const ordered = [
+			section(1, 'roman-lower'),
+			section(5, 'arabic', 3),
+			section(6, 'alpha-upper'),
+		];
+		assert.deepEqual(sectionLabels(ordered, 9), [
+			'p. 1–4 · i, ii, iii',
+			'p. 5 · 3, 4, 5',
+			'p. 6–9 · A, B, C',
+		]);
 	});
 
 	test('numberLines expands the template where numbers are on', function (assert) {

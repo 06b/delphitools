@@ -52,6 +52,7 @@ import {
 	parseSections,
 	section,
 	sectionAt,
+	sectionLabels,
 	splitAt,
 	type Section,
 } from 'delphitools-v2/components/tools/pdf-page-numberer/sections';
@@ -274,6 +275,19 @@ export default class PdfPageNumberer extends Component {
 	get styleIndex() {
 		return STYLES.findIndex((s) => s.id === this.current.style);
 	}
+
+	get sectionItems() {
+		return sectionLabels(this.ordered, this.count);
+	}
+
+	get sectionIndex() {
+		return this.ordered.indexOf(this.current);
+	}
+
+	selectSection = (index: number) => {
+		const picked = this.ordered[index];
+		if (picked) this.#select(picked.fromPage - 1);
+	};
 
 	get canRemove() {
 		return this.sections.length > 1;
@@ -643,6 +657,19 @@ export default class PdfPageNumberer extends Component {
 					@framed={{true}}
 				>
 					<CanonHeading @text="Sections" />
+					<CanonSegmented
+						class="ppn-section-list"
+						aria-label="Sections"
+						@items={{this.sectionItems}}
+						@columns={{1}}
+						@selected={{this.sectionIndex}}
+						@disabled={{if
+							this.loaded
+							false
+							true
+						}}
+						@onChange={{this.selectSection}}
+					/>
 					{{#each
 						this.currentKeys key="@identity"
 					}}

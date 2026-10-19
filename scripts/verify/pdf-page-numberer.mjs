@@ -251,6 +251,23 @@ check(
 	(await checked('ppn-styles')) === '1, 2, 3' &&
 		(await page.$eval('.ppn-from input', (el) => el.value)) === '1',
 );
+const sectionList = () =>
+	page.$$eval('.ppn-section-list [role="radio"]', (els) =>
+		els.map((el) => `${el.textContent.trim()}${el.getAttribute('aria-checked') === 'true' ? '*' : ''}`),
+	);
+check(
+	'the section list names each section, the lit one checked',
+	JSON.stringify(await sectionList()) === JSON.stringify(['p. 1 · 1, 2, 3*', 'p. 2–3 · ii, iii, iv']),
+	JSON.stringify(await sectionList()),
+);
+await pick('ppn-section-list', 'p. 2–3 · ii, iii, iv');
+await sleep(100);
+check(
+	'a press on a listed section selects it and goes to its first page',
+	(await checked('ppn-styles')) === 'i, ii, iii' &&
+		(await page.$eval('.ppn-from input', (el) => el.value)) === '2' &&
+		(await text('.media-pager-text')) === '2 / 3',
+);
 await page.click('.ppn-strip [data-page-index="2"] .canon-page-strip-page');
 await sleep(100);
 await page.click('.ppn-remove');
@@ -258,7 +275,8 @@ await sleep(100);
 check(
 	'Remove section drops the lit one; the last cannot go',
 	JSON.stringify(await names()) === JSON.stringify(['Page 1, 1', 'Page 2, 2', 'Page 3, 3']) &&
-		(await page.$eval('.ppn-remove', (el) => el.disabled)),
+		(await page.$eval('.ppn-remove', (el) => el.disabled)) &&
+		JSON.stringify(await sectionList()) === JSON.stringify(['p. 1–3 · 1, 2, 3*']),
 	JSON.stringify(await names()),
 );
 
