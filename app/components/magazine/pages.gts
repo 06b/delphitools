@@ -288,12 +288,18 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		listed: true,
 		links: [],
 	},
-	// placeholder until Ruby's right-hand page arrives
 	{
 		id: 'substrata-ios-feature',
 		name: 'Substrata for iOS',
-		art: '/magazine/substrata-shot.webp',
-		component: Product,
+		component: Plate,
+		art: '/magazine/substrata-paint.webp',
+		printed: [
+			"AND YOU THOUGHT YOU COULDN'T GET DIGITAL PAINT THAT'S THIS REALISTIC.",
+			"Yes, the above is NOT prerendered. It's not a photo. It's not some expensive fluid simulation system rendered on a Silicon Graphics compute farm.",
+			'This is realtime rendered digital paint, in Substrata for iOS.',
+			"Based on the work of Kubelka, Munk, Chu, Baxter and Liu, delphitools is proud to offer full realtime fluid paint simulation with a world's first - multicoloured brushes. Yes, you heard right - dip your brushes in oil paint, watercolours, acrylic, gouache and ink just how you would in real life, just without the mess. Layer paint on top of paint with the world's most realistic impasto simulation, all completely free and open-source. No expensive specialty programs, no complex user interfaces, just you and your art.",
+			"Substrata matches Rebelle and Procreate in performance and beats them on price: Because it's free.",
+		],
 		links: [],
 	},
 	{
