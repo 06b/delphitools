@@ -180,46 +180,14 @@ async function clickLink(page, index, href) {
 		JSON.stringify(await pages(page)) === '[0]',
 	);
 
-	// drag the right page over the spine
 	await page.keyboard.press('ArrowRight');
 	await settled(page);
-	const from = await pointFor(page, 2, 0.94, 0.62);
-	const to = await pointFor(page, 1, 0.2, 0.58);
-	await page.mouse.move(from.x, from.y);
-	await page.mouse.down();
-	for (let i = 1; i <= 16; i++) {
-		await page.mouse.move(
-			from.x + ((to.x - from.x) * i) / 16,
-			from.y + ((to.y - from.y) * i) / 16 - Math.sin((Math.PI * i) / 16) * 40,
-		);
-		await sleep(16);
-	}
-	const bending = await page.evaluate(
-		() => !window.__magazine.engine.settled,
-	);
-	check('a drag bends the page', bending);
-	await page.mouse.up();
+	await page.keyboard.press('ArrowRight');
 	await settled(page);
 	check(
-		'releasing past the spine turns it',
+		'two turns from the cover reach the second spread',
 		JSON.stringify(await pages(page)) === '[3,4]',
 		JSON.stringify(await pages(page)),
-	);
-
-	// a short drag snaps back
-	const near = await pointFor(page, 4, 0.95, 0.5);
-	await page.mouse.move(near.x, near.y);
-	await page.mouse.down();
-	for (let i = 1; i <= 6; i++) {
-		await page.mouse.move(near.x - i * 10, near.y);
-		await sleep(30);
-	}
-	await sleep(50);
-	await page.mouse.up();
-	await settled(page);
-	check(
-		'a short drag snaps back',
-		JSON.stringify(await pages(page)) === '[3,4]',
 	);
 
 	// clicking the halves
@@ -333,10 +301,14 @@ async function clickLink(page, index, href) {
 		check('and paints', share > 0.12, share.toFixed(2));
 	}
 
-	// the backdrop closes it
-	await page.mouse.click(30, 980);
-	await closed(page);
-	check('a click on the backdrop closes it', !(await isOpen(page)));
+	// the left zone reaches past the page edge
+	await page.mouse.click(30, 500);
+	await settled(page);
+	check(
+		'a click left of the magazine turns back',
+		JSON.stringify(await pages(page)) === '[0]',
+		JSON.stringify(await pages(page)),
+	);
 
 	// the canon kit page routes in-app
 	await visit(page, `/?magazine=canon-ui-kit`);
@@ -451,15 +423,34 @@ async function clickLink(page, index, href) {
 	await ready(page);
 	await sleep(600);
 	check(
-		'phone: one page at a time',
-		(await page.evaluate(() => window.__magazine.engine.mode)) === 'single',
+		'phone: one page in view',
+		await page.evaluate(() => window.__magazine.engine.narrow),
 	);
 	check('phone: the closed magazine paints', (await paintedShare(page)) > 0.12);
-	await page.keyboard.press('ArrowRight');
+	const steps = [];
+	for (const key of ['ArrowRight', 'ArrowRight', 'ArrowRight']) {
+		await page.keyboard.press(key);
+		await settled(page);
+		steps.push(JSON.stringify(await pages(page)));
+	}
+	check(
+		'phone: right opens on the left page, then pans, then turns',
+		steps.join() === '[1],[2],[3]',
+		steps.join(),
+	);
+	await page.mouse.click(360, 420);
 	await settled(page);
 	check(
-		'phone: a turn shows the next page',
-		JSON.stringify(await pages(page)) === '[1]',
+		'phone: a tap on the right of a left page pans to its right page',
+		JSON.stringify(await pages(page)) === '[4]',
+		JSON.stringify(await pages(page)),
+	);
+	await page.mouse.click(30, 420);
+	await settled(page);
+	check(
+		'phone: a tap on the left of a right page pans back',
+		JSON.stringify(await pages(page)) === '[3]',
+		JSON.stringify(await pages(page)),
 	);
 	const overflow = await page.evaluate(() => ({
 		doc: document.documentElement.scrollWidth,

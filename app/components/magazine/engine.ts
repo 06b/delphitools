@@ -8,13 +8,11 @@ import {
 	FrontSide,
 	Group,
 	HemisphereLight,
-	Matrix4,
 	Mesh,
 	MeshBasicMaterial,
 	MeshStandardMaterial,
 	PCFShadowMap,
 	PerspectiveCamera,
-	Plane,
 	PlaneGeometry,
 	Raycaster,
 	Scene,
@@ -31,7 +29,6 @@ export interface EngineHooks {
 	/** The href of a link at page coordinates (0..1 from the top left), if any. */
 	hitLink(page: number, u: number, v: number): string | undefined;
 	follow(href: string): void;
-	close(): void;
 	/** The leaves turned changed; `pages` are the page indices now facing up. */
 	changed(pages: number[]): void;
 	rendered(): void;
@@ -48,8 +45,6 @@ export interface EngineOptions {
 	hooks: EngineHooks;
 }
 
-type Mode = 'spread' | 'single';
-
 interface Turn {
 	leaf: Leaf;
 	/** The grabbed point on the unturned leaf, page plane coordinates. */
@@ -61,7 +56,6 @@ interface Turn {
 	lift: number;
 	start: number;
 	duration: number;
-	dragging: boolean;
 	forward: boolean;
 	/** Ends on the left stack. */
 	toLeft: boolean;
@@ -90,11 +84,10 @@ const CURL_RADIUS = 0.085;
 const COVER_BEND = 0.35;
 const TURN_MS = 760;
 const FAST_TURN_MS = 420;
-const DRAG_SLOP_PX = 6;
 const TILT = (4 * Math.PI) / 180;
 const DEG = Math.PI / 180;
-// resting angle on the desk, per mode; open spreads straighten
-const REST_TURN = { spread: -7 * DEG, single: -2.5 * DEG };
+// resting angle on the desk; narrow screens tilt less so a page fits
+const REST_TURN = { wide: -7 * DEG, narrow: -2.5 * DEG };
 const OPEN_TURN = -1 * DEG;
 const TOSS_MS = 900;
 const TOSS_LIFT = 0.3;
@@ -278,7 +271,9 @@ export function createEngine(options: EngineOptions) {
 	const textures = new Map<number, Texture>();
 	const textureFor = (page: number) => textures.get(page) ?? blank;
 
-	let mode: Mode = 'spread';
+	let narrow = false;
+	/** The page of the spread in view on a narrow screen. */
+	let side: 'left' | 'right' = 'right';
 	let leaves: Leaf[] = [];
 	let dz = 0;
 	/** Leaves committed to the left stack, in flight included. */
@@ -287,7 +282,7 @@ export function createEngine(options: EngineOptions) {
 	const turns: Turn[] = [];
 	let openness = 0;
 
-	const leafCount = () => (mode === 'spread' ? pageCount / 2 : pageCount);
+	const leafCount = () => pageCount / 2;
 
 	function buildLeaves() {
 		for (const leaf of leaves) disposeLeaf(leaf);
@@ -295,12 +290,9 @@ export function createEngine(options: EngineOptions) {
 		dz = THICKNESS / Math.max(count, 1);
 		leaves = [];
 		for (let index = 0; index < count; index++) {
-			const front = mode === 'spread' ? index * 2 : index;
-			const back = mode === 'spread' ? index * 2 + 1 : -1;
-			const cover =
-				mode === 'spread'
-					? index === 0 || index === count - 1
-					: index === 0;
+			const front = index * 2;
+			const back = index * 2 + 1;
+			const cover = index === 0 || index === count - 1;
 			const geometry = new PlaneGeometry(
 				W,
 				H,
@@ -324,8 +316,7 @@ export function createEngine(options: EngineOptions) {
 			backGeometry.setAttribute('uv', uv);
 			// the outside of a cover is coated stock: glossy, no gutter
 			const frontCover = index === 0;
-			const backCover =
-				mode === 'spread' && index === count - 1;
+			const backCover = index === count - 1;
 			const frontMesh = new Mesh(
 				geometry,
 				paperMaterial(
@@ -338,7 +329,7 @@ export function createEngine(options: EngineOptions) {
 			const backMesh = new Mesh(
 				backGeometry,
 				paperMaterial(
-					back < 0 ? blank : textureFor(back),
+					textureFor(back),
 					true,
 					!backCover,
 					backCover ? 0.42 : 0.82,
@@ -507,15 +498,15 @@ export function createEngine(options: EngineOptions) {
 	}
 
 	function visiblePages(): number[] {
-		if (mode === 'single') return [Math.min(turned, pageCount - 1)];
 		const pages: number[] = [];
 		if (turned > 0) pages.push(turned * 2 - 1);
 		if (turned < leaves.length) pages.push(turned * 2);
+		if (narrow && pages.length === 2)
+			return [pages[side === 'left' ? 0 : 1]!];
 		return pages;
 	}
 
-	const turnedForPage = (page: number) =>
-		mode === 'spread' ? Math.ceil(page / 2) : page;
+	const turnedForPage = (page: number) => Math.ceil(page / 2);
 
 	// camera
 	const view = { x: W / 2, width: W, intro: 1 };
@@ -523,16 +514,22 @@ export function createEngine(options: EngineOptions) {
 	let size = { width: 1, height: 1 };
 
 	function framing() {
-		if (mode === 'single') return { x: W / 2, width: W };
 		if (turned === 0) return { x: W / 2, width: W };
 		if (turned === leaves.length) return { x: -W / 2, width: W };
+		// a narrow screen watches the spine while a leaf crosses it
+		if (narrow && turns.length) return { x: 0, width: W };
+		if (narrow)
+			return {
+				x: side === 'left' ? -W / 2 : W / 2,
+				width: W,
+			};
 		return { x: 0, width: 2 * W };
 	}
 
 	function placeCamera() {
 		const aspect = size.width / size.height;
 		const half = Math.tan(((FOV / 2) * Math.PI) / 180);
-		const margin = mode === 'single' ? 1.1 : 1.32;
+		const margin = narrow ? 1.1 : 1.32;
 		const distance =
 			Math.max(
 				(H * margin) / 2 / half,
@@ -555,9 +552,10 @@ export function createEngine(options: EngineOptions) {
 			: Math.min(1, (now - toss.start) / TOSS_MS);
 		const slide = 1 - easeOut(toss.t);
 		const fall = Math.max(0, 1 - toss.t / 0.45);
+		const rest = REST_TURN[narrow ? 'narrow' : 'wide'];
 		const angle =
-			REST_TURN[mode] +
-			(OPEN_TURN - REST_TURN[mode]) * openness +
+			rest +
+			(OPEN_TURN - rest) * openness +
 			TOSS_SPIN * slide;
 		const pivot = view.x;
 		magazine.rotation.set(0, 0, angle);
@@ -577,18 +575,9 @@ export function createEngine(options: EngineOptions) {
 		renderer.setSize(width, height, false);
 		camera.aspect = width / height;
 		camera.updateProjectionMatrix();
-		const next: Mode =
-			width / height < 0.85 && width < 760
-				? 'single'
-				: 'spread';
-		if (next !== mode) {
-			const page = visiblePages().at(-1) ?? 0;
-			finishTurns();
-			mode = next;
-			turned = target = turnedForPage(page);
-			buildLeaves();
-			hooks.changed(visiblePages());
-		}
+		const wasNarrow = narrow;
+		narrow = width / height < 0.85 && width < 760;
+		if (narrow !== wasNarrow) hooks.changed(visiblePages());
 		dirty = true;
 	}
 
@@ -609,7 +598,6 @@ export function createEngine(options: EngineOptions) {
 			lift: 0.16 * H,
 			start: performance.now(),
 			duration,
-			dragging: false,
 			forward,
 			toLeft: forward,
 		};
@@ -622,16 +610,8 @@ export function createEngine(options: EngineOptions) {
 		turns.splice(turns.indexOf(turn), 1);
 	}
 
-	function finishTurns() {
-		for (const turn of [...turns]) {
-			if (turn.dragging) continue;
-			settle(turn);
-		}
-	}
-
 	function advance(now: number) {
 		for (const turn of [...turns]) {
-			if (turn.dragging) continue;
 			const t = clamp01((now - turn.start) / turn.duration);
 			const e = turn.lift ? ease(t) : easeOut(t);
 			turn.point.lerpVectors(turn.from, turn.to, e);
@@ -639,10 +619,7 @@ export function createEngine(options: EngineOptions) {
 			if (t >= 1) settle(turn);
 		}
 		const busy = turns.at(-1);
-		const ready =
-			!busy ||
-			(!busy.dragging &&
-				now - busy.start > busy.duration * 0.3);
+		const ready = !busy || now - busy.start > busy.duration * 0.3;
 		if (!ready || turned === target) return;
 		const forward = target > turned;
 		const leaf = leaves[forward ? turned : turned - 1];
@@ -655,6 +632,7 @@ export function createEngine(options: EngineOptions) {
 	}
 
 	function goTo(page: number) {
+		side = page % 2 === 1 ? 'left' : 'right';
 		target = Math.min(
 			leaves.length,
 			Math.max(0, turnedForPage(page)),
@@ -662,11 +640,28 @@ export function createEngine(options: EngineOptions) {
 		dirty = true;
 	}
 
+	// inside the magazine on a narrow screen, the first step pans across the spread
+	const inside = () =>
+		turned > 0 && turned < leaves.length && turned === target;
 	const next = () => {
+		if (narrow && side === 'left' && inside()) {
+			side = 'right';
+			hooks.changed(visiblePages());
+			dirty = true;
+			return;
+		}
+		side = 'left';
 		target = Math.min(leaves.length, Math.max(target, turned) + 1);
 		dirty = true;
 	};
 	const prev = () => {
+		if (narrow && side === 'right' && inside()) {
+			side = 'left';
+			hooks.changed(visiblePages());
+			dirty = true;
+			return;
+		}
+		side = 'right';
 		target = Math.max(0, Math.min(target, turned) - 1);
 		dirty = true;
 	};
@@ -674,11 +669,8 @@ export function createEngine(options: EngineOptions) {
 	// picking
 	const raycaster = new Raycaster();
 	const ndc = new Vector2();
-	const plane = new Plane(new Vector3(0, 0, 1), -THICKNESS);
-	const inverse = new Matrix4();
-	const hit3 = new Vector3();
 
-	function setRay(event: PointerEvent) {
+	function setRay(event: MouseEvent) {
 		const rect = canvas.getBoundingClientRect();
 		ndc.set(
 			((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -696,7 +688,7 @@ export function createEngine(options: EngineOptions) {
 		y: number;
 	}
 
-	function pick(event: PointerEvent): Hit | undefined {
+	function pick(event: MouseEvent): Hit | undefined {
 		setRay(event);
 		const meshes = [
 			...leaves.flatMap((leaf) => [
@@ -724,192 +716,37 @@ export function createEngine(options: EngineOptions) {
 		};
 	}
 
-	function pointOnPlane(event: PointerEvent, into: Vector2) {
-		setRay(event);
-		inverse.copy(magazine.matrixWorld).invert();
-		const ray = raycaster.ray.clone().applyMatrix4(inverse);
-		if (ray.intersectPlane(plane, hit3)) into.set(hit3.x, hit3.y);
-	}
-
-	interface Press {
-		id: number;
-		x: number;
-		y: number;
-		hit: Hit | undefined;
-		turn?: Turn;
-		lastX: number;
-		lastT: number;
-		velocity: number;
-	}
-	let press: Press | undefined;
-
-	function draggable(hit: Hit | undefined):
-		| {
-				leaf: Leaf;
-				forward: boolean;
-				grab: Vector2;
-		  }
-		| undefined {
-		if (!hit?.leaf || options.reducedMotion) return undefined;
-		const top = leaves[turned];
-		const under = leaves[turned - 1];
-		const y = (0.5 - hit.v) * H;
-		if (hit.leaf === top && !top.left && hit.u > 0.5)
-			return {
-				leaf: top,
-				forward: true,
-				grab: new Vector2(hit.u * W, y),
-			};
-		if (hit.leaf === under && under.left && hit.u < 0.5)
-			return {
-				leaf: under,
-				forward: false,
-				grab: new Vector2((1 - hit.u) * W, y),
-			};
-		return undefined;
-	}
-
-	const onPointerDown = (event: PointerEvent) => {
-		if (event.button !== 0 || press) return;
-		finishTurns();
-		turned = target = Math.max(0, Math.min(leaves.length, turned));
-		press = {
-			id: event.pointerId,
-			x: event.clientX,
-			y: event.clientY,
-			hit: pick(event),
-			lastX: event.clientX,
-			lastT: performance.now(),
-			velocity: 0,
-		};
-		canvas.setPointerCapture(event.pointerId);
+	const zone = (event: MouseEvent) => {
+		const rect = canvas.getBoundingClientRect();
+		return event.clientX - rect.left < rect.width / 2
+			? 'prev'
+			: 'next';
 	};
+
+	function linkAt(event: MouseEvent) {
+		const hit = pick(event);
+		return hit?.page === undefined
+			? undefined
+			: hooks.hitLink(hit.page, hit.u, hit.v);
+	}
 
 	const onPointerMove = (event: PointerEvent) => {
-		dirty = true;
-		if (!press) {
-			const hit = pick(event);
-			canvas.style.cursor =
-				hit?.page !== undefined &&
-				hooks.hitLink(hit.page, hit.u, hit.v)
-					? 'pointer'
-					: draggable(hit)
-						? 'grab'
-						: hit
-							? 'pointer'
-							: '';
-			return;
-		}
-		if (event.pointerId !== press.id) return;
-		const now = performance.now();
-		press.velocity =
-			press.velocity * 0.7 +
-			(0.3 * (event.clientX - press.lastX)) /
-				Math.max(8, now - press.lastT);
-		press.lastX = event.clientX;
-		press.lastT = now;
-		if (!press.turn) {
-			if (
-				Math.hypot(
-					event.clientX - press.x,
-					event.clientY - press.y,
-				) < DRAG_SLOP_PX
-			)
-				return;
-			const grip = draggable(press.hit);
-			if (!grip) return;
-			press.turn = {
-				leaf: grip.leaf,
-				grab: grip.grab,
-				point: grip.forward
-					? grip.grab.clone()
-					: new Vector2(
-							-grip.grab.x,
-							grip.grab.y,
-						),
-				from: new Vector2(),
-				to: new Vector2(),
-				lift: 0,
-				start: 0,
-				duration: 0,
-				dragging: true,
-				forward: grip.forward,
-				toLeft: grip.forward,
-			};
-			turns.push(press.turn);
-			canvas.style.cursor = 'grabbing';
-		}
-		pointOnPlane(event, press.turn.point);
+		canvas.style.cursor = linkAt(event)
+			? 'pointer'
+			: zone(event) === 'next'
+				? 'e-resize'
+				: 'w-resize';
 	};
 
-	const onPointerUp = (event: PointerEvent) => {
-		if (!press || event.pointerId !== press.id) return;
-		const { turn, hit, velocity } = press;
-		press = undefined;
-		canvas.style.cursor = '';
-		if (turn) {
-			// px per ms; a flick finishes the turn
-			const moved = turn.point.distanceTo(
-				turn.forward
-					? turn.grab
-					: new Vector2(
-							-turn.grab.x,
-							turn.grab.y,
-						),
-			);
-			const flick = moved > W * 0.25 ? velocity : 0;
-			const done = turn.forward
-				? turn.point.x < 0 || flick < -0.8
-				: turn.point.x > 0 || flick > 0.8;
-			const toLeft = turn.forward === done;
-			turn.dragging = false;
-			turn.from = turn.point.clone();
-			turn.to = toLeft
-				? new Vector2(-turn.grab.x, turn.grab.y)
-				: turn.grab.clone();
-			turn.toLeft = toLeft;
-			turn.start = performance.now();
-			turn.duration =
-				220 +
-				260 * (turn.from.distanceTo(turn.to) / (2 * W));
-			if (done) {
-				turned += turn.forward ? 1 : -1;
-				target = turned;
-				hooks.changed(visiblePages());
-			}
-			return;
-		}
-		if (event.type === 'pointercancel') return;
-		click(hit);
-	};
-
-	function click(hit: Hit | undefined) {
-		if (!hit) {
-			hooks.close();
-			return;
-		}
-		if (hit.page !== undefined) {
-			const href = hooks.hitLink(hit.page, hit.u, hit.v);
-			if (href) {
-				hooks.follow(href);
-				return;
-			}
-		}
-		if (mode === 'single') {
-			if (hit.u < 0.35 && turned > 0) prev();
-			else next();
-			return;
-		}
-		if (turned === 0) next();
-		else if (turned === leaves.length) prev();
-		else if (hit.x >= 0) next();
+	const onClick = (event: MouseEvent) => {
+		const href = linkAt(event);
+		if (href) hooks.follow(href);
+		else if (zone(event) === 'next') next();
 		else prev();
-	}
+	};
 
-	canvas.addEventListener('pointerdown', onPointerDown);
 	canvas.addEventListener('pointermove', onPointerMove);
-	canvas.addEventListener('pointerup', onPointerUp);
-	canvas.addEventListener('pointercancel', onPointerUp);
+	canvas.addEventListener('click', onClick);
 	const observer = new ResizeObserver(resize);
 	observer.observe(canvas);
 
@@ -926,7 +763,6 @@ export function createEngine(options: EngineOptions) {
 		const animating = turns.length > 0 || turned !== target;
 		const goal = framing();
 		const closed =
-			mode === 'spread' &&
 			(turned === 0 || turned === leaves.length) &&
 			turns.length === 0;
 		const settleRate = options.reducedMotion
@@ -961,9 +797,9 @@ export function createEngine(options: EngineOptions) {
 		blocks[0]!.scale.z = Math.max(rightCount * dz - dz * 0.5, 1e-4);
 		blocks[1]!.scale.z = Math.max(leftCount * dz - dz * 0.5, 1e-4);
 		blocks[0]!.visible = rightCount > 0;
-		blocks[1]!.visible = leftCount > 0 && mode === 'spread';
+		blocks[1]!.visible = leftCount > 0;
 		contacts[0]!.visible = rightCount > 0 || turned < leaves.length;
-		contacts[1]!.visible = mode === 'spread' && turned > 0;
+		contacts[1]!.visible = turned > 0;
 		for (const leaf of leaves)
 			deform(
 				leaf,
@@ -1009,7 +845,7 @@ export function createEngine(options: EngineOptions) {
 		u1: number,
 		v1: number,
 	) {
-		const left = mode === 'spread' && page % 2 === 1;
+		const left = page % 2 === 1;
 		const toX = (u: number) => (left ? (u - 1) * W : u * W);
 		const rect = canvas.getBoundingClientRect();
 		const xs: number[] = [];
@@ -1061,8 +897,8 @@ export function createEngine(options: EngineOptions) {
 		get settled() {
 			return turns.length === 0 && turned === target;
 		},
-		get mode() {
-			return mode;
+		get narrow() {
+			return narrow;
 		},
 		/** For harnesses: the page area's centre on screen. */
 		pointFor(page: number, u: number, v: number) {
@@ -1086,18 +922,10 @@ export function createEngine(options: EngineOptions) {
 			cancelAnimationFrame(frame);
 			observer.disconnect();
 			canvas.removeEventListener(
-				'pointerdown',
-				onPointerDown,
-			);
-			canvas.removeEventListener(
 				'pointermove',
 				onPointerMove,
 			);
-			canvas.removeEventListener('pointerup', onPointerUp);
-			canvas.removeEventListener(
-				'pointercancel',
-				onPointerUp,
-			);
+			canvas.removeEventListener('click', onClick);
 			for (const leaf of leaves) disposeLeaf(leaf);
 			for (const texture of textures.values())
 				texture.dispose();

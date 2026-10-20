@@ -92,7 +92,6 @@ export default class MagazineOverlay extends Component {
 				hooks: {
 					hitLink: this.hitLink,
 					follow: this.follow,
-					close: this.magazine.close,
 					changed: this.announce,
 					rendered: this.placeRing,
 				},
