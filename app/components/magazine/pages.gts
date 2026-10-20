@@ -228,13 +228,13 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		links: [],
 	},
 	{
-		id: 'substrata-ad',
-		name: 'Substrata',
+		id: 'android-ad',
+		name: 'delphitools for Android',
 		component: Plate,
-		art: '/magazine/substrata-ad.webp',
+		art: '/magazine/android-ad.webp',
 		printed: [
-			"AND YOU THOUGHT YOU COULDN'T GET DIGITAL PAINT THAT'S THIS REALISTIC.",
-			'Based on the work of industry legends, Substrata comes with real time fluid-simulated paint approximation. Oil, Watercolour, Acrylic and more, computed on your device in real time. Substrata is unmatched in speed, simulation fidelity and freedom of choice. And, of course, it has the best colour blending system imaginable. No muddy colours, no drab browns. And all this at an unbeatable price: Free.',
+			'NOW YOU CAN EXTEND THE BLESSINGS OF DELPHITOOLS TO LESS PRIVILEGED PLATFORMS.',
+			'DELPHITOOLS FOR ANDROID. COMING CHRISTMAS 2026.',
 		],
 		links: [],
 	},
