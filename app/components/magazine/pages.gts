@@ -1,6 +1,10 @@
 import type { TOC } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
 import Icon from 'delphitools-v2/components/icon';
+import {
+	CanonFeatureLeft,
+	CanonFeatureRight,
+} from 'delphitools-v2/components/magazine/canon-feature';
 import { CANON_KIT_ID, getToolById } from 'delphitools-v2/lib/tools';
 import './pages.css';
 
@@ -255,6 +259,19 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 			"If you've been looking at truly convenient open source software designed with love and care by industry professionals, compare them with delphitools. You'll be amazed what it can do.",
 		],
 		links: [{ href: IOS.href, label: 'Download on the App Store' }],
+	},
+	{
+		id: 'canon-feature',
+		name: 'delphitools 2.3',
+		component: CanonFeatureLeft,
+		listed: true,
+		links: [],
+	},
+	{
+		id: 'canon-feature-2',
+		name: 'delphitools 2.3',
+		component: CanonFeatureRight,
+		links: [{ href: KIT.href, label: 'Open the kit' }],
 	},
 	{
 		id: 'substrata-ios',

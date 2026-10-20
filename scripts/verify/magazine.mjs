@@ -159,13 +159,13 @@ async function clickLink(page, index, href) {
 	const live = await page.$eval(`${DIALOG} [aria-live]`, (el) =>
 		el.textContent.trim(),
 	);
-	check('the live region reads the pages', /^4–5 \/ 12/.test(live), live);
+	check('the live region reads the pages', /^4–5 \/ 14/.test(live), live);
 	const toc = await page.$$eval(`${DIALOG} .dt-mag-toc-num`, (els) =>
 		els.map((el) => el.textContent.trim()).join(),
 	);
 	check(
-		'contents lists the seven products, iOS over two pages',
-		toc === '4,6,7,8,9,10,11',
+		'contents lists eight entries; the iOS feature and the 2.3 feature take two pages each',
+		toc === '4,6,8,9,10,11,12,13',
 		toc,
 	);
 	await page.keyboard.press('ArrowLeft');
@@ -178,7 +178,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'End shows the back cover',
-		JSON.stringify(await pages(page)) === '[11]',
+		JSON.stringify(await pages(page)) === '[13]',
 		JSON.stringify(await pages(page)),
 	);
 	await page.keyboard.press('Home');
@@ -243,9 +243,11 @@ async function clickLink(page, index, href) {
 	await page.evaluate(() => (window.__opened = []));
 	await page.keyboard.press('ArrowRight');
 	await settled(page);
+	await page.keyboard.press('ArrowRight');
+	await settled(page);
 	const github = await clickLink(
 		page,
-		6,
+		8,
 		'https://github.com/1612elphi/delphitools-cli',
 	);
 	check('the CLI page has a link hotspot', github.found);
@@ -289,7 +291,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'the home CLI cell opens on the CLI page',
-		(await pages(page)).includes(6),
+		(await pages(page)).includes(8),
 		JSON.stringify(await pages(page)),
 	);
 	{
@@ -342,9 +344,9 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'?magazine=canon-ui-kit opens on the kit page',
-		(await pages(page)).includes(7),
+		(await pages(page)).includes(9),
 	);
-	const kit = await clickLink(page, 7, '/canon');
+	const kit = await clickLink(page, 9, '/canon');
 	check('the kit page has an Open hotspot', kit.found);
 	await closed(page);
 	await page.waitForFunction(
@@ -373,7 +375,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'?magazine=cli opens on the CLI page under reduced motion',
-		JSON.stringify(await pages(page)) === '[5,6]',
+		JSON.stringify(await pages(page)) === '[7,8]',
 		JSON.stringify(await pages(page)),
 	);
 	{
@@ -385,7 +387,7 @@ async function clickLink(page, index, href) {
 	const instant = await page.evaluate(() => window.__magazine.engine.pages);
 	check(
 		'a turn is instant',
-		JSON.stringify(instant) === '[7,8]',
+		JSON.stringify(instant) === '[9,10]',
 		JSON.stringify(instant),
 	);
 	await page.keyboard.press('Escape');

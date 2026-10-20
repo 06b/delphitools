@@ -193,3 +193,92 @@
 	display: block;
 	height: 44px;
 }
+
+/* the delphitools 2.3 feature: a two-column interview with live kit parts */
+.dt-mag-feature {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	gap: 14px;
+}
+
+.dt-mag-feature-head {
+	font-size: 46px;
+	font-weight: var(--canon-weight-bold);
+	letter-spacing: -0.02em;
+	line-height: 0.95;
+}
+
+.dt-mag-standfirst {
+	font-size: 19px;
+	line-height: 1.3;
+}
+
+.dt-mag-byline {
+	padding-bottom: 10px;
+	border-bottom: var(--canon-frame) solid var(--dt-mag-ink);
+	font-size: 13px;
+	font-weight: var(--canon-weight-semibold);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.dt-mag-columns {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	column-count: 2;
+	column-fill: auto;
+	column-gap: 22px;
+	font-size: 14.5px;
+	line-height: 1.4;
+	hyphens: auto;
+	text-align: justify;
+}
+
+.dt-mag-columns p {
+	margin: 0 0 9px;
+}
+
+.dt-mag-q {
+	font-weight: var(--canon-weight-bold);
+}
+
+.dt-mag-pull {
+	margin: 0;
+	padding-block: 6px 14px;
+	border-bottom: var(--canon-frame) solid var(--dt-mag-ink);
+	font-size: 30px;
+	font-style: italic;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.1;
+}
+
+/* live kit parts; they follow the app theme, like a screenshot */
+.dt-mag-specimen {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 14px;
+	gap: 10px;
+	background: var(--canon-background);
+}
+
+.dt-mag-specimen-parts {
+	display: grid;
+	align-items: center;
+	gap: 10px;
+	grid-template-columns: 1fr 1fr;
+}
+
+.dt-mag-specimen figcaption {
+	color: var(--canon-muted-foreground);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.dt-mag-specimen-value {
+	padding-inline: 12px;
+	font-family: var(--canon-mono-font);
+}
