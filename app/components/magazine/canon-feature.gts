@@ -29,60 +29,30 @@ function text(value: string, words: number) {
 }
 
 const copy = {
-	// ∑CG: headline of the delphitools 2.3 and Canon feature, set large on the left page
-	//   spec: max 6 words, two lines at 44 px, names Canon or the new design, magazine-feature voice
-	//   sample: "Canon and the art of the toolbox"
-	headline: '∑CG',
+	headline: 'A new look',
 
-	// ∑CG: standfirst under the feature headline, introduces Emma's interview with Delphi
-	//   spec: 30 words, one sentence or two, says this is an interview about delphitools 2.3 and the Canon kit
-	//   sample: "Emma Perkins sits down with Delphi to talk about delphitools 2.3, a new design language, and why every tool got rebuilt by hand."
-	standfirst: '∑CG',
+	standfirst: 'Adapted from the UIKit tooling, delphitools now uses the new Canon Design Language and UI Kit, built from the ground up.',
 
-	// ∑CG: opening paragraph of the feature, Emma's scene-setting before the first question
-	//   spec: 62 words, third person, sets up delphitools 2.3 and the Canon kit
-	//   sample: "Delphi has spent the year rebuilding a hundred small tools to look and feel like one app."
-	intro: '∑CG',
+	intro: 'Long time fans of delphitools have been through two redesigns so far. First, when we switched from primitives to shadcn/ui modules, then later when those modules were redesigned with version 1.4. Now, for the first time, all elements in delphitools are new, creative and custom. An interview with the designer.',
 
-	// ∑CG: Emma's first interview question
-	//   spec: 15 words, a question, printed bold
-	//   sample: "Where did Canon start?"
-	question1: '∑CG',
+	question1: 'Canon is a big departure from the previous style. Why redesign what worked?',
 
-	// ∑CG: Delphi's first answer
-	//   spec: 70 words, first person, Delphi's voice
-	//   sample: "With the iOS app. I drew the components there first and brought them back to the web."
-	answer1: '∑CG',
+	answer1: "The previous iteration was just... safe. It was boring. I didn't much like it, it didn't take many risks, and it looked like every other website out there. With the powerful layout options that UIKit gave me in the new 2.0 version of the iOS app, I figured we might as well try to port it to web as well.",
 
 	// ∑CG: caption under the live kit components on the left page
 	//   spec: 12 words, figure caption, names the components shown (button, segmented control, slider, switch)
 	//   sample: "Fig. 1: Real Canon components, drawn by the same code the tools use."
 	captionLeft: '∑CG',
 
-	// ∑CG: pull quote at the top of the right page, a line from Delphi's answers
-	//   spec: 16 words, quoted speech, set large; should be lifted from an answer below
-	//   sample: "Every tool should feel like it came out of the same drawer."
-	pullQuote: '∑CG',
+	pullQuote: "Anyone can make an interface these days, and that's great. But I do think you owe it to your users to make something special, make something with love.",
 
-	// ∑CG: Emma's second interview question
-	//   spec: 15 words, a question, printed bold
-	//   sample: "What changed in delphitools 2.3?"
-	question2: '∑CG',
+	question2: 'So Canon started as an iOS only idea, and then moved to web?',
 
-	// ∑CG: Delphi's second answer
-	//   spec: 75 words, first person
-	//   sample: "Everything you touch. Every tool moved onto Canon, and the home page went with it."
-	answer2: '∑CG',
+	answer2: "That's right. I initially expected the web version to be a lot more compact and simple, since many of the UIKit options (like a reliable 3D transform) simply weren't available, but I'm pleased to say it wasn't too difficult.",
 
-	// ∑CG: Emma's third interview question
-	//   spec: 15 words, a question, printed bold
-	//   sample: "Can other people use the kit?"
-	question3: '∑CG',
+	question3: 'The biggest change is the typeface situation. Why change this?',
 
-	// ∑CG: Delphi's third answer
-	//   spec: 84 words, first person, mentions the kit is open source
-	//   sample: "Yes. It is open source, and the docs live at canon in the sidebar."
-	answer3: '∑CG',
+	answer3: "While I love iA Writer Quattro, our previous font, I did feel like it was an overly safe and boring choice. Recently, I've been using Open Sans Condensed a lot, and kind of fell in love with it. As for the mono change from Plex to Iosevka, you'll have to thank my esteemed colleague Ash for that.",
 
 	// ∑CG: caption under the live settings panel on the right page
 	//   spec: 12 words, figure caption, names the parts shown (rows, heading, stepper, lamps)
