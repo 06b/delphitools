@@ -8,8 +8,8 @@ export interface LinkRect {
 	v1: number;
 }
 
-// 10 pages of 1536 px RGBA with mipmaps stay near 100 MB of GPU memory
-const MAX_TEXTURE_HEIGHT = 1536;
+// 10 pages of 2048 px RGBA with mipmaps stay near 170 MB of GPU memory
+const MAX_TEXTURE_HEIGHT = 2048;
 
 /** Device px per CSS px for a page `pageHeight` CSS px tall that shows `screenHeight` CSS px tall. */
 export function textureScale(pageHeight: number, screenHeight: number) {

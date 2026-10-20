@@ -100,6 +100,11 @@ const TOSS_MS = 900;
 const TOSS_LIFT = 0.3;
 const TOSS_SPIN = -21 * DEG;
 const FOV = 30;
+// a flat page facing the camera sums to about 1, so art keeps its colour
+const HEMI = 0.3;
+const SUN = 3.3;
+const FILL = 0.15;
+const COVER_ROUGHNESS = 0.85;
 const PAPER = '#ffffff';
 
 const ease = (t: number) =>
@@ -196,9 +201,9 @@ export function createEngine(options: EngineOptions) {
 	const magazine = new Group();
 	scene.add(magazine);
 
-	const hemi = new HemisphereLight('#ffffff', '#8a8a80', 1.35);
+	const hemi = new HemisphereLight('#ffffff', '#8a8a80', HEMI);
 	scene.add(hemi);
-	const sun = new DirectionalLight('#fffaf0', 1.9);
+	const sun = new DirectionalLight('#fffaf0', SUN);
 	sun.position.set(-0.9, 1.3, 2.6);
 	sun.castShadow = true;
 	sun.shadow.mapSize.set(2048, 2048);
@@ -214,7 +219,7 @@ export function createEngine(options: EngineOptions) {
 	scene.add(sun);
 	scene.add(sun.target);
 	// from the viewer, so the stack edges facing the camera read as paper
-	const fill = new DirectionalLight('#ffffff', 0.9);
+	const fill = new DirectionalLight('#ffffff', FILL);
 	fill.position.set(0.4, -2, 1.2);
 	scene.add(fill);
 
@@ -327,7 +332,7 @@ export function createEngine(options: EngineOptions) {
 					textureFor(front),
 					false,
 					!frontCover,
-					frontCover ? 0.42 : 0.82,
+					frontCover ? COVER_ROUGHNESS : 0.82,
 				),
 			);
 			const backMesh = new Mesh(
@@ -964,8 +969,8 @@ export function createEngine(options: EngineOptions) {
 				leaf,
 				turns.find((turn) => turn.leaf === leaf),
 			);
-		hemi.intensity = dark ? 0.85 : 1.0;
-		sun.intensity = dark ? 1.9 : 2.05;
+		hemi.intensity = dark ? HEMI * 0.9 : HEMI;
+		sun.intensity = dark ? SUN * 0.9 : SUN;
 		table.material.opacity = dark ? 0.45 : 0.28;
 		renderer.render(scene, camera);
 		if (animating) {
