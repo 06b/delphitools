@@ -164,8 +164,8 @@ async function clickLink(page, index, href) {
 		els.map((el) => el.textContent.trim()).join(),
 	);
 	check(
-		'contents lists the seven product pages from page 4',
-		toc === '4,5,6,7,8,9,10',
+		'contents lists the seven products, iOS over two pages',
+		toc === '4,6,7,8,9,10,11',
 		toc,
 	);
 	await page.keyboard.press('ArrowLeft');
@@ -227,9 +227,25 @@ async function clickLink(page, index, href) {
 		window.__opened = [];
 		window.open = (...args) => window.__opened.push(args);
 	});
+	await page.keyboard.press('ArrowLeft');
+	await settled(page);
+	const store = await clickLink(
+		page,
+		4,
+		'https://apps.apple.com/us/app/delphitools/id6761313703',
+	);
+	check(
+		'the iOS feature has an App Store badge hotspot',
+		store.found &&
+			(await page.evaluate(() => window.__opened[0]?.[0])) ===
+				'https://apps.apple.com/us/app/delphitools/id6761313703',
+	);
+	await page.evaluate(() => (window.__opened = []));
+	await page.keyboard.press('ArrowRight');
+	await settled(page);
 	const github = await clickLink(
 		page,
-		5,
+		6,
 		'https://github.com/1612elphi/delphitools-cli',
 	);
 	check('the CLI page has a link hotspot', github.found);
@@ -273,7 +289,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'the home CLI cell opens on the CLI page',
-		(await pages(page)).includes(5),
+		(await pages(page)).includes(6),
 		JSON.stringify(await pages(page)),
 	);
 	{
@@ -326,9 +342,9 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'?magazine=canon-ui-kit opens on the kit page',
-		(await pages(page)).includes(6),
+		(await pages(page)).includes(7),
 	);
-	const kit = await clickLink(page, 6, '/canon');
+	const kit = await clickLink(page, 7, '/canon');
 	check('the kit page has an Open hotspot', kit.found);
 	await closed(page);
 	await page.waitForFunction(

@@ -176,3 +176,20 @@
 	flex: 1;
 	align-items: flex-end;
 }
+
+/* the free band under the columns in the iOS feature art */
+.dt-mag-store {
+	position: absolute;
+	inset-block-end: 28px;
+	inset-inline: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	font-size: 15px;
+}
+
+.dt-mag-store-badge img {
+	display: block;
+	height: 44px;
+}

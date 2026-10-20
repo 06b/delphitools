@@ -72,6 +72,31 @@ const Plate: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
+// a plate with Apple's badge in the space the art leaves for it
+const AppStorePlate: TOC<PageSignature> = <template>
+	<div class="dt-mag-plate">
+		<img class="dt-mag-plate-art" src={{@page.art}} alt="" />
+		{{#each @page.printed as |line|}}
+			<p class="dt-sr-only">{{line}}</p>
+		{{/each}}
+		<div class="dt-mag-store">
+			{{#each @page.links as |link|}}
+				<a
+					href={{link.href}}
+					class="dt-mag-store-badge"
+					target="_blank"
+					rel="noopener noreferrer"
+					data-magazine-link
+				><img
+						src="/magazine/app-store-badge.svg"
+						alt={{link.label}}
+					/></a>
+			{{/each}}
+			<p>Visit the App Store today</p>
+		</div>
+	</div>
+</template>;
+
 const pageNumber = (pages: MagazinePage[], page: MagazinePage) =>
 	pages.indexOf(page) + 1;
 const anchor = (page: MagazinePage) => ({
@@ -183,8 +208,6 @@ const BackCover: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-const Blank: TOC<PageSignature> = <template></template>;
-
 /**
  * The magazine, one entry per page in reading order: front cover first,
  * back cover last. The count must stay even (pages pair into leaves).
@@ -213,11 +236,25 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: IOS.id,
 		name: IOS.name,
-		description: IOS.description,
-		art: '/magazine/ios-shot.webp',
-		component: Product,
+		component: Plate,
+		art: '/magazine/ios-left.webp',
 		listed: true,
-		links: [{ href: IOS.href, label: 'App Store' }],
+		links: [],
+	},
+	{
+		id: 'ios-app-feature',
+		name: IOS.name,
+		component: AppStorePlate,
+		art: '/magazine/ios-right.webp',
+		printed: [
+			'Looking good.',
+			'Federal regulations require us to inform you that delphitools for iOS 2.0 is... looking pretty good.',
+			"Featuring full tool parity with the web version, completely redesigned tool interfaces, Metal-accelerated 3D elements, a completely custom implementation of the new Canon design language in UIKit and the low low price of completely free, you'd be a fool not to download this free update.",
+			"And it doesn't end there. We also fully support your iPad-brand tablet computer and the new iPhone Duo pocket terminal. Take your tools on the go.",
+			"With delphitools-iOS 2.0's new redesigned tool interfaces, you'll finally enjoy the digital chores you've been going to shady websites for. Quicker access to tools and an intuitive search interface make it easy to find what you're looking for, and save time doing it.",
+			"If you've been looking at truly convenient open source software designed with love and care by industry professionals, compare them with delphitools. You'll be amazed what it can do.",
+		],
+		links: [{ href: IOS.href, label: 'Download on the App Store' }],
 	},
 	{
 		id: 'substrata-ios',
@@ -270,13 +307,6 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		listed: true,
 		links: [],
 		soon: true,
-	},
-	// pads the count to even
-	{
-		id: 'inside-back',
-		name: 'Inside back cover',
-		component: Blank,
-		links: [],
 	},
 	{
 		id: 'back-cover',
