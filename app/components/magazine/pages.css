@@ -160,15 +160,26 @@
 	line-height: 1.45;
 }
 
-.dt-mag-terminal {
+/* two overlapping window shots; the transparent window shadows may cross the margin */
+.dt-mag-shots {
+	position: relative;
 	flex: 1;
-	padding: 20px;
-	background: var(--dt-mag-ink);
-	color: var(--canon-paper);
-	font-family: var(--canon-mono-font);
-	font-size: 13px;
-	line-height: 1.4;
-	white-space: pre;
+	margin-inline: -28px;
+}
+
+.dt-mag-shots img {
+	position: absolute;
+	width: 66%;
+}
+
+.dt-mag-shots img:first-child {
+	inset-block-start: 0;
+	inset-inline-start: 0;
+}
+
+.dt-mag-shots img:last-child {
+	inset-block-end: 0;
+	inset-inline-end: 0;
 }
 
 .dt-mag-back {
