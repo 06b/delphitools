@@ -102,11 +102,18 @@ const Contents: TOC<PageSignature> = <template>
 				alt=""
 			/>
 			<h3 class="dt-mag-kicker">From the editor</h3>
-			{{! ∑CG: editor's letter on the contents page of issue one, beside Delphi's portrait
-				spec: Ruby writes this; 120 to 180 words, first person, dry and warm, introduces the multiplatform issue (iOS, Substrata, CLI, the kit, what is coming)
-				sample: "Welcome to the first issue. The tools left the browser this year, and this is where they went."
-			}}
-			<p class="dt-mag-letter">∑CG</p>
+			<p class="dt-mag-letter">DELPHI MAGAZINE's readers like
+				to stay on the leading edge of technology and to
+				try things for themselves. We think this issue
+				offers extraordinary opportunities for you to
+				discover some of the most exciting developments
+				at the forefront of independent digital
+				toolcrafting. The new Substrata Image Editor for
+				Apple's iOS platform is a tool that will
+				rekindle your love to create on the go. We would
+				love to know what you think, and hope you enjoy
+				this and the many new changes in delphitools 2.3
+				and delphitools for iOS 2.0.</p>
 		</section>
 	</div>
 </template>;
