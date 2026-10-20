@@ -6,7 +6,7 @@ import './pages.css';
 
 /** CSS px of one page; the textures scale from this. */
 export const PAGE_WIDTH = 600;
-export const PAGE_HEIGHT = 780;
+export const PAGE_HEIGHT = 800;
 
 export interface MagazineLink {
 	/** `https://…` opens a tab, `/…` routes in-app, `#<page id>` turns to that page. */
@@ -58,32 +58,16 @@ export const MagazineLinkButton: TOC<{ Args: { link: MagazineLink } }> =
 		{{/if}}
 	</template>;
 
-const issueDate = new Intl.DateTimeFormat('en-GB', {
-	month: 'long',
-	year: 'numeric',
-}).format(new Date());
-
-const COVER_ART = [
-	'/magazine/ios-icon.webp',
-	'/magazine/substrata-icon.webp',
-	'/magazine/mac-icon.webp',
-	'/magazine/android-icon.webp',
-];
-
+// the art carries the masthead; the text is for screen readers
 const Cover: TOC<PageSignature> = <template>
 	<div class="dt-mag-cover">
-		<p class="dt-mag-issue">
-			<span>No. 1</span>
-			<span>{{issueDate}}</span>
-			<span>Free</span>
-		</p>
-		<h2 class="dt-mag-masthead">DELPHI MAGAZINE</h2>
-		<div class="dt-mag-cover-art">
-			{{#each COVER_ART as |src|}}
-				<img src={{src}} alt="" />
-			{{/each}}
-		</div>
-		<p class="dt-mag-headline">DELPHI ELSEWHERE</p>
+		<img
+			class="dt-mag-cover-art"
+			src="/magazine/cover.webp"
+			alt=""
+		/>
+		<h2 class="dt-sr-only">DELPHI MAGAZINE</h2>
+		<p class="dt-sr-only">THE MULTIPLATFORM FRONTIER</p>
 	</div>
 </template>;
 

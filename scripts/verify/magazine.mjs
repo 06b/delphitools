@@ -43,6 +43,32 @@ async function paperShare(page) {
 	}, shot);
 }
 
+// the cover is art, not white paper: share of pixels unlike the backdrop corner
+async function paintedShare(page) {
+	const shot = await page.screenshot({ encoding: 'base64' });
+	return page.evaluate(async (b64) => {
+		const img = new Image();
+		img.src = `data:image/png;base64,${b64}`;
+		await img.decode();
+		const canvas = new OffscreenCanvas(img.width, img.height);
+		const ctx = canvas.getContext('2d');
+		ctx.drawImage(img, 0, 0);
+		const { data } = ctx.getImageData(0, 0, img.width, img.height);
+		const at = (img.height - 2) * img.width * 4 + 8;
+		const base = [data[at], data[at + 1], data[at + 2]];
+		let painted = 0;
+		for (let i = 0; i < data.length; i += 4)
+			if (
+				Math.abs(data[i] - base[0]) +
+					Math.abs(data[i + 1] - base[1]) +
+					Math.abs(data[i + 2] - base[2]) >
+				90
+			)
+				painted++;
+		return painted / (data.length / 4);
+	}, shot);
+}
+
 const pointFor = (page, index, u, v) =>
 	page.evaluate(
 		(index, u, v) => window.__magazine.engine.pointFor(index, u, v),
@@ -102,7 +128,7 @@ async function clickLink(page, index, href) {
 		'three loads when it opens',
 		requests.some((url) => /\/three[./]/.test(url)),
 	);
-	const share = await paperShare(page);
+	const share = await paintedShare(page);
 	check('the canvas paints the cover', share > 0.12, share.toFixed(2));
 	check(
 		'it opens at the cover',
@@ -428,7 +454,7 @@ async function clickLink(page, index, href) {
 		'phone: one page at a time',
 		(await page.evaluate(() => window.__magazine.engine.mode)) === 'single',
 	);
-	check('phone: the closed magazine paints', (await paperShare(page)) > 0.12);
+	check('phone: the closed magazine paints', (await paintedShare(page)) > 0.12);
 	await page.keyboard.press('ArrowRight');
 	await settled(page);
 	check(

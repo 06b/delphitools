@@ -13,7 +13,7 @@
 	box-sizing: border-box;
 	flex-direction: column;
 	width: 600px;
-	height: 780px;
+	height: 800px;
 	padding: 48px;
 	background: var(--canon-paper);
 	color: var(--dt-mag-ink);
@@ -37,7 +37,6 @@
 	line-height: 0.9;
 }
 
-.dt-mag-cover,
 .dt-mag-product,
 .dt-mag-contents {
 	display: flex;
@@ -46,35 +45,20 @@
 	gap: 20px;
 }
 
-.dt-mag-issue {
-	display: flex;
-	justify-content: space-between;
-	padding-bottom: 8px;
-	border-bottom: var(--canon-frame) solid var(--dt-mag-ink);
-	font-size: 16px;
-	font-weight: var(--canon-weight-semibold);
-	text-transform: uppercase;
+.dt-mag-page:has(> .dt-mag-cover) {
+	padding: 0;
+}
+
+.dt-mag-cover {
+	flex: 1;
+	min-height: 0;
 }
 
 .dt-mag-cover-art {
-	display: grid;
-	flex: 1;
-	align-content: center;
-	gap: 24px;
-	grid-template-columns: repeat(2, 1fr);
-	justify-items: center;
-}
-
-.dt-mag-cover-art img {
-	width: 160px;
-	height: 160px;
-}
-
-.dt-mag-headline {
-	font-size: 48px;
-	font-weight: var(--canon-weight-bold);
-	line-height: 1;
-	text-align: right;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
 }
 
 .dt-mag-title {
