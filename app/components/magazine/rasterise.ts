@@ -1,4 +1,4 @@
-import { domToCanvas } from 'modern-screenshot';
+import { createContext, destroyContext, domToCanvas } from 'modern-screenshot';
 
 export interface LinkRect {
 	href: string;
@@ -36,10 +36,40 @@ export function linkRects(page: HTMLElement): LinkRect[] {
 	});
 }
 
-export function rasterise(page: HTMLElement, scale: number) {
-	return domToCanvas(page, {
+// modern-screenshot 4.7.0 reads default styles from a srcdoc iframe without
+// waiting for it; Firefox's blank first document has no UA styles
+function loadedSandbox(doc: Document) {
+	const frame = doc.createElement('iframe');
+	frame.width = '0';
+	frame.height = '0';
+	frame.style.visibility = 'hidden';
+	frame.style.position = 'fixed';
+	const loaded = new Promise<HTMLIFrameElement>((resolve) =>
+		frame.addEventListener('load', () => resolve(frame), {
+			once: true,
+		}),
+	);
+	frame.srcdoc = '<!DOCTYPE html><meta charset="UTF-8"><body>';
+	doc.body.append(frame);
+	return loaded;
+}
+
+export async function rasterise(page: HTMLElement, scale: number) {
+	const context = await createContext(page, {
 		scale,
 		width: page.offsetWidth,
 		height: page.offsetHeight,
+		// the default-style diff drops text-decoration: none on links;
+		// without an href the copy gets no UA link style
+		onCloneEachNode: (node) => {
+			if (node instanceof HTMLAnchorElement)
+				node.removeAttribute('href');
+		},
 	});
+	context.sandbox = await loadedSandbox(page.ownerDocument);
+	try {
+		return await domToCanvas(context);
+	} finally {
+		destroyContext(context);
+	}
 }
