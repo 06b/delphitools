@@ -10,6 +10,7 @@ import {
 	HemisphereLight,
 	Mesh,
 	MeshBasicMaterial,
+	MeshPhysicalMaterial,
 	MeshStandardMaterial,
 	PCFShadowMap,
 	PerspectiveCamera,
@@ -148,11 +149,13 @@ function paperMaterial(
 	spineAtRight: boolean,
 	gutter: boolean,
 	roughness: number,
-): MeshStandardMaterial {
-	const material = new MeshStandardMaterial({
+): MeshPhysicalMaterial {
+	// low specular: full sheen lifted a printed black to 37,36,35
+	const material = new MeshPhysicalMaterial({
 		map,
 		roughness,
 		metalness: 0,
+		specularIntensity: 0.25,
 		side: spineAtRight ? BackSide : FrontSide,
 		shadowSide: DoubleSide,
 	});
