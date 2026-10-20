@@ -212,6 +212,8 @@ const BackCover: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
+const Blank: TOC<PageSignature> = <template></template>;
+
 /**
  * The magazine, one entry per page in reading order: front cover first,
  * back cover last. The count must stay even (pages pair into leaves).
@@ -276,9 +278,22 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: 'substrata-ios',
 		name: 'Substrata for iOS',
+		component: Plate,
+		art: '/magazine/freetone-ad.webp',
+		printed: [
+			'FREETONE by Stuart Semple',
+			'Now your Substrata Image Editing Suite can display beautiful, free colours.',
+			'All FREETONE swatches are graciously provided by Stuart Semple and are free to use within Substrata.',
+		],
+		listed: true,
+		links: [],
+	},
+	// placeholder until Ruby's right-hand page arrives
+	{
+		id: 'substrata-ios-feature',
+		name: 'Substrata for iOS',
 		art: '/magazine/substrata-shot.webp',
 		component: Product,
-		listed: true,
 		links: [],
 	},
 	{
@@ -324,6 +339,13 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		listed: true,
 		links: [],
 		soon: true,
+	},
+	// pads the count to even
+	{
+		id: 'inside-back',
+		name: 'Inside back cover',
+		component: Blank,
+		links: [],
 	},
 	{
 		id: 'back-cover',
