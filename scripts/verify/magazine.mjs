@@ -249,7 +249,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	const github = await clickLink(
 		page,
-		9,
+		10,
 		'https://github.com/1612elphi/delphitools-cli',
 	);
 	check('the CLI page has a link hotspot', github.found);
@@ -293,7 +293,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'the home CLI cell opens on the CLI page',
-		(await pages(page)).includes(9),
+		(await pages(page)).includes(10),
 		JSON.stringify(await pages(page)),
 	);
 	{
@@ -346,9 +346,9 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'?magazine=canon-ui-kit opens on the kit page',
-		(await pages(page)).includes(10),
+		(await pages(page)).includes(11),
 	);
-	const kit = await clickLink(page, 10, '/canon');
+	const kit = await clickLink(page, 11, '/canon');
 	check('the kit page has an Open hotspot', kit.found);
 	await closed(page);
 	await page.waitForFunction(
