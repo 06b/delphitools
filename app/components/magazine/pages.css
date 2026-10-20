@@ -45,16 +45,16 @@
 	gap: 20px;
 }
 
-.dt-mag-page:has(> .dt-mag-cover) {
+.dt-mag-page:has(> .dt-mag-plate) {
 	padding: 0;
 }
 
-.dt-mag-cover {
+.dt-mag-plate {
 	flex: 1;
 	min-height: 0;
 }
 
-.dt-mag-cover-art {
+.dt-mag-plate-art {
 	display: block;
 	width: 100%;
 	height: 100%;
@@ -135,6 +135,29 @@
 .dt-mag-toc .dt-mag-link {
 	padding: 0;
 	border: 0;
+}
+
+.dt-mag-editorial {
+	display: flow-root;
+	margin-top: auto;
+	padding-top: 16px;
+	border-top: var(--canon-frame) solid var(--dt-mag-ink);
+}
+
+.dt-mag-editor {
+	float: left;
+	width: 128px;
+	height: 128px;
+	margin: 4px 20px 8px 0;
+}
+
+.dt-mag-editorial .dt-mag-kicker {
+	margin: 0 0 8px;
+}
+
+.dt-mag-letter {
+	font-size: 16px;
+	line-height: 1.45;
 }
 
 .dt-mag-terminal {

@@ -30,6 +30,10 @@ export interface MagazinePage {
 	/** A lucide icon, for a page without art. */
 	icon?: string;
 	soon?: boolean;
+	/** Listed on the contents page. */
+	listed?: boolean;
+	/** Words printed in a full-page image, for screen readers. */
+	printed?: string[];
 }
 
 const tool = (id: string) => getToolById(id)!;
@@ -58,16 +62,13 @@ export const MagazineLinkButton: TOC<{ Args: { link: MagazineLink } }> =
 		{{/if}}
 	</template>;
 
-// the art carries the masthead; the text is for screen readers
-const Cover: TOC<PageSignature> = <template>
-	<div class="dt-mag-cover">
-		<img
-			class="dt-mag-cover-art"
-			src="/magazine/cover.webp"
-			alt=""
-		/>
-		<h2 class="dt-sr-only">DELPHI MAGAZINE</h2>
-		<p class="dt-sr-only">THE MULTIPLATFORM FRONTIER</p>
+// a full-bleed image page; its printed words stay readable for screen readers
+const Plate: TOC<PageSignature> = <template>
+	<div class="dt-mag-plate">
+		<img class="dt-mag-plate-art" src={{@page.art}} alt="" />
+		{{#each @page.printed as |line|}}
+			<p class="dt-sr-only">{{line}}</p>
+		{{/each}}
 	</div>
 </template>;
 
@@ -77,14 +78,13 @@ const anchor = (page: MagazinePage) => ({
 	href: `#${page.id}`,
 	label: page.name,
 });
-// between the contents page and the back cover
-const products = (pages: MagazinePage[]) => pages.slice(2, -1);
+const listed = (pages: MagazinePage[]) => pages.filter((page) => page.listed);
 
 const Contents: TOC<PageSignature> = <template>
 	<div class="dt-mag-contents">
 		<h2 class="dt-mag-title">Contents</h2>
 		<ol class="dt-mag-toc">
-			{{#each (products @pages) as |entry|}}
+			{{#each (listed @pages) as |entry|}}
 				<li>
 					<span
 						class="dt-mag-toc-num"
@@ -95,6 +95,19 @@ const Contents: TOC<PageSignature> = <template>
 				</li>
 			{{/each}}
 		</ol>
+		<section class="dt-mag-editorial">
+			<img
+				class="dt-mag-editor"
+				src="/magazine/editor.webp"
+				alt=""
+			/>
+			<h3 class="dt-mag-kicker">From the editor</h3>
+			{{! ∑CG: editor's letter on the contents page of issue one, beside Delphi's portrait
+				spec: Ruby writes this; 120 to 180 words, first person, dry and warm, introduces the multiplatform issue (iOS, Substrata, CLI, the kit, what is coming)
+				sample: "Welcome to the first issue. The tools left the browser this year, and this is where they went."
+			}}
+			<p class="dt-mag-letter">∑CG</p>
+		</section>
 	</div>
 </template>;
 
@@ -163,6 +176,8 @@ const BackCover: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
+const Blank: TOC<PageSignature> = <template></template>;
+
 /**
  * The magazine, one entry per page in reading order: front cover first,
  * back cover last. The count must stay even (pages pair into leaves).
@@ -171,7 +186,20 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: 'cover',
 		name: 'DELPHI ELSEWHERE',
-		component: Cover,
+		component: Plate,
+		art: '/magazine/cover.webp',
+		printed: ['DELPHI MAGAZINE', 'THE MULTIPLATFORM FRONTIER'],
+		links: [],
+	},
+	{
+		id: 'substrata-ad',
+		name: 'Substrata',
+		component: Plate,
+		art: '/magazine/substrata-ad.webp',
+		printed: [
+			"AND YOU THOUGHT YOU COULDN'T GET DIGITAL PAINT THAT'S THIS REALISTIC.",
+			'Based on the work of industry legends, Substrata comes with real time fluid-simulated paint approximation. Oil, Watercolour, Acrylic and more, computed on your device in real time. Substrata is unmatched in speed, simulation fidelity and freedom of choice. And, of course, it has the best colour blending system imaginable. No muddy colours, no drab browns. And all this at an unbeatable price: Free.',
+		],
 		links: [],
 	},
 	{ id: 'contents', name: 'Contents', component: Contents, links: [] },
@@ -181,6 +209,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		description: IOS.description,
 		art: '/magazine/ios-shot.webp',
 		component: Product,
+		listed: true,
 		links: [{ href: IOS.href, label: 'App Store' }],
 	},
 	{
@@ -188,6 +217,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		name: 'Substrata for iOS',
 		art: '/magazine/substrata-shot.webp',
 		component: Product,
+		listed: true,
 		links: [],
 	},
 	{
@@ -195,6 +225,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		name: CLI.name,
 		description: CLI.description,
 		component: Terminal,
+		listed: true,
 		links: [{ href: CLI.href, label: 'GitHub' }],
 	},
 	{
@@ -203,6 +234,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		description: KIT.description,
 		icon: KIT.icon,
 		component: Product,
+		listed: true,
 		links: [{ href: KIT.href, label: 'Open' }],
 	},
 	{
@@ -210,6 +242,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		name: 'delphitools for Android',
 		art: '/magazine/android-icon.webp',
 		component: Product,
+		listed: true,
 		links: [],
 		soon: true,
 	},
@@ -218,6 +251,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		name: 'delphitools for Macintosh',
 		art: '/magazine/mac-icon.webp',
 		component: Product,
+		listed: true,
 		links: [],
 		soon: true,
 	},
@@ -226,8 +260,16 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		name: 'delphitools CLI 2.0',
 		icon: 'square-terminal',
 		component: Product,
+		listed: true,
 		links: [],
 		soon: true,
+	},
+	// pads the count to even
+	{
+		id: 'inside-back',
+		name: 'Inside back cover',
+		component: Blank,
+		links: [],
 	},
 	{
 		id: 'back-cover',
