@@ -297,3 +297,12 @@
 .dt-mag-ad::first-line {
 	font-weight: var(--canon-weight-bold);
 }
+
+.dt-mag-ads .dt-mag-ad-art {
+	padding: 0;
+}
+
+.dt-mag-ad-art img {
+	display: block;
+	width: 100%;
+}

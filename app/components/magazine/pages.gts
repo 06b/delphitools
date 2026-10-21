@@ -165,7 +165,9 @@ const Shots: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-const ADS: { copy: string; words: number }[] = [
+type Ad = { copy: string; words: number } | { art: string; printed: string };
+
+const ADS: Ad[] = [
 	{
 		// ∑CG: classified ad 1 on the advertising page, the largest ad, top of the first column
 		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
@@ -174,18 +176,15 @@ const ADS: { copy: string; words: number }[] = [
 		words: 48,
 	},
 	{
-		// ∑CG: classified ad 2 on the advertising page, a short ad
-		//   spec: 40 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
-		//   sample: "FOR SALE: Rust code, lightly used, one careful owner. Collection only. No timewasters."
-		copy: '∑CG',
-		words: 40,
+		art: '/magazine/ad-xbox.png',
+		printed: 'ACCEPT GARBAJCAM INTO YOUR HEART AND WIN A FREE XBOX. CLICK HERE',
 	},
 	{
 		// ∑CG: classified ad 3 on the advertising page, a mid-size ad
-		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   spec: 36 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
 		//   sample: "LOST: my favourite colour palette. Last seen in a terminal. Five swatches, answers to random-cohesive. Please return to the palette generator."
 		copy: '∑CG',
-		words: 48,
+		words: 36,
 	},
 	{
 		// ∑CG: classified ad 4 on the advertising page, a short ad
@@ -210,15 +209,26 @@ const ADS: { copy: string; words: number }[] = [
 	},
 ];
 
+const isArt = (ad: Ad): ad is Extract<Ad, { art: string }> => 'art' in ad;
+
 const Classifieds: TOC<PageSignature> = <template>
 	<div class="dt-mag-product">
 		<h2 class="dt-mag-title">{{@page.name}}</h2>
 		<div class="dt-mag-ads">
 			{{#each ADS as |ad|}}
-				<p class="dt-mag-ad">{{text
-						ad.copy
-						ad.words
-					}}</p>
+				{{#if (isArt ad)}}
+					<div class="dt-mag-ad dt-mag-ad-art">
+						<img src={{ad.art}} alt="" />
+						<p
+							class="dt-sr-only"
+						>{{ad.printed}}</p>
+					</div>
+				{{else}}
+					<p class="dt-mag-ad">{{text
+							ad.copy
+							ad.words
+						}}</p>
+				{{/if}}
 			{{/each}}
 		</div>
 	</div>
