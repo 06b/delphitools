@@ -24,26 +24,7 @@ const closed = (page) =>
 		timeout: 5000,
 	});
 
-// share of paper-white pixels; the dimmed app has none
-async function paperShare(page) {
-	const shot = await page.screenshot({ encoding: 'base64' });
-	return page.evaluate(async (b64) => {
-		const img = new Image();
-		img.src = `data:image/png;base64,${b64}`;
-		await img.decode();
-		const canvas = new OffscreenCanvas(img.width, img.height);
-		const ctx = canvas.getContext('2d');
-		ctx.drawImage(img, 0, 0);
-		const { data } = ctx.getImageData(0, 0, img.width, img.height);
-		let paper = 0;
-		for (let i = 0; i < data.length; i += 4)
-			if (data[i] > 205 && data[i + 1] > 205 && data[i + 2] > 200)
-				paper++;
-		return paper / (data.length / 4);
-	}, shot);
-}
-
-// the cover is art, not white paper: share of pixels unlike the backdrop corner
+// share of pixels unlike the backdrop corner
 async function paintedShare(page) {
 	const shot = await page.screenshot({ encoding: 'base64' });
 	return page.evaluate(async (b64) => {
@@ -159,13 +140,13 @@ async function clickLink(page, index, href) {
 	const live = await page.$eval(`${DIALOG} [aria-live]`, (el) =>
 		el.textContent.trim(),
 	);
-	check('the live region reads the pages', /^4–5 \/ 16/.test(live), live);
+	check('the live region reads the pages', /^4–5 \/ 18/.test(live), live);
 	const toc = await page.$$eval(`${DIALOG} .dt-mag-toc-num`, (els) =>
 		els.map((el) => el.textContent.trim()).join(),
 	);
 	check(
 		'contents lists eight entries; the iOS feature and the 2.3 feature take two pages each',
-		toc === '4,6,8,10,11,12,14,15',
+		toc === '4,6,8,10,11,12,14,16',
 		toc,
 	);
 	await page.keyboard.press('ArrowLeft');
@@ -178,7 +159,7 @@ async function clickLink(page, index, href) {
 	await settled(page);
 	check(
 		'End shows the back cover',
-		JSON.stringify(await pages(page)) === '[15]',
+		JSON.stringify(await pages(page)) === '[17]',
 		JSON.stringify(await pages(page)),
 	);
 	await page.keyboard.press('Home');
@@ -280,7 +261,7 @@ async function clickLink(page, index, href) {
 		JSON.stringify(await pages(page)),
 	);
 	{
-		const share = await paperShare(page);
+		const share = await paintedShare(page);
 		check('and paints', share > 0.12, share.toFixed(2));
 	}
 	check('the url stays on the home', new URL(page.url()).pathname === '/');
@@ -310,7 +291,7 @@ async function clickLink(page, index, href) {
 		JSON.stringify(await pages(page)),
 	);
 	{
-		const share = await paperShare(page);
+		const share = await paintedShare(page);
 		check('and paints', share > 0.12, share.toFixed(2));
 	}
 
@@ -369,7 +350,7 @@ async function clickLink(page, index, href) {
 		JSON.stringify(await pages(page)),
 	);
 	{
-		const share = await paperShare(page);
+		const share = await paintedShare(page);
 		check('and paints', share > 0.12, share.toFixed(2));
 	}
 	await page.keyboard.press('ArrowRight');
