@@ -31,7 +31,7 @@ export interface MagazinePage {
 	description?: string;
 	/** An image in public/magazine. */
 	art?: string;
-	/** Small words over a page heading. */
+	/** Small capitals above the page. */
 	kicker?: string;
 	/** Window screenshots in public/magazine, overlapping. */
 	shots?: string[];
@@ -148,12 +148,11 @@ const Contents: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-// two overlapping window shots; a kicker sets a heading above them
+// two overlapping window shots
 const Shots: TOC<PageSignature> = <template>
 	<div class="dt-mag-product">
 		{{#if @page.kicker}}
 			<p class="dt-mag-kicker">{{@page.kicker}}</p>
-			<h2 class="dt-mag-title">{{@page.name}}</h2>
 		{{/if}}
 		<div class="dt-mag-shots">
 			{{#each @page.shots as |shot|}}
@@ -383,7 +382,7 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: 'mac',
 		name: 'delphitools for Macintosh',
-		kicker: 'Sneak peek',
+		kicker: 'A SNEAK PEEK AT DELPHITOOLS FOR MACINTOSH COMPUTERS',
 		component: Shots,
 		shots: [
 			'/magazine/mac-clipboard.webp',
