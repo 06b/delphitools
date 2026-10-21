@@ -165,7 +165,7 @@ async function clickLink(page, index, href) {
 	);
 	check(
 		'contents lists eight entries; the iOS feature and the 2.3 feature take two pages each',
-		toc === '4,6,8,10,11,12,13,14',
+		toc === '4,6,8,10,11,12,14,15',
 		toc,
 	);
 	await page.keyboard.press('ArrowLeft');
@@ -340,16 +340,21 @@ async function clickLink(page, index, href) {
 		JSON.stringify(await pages(page)),
 	);
 
-	// the canon kit page routes in-app
 	await visit(page, `/?magazine=canon-ui-kit`);
 	await ready(page);
 	await settled(page);
 	check(
-		'?magazine=canon-ui-kit opens on the kit page',
-		(await pages(page)).includes(11),
+		'?magazine=canon-ui-kit opens on the kit spread',
+		JSON.stringify(await pages(page)) === '[11,12]',
+		JSON.stringify(await pages(page)),
 	);
-	const kit = await clickLink(page, 11, '/canon');
-	check('the kit page has an Open hotspot', kit.found);
+
+	// the feature's kit link routes in-app
+	await visit(page, `/?magazine=canon-feature-2`);
+	await ready(page);
+	await settled(page);
+	const kit = await clickLink(page, 6, '/canon');
+	check('the feature has an Open the kit hotspot', kit.found);
 	await closed(page);
 	await page.waitForFunction(
 		() => location.pathname.startsWith('/canon'),

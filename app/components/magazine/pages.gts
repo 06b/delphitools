@@ -205,8 +205,6 @@ const BackCover: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-const Blank: TOC<PageSignature> = <template></template>;
-
 /**
  * The magazine, one entry per page in reading order: front cover first,
  * back cover last. The count must stay even (pages pair into leaves).
@@ -318,11 +316,22 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: KIT.id,
 		name: KIT.name,
-		description: KIT.description,
-		icon: KIT.icon,
-		component: Product,
+		component: Plate,
+		art: '/magazine/kit-left.webp',
 		listed: true,
-		links: [{ href: KIT.href, label: 'Open' }],
+		links: [],
+	},
+	{
+		id: 'canon-ui-kit-2',
+		name: KIT.name,
+		component: Plate,
+		art: '/magazine/kit-right.webp',
+		printed: [
+			'Retcon your app.',
+			'CANON UI KIT',
+			'Available for Ember, Svelte, Vue, React, UIKit and Jetpack Compose',
+		],
+		links: [],
 	},
 	{
 		id: 'android',
@@ -341,13 +350,6 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		listed: true,
 		links: [],
 		soon: true,
-	},
-	// pads the count to even
-	{
-		id: 'inside-back',
-		name: 'Inside back cover',
-		component: Blank,
-		links: [],
 	},
 	{
 		id: 'back-cover',
