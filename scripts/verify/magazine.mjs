@@ -234,31 +234,14 @@ async function clickLink(page, index, href) {
 		4,
 		'https://apps.apple.com/us/app/delphitools/id6761313703',
 	);
-	check(
-		'the iOS feature has an App Store badge hotspot',
-		store.found &&
-			(await page.evaluate(() => window.__opened[0]?.[0])) ===
-				'https://apps.apple.com/us/app/delphitools/id6761313703',
-	);
-	await page.evaluate(() => (window.__opened = []));
-	await page.keyboard.press('ArrowRight');
-	await settled(page);
-	await page.keyboard.press('ArrowRight');
-	await settled(page);
-	await page.keyboard.press('ArrowRight');
-	await settled(page);
-	const github = await clickLink(
-		page,
-		10,
-		'https://github.com/1612elphi/delphitools-cli',
-	);
-	check('the CLI page has a link hotspot', github.found);
-	check('the pointer is a hand over it', github.cursor === 'pointer', github.cursor);
 	const opened = await page.evaluate(() => window.__opened);
+	check('the iOS feature has an App Store badge hotspot', store.found);
+	check('the pointer is a hand over it', store.cursor === 'pointer', store.cursor);
 	check(
-		'it opens GitHub in a new tab without an opener',
+		'it opens the App Store in a new tab without an opener',
 		opened.length === 1 &&
-			opened[0][0] === 'https://github.com/1612elphi/delphitools-cli' &&
+			opened[0][0] ===
+				'https://apps.apple.com/us/app/delphitools/id6761313703' &&
 			opened[0][1] === '_blank' &&
 			/noopener/.test(opened[0][2]) &&
 			/noreferrer/.test(opened[0][2]),

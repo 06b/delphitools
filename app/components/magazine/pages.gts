@@ -4,7 +4,6 @@ import Icon from 'delphitools-v2/components/icon';
 import {
 	CanonFeatureLeft,
 	CanonFeatureRight,
-	text,
 } from 'delphitools-v2/components/magazine/canon-feature';
 import { CANON_KIT_ID, getToolById } from 'delphitools-v2/lib/tools';
 import './pages.css';
@@ -175,27 +174,14 @@ const Product: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-const vito = {
-	// ∑CG: standfirst under the Vito heading on the CLI page
-	//   spec: 25 words, magazine standfirst, introduces Vito as the interactive TUI for delphitools CLI 2.0: browse every command, open a tool like the palette generator
-	//   sample: "Vito puts every delphitools command in one window. Browse by category, read the flags, then open a tool and work with it from the keyboard."
-	standfirst: '∑CG',
-};
-
 const Vito: TOC<PageSignature> = <template>
 	<div class="dt-mag-product">
-		<p class="dt-mag-kicker">{{@page.description}}</p>
-		<h2 class="dt-mag-title">{{@page.name}}</h2>
-		<p class="dt-mag-standfirst">{{text vito.standfirst 25}}</p>
 		<div class="dt-mag-shots">
 			<img src="/magazine/vito-help.webp" alt="" />
 			<img src="/magazine/vito-palette.webp" alt="" />
 		</div>
-		<div class="dt-mag-links">
-			{{#each @page.links as |link|}}
-				<MagazineLinkButton @link={{link}} />
-			{{/each}}
-		</div>
+		<p class="dt-mag-description">delphitools CLI 2.0 with the new
+			Vito TUI enabled</p>
 	</div>
 </template>;
 
@@ -308,10 +294,9 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: CLI.id,
 		name: 'Vito',
-		description: 'delphitools CLI 2.0',
 		component: Vito,
 		listed: true,
-		links: [{ href: CLI.href, label: 'GitHub' }],
+		links: [],
 	},
 	{
 		id: KIT.id,
