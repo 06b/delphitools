@@ -304,6 +304,23 @@ async function clickLink(page, index, href) {
 		JSON.stringify(await pages(page)),
 	);
 
+	await visit(page, '/?magazine=classifieds');
+	await ready(page);
+	await settled(page);
+	await page.evaluate(() => {
+		window.__opened = [];
+		window.open = (...args) => window.__opened.push(args);
+	});
+	const ad = await clickLink(page, 16, 'https://www.sakeozo.com/');
+	check(
+		'the Sakeozo ad opens its site',
+		ad.found &&
+			(await page.evaluate(() => window.__opened[0]?.[0])) ===
+				'https://www.sakeozo.com/',
+	);
+	await page.keyboard.press('Escape');
+	await closed(page);
+
 	await visit(page, `/?magazine=canon-ui-kit`);
 	await ready(page);
 	await settled(page);

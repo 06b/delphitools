@@ -165,7 +165,9 @@ const Shots: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-type Ad = { copy: string; words: number } | { art: string; printed: string };
+type Ad =
+	| { copy: string; words: number }
+	| { art: string; printed: string; href?: string };
 
 const ADS: Ad[] = [
 	{
@@ -187,25 +189,23 @@ const ADS: Ad[] = [
 		words: 36,
 	},
 	{
-		// ∑CG: classified ad 4 on the advertising page, a short ad
-		//   spec: 40 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
-		//   sample: "PEN PALS: Shavian enthusiast seeks same for letters. Must be able to read this ad."
-		copy: '∑CG',
-		words: 40,
+		art: '/magazine/ad-sakeozo.webp',
+		printed: 'SAKEOZO',
+		href: 'https://www.sakeozo.com/',
 	},
 	{
 		// ∑CG: classified ad 5 on the advertising page, the smallest ad
-		//   spec: 32 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   spec: 24 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
 		//   sample: "FREE to good home: 0BSD licence. Take as many as you like."
 		copy: '∑CG',
-		words: 32,
+		words: 24,
 	},
 	{
 		// ∑CG: classified ad 6 on the advertising page, a mid-size ad, bottom of the second column
-		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   spec: 24 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
 		//   sample: "SERVICES: privacy-first utilities, all local, no logins. Fifty-five tools and counting. Visit any browser, any time."
 		copy: '∑CG',
-		words: 48,
+		words: 24,
 	},
 ];
 
@@ -217,12 +217,35 @@ const Classifieds: TOC<PageSignature> = <template>
 		<div class="dt-mag-ads">
 			{{#each ADS as |ad|}}
 				{{#if (isArt ad)}}
-					<div class="dt-mag-ad dt-mag-ad-art">
-						<img src={{ad.art}} alt="" />
-						<p
-							class="dt-sr-only"
-						>{{ad.printed}}</p>
-					</div>
+					{{#if ad.href}}
+						<a
+							href={{ad.href}}
+							class="dt-mag-ad dt-mag-ad-art"
+							target="_blank"
+							rel="noopener noreferrer"
+							data-magazine-link
+						>
+							<img
+								src={{ad.art}}
+								alt=""
+							/>
+							<span
+								class="dt-sr-only"
+							>{{ad.printed}}</span>
+						</a>
+					{{else}}
+						<div
+							class="dt-mag-ad dt-mag-ad-art"
+						>
+							<img
+								src={{ad.art}}
+								alt=""
+							/>
+							<p
+								class="dt-sr-only"
+							>{{ad.printed}}</p>
+						</div>
+					{{/if}}
 				{{else}}
 					<p class="dt-mag-ad">{{text
 							ad.copy

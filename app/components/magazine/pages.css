@@ -299,6 +299,7 @@
 }
 
 .dt-mag-ads .dt-mag-ad-art {
+	display: block;
 	padding: 0;
 }
 
