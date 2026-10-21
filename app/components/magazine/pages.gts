@@ -1,9 +1,9 @@
 import type { TOC } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
-import Icon from 'delphitools-v2/components/icon';
 import {
 	CanonFeatureLeft,
 	CanonFeatureRight,
+	text,
 } from 'delphitools-v2/components/magazine/canon-feature';
 import { CANON_KIT_ID, getToolById } from 'delphitools-v2/lib/tools';
 import './pages.css';
@@ -31,9 +31,10 @@ export interface MagazinePage {
 	description?: string;
 	/** An image in public/magazine. */
 	art?: string;
-	/** A lucide icon, for a page without art. */
-	icon?: string;
-	soon?: boolean;
+	/** Small words over a page heading. */
+	kicker?: string;
+	/** Window screenshots in public/magazine, overlapping. */
+	shots?: string[];
 	/** Listed on the contents page. */
 	listed?: boolean;
 	/** Words printed in a full-page image, for screen readers. */
@@ -147,45 +148,82 @@ const Contents: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-const Product: TOC<PageSignature> = <template>
+// two overlapping window shots; a kicker sets a heading above them
+const Shots: TOC<PageSignature> = <template>
 	<div class="dt-mag-product">
-		{{#if @page.soon}}
-			<p class="dt-mag-kicker">Coming soon</p>
+		{{#if @page.kicker}}
+			<p class="dt-mag-kicker">{{@page.kicker}}</p>
+			<h2 class="dt-mag-title">{{@page.name}}</h2>
 		{{/if}}
-		<h2 class="dt-mag-title">{{@page.name}}</h2>
+		<div class="dt-mag-shots">
+			{{#each @page.shots as |shot|}}
+				<img src={{shot}} alt="" />
+			{{/each}}
+		</div>
 		{{#if @page.description}}
 			<p class="dt-mag-description">{{@page.description}}</p>
 		{{/if}}
-		<div class="dt-mag-art">
-			{{#if @page.art}}
-				<img src={{@page.art}} alt="" />
-			{{else if @page.icon}}
-				<Icon
-					@name={{@page.icon}}
-					class="dt-mag-art-icon"
-				/>
-			{{/if}}
-		</div>
-		<div class="dt-mag-links">
-			{{#each @page.links as |link|}}
-				<MagazineLinkButton @link={{link}} />
+	</div>
+</template>;
+
+const ADS: { copy: string; words: number }[] = [
+	{
+		// ∑CG: classified ad 1 on the advertising page, the largest ad, top of the first column
+		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   sample: "WANTED: one (1) Android phone owner with patience. Must enjoy waiting. Reward: delphitools, eventually, around Christmas."
+		copy: '∑CG',
+		words: 48,
+	},
+	{
+		// ∑CG: classified ad 2 on the advertising page, a short ad
+		//   spec: 40 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   sample: "FOR SALE: Rust code, lightly used, one careful owner. Collection only. No timewasters."
+		copy: '∑CG',
+		words: 40,
+	},
+	{
+		// ∑CG: classified ad 3 on the advertising page, a mid-size ad
+		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   sample: "LOST: my favourite colour palette. Last seen in a terminal. Five swatches, answers to random-cohesive. Please return to the palette generator."
+		copy: '∑CG',
+		words: 48,
+	},
+	{
+		// ∑CG: classified ad 4 on the advertising page, a short ad
+		//   spec: 40 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   sample: "PEN PALS: Shavian enthusiast seeks same for letters. Must be able to read this ad."
+		copy: '∑CG',
+		words: 40,
+	},
+	{
+		// ∑CG: classified ad 5 on the advertising page, the smallest ad
+		//   spec: 32 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   sample: "FREE to good home: 0BSD licence. Take as many as you like."
+		copy: '∑CG',
+		words: 32,
+	},
+	{
+		// ∑CG: classified ad 6 on the advertising page, a mid-size ad, bottom of the second column
+		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
+		//   sample: "SERVICES: privacy-first utilities, all local, no logins. Fifty-five tools and counting. Visit any browser, any time."
+		copy: '∑CG',
+		words: 48,
+	},
+];
+
+const Classifieds: TOC<PageSignature> = <template>
+	<div class="dt-mag-product">
+		<h2 class="dt-mag-title">{{@page.name}}</h2>
+		<div class="dt-mag-ads">
+			{{#each ADS as |ad|}}
+				<p class="dt-mag-ad">{{text
+						ad.copy
+						ad.words
+					}}</p>
 			{{/each}}
 		</div>
 	</div>
 </template>;
-
-const Vito: TOC<PageSignature> = <template>
-	<div class="dt-mag-product">
-		<div class="dt-mag-shots">
-			<img src="/magazine/vito-help.webp" alt="" />
-			<img src="/magazine/vito-palette.webp" alt="" />
-		</div>
-		<p class="dt-mag-description">delphitools CLI 2.0 with the new
-			Vito TUI enabled</p>
-	</div>
-</template>;
-
-const Blank: TOC<PageSignature> = <template></template>;
 
 const BackCover: TOC<PageSignature> = <template>
 	<div class="dt-mag-back">
@@ -296,7 +334,13 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: CLI.id,
 		name: 'Vito',
-		component: Vito,
+		description:
+			'delphitools CLI 2.0 with the new Vito TUI enabled',
+		component: Shots,
+		shots: [
+			'/magazine/vito-help.webp',
+			'/magazine/vito-palette.webp',
+		],
 		listed: true,
 		links: [],
 	},
@@ -339,17 +383,19 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: 'mac',
 		name: 'delphitools for Macintosh',
-		art: '/magazine/mac-icon.webp',
-		component: Product,
+		kicker: 'Sneak peek',
+		component: Shots,
+		shots: [
+			'/magazine/mac-clipboard.webp',
+			'/magazine/mac-toolbox.webp',
+		],
 		listed: true,
 		links: [],
-		soon: true,
 	},
-	// pads the count to even
 	{
-		id: 'inside-back',
-		name: 'Inside back cover',
-		component: Blank,
+		id: 'classifieds',
+		name: 'Classifieds',
+		component: Classifieds,
 		links: [],
 	},
 	{

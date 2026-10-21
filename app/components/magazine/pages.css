@@ -79,25 +79,6 @@
 	font-size: 20px;
 }
 
-.dt-mag-art {
-	display: flex;
-	min-height: 0;
-	flex: 1;
-	align-items: center;
-	justify-content: center;
-}
-
-.dt-mag-art img {
-	max-width: 100%;
-	max-height: 100%;
-	object-fit: contain;
-}
-
-.dt-mag-art-icon {
-	width: 200px;
-	height: 200px;
-}
-
 .dt-mag-links {
 	display: flex;
 	gap: 12px;
@@ -295,4 +276,24 @@
 .dt-mag-specimen-value {
 	padding-inline: 12px;
 	font-family: var(--canon-mono-font);
+}
+
+.dt-mag-ads {
+	flex: 1;
+	min-height: 0;
+	column-count: 2;
+	column-gap: 16px;
+}
+
+.dt-mag-ads .dt-mag-ad {
+	margin: 0 0 16px;
+	padding: 12px 14px;
+	border: var(--canon-frame) solid var(--dt-mag-ink);
+	break-inside: avoid;
+	font-size: 15px;
+	line-height: 1.35;
+}
+
+.dt-mag-ad::first-line {
+	font-weight: var(--canon-weight-bold);
 }

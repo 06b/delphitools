@@ -18,7 +18,7 @@ const LOREM =
 	);
 
 // ponytail: an unfilled gap shows lorem at its word budget, so the layout shows how much text fits
-function text(value: string, words: number) {
+export function text(value: string, words: number) {
 	if (value !== GAP) return value;
 	const out = Array.from(
 		{ length: words },
