@@ -201,11 +201,8 @@ const ADS: Ad[] = [
 		words: 24,
 	},
 	{
-		// ∑CG: classified ad 6 on the advertising page, a mid-size ad, bottom of the second column
-		//   spec: 24 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
-		//   sample: "SERVICES: privacy-first utilities, all local, no logins. Fifty-five tools and counting. Visit any browser, any time."
-		copy: '∑CG',
-		words: 24,
+		art: '/magazine/ad-mimi.webp',
+		printed: 'this is a picture of miss mimi she is very little and very loud sometimes',
 	},
 ];
 
