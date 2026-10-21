@@ -185,6 +185,8 @@ const Vito: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
+const Blank: TOC<PageSignature> = <template></template>;
+
 const BackCover: TOC<PageSignature> = <template>
 	<div class="dt-mag-back">
 		<p class="dt-mag-masthead">delphitools</p>
@@ -321,11 +323,18 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 	{
 		id: 'android',
 		name: 'delphitools for Android',
-		art: '/magazine/android-icon.webp',
-		component: Product,
+		component: Plate,
+		art: '/magazine/android-left.webp',
 		listed: true,
 		links: [],
-		soon: true,
+	},
+	{
+		id: 'android-2',
+		name: 'delphitools for Android',
+		component: Plate,
+		art: '/magazine/android-right.webp',
+		printed: ['XMAS 2026', 'NOW STOP BOTHERING ME'],
+		links: [],
 	},
 	{
 		id: 'mac',
@@ -335,6 +344,13 @@ export const MAGAZINE_PAGES: MagazinePage[] = [
 		listed: true,
 		links: [],
 		soon: true,
+	},
+	// pads the count to even
+	{
+		id: 'inside-back',
+		name: 'Inside back cover',
+		component: Blank,
+		links: [],
 	},
 	{
 		id: 'back-cover',
