@@ -1,3 +1,5 @@
+import { isIosWebKit } from 'delphitools-v2/lib/platform';
+
 export const MODEL_ID = 'briaai/RMBG-1.4';
 
 // fp16 preserves edge detail
@@ -36,8 +38,8 @@ export async function loadRemover(
 	const { pipeline, env } = await import('@huggingface/transformers');
 
 	env.allowLocalModels = false;
-	// disable unreliable ios cache
-	env.useBrowserCache = false;
+	// ios cache api fails on the model files
+	env.useBrowserCache = !isIosWebKit();
 
 	const progress_callback = (event: {
 		status: string;
