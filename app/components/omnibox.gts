@@ -30,6 +30,7 @@ import {
 	type OmniReading,
 } from 'delphitools-v2/lib/omni';
 import { HERO_ART } from 'delphitools-v2/lib/hero-art';
+import { heroPatternStyle } from 'delphitools-v2/lib/icon-pattern';
 import WhatsNew from 'delphitools-v2/components/whats-new';
 import ChangelogPopup from 'delphitools-v2/components/changelog-popup';
 import './omnibox.css';
@@ -74,6 +75,7 @@ export default class Omnibox extends Component<OmniboxSignature> {
 	@tracked file: File | null = null;
 	@tracked fileTools: Tool[] = [];
 	@tracked artIndex = Math.floor(Math.random() * HERO_ART.length);
+	heroPattern = heroPatternStyle(allTools.map((tool) => tool.icon));
 
 	#readTimer?: ReturnType<typeof setTimeout>;
 	#readToken = 0;
@@ -291,6 +293,9 @@ export default class Omnibox extends Component<OmniboxSignature> {
 
 	<template>
 		<header class="dt-hero">
+			<div class="dt-hero-pattern" aria-hidden="true">
+				<div style={{this.heroPattern}}></div>
+			</div>
 			<div class="dt-hero-pills">
 				<ChangelogPopup />
 				<WhatsNew />

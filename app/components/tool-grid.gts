@@ -8,6 +8,7 @@ import { modifier } from 'ember-modifier';
 import { or } from 'ember-truth-helpers';
 import CanonGrid from 'delphicanon/components/canon-grid';
 import Icon from 'delphitools-v2/components/icon';
+import { patternStyle } from 'delphitools-v2/lib/icon-pattern';
 import type { Tool } from 'delphitools-v2/lib/tools';
 import type MagazineService from 'delphitools-v2/services/magazine';
 import { isPlainClick } from 'delphitools-v2/services/magazine';
@@ -89,6 +90,13 @@ export default class ToolGrid extends Component<ToolGridSignature> {
 							)
 						}}
 					>
+						<span
+							class="dt-cell-pattern"
+							style={{patternStyle
+								tool.icon
+							}}
+							aria-hidden="true"
+						></span>
 						<Icon
 							@name={{tool.icon}}
 							class="dt-cell-icon"
@@ -107,6 +115,13 @@ export default class ToolGrid extends Component<ToolGridSignature> {
 						target="_blank"
 						rel="noopener noreferrer"
 					>
+						<span
+							class="dt-cell-pattern"
+							style={{patternStyle
+								tool.icon
+							}}
+							aria-hidden="true"
+						></span>
 						<Icon
 							@name={{tool.icon}}
 							class="dt-cell-icon"
@@ -127,6 +142,13 @@ export default class ToolGrid extends Component<ToolGridSignature> {
 								'is-highlight'
 							}}"
 					>
+						<span
+							class="dt-cell-pattern"
+							style={{patternStyle
+								tool.icon
+							}}
+							aria-hidden="true"
+						></span>
 						<Icon
 							@name={{tool.icon}}
 							class="dt-cell-icon"
@@ -160,6 +182,13 @@ export default class ToolGrid extends Component<ToolGridSignature> {
 							)
 						}}
 					>
+						<span
+							class="dt-cell-pattern"
+							style={{patternStyle
+								tool.icon
+							}}
+							aria-hidden="true"
+						></span>
 						<Icon
 							@name={{tool.icon}}
 							class="dt-cell-icon"

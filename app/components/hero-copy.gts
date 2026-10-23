@@ -89,7 +89,7 @@ export default class HeroCopy extends Component {
 							low stakes and low
 							effort tools.
 						</p>
-						<p>
+						<p class="dt-hero-ctas">
 							<button
 								type="button"
 								class="dt-hero-magazine"
@@ -102,6 +102,14 @@ export default class HeroCopy extends Component {
 								your terminal!<Icon
 									@name="book-open"
 								/></button>
+							<a
+								href="https://youtu.be/f_gtN14gWBs"
+								class="dt-hero-video"
+								target="_blank"
+								rel="noopener noreferrer"
+							>Launch Video<Icon
+									@name="play"
+								/></a>
 						</p>
 						<p>
 							No logins, no paywalls,

@@ -1,26 +1,13 @@
 import { LinkTo } from '@ember/routing';
-import { htmlSafe } from '@ember/template';
 import type { TOC } from '@ember/component/template-only';
 import Icon from 'delphitools-v2/components/icon';
-import { icons } from 'delphitools-v2/lib/icons';
+import { patternStyle } from 'delphitools-v2/lib/icon-pattern';
 import type { Suite } from 'delphitools-v2/lib/tools';
 import './suite-box.css';
 
 // two copies of the run; the track loops at -50%
 const RUN = [0, 1, 2, 3, 4, 5];
 const COPIES = [0, 1];
-
-// staggered rows; css masks it, so the stroke colour is irrelevant
-function patternStyle(name: string) {
-	const inner =
-		/<svg[^>]*>([\s\S]*)<\/svg>/.exec(icons[name] ?? '')?.[1] ?? '';
-	const icon = (x: number, y: number) =>
-		`<svg x="${x}" y="${y}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
-	const tile = `<svg xmlns="http://www.w3.org/2000/svg" width="56" height="48">${icon(4, 2)}${icon(32, 26)}</svg>`;
-	return htmlSafe(
-		`--suite-pattern: url("data:image/svg+xml,${encodeURIComponent(tile)}")`,
-	);
-}
 
 const SuiteBox: TOC<{ Args: { suite: Suite } }> = <template>
 	<LinkTo @route={{@suite.route}} class="dt-suite is-{{@suite.tool.id}}">

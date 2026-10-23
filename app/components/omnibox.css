@@ -6,12 +6,49 @@
 	color: var(--canon-foreground);
 	container-type: inline-size;
 	font-family: var(--canon-font);
+	isolation: isolate;
 }
 
 .dt-hero {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+}
+
+/* ios HomePatternView, under .dt-home's content */
+.dt-hero-pattern {
+	position: absolute;
+	z-index: -1;
+	overflow: hidden;
+	inset: -12px calc(-1 * var(--canon-panel-padding)) 0;
+	mask-image: linear-gradient(black, transparent);
+	opacity: 0.2;
+	pointer-events: none;
+}
+
+/* one block of slack for the drift */
+.dt-hero-pattern > div {
+	width: calc(100% + var(--hero-block));
+	height: calc(100% + var(--hero-block));
+	animation: dt-hero-drift 108s linear infinite;
+	background: var(--canon-primary);
+	mask-image: var(--hero-pattern);
+}
+
+@keyframes dt-hero-drift {
+	to {
+		transform: translate(
+			calc(-1 * var(--hero-block)),
+			calc(-1 * var(--hero-block))
+		);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dt-hero-pattern > div {
+		animation: none;
+	}
 }
 
 .dt-hero-pills {

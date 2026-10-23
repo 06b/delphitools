@@ -147,16 +147,15 @@
 }
 
 .dt-hero-magazine {
-	display: inline;
-	padding: 0;
-	border: 0;
+	display: inline-block;
+	padding: 8px 12px;
+	border: var(--canon-frame) solid var(--canon-foreground);
 	background: none;
 	color: var(--canon-foreground);
 	cursor: pointer;
 	font: inherit;
 	pointer-events: auto;
-	text-decoration: underline dotted;
-	text-underline-offset: 4px;
+	text-align: start;
 }
 
 .dt-hero-magazine .dt-icon {
@@ -174,7 +173,41 @@
 
 @media (hover: hover) {
 	.dt-hero-magazine:hover {
-		color: var(--canon-primary);
-		text-decoration-style: solid;
+		background: var(--canon-accent-bg);
+	}
+}
+
+.dt-hero-ctas {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.dt-hero-flip-content a.dt-hero-video {
+	display: inline-flex;
+	align-items: center;
+	align-self: stretch;
+	padding: 8px 12px;
+	border: var(--canon-frame) solid var(--canon-foreground);
+	color: var(--canon-foreground);
+	gap: 6px;
+	text-decoration: none;
+}
+
+.dt-hero-video .dt-icon {
+	width: 1.1em;
+	height: 1.1em;
+}
+
+.dt-hero-video:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+@media (hover: hover) {
+	.dt-hero-video:hover {
+		background: var(--canon-accent-bg);
 	}
 }

@@ -12,8 +12,34 @@
 	padding: var(--canon-panel-padding);
 	background: var(--canon-card);
 	color: var(--canon-foreground);
+	isolation: isolate;
 	text-decoration: none;
 	-webkit-tap-highlight-color: transparent;
+}
+
+/* the suite-box pattern, shown on hover */
+.dt-cell-pattern {
+	position: absolute;
+	z-index: -1;
+	background: var(--canon-primary);
+	inset: 0;
+	mask-composite: intersect;
+	mask-image:
+		linear-gradient(to right, transparent 40%, black),
+		var(--suite-pattern);
+	mask-repeat: no-repeat, repeat;
+	mask-size:
+		100% 100%,
+		56px 48px;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 150ms ease;
+}
+
+@media (hover: hover) {
+	.dt-cell:hover .dt-cell-pattern {
+		opacity: 0.3;
+	}
 }
 
 @media (hover: hover) {
@@ -36,7 +62,7 @@
 }
 
 .dt-cell-name {
-	font-size: var(--canon-text-footnote);
+	font-size: var(--canon-text-callout);
 	font-weight: var(--canon-weight-bold);
 	line-height: 1.3;
 }
