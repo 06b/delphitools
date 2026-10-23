@@ -63,7 +63,7 @@ html:root {
 // crayon pins body to its static sans stack
 body {
 	font-family: var(--canon-font);
-	letter-spacing: 0.03em;
+	letter-spacing: 0.01em;
 }
 
 // form controls reset letter-spacing to normal
@@ -926,6 +926,17 @@ body {
 		padding-inline: 0;
 		border: 0;
 		background: var(--canon-muted);
+		transition: background-color 160ms ease-out;
+
+		// closed, the band shows the tape; the prefs wait in the open menu
+		.dt-frame:not(.is-open, .is-dragging) & {
+			background: transparent;
+			pointer-events: none;
+		}
+	}
+
+	.dt-bar .dt-notation-trigger {
+		pointer-events: auto;
 	}
 
 	.dt-bar > .canon-button,
@@ -1008,9 +1019,31 @@ body {
 		rotate: 90deg;
 	}
 
+	// the preferences belong to the open menu, the closed band is the tape's
+	.dt-bar-pref {
+		transition: opacity 160ms ease-out;
+
+		.dt-frame:not(.is-open, .is-dragging) & {
+			opacity: 0;
+			pointer-events: none;
+		}
+	}
+
 	.dt-tape .dt-tape-shuffle {
 		inset-block-start: 50%;
+		min-inline-size: 0;
+		min-block-size: 0;
+		padding: 8px;
+		background: transparent;
+		color: #fff;
+		filter: drop-shadow(0 1px 2px rgb(0 0 0 / 60%));
+		opacity: 0.7;
 		translate: -50% -50%;
+
+		.canon-button-icon {
+			inline-size: 18px;
+			block-size: 18px;
+		}
 	}
 }
 

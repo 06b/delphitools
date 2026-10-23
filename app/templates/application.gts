@@ -127,6 +127,7 @@ export default class ApplicationTemplate extends Component {
 							/>
 						{{/if}}
 						<CanonButton
+							class="dt-bar-pref"
 							@kind="cell"
 							@label="Toggle font"
 							@icon={{component
@@ -136,6 +137,7 @@ export default class ApplicationTemplate extends Component {
 							@onClick={{this.theme.toggleFont}}
 						/>
 						<CanonButton
+							class="dt-bar-pref"
 							@kind="cell"
 							@label="Toggle theme"
 							@icon={{component
