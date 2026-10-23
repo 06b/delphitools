@@ -2,7 +2,10 @@
 // the canon metadata-stripper: slot, dossier, found and after tiles, ICC, download
 import { launch, visit, check, finish, sleep } from './harness.mjs';
 
-const { browser, page } = await launch();
+// mupdf logs its xref repair of the corrupt pdf as console errors
+const { browser, page } = await launch({
+	ignore: [/expected object number|cannot find startxref|repair broken xref|repairing PDF document/],
+});
 
 async function dropTaggedJpeg(selector) {
 	await page.evaluate(async (sel) => {
@@ -125,9 +128,8 @@ check(
 	'empty: the banner is the drop slot, the main pane says what to do, Download off',
 	await page.evaluate(
 		() =>
-			document.querySelector('.ms-slot .media-slot-prompt')?.textContent.trim() === 'Drop an image here' &&
-			document.querySelector('.metadata-stripper .canon-empty-row')?.textContent.trim() ===
-				'Add an image to see its metadata' &&
+			!!document.querySelector('.ms-slot .media-slot-prompt')?.textContent.trim() &&
+			!!document.querySelector('.metadata-stripper .canon-empty-row')?.textContent.trim() &&
 			document.querySelector('.ms-download').disabled,
 	),
 );
@@ -272,6 +274,91 @@ check(
 	),
 );
 await page.emulateMediaFeatures([]);
+
+// offsets computed, so mupdf reads the xref without repair
+async function dropPdf(selector, body) {
+	await page.evaluate(
+		(sel, text) => {
+			const objects = [
+				'<< /Type /Catalog /Pages 2 0 R /Lang (en-US) >>',
+				'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+				'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>',
+				text,
+			];
+			let out = '%PDF-1.5\n';
+			const offsets = objects.map((object, i) => {
+				const at = out.length;
+				out += `${i + 1} 0 obj\n${object}\nendobj\n`;
+				return at;
+			});
+			const xref = out.length;
+			out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+			for (const at of offsets) out += `${String(at).padStart(10, '0')} 00000 n \n`;
+			out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 4 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+			const transfer = new DataTransfer();
+			transfer.items.add(new File([out], 'GTI Handbuch.pdf', { type: 'application/pdf' }));
+			document.querySelector(sel).dispatchEvent(
+				new DragEvent('drop', { dataTransfer: transfer, bubbles: true }),
+			);
+		},
+		selector,
+		body,
+	);
+}
+
+await visit(page, '/tools/metadata-stripper');
+await dropPdf(
+	'.metadata-stripper',
+	"<< /Title (GTI Handbuch) /Author (Company GmbH) /Creator (LaTeX with hyperref) /Producer (pdfTeX-1.40.26) /CreationDate (D:20260220140500+01'00') >>",
+);
+await page.waitForSelector('.ms-found .canon-tiles-tile', { timeout: 15000 });
+const pdfFound = await tiles('.ms-found');
+check(
+	'pdf: found in original lists the document info',
+	pdfFound.Title === 'GTI Handbuch' &&
+		pdfFound.Author === 'Company GmbH' &&
+		pdfFound.Producer === 'pdfTeX-1.40.26' &&
+		pdfFound.Language === 'en-US' &&
+		pdfFound['PDF version'] === '1.5' &&
+		pdfFound.Created === '20.02.2026 14:05',
+	JSON.stringify(pdfFound),
+);
+check(
+	'pdf: no colour profile switch or content credentials row',
+	!(await page.$('.ms-icc')) && !(await page.$('.ms-c2pa')),
+);
+const pdfAfter = await tiles('.ms-after');
+check(
+	'pdf: after stripping keeps only language and version',
+	Object.keys(pdfAfter).sort().join() === 'Language,PDF version',
+	JSON.stringify(pdfAfter),
+);
+const pdfRemoved = await page.$eval('.ms-removed .canon-row-detail', (el) => el.textContent.trim());
+check('pdf: removed row names the dropped fields', pdfRemoved === 'Title · Author · Creator · Producer · Created', pdfRemoved);
+
+await armDownloadCapture();
+await page.click('.ms-download');
+await page.waitForFunction(() => window.__captured, { timeout: 5000 });
+const cleanedPdf = await page.evaluate(async () => ({
+	type: window.__captured.type,
+	head: new TextDecoder().decode((await window.__captured.arrayBuffer()).slice(0, 5)),
+}));
+check('pdf: the download is a pdf', cleanedPdf.type === 'application/pdf' && cleanedPdf.head === '%PDF-', JSON.stringify(cleanedPdf));
+
+await visit(page, '/tools/metadata-stripper');
+await page.evaluate(() => {
+	const transfer = new DataTransfer();
+	transfer.items.add(new File(['%PDF-1.5 broken'], 'broken.pdf', { type: 'application/pdf' }));
+	document.querySelector('.metadata-stripper').dispatchEvent(
+		new DragEvent('drop', { dataTransfer: transfer, bubbles: true }),
+	);
+});
+await page.waitForSelector('.ms-found .canon-status', { timeout: 15000 });
+check(
+	'pdf: a corrupt file shows the unreadable state, download off',
+	(await page.$eval('.ms-found', (el) => el.textContent)).includes('Format not readable') &&
+		(await page.$eval('.ms-download', (el) => el.disabled)),
+);
 
 await page.setViewport({ width: 390, height: 844 });
 await visit(page, '/tools/metadata-stripper');

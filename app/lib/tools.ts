@@ -443,8 +443,9 @@ export const toolCategories: ToolCategory[] = [
 					'image/png',
 					'image/webp',
 					'image/gif',
+					'application/pdf',
 				],
-				accepts: ['image/*'],
+				accepts: ['image/*', 'application/pdf'],
 			},
 			{
 				id: 'paste-image',

@@ -23,14 +23,24 @@ import {
 	type MetadataEntry,
 	type MetadataReport,
 } from 'delphitools-v2/lib/metadata';
+import {
+	parsePdfMetadata,
+	stripPdfMetadata,
+	type PdfMetadataReport,
+} from 'delphitools-v2/lib/pdf-metadata';
 import Drop from 'delphitools-v2/components/tools/media/drop';
 import Slot from 'delphitools-v2/components/tools/media/slot';
 import Dossier from 'delphitools-v2/components/tools/metadata-stripper/dossier';
-import { blocksOf } from 'delphitools-v2/components/tools/metadata-stripper/blocks';
+import {
+	blocksOf,
+	type Block,
+} from 'delphitools-v2/components/tools/metadata-stripper/blocks';
 import './media/media.css';
 import './metadata-stripper/metadata-stripper.css';
 
-const FILE_ACCEPT = 'image/*';
+const FILE_ACCEPT = 'image/*,application/pdf';
+const SLOT_PROMPT = 'Drop an image or PDF';
+const EMPTY_PROMPT = 'Add an image or PDF to see its metadata';
 const UNREADABLE = 'Format not readable';
 const READ_ERROR = 'This file could not be read as an image.';
 
@@ -43,6 +53,22 @@ const MIME: Record<ImageContainer, string> = {
 
 // canvas round-trips these
 const REENCODABLE = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+const isPdf = (file: File, bytes: Uint8Array) =>
+	file.type === 'application/pdf' ||
+	String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-';
+
+// a pdf has no exif blocks; only its xmp packet has a lamp
+const pdfBlocks = (report: PdfMetadataReport | null) =>
+	new Set<Block>(report?.xmp ? ['XMP'] : []);
+
+// the image report shape, for the shared panes
+const asReport = (report: PdfMetadataReport): MetadataReport => ({
+	format: null,
+	entries: report.entries,
+	gps: null,
+	c2pa: false,
+});
 
 const tilesOf = (entries: MetadataEntry[]) =>
 	entries.map((entry) => ({ label: entry.label, value: entry.detail }));
@@ -63,6 +89,8 @@ export default class MetadataStripper extends Component {
 	@tracked fileSize = 0;
 	@tracked report: MetadataReport | null = null;
 	@tracked afterReport: MetadataReport | null = null;
+	@tracked pdf: PdfMetadataReport | null = null;
+	@tracked afterPdf: PdfMetadataReport | null = null;
 	@tracked result: StripState | null = null;
 	@tracked keepColourProfile = true;
 	@tracked error = '';
@@ -93,6 +121,7 @@ export default class MetadataStripper extends Component {
 	}
 
 	get unreadable() {
+		if (this.pdf) return !this.pdf.readable;
 		return this.report !== null && this.report.format === null;
 	}
 
@@ -110,11 +139,15 @@ export default class MetadataStripper extends Component {
 	}
 
 	get found() {
-		return this.loaded ? blocksOf(this.report) : null;
+		if (!this.loaded) return null;
+		return this.pdf ? pdfBlocks(this.pdf) : blocksOf(this.report);
 	}
 
 	get left() {
-		return this.result ? blocksOf(this.afterReport) : null;
+		if (!this.result) return null;
+		return this.pdf
+			? pdfBlocks(this.afterPdf)
+			: blocksOf(this.afterReport);
 	}
 
 	get downloadName() {
@@ -145,8 +178,35 @@ export default class MetadataStripper extends Component {
 		this.#bytes = bytes;
 		this.result = null;
 		this.afterReport = null;
-		this.report = parseMetadata(bytes);
-		await this.#restrip();
+		this.afterPdf = null;
+		if (isPdf(file, bytes)) await this.#loadPdf(bytes, token);
+		else {
+			this.pdf = null;
+			this.report = parseMetadata(bytes);
+			await this.#restrip();
+		}
+	}
+
+	async #loadPdf(bytes: Uint8Array, token: number) {
+		const pdf = await parsePdfMetadata(bytes);
+		const stripped = pdf.readable
+			? await stripPdfMetadata(bytes)
+			: null;
+		const after = stripped
+			? await parsePdfMetadata(stripped.data)
+			: null;
+		if (token !== this.#token) return;
+		this.pdf = pdf;
+		this.report = asReport(pdf);
+		if (!stripped || !after) return;
+		this.result = {
+			blob: new Blob([stripped.data as BlobPart], {
+				type: 'application/pdf',
+			}),
+			removed: stripped.removed,
+		};
+		this.afterPdf = after;
+		this.afterReport = asReport(after);
 	}
 
 	async #restrip() {
@@ -217,6 +277,8 @@ export default class MetadataStripper extends Component {
 		this.fileSize = 0;
 		this.report = null;
 		this.afterReport = null;
+		this.pdf = null;
+		this.afterPdf = null;
 		this.result = null;
 		this.error = '';
 	};
@@ -253,7 +315,7 @@ export default class MetadataStripper extends Component {
 						<div class="ms-slot-box">
 							<Slot
 								class="ms-slot"
-								@prompt="Drop an image here"
+								@prompt={{SLOT_PROMPT}}
 								@icon="upload"
 								@accept={{FILE_ACCEPT}}
 								@over={{this.drop.over}}
@@ -288,28 +350,32 @@ export default class MetadataStripper extends Component {
 							@row={{true}}
 						/>
 					{{/if}}
-					<CanonRow
-						class="ms-icc"
-						@title="Colour profile"
-						@detail="Keep ICC"
-						as |titleId|
-					>
-						<CanonSwitch
-							@on={{this.keepColourProfile}}
-							@onChange={{this.toggleColourProfile}}
-							aria-labelledby={{titleId}}
-						/>
-					</CanonRow>
-					{{#if this.loaded}}
+					{{#unless this.pdf}}
 						<CanonRow
-							class="ms-c2pa"
-							@title="Content Credentials"
-							@detail={{if
-								this.report.c2pa
-								"C2PA found"
-								"None"
-							}}
-						/>
+							class="ms-icc"
+							@title="Colour profile"
+							@detail="Keep ICC"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.keepColourProfile}}
+								@onChange={{this.toggleColourProfile}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					{{/unless}}
+					{{#if this.loaded}}
+						{{#unless this.pdf}}
+							<CanonRow
+								class="ms-c2pa"
+								@title="Content Credentials"
+								@detail={{if
+									this.report.c2pa
+									"C2PA found"
+									"None"
+								}}
+							/>
+						{{/unless}}
 						<CanonRow
 							class="ms-removed"
 							@title="Removed"
@@ -388,7 +454,7 @@ export default class MetadataStripper extends Component {
 				{{else}}
 					<CanonRows @framed={{true}}>
 						<CanonEmptyRow
-							@text="Add an image to see its metadata"
+							@text={{EMPTY_PROMPT}}
 						/>
 					</CanonRows>
 				{{/if}}
