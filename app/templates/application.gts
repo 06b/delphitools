@@ -9,7 +9,7 @@ import CanonButton from 'delphicanon/components/canon-button';
 import CanonToast from 'delphicanon/components/canon-toast';
 import AppSidebar from 'delphitools-v2/components/app-sidebar';
 import AppTab from 'delphitools-v2/components/app-tab';
-import BandTape from 'delphitools-v2/components/band-tape';
+import BandTape, { TapeShuffle } from 'delphitools-v2/components/band-tape';
 import ColourNotationSelector from 'delphitools-v2/components/colour-notation-selector';
 import FlowState from 'delphitools-v2/components/flow-state';
 import MagazineOverlay from 'delphitools-v2/components/magazine/overlay';
@@ -110,6 +110,7 @@ export default class ApplicationTemplate extends Component {
 						@icon={{this.page.icon}}
 					/>
 					<header class="dt-bar">
+						<TapeShuffle />
 						<span class="dt-bar-heading">
 							<span
 								class="dt-bar-title"

@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import type { TOC } from '@ember/component/template-only';
 import CanonButton from 'delphicanon/components/canon-button';
 import { IconSvg } from 'delphitools-v2/components/icon';
 import type SidebarService from 'delphitools-v2/services/sidebar';
@@ -66,11 +67,39 @@ const pick = (not = -1) => {
 	return not >= 0 && index >= not ? index + 1 : index;
 };
 
+// one tape for the band and the phone bar's shuffle cell
+class Tape {
+	@tracked index = pick();
+
+	shuffle = () => {
+		this.index = pick(this.index);
+	};
+}
+
+const tape = new Tape();
+
+const ShuffleButton = <template>
+	<CanonButton
+		class={{@class}}
+		@kind="cell"
+		@label="Shuffle"
+		@icon={{component IconSvg name="shuffle"}}
+		@onClick={{tape.shuffle}}
+	/>
+</template> satisfies TOC<{ Args: { class: string } }>;
+
+// on phones the bar carries it, clear of the notation picker
+export const TapeShuffle = <template>
+	<ShuffleButton @class="dt-bar-shuffle" />
+</template>;
+
 // the iOS backdrop strip, shown in the closed band
 export default class BandTape extends Component {
 	@service declare sidebar: SidebarService;
 
-	@tracked index = pick();
+	get index() {
+		return tape.index;
+	}
 
 	get src() {
 		return `/backdrops/${TAPES[this.index]}.webp`;
@@ -84,10 +113,6 @@ export default class BandTape extends Component {
 	get flagStyle() {
 		return htmlSafe(`background-image: url("${this.src}")`);
 	}
-
-	shuffle = () => {
-		this.index = pick(this.index);
-	};
 
 	<template>
 		<div class="dt-tape" inert={{this.sidebar.open}}>
@@ -103,13 +128,7 @@ export default class BandTape extends Component {
 					alt=""
 				/>
 			{{/if}}
-			<CanonButton
-				class="dt-tape-shuffle"
-				@kind="cell"
-				@label="Shuffle"
-				@icon={{component IconSvg name="shuffle"}}
-				@onClick={{this.shuffle}}
-			/>
+			<ShuffleButton @class="dt-tape-shuffle" />
 		</div>
 	</template>
 }
