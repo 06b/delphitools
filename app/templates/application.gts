@@ -9,6 +9,7 @@ import CanonButton from 'delphicanon/components/canon-button';
 import CanonToast from 'delphicanon/components/canon-toast';
 import AppSidebar from 'delphitools-v2/components/app-sidebar';
 import AppTab from 'delphitools-v2/components/app-tab';
+import BandTape from 'delphitools-v2/components/band-tape';
 import ColourNotationSelector from 'delphitools-v2/components/colour-notation-selector';
 import FlowState from 'delphitools-v2/components/flow-state';
 import MagazineOverlay from 'delphitools-v2/components/magazine/overlay';
@@ -103,6 +104,7 @@ export default class ApplicationTemplate extends Component {
 					<AppSidebar />
 				</div>
 				<div class="dt-sheet">
+					<BandTape />
 					<AppTab
 						@title={{this.page.title}}
 						@icon={{this.page.icon}}
@@ -124,6 +126,15 @@ export default class ApplicationTemplate extends Component {
 							<ColourNotationSelector
 							/>
 						{{/if}}
+						<CanonButton
+							@kind="cell"
+							@label="Toggle font"
+							@icon={{component
+								IconSvg
+								name="type"
+							}}
+							@onClick={{this.theme.toggleFont}}
+						/>
 						<CanonButton
 							@kind="cell"
 							@label="Toggle theme"

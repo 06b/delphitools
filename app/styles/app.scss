@@ -60,7 +60,34 @@ html:root {
 	--canon-text-big-number: 36px;
 }
 
-// subtitle burn-in and recipe export
+// crayon pins body to its static sans stack
+body {
+	font-family: var(--canon-font);
+	letter-spacing: 0.03em;
+}
+
+// form controls reset letter-spacing to normal
+button,
+input,
+select,
+textarea {
+	letter-spacing: inherit;
+}
+
+// the kit's own font and sizes
+html.classic:root {
+	--canon-font:
+		"iA Writer Quattro", ui-monospace, "Cascadia Mono", menlo,
+		monaco, consolas, monospace;
+	--canon-text-title2: 20px;
+	--canon-text-title3: 18px;
+	--canon-text-body: 15px;
+	--canon-text-subheadline: 13px;
+	--canon-text-footnote: 12px;
+	--canon-text-caption: 11px;
+}
+
+// classic font, subtitle burn-in and recipe export
 @font-face {
 	font-family: "iA Writer Quattro";
 	src: url("/fonts/iAWriterQuattroV.woff2") format("woff2");
@@ -665,25 +692,41 @@ body {
 .dt-bar {
 	display: flex;
 	flex: none;
-	align-items: center;
-	gap: var(--canon-panel-spacing);
+	align-items: stretch;
 	min-block-size: var(--canon-row-height);
-	padding-inline: var(--canon-panel-padding) 4px;
+	padding-inline-start: var(--canon-panel-padding);
 	border-block-end: var(--canon-hairline) solid var(--canon-border);
 }
 
 .dt-bar-heading {
 	display: flex;
 	flex: 1;
-	flex-direction: column;
+	align-items: baseline;
+	align-self: center;
+	gap: 8px;
 	min-inline-size: 0;
+	padding-inline-end: var(--canon-panel-spacing);
 }
 
-.dt-bar-title,
+.dt-bar-title {
+	flex: none;
+	white-space: nowrap;
+}
+
 .dt-bar-detail {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+// flush cells, the bar draws the lines
+.dt-bar > .canon-button,
+.dt-bar .dt-notation-trigger {
+	min-inline-size: var(--canon-row-height);
+	block-size: auto;
+	padding-inline: 12px;
+	border-inline-start: var(--canon-hairline) solid var(--canon-border);
+	background: transparent;
 }
 
 .dt-bar-title {
@@ -756,6 +799,49 @@ body {
 	.dt-frame.is-dragging & {
 		cursor: grabbing;
 	}
+}
+
+// covers the closed band, under the tab; the drawer's rule stays visible
+.dt-tape {
+	position: absolute;
+	z-index: 1;
+	inset-block: 0;
+	inset-inline-end: calc(100% + var(--dt-rule-width));
+	inline-size: calc(var(--dt-band) - var(--dt-rule-width));
+	overflow: hidden;
+	transition:
+		opacity 160ms ease-out,
+		translate 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+	.dt-frame:is(.is-open, .is-dragging) & {
+		opacity: 0;
+		translate: -100% 0;
+		pointer-events: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}
+
+.dt-tape-art {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+}
+
+.dt-tape-art.is-flag {
+	background-position: top;
+	background-repeat: repeat-y;
+	background-size: 100% auto;
+}
+
+.dt-tape .dt-tape-shuffle {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-start: 50%;
+	translate: -50% 0;
 }
 
 .dt-tab-icon {
@@ -832,16 +918,21 @@ body {
 	}
 
 	.dt-bar {
-		// the band's colour, for the cell buttons
-		--canon-card: var(--canon-muted);
-
 		position: absolute;
 		z-index: 2;
 		inset-block-start: 100%;
 		inset-inline-start: 0;
 		block-size: var(--dt-band);
-		padding-inline: 8px;
+		padding-inline: 0;
 		border: 0;
+		background: var(--canon-muted);
+	}
+
+	.dt-bar > .canon-button,
+	.dt-bar .dt-notation-trigger {
+		border-inline-start: 0;
+		border-inline-end: var(--canon-hairline) solid
+			var(--canon-border);
 	}
 
 	.dt-bar-heading {
@@ -893,6 +984,33 @@ body {
 	.dt-tab-name {
 		min-inline-size: 0;
 		writing-mode: horizontal-tb;
+	}
+
+	.dt-tape {
+		inset-block: calc(100% + var(--dt-rule-width)) auto;
+		inset-inline: 0;
+		inline-size: auto;
+		block-size: calc(var(--dt-band) - var(--dt-rule-width));
+
+		.dt-frame:is(.is-open, .is-dragging) & {
+			translate: 0 100%;
+		}
+	}
+
+	// iOS turns the band's tape clockwise
+	.dt-tape-art {
+		position: absolute;
+		inset-block-start: 50%;
+		inset-inline-start: 50%;
+		inline-size: calc(var(--dt-band) - var(--dt-rule-width));
+		block-size: 100cqi;
+		translate: -50% -50%;
+		rotate: 90deg;
+	}
+
+	.dt-tape .dt-tape-shuffle {
+		inset-block-start: 50%;
+		translate: -50% -50%;
 	}
 }
 
