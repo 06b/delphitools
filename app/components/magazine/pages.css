@@ -166,7 +166,14 @@
 .dt-mag-back {
 	display: flex;
 	flex: 1;
-	align-items: flex-end;
+	flex-direction: column;
+	justify-content: flex-end;
+	gap: 24px;
+}
+
+.dt-mag-barcode {
+	align-self: flex-end;
+	width: 200px;
 }
 
 /* the free band under the columns in the iOS feature art */
@@ -306,4 +313,9 @@
 .dt-mag-ad-art img {
 	display: block;
 	width: 100%;
+}
+
+.dt-mag-ads .dt-mag-ad-alien {
+	border-color: #1f8a3a;
+	color: #1f8a3a;
 }

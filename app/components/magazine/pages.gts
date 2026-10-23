@@ -3,7 +3,6 @@ import type { ComponentLike } from '@glint/template';
 import {
 	CanonFeatureLeft,
 	CanonFeatureRight,
-	text,
 } from 'delphitools-v2/components/magazine/canon-feature';
 import { CANON_KIT_ID, getToolById } from 'delphitools-v2/lib/tools';
 import './pages.css';
@@ -165,28 +164,16 @@ const Shots: TOC<PageSignature> = <template>
 	</div>
 </template>;
 
-type Ad =
-	| { copy: string; words: number }
-	| { art: string; printed: string; href?: string };
+type Ad = { copy: string } | { art: string; printed: string; href?: string };
 
 const ADS: Ad[] = [
-	{
-		// ∑CG: classified ad 1 on the advertising page, the largest ad, top of the first column
-		//   spec: 48 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
-		//   sample: "WANTED: one (1) Android phone owner with patience. Must enjoy waiting. Reward: delphitools, eventually, around Christmas."
-		copy: '∑CG',
-		words: 48,
-	},
 	{
 		art: '/magazine/ad-xbox.png',
 		printed: 'ACCEPT GARBAJCAM INTO YOUR HEART AND WIN A FREE XBOX. CLICK HERE',
 	},
 	{
-		// ∑CG: classified ad 3 on the advertising page, a mid-size ad
-		//   spec: 36 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
-		//   sample: "LOST: my favourite colour palette. Last seen in a terminal. Five swatches, answers to random-cohesive. Please return to the palette generator."
-		copy: '∑CG',
-		words: 36,
+		art: '/magazine/ad-gooblin.webp',
+		printed: "GOOBLIN ARTS. i'm more green than CAM",
 	},
 	{
 		art: '/magazine/ad-sakeozo.webp',
@@ -194,11 +181,7 @@ const ADS: Ad[] = [
 		href: 'https://www.sakeozo.com/',
 	},
 	{
-		// ∑CG: classified ad 5 on the advertising page, the smallest ad
-		//   spec: 24 words, a magazine classified: an uppercase lead word or two (WANTED, FOR SALE, LOST) then the ad, deadpan, about delphitools or its makers
-		//   sample: "FREE to good home: 0BSD licence. Take as many as you like."
-		copy: '∑CG',
-		words: 24,
+		copy: 'IN SEARCH OF UFO REPAIR, Gleep 293 Monoloader, contact ALIEN DELPHI',
 	},
 	{
 		art: '/magazine/ad-mimi.webp',
@@ -244,10 +227,9 @@ const Classifieds: TOC<PageSignature> = <template>
 						</div>
 					{{/if}}
 				{{else}}
-					<p class="dt-mag-ad">{{text
-							ad.copy
-							ad.words
-						}}</p>
+					<p
+						class="dt-mag-ad dt-mag-ad-alien"
+					>{{ad.copy}}</p>
 				{{/if}}
 			{{/each}}
 		</div>
@@ -256,7 +238,12 @@ const Classifieds: TOC<PageSignature> = <template>
 
 const BackCover: TOC<PageSignature> = <template>
 	<div class="dt-mag-back">
-		<p class="dt-mag-masthead">delphitools</p>
+		<p class="dt-mag-masthead">DELPHI MAGAZINE</p>
+		<img
+			class="dt-mag-barcode"
+			src="/magazine/barcode.svg"
+			alt="stop looking at my ass"
+		/>
 	</div>
 </template>;
 

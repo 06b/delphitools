@@ -39,10 +39,7 @@ const copy = {
 
 	answer1: "The previous iteration was just... safe. It was boring. I didn't much like it, it didn't take many risks, and it looked like every other website out there. With the powerful layout options that UIKit gave me in the new 2.0 version of the iOS app, I figured we might as well try to port it to web as well.",
 
-	// ∑CG: caption under the live kit components on the left page
-	//   spec: 12 words, figure caption, names the components shown (button, segmented control, slider, switch)
-	//   sample: "Fig. 1: Real Canon components, drawn by the same code the tools use."
-	captionLeft: '∑CG',
+	captionLeft: 'Fig. 1: Canon components.',
 
 	pullQuote: "Anyone can make an interface these days, and that's great. But I do think you owe it to your users to make something special, make something with love.",
 
@@ -54,10 +51,7 @@ const copy = {
 
 	answer3: "While I love iA Writer Quattro, our previous font, I did feel like it was an overly safe and boring choice. Recently, I've been using Open Sans Condensed a lot, and kind of fell in love with it. As for the mono change from Plex to Iosevka, you'll have to thank my esteemed colleague Ash for that.",
 
-	// ∑CG: caption under the live settings panel on the right page
-	//   spec: 12 words, figure caption, names the parts shown (rows, heading, stepper, lamps)
-	//   sample: "Fig. 2: A settings pane, assembled from Canon rows."
-	captionRight: '∑CG',
+	captionRight: 'Fig. 2: A Canon settings pane.',
 };
 
 const SEGMENTS = ['Live', 'Source'];
