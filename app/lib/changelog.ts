@@ -8,6 +8,41 @@ export interface Release {
 
 export const RELEASES: Release[] = [
 	{
+		version: '2.3.0',
+		since: '2.2.1',
+		features: [
+			'A whole new look! delphitools on the web now looks like delphitools on iPhone and iPad, with a new drawer, sheet and font.',
+			'On phones, the controls now sit in a strip at the bottom of the screen.',
+			'The delphi magazine: Flip through issue one to see what else we make. Open it from the home page!',
+			'The home page has a launch video, jump links for each section and a few new patterns.',
+			'Canon UI Kit: The docs for the design kit behind delphitools now can be found at /canon.',
+			'Metadata Stripper: Now takes PDFs too! See the title, author and dates inside, then download a clean copy. Thanks, @movoid12 on GitHub!',
+			'Imposer, Zine Imposer, Image to PDF and PDF Rotate & Crop share a new paper picker, with custom sizes.',
+			'File tools: Paste or upload into any drop slot, add more files to a list and download everything as a zip.',
+			'Substrata: The editor got the iOS look too, and now fits on phones.',
+			'Image Atlas: Now reads colour profiles, gamut, bit depth and alpha.',
+			'Image Compressor: Compress to JPEG XL, and AVIF is now a regular format option.',
+			'Artwork Enhancer gets a movable loupe and an Intelligent mode; Background Remover gets a refine brush.',
+			'Imposer: Perfect binding in signatures and duplex registration marks.',
+			'Image to PDF: Set margins, DPI and bleed.',
+			'Braille Converter gets a braille keyboard and Morse Code a keypad for keying in.',
+		],
+		fixes: [
+			'Background Remover and transcription work on iPhone and iPad again. Thanks, @renatonascalves on GitHub!',
+			'Gradient Generator: The mesh gradient is now Freeform, which is what it was all along. Thanks, @tabatkins on GitHub!',
+			'Imposer: Exports now honour fit, fill and actual size, and 4-up folds in the right order.',
+			'Scientific Calculator: sin(180) is 0 again, and answers carry over at full precision.',
+			'Time Calculator: Four digits are a year again, and UTC is back.',
+			'Code Generator: PDF417 codes no longer lose rows.',
+			'Image Converter: SVGs load again.',
+			'Document Converter: Markdown converts on the spot, and a failed load no longer hangs.',
+		],
+		technical: [
+			'The web app is now built on the Canon UI kit, the same design system as the iOS app.',
+			'Self-host delphitools with the new Dockerfile. Thanks, @LeviSnoot on GitHub!',
+		],
+	},
+	{
 		version: '2.2.1',
 		since: '2.2.0',
 		features: [],
