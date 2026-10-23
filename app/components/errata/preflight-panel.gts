@@ -5,8 +5,8 @@ import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { and } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
 import ToolPanel from 'delphitools-v2/components/errata/tool-panel';
+import { RailPanel } from 'delphitools-v2/components/substrata/editor/cells';
 import type { ErrataDoc } from 'delphitools-v2/lib/errata/doc-model';
 import { exportPdf } from 'delphitools-v2/lib/errata/export';
 import { getSourceBytes } from 'delphitools-v2/lib/errata/source';
@@ -21,6 +21,7 @@ import {
 	type PreflightReport,
 } from 'delphitools-v2/lib/pdf-preflight';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './preflight-panel.css';
 
 const RERUN_MS = 400;
 
@@ -123,7 +124,6 @@ export default class PreflightPanel extends Component<{
 		this.goTo(issue.page);
 		flashHighlight(issue.page - 1, issue.rects ?? []);
 	};
-
 	<template>
 		<ToolPanel
 			@open={{@open}}
@@ -133,27 +133,29 @@ export default class PreflightPanel extends Component<{
 			@onCancel={{closeMode}}
 			@cancelLabel="Close"
 			@failed={{this.failed}}
-			class="z-40"
+			@busy={{this.busy}}
 			{{this.run (if @open this.doc.current)}}
 		>
 			<:status>
 				{{#each this.badges key="severity" as |b|}}
-					<span class="err-preflight-count">
+					<span
+						class="err-mode-tag err-preflight-count"
+					>
 						<Icon
 							@name={{b.icon}}
-							class="dt-preflight-sev is-{{b.severity}}"
+							class="err-preflight-sev is-{{b.severity}}"
 						/>
 						{{b.label}}
 					</span>
 				{{/each}}
-				{{#if this.busy}}
-					<NdsLoader />
-				{{/if}}
 			</:status>
 		</ToolPanel>
 
-		<div
-			class="err-preflight z-40 shadow-lg
+		<RailPanel
+			@id="preflight"
+			@title="Findings"
+			@onClose={{closeMode}}
+			class="err-preflight
 				{{if (and @open this.report) 'is-open'}}"
 			inert={{unless (and @open this.report) true}}
 		>
@@ -162,7 +164,7 @@ export default class PreflightPanel extends Component<{
 					{{#if g.page}}
 						<button
 							type="button"
-							class="dt-preflight-page-btn"
+							class="err-preflight-page"
 							{{on
 								"click"
 								(fn
@@ -173,17 +175,13 @@ export default class PreflightPanel extends Component<{
 						>Page {{g.page}}</button>
 					{{else}}
 						<h3
-							class="dt-preflight-page-btn"
+							class="err-preflight-page"
 						>Document</h3>
 					{{/if}}
 					{{#each g.issues as |issue|}}
 						<button
 							type="button"
-							class="dt-preflight-issue is-row is-compact
-								{{unless
-									g.page
-									'is-static'
-								}}"
+							class="err-preflight-issue"
 							title={{issue.details}}
 							disabled={{if
 								g.page
@@ -200,15 +198,15 @@ export default class PreflightPanel extends Component<{
 						>
 							<Icon
 								@name={{issue.icon}}
-								class="dt-preflight-sev is-{{issue.severity}}"
+								class="err-preflight-sev is-{{issue.severity}}"
 							/>
 							<span
-								class="dt-preflight-issue-message"
+								class="err-preflight-message"
 							>{{issue.message}}</span>
 						</button>
 					{{/each}}
 				</section>
 			{{/each}}
-		</div>
+		</RailPanel>
 	</template>
 }

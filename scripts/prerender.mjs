@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { serve } from './static-server.mjs';
-import { renderPng, toolCard, siteCard } from './og.mjs';
+import { renderPng, toolCard, siteCard, canonCard } from './og.mjs';
 
 const CHROME =
 	process.env.CHROME_PATH ??
@@ -13,7 +13,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = process.argv[2] ?? join(root, 'dist');
 
 // node strips typescript
-const { allTools } = await import('../app/lib/tools.ts');
+const { allTools, CANON_KIT_ID } = await import('../app/lib/tools.ts');
+const { docsPages } = await import('../app/lib/canon-docs.ts');
+
+const canonKit = allTools.find((t) => t.id === CANON_KIT_ID);
+
+const canonCardAlt = "A share card for Delphi's Canon UI Kit on delphitools";
 
 const toolRoutes = allTools.filter(
 	(t) => !t.external && t.href.startsWith('/tools/'),
@@ -122,6 +127,24 @@ const routes = [
 		imageAlt: 'A share card for Errata, the delphitools PDF editor',
 		card: toolCard('Errata'),
 	},
+	...docsPages.map((page) => ({
+		url: page.url,
+		title:
+			page.kind === 'overview'
+				? canonKit.name
+				: `${page.heading} - ${canonKit.name}`,
+		description: canonKit.description,
+		image: `${page.url}/og.png`,
+		imageAlt: canonCardAlt,
+		// a pattern or screen title alone ("Tone") needs its kind on the card
+		card: canonCard(
+			page.kind === 'overview'
+				? 'Canon'
+				: ['pattern', 'screen'].includes(page.kind)
+					? `${page.heading} ${page.kind}`
+					: page.heading,
+		),
+	})),
 ];
 
 let written = 0;
@@ -135,7 +158,7 @@ for (const route of routes) {
 		route.url,
 		() =>
 			document
-				.querySelector('.dt-header-title h1')
+				.querySelector('.dt-bar-title')
 				?.textContent?.trim() ?? '',
 	);
 

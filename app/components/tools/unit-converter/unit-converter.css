@@ -1,0 +1,124 @@
+/* the picture */
+.uc-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--canon-card);
+}
+
+.uc-drawing {
+	position: absolute;
+	inset: 0;
+	display: block;
+}
+
+.uc-readout {
+	position: absolute;
+	inset-block-start: 6px;
+	inset-inline-end: var(--canon-panel-padding);
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	max-inline-size: max-content;
+	margin-inline-start: auto;
+	overflow: hidden;
+}
+
+/* iOS mono 36 bold, shrinking for long values */
+.uc-field .canon-big-number-field-input {
+	font-family: var(--canon-mono-font);
+}
+
+/* the units */
+.uc-row {
+	display: grid;
+	grid-template-columns: 56px minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	box-sizing: border-box;
+	inline-size: 100%;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 8px var(--canon-panel-padding) 8px 10px;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	transition: background-color 200ms ease-out;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	appearance: none;
+}
+
+.uc-row--from,
+.uc-row--to {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	.uc-row:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.uc-row:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.uc-plate {
+	overflow: hidden;
+	padding: 3px 6px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+	text-align: center;
+	white-space: nowrap;
+	transition:
+		background-color 200ms ease-out,
+		color 200ms ease-out;
+}
+
+.uc-row--from .uc-plate {
+	background: var(--canon-foreground);
+	color: var(--canon-background);
+}
+
+.uc-row--to .uc-plate {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.uc-name {
+	display: -webkit-box;
+	overflow: hidden;
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.uc-value {
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: 18px;
+	font-weight: var(--canon-weight-semibold);
+	text-align: end;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.uc-row--to .uc-value {
+	color: var(--canon-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.uc-row,
+	.uc-plate {
+		transition: none;
+	}
+}

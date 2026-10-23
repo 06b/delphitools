@@ -4,133 +4,180 @@ import { launch, visit, check, finish, sleep } from './harness.mjs';
 
 const { browser, page } = await launch();
 
-// typing appends; set+input replaces
-async function setExpression(text) {
-	await page.evaluate((value) => {
-		const input = document.querySelector('.dt-graph-input');
-		input.value = value;
-		input.dispatchEvent(new Event('input', { bubbles: true }));
-	}, text);
-	await sleep(1200);
+const curves = () =>
+	page.$$eval('.graph-curve', (paths) =>
+		paths.map((path) => {
+			const d = path.getAttribute('d') ?? '';
+			return {
+				subpaths: (d.match(/M/g) ?? []).length,
+				points: (d.match(/[ML]/g) ?? []).length,
+			};
+		}),
+	);
+
+const rows = () => page.$$('.graph-function');
+
+const ranges = () =>
+	page.$$eval('.graph-range-field', (els) => els.map((el) => el.value));
+
+async function clickText(selector, text) {
+	await page.evaluate(
+		(sel, t) =>
+			[...document.querySelectorAll(sel)]
+				.find((el) => el.textContent.trim() === t)
+				?.click(),
+		selector,
+		text,
+	);
+	await sleep(400);
 }
 
-function readCurve() {
-	return page.evaluate(() => {
-		const path = document.querySelector('.dt-graph-curve');
-		const error = document
-			.querySelector('.dt-graph-error')
-			?.textContent?.replace(/\s+/g, ' ')
-			.trim();
-		if (!path) return { drawn: false, error };
-		const d = path.getAttribute('d') ?? '';
-		const ys = d
-			.replace(/^M/, '')
-			.split(/[ML]/)
-			.join(',')
-			.split(',')
-			.map(Number)
-			.filter((_, i) => i % 2 === 1);
-		return {
-			drawn: true,
-			expression: document.querySelector('.dt-graph-input')
-				?.value,
-			subpaths: (d.match(/M/g) ?? []).length,
-			points: ys.length,
-			span: Math.round(Math.max(...ys) - Math.min(...ys)),
-			error,
-		};
-	});
+// the keypad sheet types keyboard keys; Enter is Done
+async function typeInto(row, keys) {
+	const fields = await page.$$('.graph-field');
+	await fields[row].click();
+	await page.waitForSelector('dialog.canon-math-input[open]');
+	await sleep(500);
+	await page.keyboard.down('Meta');
+	await page.keyboard.press('Backspace');
+	await page.keyboard.up('Meta');
+	for (let i = 0; i < 12; i++) await page.keyboard.press('Backspace');
+	await page.keyboard.type(keys);
+	await page.keyboard.press('Enter');
+	await sleep(900);
 }
 
 await visit(page, '/tools/graph-calc');
-await sleep(500);
+await sleep(800);
 
-// mathjs ~700kb, loads dynamic
-const initial = await readCurve();
+const initial = await curves();
 check(
-	'the default entry plots once mathjs loads',
-	initial.drawn && initial.points > 100,
-	`${initial.expression}: ${initial.points} points`,
+	'the default function plots once mathjs loads',
+	initial.length === 1 && initial[0].points > 100,
+	JSON.stringify(initial),
 );
 
 const surface = await page.evaluate(() => ({
-	axes: document.querySelectorAll('.dt-graph-axes *').length,
-	grid: document.querySelectorAll('.dt-graph-grid *').length,
-	ticks: document.querySelectorAll('.dt-graph-ticks *').length,
+	axes: document.querySelector('.graph-axes')?.getAttribute('d') ?? '',
+	grid: document.querySelector('.graph-grid-major')?.getAttribute('d') ?? '',
+	labels: document.querySelectorAll('.graph-labels text').length,
+	tags: document.querySelectorAll('.graph-tag').length,
 }));
 check(
-	'the plane carries axes, grid and tick labels',
-	surface.axes > 0 && surface.grid > 0 && surface.ticks > 0,
-	`axes ${surface.axes}, grid ${surface.grid}, ticks ${surface.ticks}`,
+	'the plane carries axes, grid, tick labels and trace tags',
+	surface.axes && surface.grid && surface.labels > 4 && surface.tags === 2,
+	`labels ${surface.labels}, tags ${surface.tags}`,
 );
 
-await setExpression('sin(x)');
-const sin = await readCurve();
+await clickText('.canon-button', 'sin(x)');
+await clickText('.canon-button', 'tan(x)');
+const three = await curves();
 check(
-	'a new expression replaces the curve',
-	sin.expression === 'sin(x)' && !sin.error && sin.points > 100,
-	`${sin.points} points, ${sin.span} px tall ${sin.error ?? ''}`,
+	'examples add functions',
+	(await rows()).length === 3 && three.length === 3,
+	`${three.length} curves`,
 );
+// six poles from -10 to 10: seven runs
+check('tan(x) breaks at every asymptote', three[2]?.subpaths === 7, `${three[2]?.subpaths} subpaths`);
 
-// 6 poles → 7 runs
-await setExpression('tan(x)');
-const tan = await readCurve();
-check(
-	'tan(x) breaks at every asymptote',
-	tan.subpaths === 7,
-	`${tan.subpaths} subpaths ${tan.error ?? ''}`,
+const names = await page.$$eval('.graph-table-name', (els) =>
+	els.map((el) => el.textContent.trim()),
 );
+check('the table has a column per curve', names.join() === 'x,y₁,y₂,y₃', names.join());
 
-await setExpression('1/x');
-const inverse = await readCurve();
-check(
-	'and 1/x breaks at zero',
-	inverse.subpaths === 2,
-	`${inverse.subpaths} subpaths ${inverse.error ?? ''}`,
-);
+await typeInto(0, '1/x');
+const inverse = await curves();
+check('typed in the keypad, 1/x breaks at zero', inverse[0]?.subpaths === 2, `${inverse[0]?.subpaths} subpaths`);
 
-await setExpression('sqrt(');
-const broken = await readCurve();
-check(
-	'an expression that does not compile says so',
-	!!broken.error,
-	broken.error ?? 'no error shown',
-);
+await typeInto(1, 'x^');
+const error = await page.$eval('.graph-function:nth-of-type(2) .canon-status', (el) => el.textContent.trim()).catch(() => '');
+check('an unfinished expression says so', error === 'Invalid expression', error);
+check('and is not plotted', (await curves()).length === 2);
 
-// pan/zoom shifts range bounds
+const relation = await page.$$('.graph-relation');
+await relation[0].click();
+await sleep(300);
+await clickText('.canon-menu-item', '<');
+const region = await page.$$eval('.graph-region', (els) => els.length);
+check('a relation shades its region', region === 1, `${region} regions`);
 
-await setExpression('sin(x)');
-const ranges = () =>
-	page.$$eval('.dt-graph-range input', (els) =>
-		els.map((el) => el.value),
-	);
+const swatch = await page.$$('.graph-swatch');
+await swatch[0].click();
+await sleep(400);
+await page.click('.graph-colour[aria-label="Colour 5"]');
+await sleep(400);
+const stroke = await page.$eval('.graph-curve', (el) => el.getAttribute('stroke'));
+check('a palette pick recolours the curve', stroke === '#8b5cf6', stroke);
 
-const centre = await page.$eval('.dt-graph-plot', (svg) => {
-	const box = svg.getBoundingClientRect();
-	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+const eye = await page.$$('.graph-cell[aria-label="Hide"]');
+await eye[0].click();
+await sleep(300);
+check('hiding drops the curve', (await curves()).length === 1);
+
+const remove = await page.$$('.graph-cell[aria-label="Remove"]');
+await remove[1].click();
+await sleep(300);
+check('remove drops the row', (await rows()).length === 2);
+
+const box = await page.$eval('.graph-plot', (el) => {
+	const r = el.getBoundingClientRect();
+	return { x: r.x, y: r.y, w: r.width, h: r.height };
 });
-
 const atRest = await ranges();
-await page.mouse.move(centre.x, centre.y);
+await page.mouse.move(box.x + box.w * 0.25, box.y + box.h * 0.3);
 await page.mouse.down();
-await page.mouse.move(centre.x - 90, centre.y - 50, { steps: 10 });
+await page.mouse.move(box.x + box.w * 0.25 - 90, box.y + box.h * 0.3 - 50, { steps: 10 });
+await sleep(120);
 await page.mouse.up();
 await sleep(300);
 const panned = await ranges();
-check(
-	'dragging pans the plane',
-	panned.join() !== atRest.join(),
-	`${atRest.join(' ')} -> ${panned.join(' ')}`,
-);
+check('dragging pans the plane', panned.join() !== atRest.join(), `${atRest.join(' ')} -> ${panned.join(' ')}`);
 
-await page.mouse.move(centre.x, centre.y);
+await page.mouse.move(box.x + box.w / 2, box.y + box.h / 2);
 await page.mouse.wheel({ deltaY: -300 });
-await sleep(400);
+await sleep(300);
 const zoomed = await ranges();
-check(
-	'and the wheel zooms it',
-	zoomed.join() !== panned.join(),
-	`${panned.join(' ')} -> ${zoomed.join(' ')}`,
-);
+check('and the wheel zooms it', zoomed.join() !== panned.join(), `${panned.join(' ')} -> ${zoomed.join(' ')}`);
+
+await clickText('.canon-button', 'Trig');
+await sleep(700);
+const trigRange = await ranges();
+check('Trig sets the window', trigRange.join() === '−6.28,6.28,−4,4', trigRange.join());
+
+const traceLine = await page.$eval('.graph-trace', (el) => el.getAttribute('d'));
+const lineX = Number(/M([\d.]+)/.exec(traceLine)?.[1]);
+await page.mouse.move(box.x + lineX, box.y + box.h * 0.6);
+await page.mouse.down();
+await page.mouse.move(box.x + lineX + 60, box.y + box.h * 0.6, { steps: 6 });
+await page.mouse.up();
+await sleep(300);
+const traced = await page.$eval('input[aria-label="Trace"]', (el) => el.value);
+check('dragging the trace line moves the trace', traced !== '1', traced);
+
+await page.$eval('input[aria-label="Trace"]', (el) => {
+	el.value = '2';
+	el.dispatchEvent(new Event('input', { bubbles: true }));
+	el.blur();
+});
+await sleep(300);
+await page.click('.canon-stepper-plus');
+await sleep(600);
+const centre = await page.$eval('output[aria-label="Table"]', (el) => el.textContent.trim());
+check('a step moves the trace and the table', centre === 'x 3, y₂ −0.1425', centre);
+
+await page.$eval('input[aria-label="X minimum"]', (el) => {
+	el.focus();
+	el.value = '-1';
+	el.dispatchEvent(new Event('input', { bubbles: true }));
+	el.blur();
+});
+await sleep(800);
+const typedRange = await ranges();
+check('a typed range sets the window', typedRange[0] === '−1' && typedRange[1] === '6.28', typedRange.join());
+
+await page.click('.canon-switch');
+await sleep(200);
+const grid = await page.$eval('.graph-grid-major', (el) => el.getAttribute('d'));
+check('the Grid switch hides the grid', !grid, grid);
 
 await finish(browser);

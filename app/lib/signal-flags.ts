@@ -160,9 +160,9 @@ export function flagSvg(letter: string): string {
 	const spec = FLAGS[letter.toUpperCase()];
 	if (!spec) return '';
 	return (
-		`<svg class="dt-nato-flag" viewBox="0 0 ${W} ${H}" aria-hidden="true">` +
+		`<svg class="np-flag" viewBox="0 0 ${W} ${H}" aria-hidden="true">` +
 		spec.shapes +
-		`<path d="${spec.outline}" fill="none" stroke="var(--border)" stroke-width="2"/>` +
+		`<path d="${spec.outline}" fill="none" stroke="var(--canon-border)" stroke-width="2"/>` +
 		`</svg>`
 	);
 }
@@ -207,7 +207,7 @@ export function semaphoreSvg(letter: string): string {
 		return `<line x1="24" y1="24" x2="${x}" y2="${y}"/>`;
 	};
 	return (
-		`<svg class="dt-nato-sem" viewBox="0 0 48 48" aria-hidden="true">` +
+		`<svg class="np-sem" viewBox="0 0 48 48" aria-hidden="true">` +
 		`<circle cx="24" cy="24" r="21"/>` +
 		arm(angles[0]) +
 		arm(angles[1]) +

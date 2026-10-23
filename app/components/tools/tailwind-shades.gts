@@ -1,529 +1,225 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
 import { service } from '@ember/service';
-import Icon from 'delphitools-v2/components/icon';
-import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
-import {
-	hexToRgb,
-	rgbToHex,
-	rgbToOklch,
-	oklabToRgb,
-	lchToLab,
-	maxOklchChroma,
-	type Triple,
-} from 'delphitools-v2/lib/colour-maths';
-import { colourFromUrl } from 'delphitools-v2/lib/colour-query';
+import type Owner from '@ember/owner';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonColourNotationInput from 'delphicanon/components/canon-colour-notation-input';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import { readColour } from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import Ramp, {
+	rampHeight,
+} from 'delphitools-v2/components/tools/tailwind-shades/ramp';
+import {
+	cleanName,
+	cssBlock,
+	generateShades,
+	GENERATION_MODES,
+	oklchBlock,
+	tailwindBlock,
+} from 'delphitools-v2/components/tools/tailwind-shades/shades';
+import './tailwind-shades/tailwind-shades.css';
 
-const DEFAULT_COLOUR = '#3b82f6';
-const COPIED_MS = 1500;
+const startColour = parseHex('3B82F6')!;
+const modeTitles = GENERATION_MODES.map((mode) => mode.title);
 
-/** built from a bundled lookup → list of level/lightness pairs */
-const SHADE_TARGETS: [level: number, lightness: number][] = [
-	[50, 0.97],
-	[100, 0.93],
-	[200, 0.87],
-	[300, 0.78],
-	[400, 0.66],
-	[500, 0.55],
-	[600, 0.47],
-	[700, 0.4],
-	[800, 0.33],
-	[900, 0.27],
-	[950, 0.2],
-];
-
-export type GenerationMode =
-	'classic' | 'hue-shift' | 'luminance-anchored' | 'vivid' | 'muted';
-
-export const GENERATION_MODES: {
-	value: GenerationMode;
-	label: string;
-	description: string;
-}[] = [
-	{
-		value: 'classic',
-		label: 'Classic',
-		description:
-			'Standard Tailwind-style generation with uniform hue',
-	},
-	{
-		value: 'hue-shift',
-		label: 'Hue Shift',
-		description: 'Warm tones for lighter shades, cool for darker',
-	},
-	{
-		value: 'luminance-anchored',
-		label: 'Luminance Anchored',
-		description: 'Anchors to true white/black for better contrast',
-	},
-	{
-		value: 'vivid',
-		label: 'Vivid',
-		description: 'Maximizes saturation across all shades',
-	},
-	{
-		value: 'muted',
-		label: 'Muted',
-		description: 'Subtle, desaturated tones throughout',
-	},
-];
-
-export interface Shade {
-	level: number;
-	hex: string;
-	oklch: Triple;
+/**
+ * The iOS launch arguments as query flags: ?tailwindColour=<any notation>
+ * ?tailwindMode=<index>, plus the carried ?color=<hex>.
+ */
+function launchFlags(search: string) {
+	const query = new URLSearchParams(search);
+	const typed = query.get('tailwindColour');
+	const carried = query.get('color');
+	const mode = Number(query.get('tailwindMode') ?? NaN);
+	return {
+		colour:
+			(typed ? readColour(typed) : undefined) ??
+			(carried ? readColour(carried) : undefined),
+		mode:
+			Number.isInteger(mode) && GENERATION_MODES[mode]
+				? mode
+				: 0,
+	};
 }
 
-const MODE_RAMPS: Record<
-	GenerationMode,
-	[light: number, mid: number, dark: number]
-> = {
-	classic: [0.75, 1, 0.85],
-	'hue-shift': [0.75, 1, 0.85],
-	'luminance-anchored': [0.5, 1, 0.6],
-	vivid: [1, 1.35, 1.15],
-	muted: [0.3, 0.5, 0.4],
-};
-
-function rampScale(index: number, mode: GenerationMode): number {
-	const [light, mid, dark] = MODE_RAMPS[mode];
-	const fromEnd = SHADE_TARGETS.length - 1 - index;
-	if (index < 2) return light + (mid - light) * (index / 2);
-	if (fromEnd < 2) return dark + (mid - dark) * (fromEnd / 2);
-	return mid;
-}
-
-function shadeParams(
-	index: number,
-	targetL: number,
-	baseSat: number,
-	baseH: number,
-	mode: GenerationMode,
-): Triple {
-	const fromEnd = SHADE_TARGETS.length - 1 - index;
-	const l =
-		mode !== 'luminance-anchored'
-			? targetL
-			: index < 2
-				? targetL + (1 - targetL) * 0.3
-				: fromEnd < 2
-					? targetL * 0.8
-					: targetL;
-	const h =
-		mode === 'hue-shift'
-			? (baseH + (targetL - 0.5) * 2 * 15 + 360) % 360
-			: baseH;
-	const sat = Math.min(1, baseSat * rampScale(index, mode));
-	return [l, sat * maxOklchChroma(l, h), h];
-}
-
-export function generateShades(
-	baseHex: string,
-	mode: GenerationMode,
-): Shade[] | null {
-	const rgb = hexToRgb(baseHex);
-	if (!rgb) return null;
-
-	// saturation = chroma / max at that lightness; fixed chroma reads grey at L~0.95
-	// tailwind sits within 0.1 of sRGB edge across levels
-	const [baseL, baseC, baseH] = rgbToOklch(...rgb);
-	const baseMax = maxOklchChroma(baseL, baseH);
-	const baseSat = baseMax > 0 ? Math.min(1, baseC / baseMax) : 0;
-
-	return SHADE_TARGETS.map(([level, targetL], index) => {
-		const oklch = shadeParams(index, targetL, baseSat, baseH, mode);
-		return {
-			level,
-			hex: rgbToHex(...oklabToRgb(...lchToLab(...oklch))),
-			oklch,
-		};
-	});
-}
-
-export default class TailwindShadesTool extends Component {
+/** The port of TailwindShadesViewController. */
+export default class TailwindShades extends Component {
 	@service declare colourNotation: ColourNotationService;
 
-	@tracked baseColour = colourFromUrl() ?? DEFAULT_COLOUR;
-	@tracked colourName = 'primary';
-	@tracked mode: GenerationMode = 'classic';
-	@tracked copied: string | null = null;
+	@tracked base: Rgb;
+	@tracked mode: number;
+	@tracked name = 'primary';
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		this.base = flags.colour ?? startColour;
+		this.mode = flags.mode;
 	}
 
-	get modes() {
-		return GENERATION_MODES;
+	get hex() {
+		return hex(this.base);
 	}
 
-	get modeLabel() {
-		return (
-			GENERATION_MODES.find((m) => m.value === this.mode)
-				?.label ?? ''
-		);
-	}
-
-	get modeDescription() {
-		return (
-			GENERATION_MODES.find((m) => m.value === this.mode)
-				?.description ?? ''
-		);
+	get text() {
+		return this.colourNotation.format(this.hex);
 	}
 
 	get shades() {
-		return generateShades(this.baseColour, this.mode);
+		return generateShades(
+			this.hex,
+			GENERATION_MODES[this.mode]!.value,
+		)!;
 	}
 
-	/** half-typed hex → no fill style */
-	get baseFillStyle() {
-		return htmlSafe(
-			hexToRgb(this.baseColour)
-				? `background-color: ${this.baseColour}`
-				: '',
-		);
+	get description() {
+		return GENERATION_MODES[this.mode]!.description;
 	}
 
-	get pickerHex() {
-		return hexToRgb(this.baseColour) ? this.baseColour : '#000000';
+	format = (code: string) => this.colourNotation.format(code);
+
+	get lines() {
+		return this.shades.map((shade) => ({
+			label: String(shade.level),
+			value: this.format(shade.hex),
+		}));
 	}
 
-	get rows() {
-		const shades = this.shades;
-		if (!shades) return [];
-		return shades.map((shade) => {
-			const value = this.colourNotation.format(shade.hex);
-			return {
-				level: shade.level,
-				hex: shade.hex,
-				value,
-				title: `${shade.level}: ${value}`,
-				fillStyle: htmlSafe(
-					`background-color: ${shade.hex}`,
-				),
-				lightText: shade.level >= 500,
-			};
-		});
-	}
-
-	get cssBlock() {
-		const shades = this.shades;
-		if (!shades) return '';
-		const lines = shades
-			.map(
-				(s) =>
-					`  --${this.colourName}-${s.level}: ${this.colourNotation.format(s.hex)};`,
-			)
-			.join('\n');
-		return `:root {\n${lines}\n}`;
-	}
-
-	get oklchBlock() {
-		const shades = this.shades;
-		if (!shades) return '';
-		const lines = shades
-			.map(
-				(s) =>
-					`  --${this.colourName}-${s.level}: oklch(${s.oklch[0].toFixed(3)} ${s.oklch[1].toFixed(3)} ${s.oklch[2].toFixed(1)});`,
-			)
-			.join('\n');
-		return `:root {\n${lines}\n}`;
-	}
-
-	/** trailing comma so it pastes into a map */
-	get tailwindBlock() {
-		const shades = this.shades;
-		if (!shades) return '';
-		const entries = shades
-			.map(
-				(s) =>
-					`      ${s.level}: '${this.colourNotation.format(s.hex)}',`,
-			)
-			.join('\n');
-		return `${this.colourName}: {\n${entries}\n    },`;
-	}
-
-	get codeBlocks() {
+	get blocks() {
+		const { shades, name, format } = this;
 		return [
 			{
-				key: 'css',
-				label: 'CSS Variables',
-				code: this.cssBlock,
+				language: 'CSS Variables',
+				code: cssBlock(shades, name, format),
 			},
 			{
-				key: 'oklch',
-				label: 'CSS Variables (OKLCH)',
-				code: this.oklchBlock,
+				language: 'CSS Variables (OKLCH)',
+				code: oklchBlock(shades, name),
 			},
 			{
-				key: 'tailwind',
-				label: 'Tailwind Config',
-				code: this.tailwindBlock,
+				language: 'Tailwind Config',
+				code: tailwindBlock(shades, name, format),
 			},
 		];
 	}
 
-	setBaseColour = (event: Event) => {
-		this.baseColour = (event.target as HTMLInputElement).value;
+	use = (colour: Rgb) => (this.base = colour);
+
+	parse = (text: string) => {
+		const colour = readColour(text);
+		if (colour) this.base = colour;
+		return colour !== undefined;
 	};
 
-	setColourName = (event: Event) => {
-		this.colourName = (event.target as HTMLInputElement).value
-			.toLowerCase()
-			.replace(/[^a-z0-9-]/g, '');
+	// the web field answered every keystroke; the kit input waits 400 ms
+	typeLive = (event: Event) =>
+		void this.parse((event.target as HTMLInputElement).value);
+
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
 	};
 
-	chooseMode = (value: string) => {
-		this.mode = value as GenerationMode;
+	// css custom property
+	setName = (event: Event) => {
+		const field = event.target as HTMLInputElement;
+		const cleaned = cleanName(field.value);
+		if (field.value !== cleaned) field.value = cleaned;
+		this.name = cleaned;
 	};
 
-	copy = async (value: string, key: string) => {
-		await navigator.clipboard.writeText(value);
-		this.copied = key;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	};
-
-	copyValue = (value: string, key: string) => void this.copy(value, key);
+	selectMode = (index: number) => (this.mode = index);
 
 	<template>
-		<div class="dt-shades">
-			<div class="dt-shades-inputs">
-				<div class="dt-shades-field">
-					<span class="dt-shades-label">Base
-						Colour</span>
-					<div class="dt-shades-combo">
-						<span class="dt-shades-picker">
-							<span
-								style={{this.baseFillStyle}}
-								aria-hidden="true"
-							></span>
-							<input
-								type="color"
-								value={{this.pickerHex}}
-								aria-label="Pick base colour"
-								{{on
-									"input"
-									this.setBaseColour
-								}}
-							/>
-						</span>
-						<input
-							type="text"
-							class="dt-shades-hex"
-							value={{this.baseColour}}
-							placeholder={{DEFAULT_COLOUR}}
-							aria-label="Base colour"
+		<CanonSplit class="tailwind-shades" @collapsesTo={{rampHeight}}>
+			<:banner>
+				<CanonCanvas
+					@height={{rampHeight}}
+					@background="var(--canon-muted)"
+				>
+					<Ramp
+						@shades={{this.shades}}
+						@base={{this.base}}
+						@hex={{this.hex}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonColourNotationInput
+						class="tw-input"
+						@colour={{this.base}}
+						@text={{this.text}}
+						@onColour={{this.use}}
+						@parse={{this.parse}}
+						@label="Base"
+						{{on "input" this.typeLive}}
+						{{on "focusin" this.selectAll}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						@title="Name"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="tw-name"
+							@value={{this.name}}
+							@placeholder="primary"
+							aria-labelledby={{titleId}}
+							spellcheck="false"
+							autocomplete="off"
+							autocapitalize="off"
 							{{on
 								"input"
-								this.setBaseColour
+								this.setName
 							}}
 						/>
-					</div>
-				</div>
-
-				<div class="dt-shades-field">
-					<span class="dt-shades-label">Colour
-						Name</span>
-					<input
-						type="text"
-						class="dt-shades-name"
-						value={{this.colourName}}
-						placeholder="primary"
-						aria-label="Colour name"
-						{{on
-							"input"
-							this.setColourName
-						}}
-					/>
-				</div>
-
-				<div class="dt-shades-field">
-					<span class="dt-shades-label">Generation
-						Mode</span>
-					<Select
-						@value={{this.mode}}
-						@onValueChange={{this.chooseMode}}
-					>
-						<SelectTrigger
-							class="dt-shades-mode"
-						>
-							<SelectValue
-							>{{this.modeLabel}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each
-								this.modes
-								key="value"
-								as |option|
-							}}
-								<SelectItem
-									@value={{option.value}}
-								>{{option.label}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
+					</CanonRow>
+					<CanonRow @title="Mode" @form="stacked">
+						<CanonSegmented
+							@items={{modeTitles}}
+							@selected={{this.mode}}
+							@columns={{3}}
+							@onChange={{this.selectMode}}
+						/>
+					</CanonRow>
 					<p
-						class="dt-shades-mode-desc"
-					>{{this.modeDescription}}</p>
-				</div>
-			</div>
-
-			{{#if this.rows}}
-				<div class="dt-shades-section">
-					<div class="dt-shades-section-head">
-						<span
-							class="dt-shades-label"
-						>Generated Shades</span>
-					</div>
-
-					<div class="dt-shades-strip">
-						{{#each
-							this.rows key="level"
-							as |row|
-						}}
-							<button
-								type="button"
-								class="dt-shades-cell"
-								style={{row.fillStyle}}
-								title={{row.title}}
-								aria-label="Copy
-									{{row.level}}"
-								{{on
-									"click"
-									(fn
-										this.copyValue
-										row.value
-										row.hex
-									)
-								}}
-							>
-								<span
-									class="dt-shades-cell-level
-										{{if
-											row.lightText
-											'is-light'
-										}}"
-								>{{row.level}}</span>
-							</button>
-						{{/each}}
-					</div>
-
-					<div class="dt-shades-rows">
-						{{#each
-							this.rows key="level"
-							as |row|
-						}}
-							<div
-								class="dt-shades-row"
-							>
-								<span
-									class="dt-shades-level"
-								>{{row.level}}</span>
-								<span
-									class="dt-shades-swatch"
-									style={{row.fillStyle}}
-									aria-hidden="true"
-								></span>
-								<span
-									class="dt-shades-value"
-								>{{row.value}}</span>
-								<button
-									type="button"
-									class="dt-shades-copy
-										{{if
-											(eq
-												this.copied
-												row.hex
-											)
-											'is-copied'
-										}}"
-									aria-label="Copy
-										{{row.level}}"
-									{{on
-										"click"
-										(fn
-											this.copyValue
-											row.value
-											row.hex
-										)
-									}}
-								>
-									<Icon
-										@name={{if
-											(eq
-												this.copied
-												row.hex
-											)
-											"check"
-											"copy"
-										}}
-									/>
-								</button>
-							</div>
-						{{/each}}
-					</div>
-				</div>
-
-				<div class="dt-shades-code">
-					{{#each
-						this.codeBlocks key="key"
-						as |block|
-					}}
-						<div class="dt-shades-block">
-							<div
-								class="dt-shades-block-head"
-							>
-								<span
-									class="dt-shades-label"
-								>{{block.label}}</span>
-								<button
-									type="button"
-									class="dt-shades-block-copy"
-									{{on
-										"click"
-										(fn
-											this.copyValue
-											block.code
-											block.key
-										)
-									}}
-								>
-									<Icon
-										@name={{if
-											(eq
-												this.copied
-												block.key
-											)
-											"check"
-											"copy"
-										}}
-									/>
-									Copy
-								</button>
-							</div>
-							<pre
-							>{{block.code}}</pre>
-						</div>
+						class="tw-description"
+					>{{this.description}}</p>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Shades" />
+					{{#each this.lines as |line|}}
+						<CanonValueLine
+							@label={{line.label}}
+							@value={{line.value}}
+							@labelWidth={{40}}
+						/>
 					{{/each}}
-				</div>
-			{{/if}}
-		</div>
+				</CanonRows>
+				{{#each this.blocks key="language" as |block|}}
+					<CanonCodeBlock
+						@code={{block.code}}
+						@language={{block.language}}
+					/>
+				{{/each}}
+			</:main>
+		</CanonSplit>
 	</template>
 }

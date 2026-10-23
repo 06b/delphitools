@@ -1,585 +1,470 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
-import { eq, not } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import {
+	fieldNames,
+	firstWeekday,
+	initialState,
+	issueText,
+	parseOf,
+	parsedOf,
+	withBox,
+	withField,
+	withMode,
+	withSub,
+	type CronState,
+	type Mode,
+	type SubKey,
+} from 'delphitools-v2/components/tools/cron-builder/cron';
+import Field from 'delphitools-v2/components/tools/cron-builder/field';
+import Rails from 'delphitools-v2/components/tools/cron-builder/rails';
 import {
 	describeCron,
 	FIELD_RULES,
 	nextRuns,
-	parseCron,
-	parseField,
 	type FieldKind,
-	type FieldParse,
-	type FieldRule,
-	type CronParse,
 } from 'delphitools-v2/lib/cron';
+import './cron-builder/cron-builder.css';
 
-type Mode = 'every' | 'value' | 'range' | 'step';
-
-interface Subs {
-	value: number;
-	lo: number;
-	hi: number;
-	step: number;
-}
-
-interface FieldRow {
-	kind: FieldKind;
-	rule: FieldRule;
-	label: string;
-	source: string;
-	mode: Mode | null;
-	parse: FieldParse;
-	error: { text: string; data?: string } | null;
-	subs: Subs;
-}
-
-interface RunRow {
-	key: number;
-	text: string;
-}
-
-const MODES: { id: Mode; label: string }[] = [
-	{ id: 'every', label: 'Every' },
-	{ id: 'value', label: 'Value' },
-	{ id: 'range', label: 'Range' },
-	{ id: 'step', label: 'Step' },
-];
-
-const COPIED_MS = 1500;
-const DEFAULT_FIELD_TEXTS = ['30', '9', '*', '*', 'MON-FRI'];
-
-const ARITY_WARNING =
+const arityWarning =
 	'A cron expression has five fields: minute, hour, day, month, weekday';
+const runCount = 5;
 
-function modeOf(parse: FieldParse): Mode | null {
-	if (!parse.ok) return null;
-	switch (parse.shape.kind) {
-		case 'star':
-			return 'every';
-		case 'single':
-			return 'value';
-		case 'step':
-			return 'step';
-		case 'range':
-			return parse.shape.step === 1 ? 'range' : null;
-		default:
-			return null;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+
+const runFormat = new Intl.DateTimeFormat(undefined, {
+	weekday: 'short',
+	year: 'numeric',
+	month: 'short',
+	day: 'numeric',
+	hour: '2-digit',
+	minute: '2-digit',
+});
+
+// a click places the caret after focus, so select on the next frame
+const selectAll = (event: FocusEvent) => {
+	const field = event.target;
+	if (field instanceof HTMLInputElement)
+		requestAnimationFrame(() => field.select());
+};
+
+/** The port of CronBuilderViewController, CronFieldEditor and CronRails. */
+export default class CronBuilder extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
+	@tracked state: CronState = initialState();
+	@tracked field: number | null = 0;
+	@tracked now = new Date();
+	@tracked minute = Math.floor(Date.now() / 60_000);
+
+	firstDay = firstWeekday();
+	#ticker?: number;
+	#focus?: string;
+
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?cronExpr= ?cronField=<0-4> ?cronFocus=expression|field: the iOS launch arguments
+		const query = new URLSearchParams(window.location.search);
+		const expr = query.get('cronExpr');
+		if (expr !== null) this.state = withBox(initialState(), expr);
+		if (query.has('cronField'))
+			this.field = Math.min(
+				Math.max(
+					Number(query.get('cronField')) || 0,
+					0,
+				),
+				4,
+			);
+		this.#focus = query.get('cronFocus') ?? undefined;
+		this.#ticker = window.setInterval(() => this.#tick(), 1000);
 	}
-}
-
-export default class CronBuilderTool extends Component {
-	@tracked fields: Record<FieldKind, string> = {
-		minute: DEFAULT_FIELD_TEXTS[0]!,
-		hour: DEFAULT_FIELD_TEXTS[1]!,
-		dom: DEFAULT_FIELD_TEXTS[2]!,
-		month: DEFAULT_FIELD_TEXTS[3]!,
-		dow: DEFAULT_FIELD_TEXTS[4]!,
-	};
-
-	@tracked boxText = DEFAULT_FIELD_TEXTS.join(' ');
-
-	@tracked subs: Record<FieldKind, Subs> = {
-		minute: { value: 0, lo: 0, hi: 15, step: 5 },
-		hour: { value: 9, lo: 9, hi: 17, step: 2 },
-		dom: { value: 1, lo: 1, hi: 15, step: 2 },
-		month: { value: 1, lo: 1, hi: 6, step: 2 },
-		dow: { value: 1, lo: 1, hi: 5, step: 2 },
-	};
-
-	@tracked copied = false;
-
-	#copiedTimer?: ReturnType<typeof setTimeout>;
 
 	willDestroy() {
 		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+		window.clearInterval(this.#ticker);
 	}
 
-	// preserve invalid input
-	get parsed(): CronParse {
-		return parseCron(this.boxText);
+	#tick() {
+		this.now = new Date();
+		const minute = Math.floor(this.now.getTime() / 60_000);
+		if (minute !== this.minute) this.minute = minute;
 	}
 
-	get modes() {
-		return MODES;
+	focusOnLaunch = modifier((root: HTMLElement) => {
+		if (!this.#focus) return;
+		const target =
+			this.#focus === 'field'
+				? root.querySelector<HTMLElement>(
+						'.cron-field--open .cron-field-source',
+					)
+				: root.querySelector<HTMLElement>(
+						'.cron-expression',
+					);
+		requestAnimationFrame(() => target?.focus());
+		this.#focus = undefined;
+	});
+
+	get parsed() {
+		return parsedOf(this.state);
 	}
 
-	get arityError(): boolean {
-		return (
-			this.boxText.trim().split(/\s+/).filter(Boolean)
-				.length !== 5
+	// a long expression shrinks to stay whole in a 340 px sidebar, down to 17 px
+	get expressionStyle() {
+		const size = Math.max(
+			17,
+			Math.min(28, 530 / Math.max(1, this.state.box.length)),
 		);
+		return htmlSafe(`font-size: ${Math.floor(size)}px`);
 	}
 
-	get canonical(): string | null {
+	get arityError() {
+		return this.parsed.fieldCount !== 5;
+	}
+
+	get arityWarning() {
+		return arityWarning;
+	}
+
+	get canonical() {
 		return this.parsed.ok ? this.parsed.expression : null;
 	}
 
-	get description(): string | null {
+	get description() {
 		return this.parsed.ok ? describeCron(this.parsed.fields) : null;
 	}
 
-	get runs(): RunRow[] {
-		if (!this.parsed.ok) return [];
-		const format = new Intl.DateTimeFormat(undefined, {
-			weekday: 'short',
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit',
-		});
-		return nextRuns(this.parsed, 5, new Date()).map((d, i) => ({
-			key: i,
-			text: format.format(d),
-		}));
-	}
-
-	get timeZone(): string {
+	get timeZone() {
 		return Intl.DateTimeFormat().resolvedOptions().timeZone;
 	}
 
-	get fieldRows(): FieldRow[] {
-		return FIELD_RULES.map((rule) => {
-			const source = this.fields[rule.kind];
-			const parse = parseField(source, rule);
+	get runsHeading() {
+		return `Next runs · ${this.timeZone}`;
+	}
+
+	// once a minute; one spare, as the minute's own run may pass while it lasts
+	@cached
+	get upcoming(): Date[] {
+		const { parsed } = this;
+		if (!parsed.ok) return [];
+		return nextRuns(
+			parsed,
+			runCount + 1,
+			new Date(this.minute * 60_000),
+		);
+	}
+
+	get runs() {
+		return this.upcoming
+			.filter((run) => run > this.now)
+			.slice(0, runCount);
+	}
+
+	get next() {
+		return this.runs[0];
+	}
+
+	get runLines() {
+		return this.runs.map((run, i) => ({
+			index: String(i + 1).padStart(2, '0'),
+			text: runFormat.format(run),
+		}));
+	}
+
+	get when() {
+		return this.next ? runFormat.format(this.next) : undefined;
+	}
+
+	get pictureLabel() {
+		return this.description ?? 'Errors';
+	}
+
+	@cached
+	get fields() {
+		const { state, arityError, parsed } = this;
+		return FIELD_RULES.map((rule, index) => {
+			const parse = parseOf(state, rule.kind);
+			const fieldParse = parsed.fields[index];
 			return {
+				index,
 				kind: rule.kind,
-				rule,
-				label: rule.label,
-				source,
-				mode: modeOf(parse),
+				name: fieldNames[index]!,
+				source: state.fields[rule.kind],
 				parse,
-				error: parse.ok ? null : parse.error,
-				subs: this.subs[rule.kind],
+				subs: state.subs[rule.kind],
+				editable: !arityError,
+				issue:
+					fieldParse && !fieldParse.ok
+						? issueText(fieldParse.error)
+						: undefined,
 			};
 		});
 	}
 
-	get errors(): { label: string; text: string; data?: string }[] {
-		if (this.parsed.ok || this.parsed.fieldCount !== 5) return [];
-		return this.parsed.fields.flatMap((f, i) =>
+	get timeFields() {
+		return this.fields.slice(0, 2);
+	}
+
+	get dateFields() {
+		return this.fields.slice(2);
+	}
+
+	get errors() {
+		const { parsed } = this;
+		if (parsed.ok || parsed.fieldCount !== 5) return [];
+		return parsed.fields.flatMap((f, i) =>
 			f.ok
 				? []
 				: [
-						{
-							label: FIELD_RULES[i]!
-								.label,
-							text: f.error.text,
-							data: f.error.data,
-						},
+						`${FIELD_RULES[i]!.label} · ${issueText(f.error)}`,
 					],
 		);
 	}
 
-	#writeFields(next: Record<FieldKind, string>) {
-		this.fields = next;
-		this.boxText = FIELD_RULES.map((rule) => next[rule.kind]).join(
-			' ',
-		);
-		const subs = { ...this.subs };
-		for (const rule of FIELD_RULES) {
-			const p = parseField(next[rule.kind], rule);
-			if (!p.ok) continue;
-			if (p.shape.kind === 'single')
-				subs[rule.kind] = {
-					...subs[rule.kind],
-					value: p.shape.value,
-				};
-			else if (p.shape.kind === 'range')
-				subs[rule.kind] = {
-					...subs[rule.kind],
-					lo: p.shape.lo,
-					hi: p.shape.hi,
-					step: p.shape.step,
-				};
-			else if (p.shape.kind === 'step')
-				subs[rule.kind] = {
-					...subs[rule.kind],
-					step: p.shape.step,
-				};
-		}
-		this.subs = subs;
-	}
+	typeBox = (text: string) => {
+		this.state = withBox(this.state, text);
+	};
 
-	setBoxText = (event: Event) => {
-		const raw = (event.target as HTMLInputElement).value;
-		this.boxText = raw;
-		const parts = raw.trim().split(/\s+/).filter(Boolean);
-		if (parts.length !== 5) return;
-		this.#writeFields({
-			minute: parts[0]!,
-			hour: parts[1]!,
-			dom: parts[2]!,
-			month: parts[3]!,
-			dow: parts[4]!,
-		});
+	toggle = (index: number) => {
+		this.field = this.field === index ? null : index;
+	};
+
+	open = (index: number) => {
+		this.field = index;
+	};
+
+	typeField = (kind: FieldKind, text: string) => {
+		this.state = withField(this.state, kind, text);
 	};
 
 	setMode = (kind: FieldKind, mode: Mode) => {
-		const s = this.subs[kind];
-		const source =
-			mode === 'every'
-				? '*'
-				: mode === 'value'
-					? String(s.value)
-					: mode === 'range'
-						? `${s.lo}-${s.hi}`
-						: `*/${s.step}`;
-		this.#writeFields({ ...this.fields, [kind]: source });
+		this.state = withMode(this.state, kind, mode);
 	};
 
-	setSub = (kind: FieldKind, key: keyof Subs, event: Event) => {
-		const rule = FIELD_RULES.find((r) => r.kind === kind)!;
-		const raw = parseInt(
-			(event.target as HTMLInputElement).value,
-			10,
-		);
-		if (Number.isNaN(raw)) return;
-		// steps start at one
-		const min = key === 'step' ? 1 : rule.min;
-		const max =
-			key === 'step'
-				? rule.rangeMax - rule.min + 1
-				: rule.max;
-		const n = Math.min(Math.max(raw, min), max);
-		const s = { ...this.subs[kind], [key]: n };
-		if (key === 'lo' && s.lo > s.hi) s.hi = s.lo;
-		if (key === 'hi' && s.hi < s.lo) s.lo = s.hi;
-		this.subs = { ...this.subs, [kind]: s };
-		const mode = modeOf(parseField(this.fields[kind], rule));
-		if (mode === 'value') {
-			this.#writeFields({
-				...this.fields,
-				[kind]: String(n),
-			});
-		} else if (mode === 'range') {
-			this.#writeFields({
-				...this.fields,
-				[kind]: `${s.lo}-${s.hi}`,
-			});
-		} else if (mode === 'step') {
-			this.#writeFields({
-				...this.fields,
-				[kind]: `*/${s.step}`,
-			});
-		}
+	setNumber = (kind: FieldKind, key: SubKey, value: number) => {
+		this.state = withSub(this.state, kind, key, value);
 	};
 
-	setFieldText = (kind: FieldKind, event: Event) => {
-		const source = (event.target as HTMLInputElement).value;
-		this.#writeFields({ ...this.fields, [kind]: source });
-	};
-
-	copyExpression = () => {
-		if (this.canonical === null) return;
-		void navigator.clipboard.writeText(this.canonical);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
+	copy = () => {
+		if (this.canonical) void this.toast.copy(this.canonical);
 	};
 
 	<template>
-		<div class="dt-cb">
-			<div class="dt-cb-frame">
-				<div class="dt-cb-bar">
-					<label
-						class="dt-cb-bar-label"
-						for="dt-cb-expr"
-					>
-						Expression
-					</label>
-					<input
-						id="dt-cb-expr"
-						type="text"
-						class="dt-cb-expr"
-						spellcheck="false"
-						autocomplete="off"
-						value={{this.boxText}}
-						{{on "input" this.setBoxText}}
+		<CanonSplit class="cron-builder" {{this.focusOnLaunch}}>
+			<:banner>
+				<CanonCanvas @fitting={{true}}>
+					<Rails
+						@parsed={{this.parsed}}
+						@field={{this.field}}
+						@next={{this.next}}
+						@now={{this.now}}
+						@when={{this.when}}
+						@label={{this.pictureLabel}}
+						@firstDay={{this.firstDay}}
 					/>
-					<button
-						type="button"
-						class="dt-cb-btn is-primary"
-						disabled={{not this.canonical}}
-						{{on
-							"click"
-							this.copyExpression
-						}}
-					>
-						{{#if this.copied}}
-							<Icon @name="check" />
-							Copied!
-						{{else}}
-							<Icon @name="copy" />
-							Copy
-						{{/if}}
-					</button>
-				</div>
-
-				{{#if this.arityError}}
-					<p class="dt-cb-error" role="alert">
-						<Icon @name="circle-alert" />
-						{{ARITY_WARNING}}
-					</p>
-				{{/if}}
-
-				<div class="dt-cb-grid">
-					{{#each
-						this.fieldRows key="kind"
-						as |row|
-					}}
-						<div
-							class="dt-cb-cell
-								{{if
-									row.error
-									'is-error'
-								}}"
-							data-field={{row.kind}}
-						>
-							<span
-								class="dt-cb-label"
-							>{{row.label}}</span>
-
-							<div
-								class="segmented dt-cb-modes"
-							>
-								{{#each
-									this.modes
-									key="id"
-									as |m|
-								}}
-									<button
-										type="button"
-										class="dt-cb-mode
-											{{if
-												(eq
-													row.mode
-													m.id
-												)
-												'is-active'
-											}}"
-										aria-pressed={{if
-											(eq
-												row.mode
-												m.id
-											)
-											"true"
-											"false"
-										}}
-										aria-label="{{m.label}} ({{row.label}})"
-										{{on
-											"click"
-											(fn
-												this.setMode
-												row.kind
-												m.id
-											)
-										}}
-									>{{m.label}}</button>
-								{{/each}}
-							</div>
-
-							<div class="dt-cb-side">
-								{{#if
-									(eq
-										row.mode
-										"value"
-									)
-								}}
-									<div
-										class="dt-cb-args"
-									>
-										<input
-											type="number"
-											class="dt-cb-num"
-											min={{row.rule.min}}
-											max={{row.rule.max}}
-											value={{row.subs.value}}
-											aria-label="{{row.label}} value"
-											{{on
-												"input"
-												(fn
-													this.setSub
-													row.kind
-													"value"
-												)
-											}}
-										/>
-									</div>
-								{{else if
-									(eq
-										row.mode
-										"range"
-									)
-								}}
-									<div
-										class="dt-cb-args"
-									>
-										<input
-											type="number"
-											class="dt-cb-num"
-											min={{row.rule.min}}
-											max={{row.rule.max}}
-											value={{row.subs.lo}}
-											aria-label="{{row.label}} from"
-											{{on
-												"input"
-												(fn
-													this.setSub
-													row.kind
-													"lo"
-												)
-											}}
-										/>
-										<span
-											class="dt-cb-args-sep"
-										>–</span>
-										<input
-											type="number"
-											class="dt-cb-num"
-											min={{row.rule.min}}
-											max={{row.rule.max}}
-											value={{row.subs.hi}}
-											aria-label="{{row.label}} to"
-											{{on
-												"input"
-												(fn
-													this.setSub
-													row.kind
-													"hi"
-												)
-											}}
-										/>
-									</div>
-								{{else if
-									(eq
-										row.mode
-										"step"
-									)
-								}}
-									<div
-										class="dt-cb-args"
-									>
-										<span
-											class="dt-cb-args-sep"
-										>*/</span>
-										<input
-											type="number"
-											class="dt-cb-num"
-											min="1"
-											max="99"
-											value={{row.subs.step}}
-											aria-label="{{row.label}} every"
-											{{on
-												"input"
-												(fn
-													this.setSub
-													row.kind
-													"step"
-												)
-											}}
-										/>
-									</div>
-								{{/if}}
-
-								<input
-									type="text"
-									class="dt-cb-free"
-									spellcheck="false"
-									autocomplete="off"
-									value={{row.source}}
-									aria-label="{{row.label}} field"
-									{{on
-										"input"
-										(fn
-											this.setFieldText
-											row.kind
-										)
-									}}
-								/>
-							</div>
-
-							{{#if row.error}}
-								<p
-									class="dt-cb-field-error"
-									role="alert"
-								>
-									{{row.error.text}}
-									{{#if
-										row.error.data
-									}}
-										<code
-										>{{row.error.data}}</code>
-									{{/if}}
-								</p>
-							{{/if}}
-						</div>
-					{{/each}}
-				</div>
-
-				<div class="dt-cb-out">
-					{{#if this.canonical}}
-						<div class="dt-cb-canon-row">
-							<span
-								class="dt-cb-canon"
-							>{{this.canonical}}</span>
-						</div>
-						<p
-							class="dt-cb-desc"
-						>{{this.description}}</p>
-						<div class="dt-cb-runs">
-							<span
-								class="dt-cb-runs-label"
-							>Next runs ({{this.timeZone}})</span>
-							{{#each
-								this.runs
-								key="key"
-								as |run|
-							}}
-								<span
-									class="dt-cb-run"
-								>{{run.text}}</span>
-							{{/each}}
-						</div>
-					{{else}}
-						{{#unless this.arityError}}
-							<ul
-								class="dt-cb-errors"
-							>
-								{{#each
-									this.errors
-									key="label"
-									as |err|
-								}}
-									<li
-										class="dt-cb-error-row"
-									>
-										<span
-											class="dt-cb-error-field"
-										>{{err.label}}</span>
-										<span
-											class="dt-cb-error-text"
-										>{{err.text}}
-											{{#if
-												err.data
-											}}
-												<code
-												>{{err.data}}</code>
-											{{/if}}</span>
-									</li>
-								{{/each}}
-							</ul>
-						{{/unless}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Expression" />
+					<CanonTextCell
+						class="cron-expression"
+						style={{this.expressionStyle}}
+						@value={{this.state.box}}
+						@placeholder="* * * * *"
+						@onChange={{this.typeBox}}
+						aria-label="Expression"
+						autocomplete="off"
+						autocapitalize="characters"
+						spellcheck="false"
+						{{on "focusin" selectAll}}
+					/>
+					{{#if this.arityError}}
+						<CanonStatus
+							@text={{this.arityWarning}}
+							@tone="warn"
+							@row={{true}}
+						/>
 					{{/if}}
-				</div>
-			</div>
-		</div>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Time" />
+					{{#each
+						this.timeFields key="kind"
+						as |f|
+					}}
+						<Field
+							@kind={{f.kind}}
+							@name={{f.name}}
+							@source={{f.source}}
+							@parse={{f.parse}}
+							@subs={{f.subs}}
+							@editable={{f.editable}}
+							@issue={{f.issue}}
+							@open={{isOpen
+								this.field
+								f.index
+							}}
+							@onToggle={{fn
+								this.toggle
+								f.index
+							}}
+							@onOpen={{fn
+								this.open
+								f.index
+							}}
+							@onType={{fn
+								this.typeField
+								f.kind
+							}}
+							@onMode={{fn
+								this.setMode
+								f.kind
+							}}
+							@onNumber={{fn
+								this.setNumber
+								f.kind
+							}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Date" />
+					{{#each
+						this.dateFields key="kind"
+						as |f|
+					}}
+						<Field
+							@kind={{f.kind}}
+							@name={{f.name}}
+							@source={{f.source}}
+							@parse={{f.parse}}
+							@subs={{f.subs}}
+							@editable={{f.editable}}
+							@issue={{f.issue}}
+							@open={{isOpen
+								this.field
+								f.index
+							}}
+							@onToggle={{fn
+								this.toggle
+								f.index
+							}}
+							@onOpen={{fn
+								this.open
+								f.index
+							}}
+							@onType={{fn
+								this.typeField
+								f.kind
+							}}
+							@onMode={{fn
+								this.setMode
+								f.kind
+							}}
+							@onNumber={{fn
+								this.setNumber
+								f.kind
+							}}
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonButton
+						class="cron-copy"
+						@text="Copy"
+						@icon={{CopyIcon}}
+						@iconStyle="oversized"
+						@kind="primary"
+						@disabled={{if
+							this.canonical
+							false
+							true
+						}}
+						@onClick={{this.copy}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				{{#if this.canonical}}
+					<CanonRows
+						class="cron-schedule"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Schedule"
+						/>
+						<p
+							class="cron-sentence"
+						>{{this.description}}</p>
+						<CanonValueLine
+							class="cron-canonical"
+							@label="Canonical"
+							@value={{this.canonical}}
+							@layout="above"
+						/>
+						<CanonHeading
+							@text={{this.runsHeading}}
+						/>
+						{{#each this.runLines as |run|}}
+							<CanonValueLine
+								class="cron-run"
+								@label={{run.index}}
+								@value={{run.text}}
+								@layout="numbered"
+							/>
+						{{else}}
+							<CanonEmptyRow
+								@text="Never"
+							/>
+						{{/each}}
+					</CanonRows>
+				{{else}}
+					<CanonRows
+						class="cron-errors"
+						@framed={{true}}
+					>
+						<CanonHeading @text="Errors" />
+						{{#if this.arityError}}
+							<CanonStatus
+								@text={{this.arityWarning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{else}}
+							{{#each
+								this.errors
+								as |error|
+							}}
+								<CanonStatus
+									@text={{error}}
+									@tone="warn"
+									@row={{true}}
+								/>
+							{{/each}}
+						{{/if}}
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function isOpen(field: number | null, index: number) {
+	return field === index;
 }

@@ -1,0 +1,22 @@
+.prc-picture {
+	inset: 0;
+	overflow: hidden;
+}
+
+.prc-blank {
+	position: absolute;
+	box-sizing: border-box;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.prc-loader {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+}
+
+.prc-source--failed .canon-row-detail {
+	color: var(--canon-destructive);
+}

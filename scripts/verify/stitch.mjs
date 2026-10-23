@@ -53,15 +53,24 @@ async function pickVia(selector, ...files) {
 	await sleep(1500);
 }
 
+const formatButton = (label) =>
+	page.evaluate(
+		(label) =>
+			[...document.querySelectorAll('.stitch-formats button')]
+				.find((b) => b.textContent.trim() === label)
+				.click(),
+		label,
+	);
+
 await visit(page, '/tools/image-stitcher');
-await pickVia('.dt-stitch-drop', IMAGE, IMAGE, IMAGE);
+await pickVia('.stitch-slot', IMAGE, IMAGE, IMAGE);
 
 const mosaic = await page.evaluate(() => ({
-	tiles: document.querySelectorAll('.dt-stitch-tile').length,
-	formats: [...document.querySelectorAll('.dt-stitch-format')].map((b) =>
-		b.textContent.trim(),
+	tiles: document.querySelectorAll('button.stitch-tile').length,
+	formats: [...document.querySelectorAll('.stitch-formats button')].map(
+		(b) => b.textContent.trim(),
 	),
-	modes: [...document.querySelectorAll('.dt-stitch-mode')].map((b) =>
+	modes: [...document.querySelectorAll('.stitch-modes button')].map((b) =>
 		b.textContent.trim(),
 	),
 }));
@@ -73,11 +82,11 @@ check(
 );
 check(
 	'both modes are present',
-	mosaic.modes.length === 2,
+	mosaic.modes.join(' ') === 'Individual Batch',
 	mosaic.modes.join(' '),
 );
 
-await page.click('.dt-stitch-download');
+await page.click('.stitch-download');
 const png = await waitForDownload(/\.png$/);
 check(
 	'the sheet exports as a PNG',
@@ -85,13 +94,24 @@ check(
 	png ? `${png.name}, ${png.bytes.length} bytes` : 'no file appeared',
 );
 
-await page.evaluate(() =>
-	[...document.querySelectorAll('.dt-stitch-format')]
-		.find((b) => /jxl/i.test(b.textContent))
-		.click(),
-);
+for (const [label, ext, test] of [
+	['JPEG', /\.jpg$/, (b) => b[0] === 0xff && b[1] === 0xd8],
+	['WebP', /\.webp$/, (b) => b.subarray(8, 12).toString() === 'WEBP'],
+]) {
+	await formatButton(label);
+	await sleep(300);
+	await page.click('.stitch-download');
+	const file = await waitForDownload(ext);
+	check(
+		`and as a ${label}`,
+		!!file && test(file.bytes),
+		file ? `${file.name}, ${file.bytes.length} bytes` : 'no file appeared',
+	);
+}
+
+await formatButton('JXL');
 await sleep(400);
-await page.click('.dt-stitch-download');
+await page.click('.stitch-download');
 const jxl = await waitForDownload(/\.jxl$/);
 // ff 0a or ISOBMFF
 const signature = jxl
@@ -110,11 +130,13 @@ check(
 );
 
 await visit(page, '/tools/image-stitcher');
-await pickVia('.dt-stitch-drop', IMAGE);
-await pickVia('.dt-stitch-side.is-right', IMAGE);
+await pickVia('.stitch-slot', IMAGE);
+await page.click('.stitch-add--gutter[aria-label="Add right"]');
+await sleep(200);
+await pickVia('.canon-menu:popover-open .canon-menu-item', IMAGE);
 const grown = await page.evaluate(() => ({
-	tiles: document.querySelectorAll('.dt-stitch-tile').length,
-	seams: document.querySelectorAll('.dt-stitch-seam').length,
+	tiles: document.querySelectorAll('button.stitch-tile').length,
+	seams: document.querySelectorAll('.stitch-add--seam').length,
 }));
 check(
 	'a side button grows the mosaic and adds a seam',
@@ -124,23 +146,18 @@ check(
 
 await visit(page, '/tools/image-stitcher');
 await page.evaluate(() =>
-	[...document.querySelectorAll('.dt-stitch-mode')]
+	[...document.querySelectorAll('.stitch-modes button')]
 		.find((b) => /batch/i.test(b.textContent))
 		.click(),
 );
 await sleep(400);
-await pickVia(
-	'.dt-stitch-pool-add, .dt-stitch-drop',
-	IMAGE,
-	IMAGE,
-	IMAGE,
-	IMAGE,
-);
+await pickVia('.stitch-slot', IMAGE, IMAGE, IMAGE, IMAGE);
 
 const batch = await page.evaluate(() => ({
-	thumbs: document.querySelectorAll('.dt-stitch-thumb').length,
-	cells: document.querySelectorAll('.dt-stitch-preview-cell').length,
-	ready: !document.querySelector('.dt-stitch-download')?.disabled,
+	thumbs: document.querySelectorAll('.stitch-strip .canon-page-strip-cell')
+		.length,
+	cells: document.querySelectorAll('span.stitch-tile').length,
+	ready: !document.querySelector('.stitch-download')?.disabled,
 }));
 check(
 	'the batch pool takes its own images',

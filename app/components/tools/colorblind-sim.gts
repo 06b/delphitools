@@ -1,691 +1,693 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import { colourFromUrl } from 'delphitools-v2/lib/colour-query';
-import Dialog from 'delphitools-v2/components/ui/dialog';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourControls, {
+	CanonColourSolidState,
+} from 'delphicanon/components/canon-colour-controls';
+import CanonColourNotationInput from 'delphicanon/components/canon-colour-notation-input';
+import CanonColourSolid from 'delphicanon/components/canon-colour-solid';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonImageCompare from 'delphicanon/components/canon-image-compare';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import { hex, parseHex, takesBlackInk, type Rgb } from 'delphicanon/lib/colour';
+import { stem } from 'delphicanon/lib/files';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import { getColourName } from 'delphitools-v2/lib/colour-names';
 import {
 	MATRICES,
-	applyMatrix,
 	simulateHex,
 	type SimulationType,
 } from 'delphitools-v2/lib/colour-vision';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
+import { downloadUrl } from 'delphitools-v2/lib/download';
+import { downloadIcon } from 'delphitools-v2/lib/flow-hooks';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import { readColour } from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import NotationStrip from 'delphitools-v2/components/tools/colour-tool/notation-strip';
+import {
+	launchFlags,
+	simulatePixels,
+	visionTypes,
+} from 'delphitools-v2/components/tools/colorblind-sim/vision';
+import './colorblind-sim/colorblind-sim.css';
 
-type Severity = 'none' | 'partial' | 'full';
+const startColour = parseHex('E63946')!;
+const modes = ['Colour', 'Image'];
+const views = ['Split', 'Side by side'];
+const maxEdge = 2048;
+const thumbEdge = 160;
 
-type Mode = 'colour' | 'image';
+const closestName = (colour: Rgb) => getColourName(hex(colour));
 
-interface SimulationInfo {
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+function drawn(bitmap: ImageBitmap, edge: number) {
+	const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+	const canvas = document.createElement('canvas');
+	canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+	canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+	const context = canvas.getContext('2d', { willReadFrequently: true })!;
+	context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+	return { canvas, context };
+}
+
+function painted(pixels: ImageData, type: SimulationType) {
+	const canvas = document.createElement('canvas');
+	canvas.width = pixels.width;
+	canvas.height = pixels.height;
+	canvas.getContext('2d')!.putImageData(
+		new ImageData(
+			simulatePixels(pixels.data, type),
+			pixels.width,
+			pixels.height,
+		),
+		0,
+		0,
+	);
+	return canvas;
+}
+
+async function blobUrl(canvas: HTMLCanvasElement) {
+	const blob = await new Promise<Blob | null>((resolve) =>
+		canvas.toBlob(resolve, 'image/png'),
+	);
+	return blob ? URL.createObjectURL(blob) : undefined;
+}
+
+interface Source {
 	name: string;
-	description: string;
-	severity: Severity;
-	prevalence: string;
+	width: number;
+	height: number;
+	url: string;
+	pixels: ImageData;
 }
 
-const SIMULATIONS: Record<SimulationType, SimulationInfo> = {
-	normal: {
-		name: 'Normal Vision',
-		description: 'No colour vision deficiency',
-		severity: 'none',
-		prevalence: '~92% of population',
-	},
-	protanopia: {
-		name: 'Protanopia',
-		description: 'Red-blind, cannot perceive red light',
-		severity: 'full',
-		prevalence: '~1% of AMAB',
-	},
-	deuteranopia: {
-		name: 'Deuteranopia',
-		description: 'Green-blind, cannot perceive green light',
-		severity: 'full',
-		prevalence: '~1% of AMAB',
-	},
-	tritanopia: {
-		name: 'Tritanopia',
-		description: 'Blue-blind, cannot perceive blue light',
-		severity: 'full',
-		prevalence: '~0.003% of population',
-	},
-	protanomaly: {
-		name: 'Protanomaly',
-		description: 'Red-weak, reduced sensitivity to red',
-		severity: 'partial',
-		prevalence: '~1% of AMAB',
-	},
-	deuteranomaly: {
-		name: 'Deuteranomaly',
-		description: 'Green-weak, reduced sensitivity to green',
-		severity: 'partial',
-		prevalence: '~5% of AMAB',
-	},
-	tritanomaly: {
-		name: 'Tritanomaly',
-		description: 'Blue-weak, reduced sensitivity to blue',
-		severity: 'partial',
-		prevalence: '~0.01% of population',
-	},
-	achromatopsia: {
-		name: 'Achromatopsia',
-		description: 'Total colour blindness, sees only grayscale',
-		severity: 'full',
-		prevalence: '~0.003% of population',
-	},
-	achromatomaly: {
-		name: 'Achromatomaly',
-		description:
-			'Partial colour blindness, reduced colour perception',
-		severity: 'partial',
-		prevalence: 'Very rare',
-	},
-};
-
-const SIM_KEYS = Object.keys(SIMULATIONS) as SimulationType[];
-
-const SEVERITY_LABEL: Record<Severity, string> = {
-	none: 'Normal',
-	partial: 'Partial',
-	full: 'Full',
-};
-
-const HEX = /^#[0-9a-f]{6}$/i;
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-	return new Promise((resolve, reject) => {
-		const image = new Image();
-		image.onload = () => resolve(image);
-		image.onerror = () => reject(new Error('image failed to load'));
-		image.src = src;
-	});
-}
-
-function fill(hex: string | null) {
-	return htmlSafe(hex ? `background-color: ${hex}` : '');
-}
-
-export default class ColorblindSimTool extends Component {
+/** The port of ColourBlindnessSimulatorViewController, on the web tool's matrices. */
+export default class ColorblindSim extends Component {
 	@service declare colourNotation: ColourNotationService;
 
-	@tracked mode: Mode = 'colour';
-	@tracked colour = colourFromUrl() ?? '#e63946';
-	@tracked selectedSim: SimulationType = 'normal';
-	@tracked sourceImage: string | null = null;
-	@tracked simulatedImage: string | null = null;
-	@tracked zoomed: { src: string; label: string } | null = null;
+	state: CanonColourSolidState;
+	@tracked imageMode = false;
+	@tracked selected: SimulationType;
+	@tracked view = 0;
+	@tracked source?: Source;
+	@tracked results: Partial<Record<SimulationType, string>> = {};
+	@tracked thumbs: Partial<Record<SimulationType, string>> = {};
+	@tracked busy = false;
+	#loading = 0;
+	#input?: HTMLInputElement;
 
-	#destroyed = false;
-	// prevent stale image results
-	#run = 0;
-
-	willDestroy() {
-		super.willDestroy();
-		this.#destroyed = true;
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		// sliced row, rgb blue
+		this.state = new CanonColourSolidState({
+			space: 'rgb',
+			colour: flags.colour ?? startColour,
+			activeRow: 2,
+		});
+		this.selected = flags.type ?? 'deuteranopia';
+		registerDestructor(this, () => this.#release());
+		if (flags.image)
+			void drawnSample().then((file) => this.load(file));
+		if (!flags.typeLater) return;
+		const timers = [
+			window.setTimeout(
+				() => this.choose('achromatopsia'),
+				2000,
+			),
+			window.setTimeout(
+				() => this.choose('protanopia'),
+				3000,
+			),
+		];
+		registerDestructor(this, () =>
+			timers.forEach((timer) => window.clearTimeout(timer)),
+		);
 	}
 
-	get isColourMode() {
-		return this.mode === 'colour';
+	get hex() {
+		return hex(this.state.colour);
 	}
 
-	get validColour(): string | null {
-		return HEX.test(this.colour) ? this.colour : null;
+	get text() {
+		return this.colourNotation.format(this.hex);
 	}
 
-	get pickerValue() {
-		return this.validColour ?? '#000000';
+	get type() {
+		return visionTypes.find((v) => v.type === this.selected)!;
 	}
 
-	get pickerStyle() {
-		return fill(this.pickerValue);
+	get vision() {
+		return MATRICES[this.selected];
 	}
 
-	get originalStyle() {
-		return fill(this.validColour);
+	simulated(type: SimulationType) {
+		return simulateHex(this.hex, type)?.toUpperCase() ?? this.hex;
 	}
 
-	get selectedInfo() {
-		return SIMULATIONS[this.selectedSim];
-	}
-
-	get selectedHex() {
-		return this.validColour
-			? simulateHex(this.validColour, this.selectedSim)
-			: null;
-	}
-
-	get selectedStyle() {
-		return fill(this.selectedHex);
-	}
-
-	get selectedDetail() {
-		const info = this.selectedInfo;
-		return `${info.description} — ${info.prevalence}`;
-	}
-
-	// hbs preserves attribute newlines
-	get simulatedAlt() {
-		return `Simulated ${this.selectedInfo.name}`;
-	}
-
-	get simulations() {
-		return SIM_KEYS.map((key) => {
-			const info = SIMULATIONS[key];
-			const hex = this.validColour
-				? simulateHex(this.validColour, key)
-				: null;
+	get rows() {
+		return visionTypes.map((v) => {
+			const code = this.simulated(v.type);
 			return {
-				key,
-				name: info.name,
-				value: hex
-					? this.colourNotation.format(hex)
-					: '',
-				badge: SEVERITY_LABEL[info.severity],
-				badgeClass: `dt-cbs-badge is-${info.severity}`,
-				swatchStyle: fill(hex),
-				isActive: key === this.selectedSim,
+				...v,
+				detail: v.severity
+					? `${v.severity} · ${v.short}`
+					: v.short,
+				value: this.colourNotation.format(code),
+				swatch: htmlSafe(`background: ${code}`),
+				thumb: this.thumbs[v.type],
+				selected: v.type === this.selected,
 			};
 		});
 	}
 
-	setColour = (event: Event) => {
-		this.colour = (event.target as HTMLInputElement).value;
+	get panes() {
+		return [
+			{ title: 'Original', code: this.hex },
+			{
+				title: this.type.name,
+				code: this.simulated(this.selected),
+			},
+		].map(({ title, code }) => ({
+			title,
+			value: this.colourNotation.format(code),
+			style: htmlSafe(
+				`background: ${code}; color: ${takesBlackInk(parseHex(code)!) ? 'black' : 'white'}`,
+			),
+		}));
+	}
+
+	get modeIndex() {
+		return this.imageMode ? 1 : 0;
+	}
+
+	get sideBySide() {
+		return this.view === 1;
+	}
+
+	get result() {
+		return this.results[this.selected];
+	}
+
+	get sizeText() {
+		const { source } = this;
+		return source ? `${source.width} × ${source.height}` : '';
+	}
+
+	get simulatedAlt() {
+		return `Simulated ${this.type.name}`;
+	}
+
+	pickMode = (index: number) => {
+		this.imageMode = index === 1;
+		void this.simulate();
 	};
 
-	setMode = (mode: Mode) => {
-		this.mode = mode;
-		void this.process();
+	pickView = (index: number) => (this.view = index);
+
+	choose = (type: SimulationType) => {
+		this.selected = type;
+		void this.simulate();
 	};
 
-	chooseSim = (type: SimulationType) => {
-		this.selectedSim = type;
-		void this.process();
+	parse = (text: string) => {
+		const colour = readColour(text);
+		if (colour) this.state.use(colour);
+		return colour !== undefined;
 	};
 
-	readFile = (file: File) => {
-		if (!file.type.startsWith('image/')) return;
-		const reader = new FileReader();
-		reader.onload = () => {
-			this.sourceImage = reader.result as string;
-			this.simulatedImage = null;
-			void this.process();
-		};
-		reader.readAsDataURL(file);
+	// the web field answered every keystroke; the kit input waits 400 ms
+	typeLive = (event: Event) => {
+		const colour = readColour(
+			(event.target as HTMLInputElement).value,
+		);
+		if (colour) this.state.use(colour);
 	};
 
-	handleFileSelect = (event: Event) => {
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
+	};
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	chooseFile = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// allow file reselection
 		input.value = '';
+		if (file) void this.load(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file) this.readFile(file);
+	loadFiles = (files: File[]) => {
+		if (files[0]) void this.load(files[0]);
 	};
 
 	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
+
+	// a drop anywhere loads; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		void this.load(file);
 	};
 
-	clearImage = () => {
-		this.sourceImage = null;
-		this.simulatedImage = null;
-	};
-
-	// retain image during processing
-	process = async () => {
-		const source = this.sourceImage;
-		const type = this.selectedSim;
-		if (this.mode !== 'image' || !source) return;
-
-		const run = ++this.#run;
-
-		if (type === 'normal') {
-			this.simulatedImage = source;
-			return;
-		}
-
-		let image: HTMLImageElement;
+	load = async (file: File) => {
+		if (!file.type.startsWith('image/')) return;
+		const run = ++this.#loading;
+		let bitmap: ImageBitmap;
 		try {
-			image = await loadImage(source);
+			bitmap = await decodeImage(file);
 		} catch {
 			return;
 		}
-		if (this.#destroyed || run !== this.#run) return;
-
-		const canvas = document.createElement('canvas');
-		canvas.width = image.naturalWidth;
-		canvas.height = image.naturalHeight;
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
-		ctx.drawImage(image, 0, 0);
-
-		const imageData = ctx.getImageData(
-			0,
-			0,
-			canvas.width,
-			canvas.height,
-		);
-		const data = imageData.data;
-		const matrix = MATRICES[type];
-
-		for (let i = 0; i < data.length; i += 4) {
-			const [r, g, b] = applyMatrix(
-				matrix,
-				data[i]!,
-				data[i + 1]!,
-				data[i + 2]!,
-			);
-			data[i] = r;
-			data[i + 1] = g;
-			data[i + 2] = b;
+		if (run !== this.#loading || isDestroying(this)) {
+			bitmap.close();
+			return;
 		}
-
-		ctx.putImageData(imageData, 0, 0);
-		this.simulatedImage = canvas.toDataURL('image/png');
-	};
-
-	zoomSource = (open: () => void) => {
-		if (!this.sourceImage) return;
-		this.zoomed = { src: this.sourceImage, label: 'Original' };
-		open();
-	};
-
-	zoomResult = (open: () => void) => {
-		if (!this.simulatedImage) return;
-		this.zoomed = {
-			src: this.simulatedImage,
-			label: this.selectedInfo.name,
+		const full = drawn(bitmap, maxEdge);
+		const small = drawn(bitmap, thumbEdge);
+		bitmap.close();
+		const pixels = full.context.getImageData(
+			0,
+			0,
+			full.canvas.width,
+			full.canvas.height,
+		);
+		const thumbPixels = small.context.getImageData(
+			0,
+			0,
+			small.canvas.width,
+			small.canvas.height,
+		);
+		const url = await blobUrl(full.canvas);
+		if (!url) return;
+		if (run !== this.#loading || isDestroying(this)) {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		this.#release();
+		this.imageMode = true;
+		this.source = {
+			name: file.name || 'image',
+			width: pixels.width,
+			height: pixels.height,
+			url,
+			pixels,
 		};
-		open();
+		this.thumbs = Object.fromEntries(
+			visionTypes.map(({ type }) => [
+				type,
+				painted(thumbPixels, type).toDataURL(),
+			]),
+		);
+		this.results = { normal: url };
+		void this.simulate();
 	};
 
-	clearZoom = () => {
-		this.zoomed = null;
+	clear = () => {
+		this.#loading++;
+		this.#release();
+		this.source = undefined;
+		this.results = {};
+		this.thumbs = {};
 	};
+
+	// cached until the image changes; one run at a time, the selection at its end runs next
+	simulate = async () => {
+		const { source, selected } = this;
+		if (!this.imageMode || !source || this.busy) return;
+		if (this.results[selected]) return;
+		this.busy = true;
+		// a frame for the loader before the pixel loop
+		await new Promise((resolve) => setTimeout(resolve, 16));
+		const url = await blobUrl(painted(source.pixels, selected));
+		this.busy = false;
+		if (source !== this.source || isDestroying(this)) {
+			if (url) URL.revokeObjectURL(url);
+			return;
+		}
+		if (url) this.results = { ...this.results, [selected]: url };
+		if (this.selected !== selected) void this.simulate();
+	};
+
+	download = () => {
+		const { source, result } = this;
+		if (source && result)
+			downloadUrl(
+				result,
+				`${stem(source.name)}-${this.selected}.png`,
+			);
+	};
+
+	#release() {
+		for (const url of Object.values(this.results))
+			if (url) URL.revokeObjectURL(url);
+	}
 
 	<template>
-		<Dialog @onClose={{this.clearZoom}} as |d|>
-			<div
-				class="dt-cbs"
-				{{filePaste this.readFile accept="image/*"}}
-			>
-				<div class="dt-cbs-frame">
-					<div class="segmented dt-cbs-modes">
-						<button
-							type="button"
-							class="dt-cbs-mode
-								{{if
-									this.isColourMode
-									'is-active'
-								}}"
-							{{on
-								"click"
-								(fn
-									this.setMode
-									"colour"
-								)
-							}}
-						>
-							<Icon @name="palette" />
-							Colour Mode
-						</button>
-						<button
-							type="button"
-							class="dt-cbs-mode
-								{{unless
-									this.isColourMode
-									'is-active'
-								}}"
-							{{on
-								"click"
-								(fn
-									this.setMode
-									"image"
-								)
-							}}
-						>
-							<Icon @name="image" />
-							Image Mode
-						</button>
-					</div>
-
-					{{#if this.isColourMode}}
-						<div class="dt-cbs-pick">
-							<span
-								class="dt-cbs-label"
-							>Select Colour</span>
-							<div
-								class="dt-cbs-field"
-							>
-								<span
-									class="dt-cbs-picker"
+		<CanonSplit
+			class="colorblind-sim"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.imageMode}}
+						{{#if this.source}}
+							{{#if this.sideBySide}}
+								<div
+									class="cbs-pair"
 								>
-									<span
-										style={{this.pickerStyle}}
-										aria-hidden="true"
-									></span>
-									<input
-										type="color"
-										value={{this.pickerValue}}
-										aria-label="Pick colour"
-										{{on
-											"input"
-											this.setColour
-										}}
-									/>
-								</span>
-								<input
-									type="text"
-									class="dt-cbs-hex"
-									value={{this.colour}}
-									placeholder="#e63946"
-									aria-label="Colour"
-									{{on
-										"input"
-										this.setColour
-									}}
-								/>
-							</div>
-						</div>
-
-						<div class="dt-cbs-types">
-							<div
-								class="dt-cbs-types-head"
-							>
-								<span
-									class="dt-cbs-label"
-								>Vision Types</span>
-							</div>
-							<div
-								class="dt-cbs-grid"
-							>
-								{{#each
-									this.simulations
-									key="key"
-									as |sim|
-								}}
-									<button
-										type="button"
-										class="dt-cbs-cell
-											{{if
-												sim.isActive
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.chooseSim
-												sim.key
-											)
-										}}
-									>
-										<span
-											class="dt-cbs-cell-top"
-										>
-											<span
-												class="dt-cbs-cell-swatch"
-												style={{sim.swatchStyle}}
-											></span>
-											<span
-												class="dt-cbs-cell-text"
-											>
-												<span
-													class="dt-cbs-cell-name"
-												>{{sim.name}}</span>
-												<span
-													class="dt-cbs-cell-value"
-												>{{sim.value}}</span>
-											</span>
-										</span>
-										<span
-											class={{sim.badgeClass}}
-										>{{sim.badge}}</span>
-									</button>
-								{{/each}}
-							</div>
-						</div>
-
-						<div class="dt-cbs-head">
-							<span
-								class="dt-cbs-label"
-							>Comparison</span>
-						</div>
-						<div class="dt-cbs-compare">
-							<div
-								class="dt-cbs-pane"
-							>
-								<span
-									class="dt-cbs-pane-title"
-								>Original</span>
-								<span
-									class="dt-cbs-fill"
-									style={{this.originalStyle}}
-								></span>
-								<span
-									class="dt-cbs-pane-value"
-								>{{this.colour}}</span>
-							</div>
-							<div
-								class="dt-cbs-pane"
-							>
-								<span
-									class="dt-cbs-pane-title"
-								>{{this.selectedInfo.name}}</span>
-								<span
-									class="dt-cbs-fill"
-									style={{this.selectedStyle}}
-								></span>
-								<span
-									class="dt-cbs-pane-value"
-								>{{this.selectedHex}}</span>
-							</div>
-						</div>
-
-						<div class="dt-cbs-desc">
-							<span
-								class="dt-cbs-desc-name"
-							>{{this.selectedInfo.name}}</span>
-							<span
-								class="dt-cbs-desc-text"
-							>{{this.selectedDetail}}</span>
-						</div>
-					{{else if this.sourceImage}}
-						<div class="dt-cbs-bar">
-							<span
-								class="dt-cbs-bar-title"
-							>Simulation Preview</span>
-							<button
-								type="button"
-								class="dt-cbs-bar-btn"
-								{{on
-									"click"
-									this.clearImage
-								}}
-							>
-								<Icon
-									@name="trash-2"
-								/>
-								Clear
-							</button>
-						</div>
-
-						<div class="dt-cbs-types">
-							<div
-								class="dt-cbs-types-head"
-							>
-								<span
-									class="dt-cbs-label"
-								>Vision Type</span>
-							</div>
-							<div
-								class="segmented dt-cbs-type-grid"
-							>
-								{{#each
-									this.simulations
-									key="key"
-									as |sim|
-								}}
-									<button
-										type="button"
-										class="dt-cbs-type
-											{{if
-												sim.isActive
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.chooseSim
-												sim.key
-											)
-										}}
-									>{{sim.name}}</button>
-								{{/each}}
-							</div>
-						</div>
-
-						<div
-							class="dt-cbs-desc is-shaded"
-						>
-							<span
-								class="dt-cbs-desc-name"
-							>{{this.selectedInfo.name}}</span>
-							<span
-								class="dt-cbs-desc-text"
-							>{{this.selectedDetail}}</span>
-						</div>
-
-						<div class="dt-cbs-compare">
-							<div
-								class="dt-cbs-pane"
-							>
-								<span
-									class="dt-cbs-pane-title"
-								>Original</span>
-								<button
-									type="button"
-									class="dt-cbs-zoom"
-									{{on
-										"click"
-										(fn
-											this.zoomSource
-											d.open
-										)
-									}}
-								>
-									<img
-										src={{this.sourceImage}}
-										alt="Original"
-									/>
-								</button>
-							</div>
-							<div
-								class="dt-cbs-pane"
-							>
-								<span
-									class="dt-cbs-pane-title"
-								>{{this.selectedInfo.name}}</span>
-								{{#if
-									this.simulatedImage
-								}}
-									<button
-										type="button"
-										class="dt-cbs-zoom"
-										{{on
-											"click"
-											(fn
-												this.zoomResult
-												d.open
-											)
-										}}
+									<figure
+										class="cbs-pair-pane"
 									>
 										<img
-											src={{this.simulatedImage}}
-											alt={{this.simulatedAlt}}
+											src={{this.source.url}}
+											alt="Original"
 										/>
-									</button>
-								{{else}}
-									<span
-										class="dt-cbs-pending"
-									>Processing...</span>
-								{{/if}}
-							</div>
-						</div>
+										<figcaption
+										>Original</figcaption>
+									</figure>
+									<figure
+										class="cbs-pair-pane"
+									>
+										{{#if
+											this.result
+										}}
+											<img
+												src={{this.result}}
+												alt={{this.simulatedAlt}}
+											/>
+										{{/if}}
+										<figcaption
+										>{{this.type.name}}</figcaption>
+									</figure>
+								</div>
+							{{else}}
+								<CanonImageCompare
+									@before={{this.source.url}}
+									@after={{this.result}}
+									@beforeTitle="Original"
+									@afterTitle={{this.type.name}}
+								/>
+							{{/if}}
+							{{#if this.busy}}
+								<CanonLoader
+									class="cbs-loader"
+								/>
+							{{/if}}
+						{{else}}
+							<Slot
+								class="cbs-slot"
+								@prompt="Drop an image"
+								@icon="image"
+								@dashed={{true}}
+								@fills={{true}}
+								@onChoose={{this.chooseFile}}
+							/>
+						{{/if}}
 					{{else}}
-						<label
-							class="dt-cbs-drop"
+						<div class="cbs-picture">
+							<CanonColourSolid
+								class="cbs-solid"
+								@space={{this.state.space}}
+								@point={{this.state.point}}
+								@animated={{this.state.animated}}
+								@sliceAxis={{this.state.sliceAxis}}
+								@isOrtho={{this.state.isOrtho}}
+								@showsWhole={{this.state.showsWhole}}
+								@vision={{this.vision}}
+								@onChange={{this.state.pick}}
+								@closestName={{closestName}}
+							/>
+							<NotationStrip
+								@hex={{this.hex}}
+							/>
+						</div>
+					{{/if}}
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonSegmented
+						class="cbs-modes"
+						@items={{modes}}
+						@selected={{this.modeIndex}}
+						@onChange={{this.pickMode}}
+					/>
+					{{#unless this.imageMode}}
+						<CanonColourNotationInput
+							class="cbs-input"
+							@colour={{this.state.colour}}
+							@text={{this.text}}
+							@onColour={{this.state.use}}
+							@parse={{this.parse}}
+							@label="Colour"
+							@placeholder="#e63946"
 							{{on
-								"drop"
-								this.handleDrop
+								"input"
+								this.typeLive
 							}}
 							{{on
-								"dragover"
-								this.allowDrop
+								"focusin"
+								this.selectAll
 							}}
-						>
-							<input
-								type="file"
-								accept="image/*"
-								class="dt-sr-only"
+						/>
+					{{/unless}}
+				</CanonRows>
+				{{#if this.imageMode}}
+					<CanonRows @framed={{true}}>
+						{{#if this.source}}
+							<CanonRow
+								class="cbs-source"
+								@title={{this.source.name}}
+								@detail={{this.sizeText}}
+								@form="flush"
+							>
+								<CanonButton
+									@kind="cell"
+									@text="Clear"
+									@icon={{Trash}}
+									@onClick={{this.clear}}
+								/>
+							</CanonRow>
+							<CanonRow
+								@title="View"
+								@form="flush"
+							>
+								<CanonSegmented
+									class="cbs-views"
+									@items={{views}}
+									@selected={{this.view}}
+									@onChange={{this.pickView}}
+								/>
+							</CanonRow>
+							<CanonGrid>
+								<CanonButton
+									class="cbs-download"
+									@text="Download colourblind image"
+									@icon={{Save}}
+									@disabled={{if
+										this.result
+										false
+										true
+									}}
+									@onClick={{this.download}}
+								/>
+							</CanonGrid>
+						{{else}}
+							<CanonDropZone
+								class="cbs-drop"
+								@prompt="Drop an image"
+								@onFiles={{this.loadFiles}}
 								{{on
-									"change"
-									this.handleFileSelect
+									"paste"
+									keepPaste
 								}}
 							/>
-							<Icon @name="upload" />
-							<span
-								class="dt-cbs-drop-title"
-							>Drop image here</span>
-							<span
-								class="dt-cbs-drop-hint"
-							>or click to select, or
-								paste</span>
-						</label>
-					{{/if}}
-				</div>
-
-				<div class="dt-cbs-about">
-					<span class="dt-cbs-about-title">About
-						Colour Blindness</span>
-					<p>Colour blindness affects
-						approximately 8% of AMAB and
-						0.5% of AFAB people worldwide.
-						The most common types are
-						red-green deficiencies
-						(protanopia/deuteranopia).</p>
-					<p>When designing, ensure sufficient
-						contrast and don't rely solely
-						on colour to convey information.
-						Use patterns, labels, or icons
-						as additional indicators.</p>
-				</div>
-
-				<d.Content class="dt-cbs-lightbox">
-					{{#if this.zoomed}}
-						<h2
-							class="dt-sr-only"
-						>{{this.zoomed.label}}</h2>
-						<button
-							type="button"
-							class="dt-cbs-lightbox-btn"
-							{{on "click" d.close}}
-						>
-							<img
-								src={{this.zoomed.src}}
-								alt={{this.zoomed.label}}
-							/>
-						</button>
-					{{/if}}
-				</d.Content>
-			</div>
-		</Dialog>
+						{{/if}}
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonColourControls
+							@state={{this.state}}
+							@hidesNotation={{true}}
+						/>
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text="Simulation Types"
+					/>
+					<div class="cbs-types">
+						{{#each
+							this.rows key="type"
+							as |row|
+						}}
+							<button
+								type="button"
+								class="cbs-type
+									{{if
+										row.selected
+										'cbs-type--selected'
+									}}"
+								aria-pressed={{if
+									row.selected
+									"true"
+									"false"
+								}}
+								{{on
+									"click"
+									(fn
+										this.choose
+										row.type
+									)
+								}}
+							>
+								<span
+									class="cbs-type-swatch"
+									style={{unless
+										this.imageMode
+										row.swatch
+									}}
+								>
+									{{#if
+										this.imageMode
+									}}
+										{{#if
+											row.thumb
+										}}
+											<img
+												src={{row.thumb}}
+												alt=""
+											/>
+										{{/if}}
+									{{/if}}
+								</span>
+								<span
+									class="cbs-type-cell"
+								>
+									<span
+										class="cbs-type-text"
+									>
+										<span
+											class="cbs-type-name"
+										>{{row.name}}</span>
+										<span
+											class="cbs-type-detail"
+										>{{row.detail}}</span>
+									</span>
+									{{#unless
+										this.imageMode
+									}}
+										<span
+											class="cbs-type-value"
+										>{{row.value}}</span>
+									{{/unless}}
+								</span>
+							</button>
+						{{/each}}
+					</div>
+				</CanonRows>
+				{{#unless this.imageMode}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Comparison"
+						/>
+						<div class="cbs-compare">
+							{{#each
+								this.panes
+								as |pane|
+							}}
+								<div
+									class="cbs-pane"
+									style={{pane.style}}
+								>
+									<span
+										class="cbs-pane-title"
+									>{{pane.title}}</span>
+									<span
+										class="cbs-pane-value"
+									>{{pane.value}}</span>
+								</div>
+							{{/each}}
+						</div>
+					</CanonRows>
+				{{/unless}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text="About Colour Blindness"
+					/>
+					<div class="cbs-about">
+						<p>Colour blindness affects
+							approximately 8% of AMAB
+							and 0.5% of AFAB people
+							worldwide. The most
+							common types are
+							red-green deficiencies
+							(protanopia/deuteranopia).</p>
+						<p>When designing, ensure
+							sufficient contrast and
+							don't rely solely on
+							colour to convey
+							information. Use
+							patterns, labels, or
+							icons as additional
+							indicators.</p>
+					</div>
+				</CanonRows>
+				{{! the empty picture opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

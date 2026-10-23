@@ -1,326 +1,295 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
+import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+import CanonBigNumberField from 'delphicanon/components/canon-big-number-field';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDecimalField from 'delphicanon/components/canon-decimal-field';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { clamp, parseDecimal } from 'delphicanon/lib/number';
+import Gauge, {
+	gaugeHeight,
+} from 'delphitools-v2/components/tools/typo-calc/gauge';
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
+	CSS_PPI,
+	UNITS,
+	UNIT_ORDER,
+	formatValue,
+	isUnit,
+	nudged,
+	type Unit,
+} from 'delphitools-v2/components/tools/typo-calc/units';
+import './typo-calc/typo-calc.css';
 
-export type Unit =
-	'px' | 'pt' | 'pc' | 'ag' | 'cc' | 'in' | 'mm' | 'cm' | 'em' | 'rem';
+const baseRange = { min: 1, max: 200 };
+const ppiRange = { min: 1, max: 2400 };
+/** Common resolutions: print at 72 pt per inch, CSS, and two print scans. */
+const ppiPresets = [72, 96, 150, 300];
+const canvasHeight = gaugeHeight + 4;
 
-export interface UnitInfo {
-	name: string;
-	description: string;
-	toPx: (value: number, basePx: number) => number;
-	fromPx: (px: number, basePx: number) => number;
-}
-
-// css 96px per inch
-const PX_PER_INCH = 96;
-const PT_PER_INCH = 72;
-const PT_PER_PICA = 12;
-const AGATES_PER_INCH = 14;
-const MM_PER_INCH = 25.4;
-const MM_PER_CICERO = 4.512;
-
-export const UNITS: Record<Unit, UnitInfo> = {
-	px: {
-		name: 'Pixels',
-		description: 'Screen pixels (96 per inch)',
-		toPx: (v) => v,
-		fromPx: (px) => px,
-	},
-	pt: {
-		name: 'Points',
-		description: 'Print points (72 per inch)',
-		toPx: (v) => v * (PX_PER_INCH / PT_PER_INCH),
-		fromPx: (px) => px * (PT_PER_INCH / PX_PER_INCH),
-	},
-	pc: {
-		name: 'Picas',
-		description: '12 points per pica',
-		toPx: (v) => v * PT_PER_PICA * (PX_PER_INCH / PT_PER_INCH),
-		fromPx: (px) =>
-			(px / PT_PER_PICA) * (PT_PER_INCH / PX_PER_INCH),
-	},
-	ag: {
-		name: 'Agates',
-		description: '14 agates per inch (US newspapers)',
-		toPx: (v) => v * (PX_PER_INCH / AGATES_PER_INCH),
-		fromPx: (px) => px * (AGATES_PER_INCH / PX_PER_INCH),
-	},
-	cc: {
-		name: 'Ciceros',
-		description: 'European unit (≈4.512mm)',
-		toPx: (v) => v * MM_PER_CICERO * (PX_PER_INCH / MM_PER_INCH),
-		fromPx: (px) =>
-			px / (MM_PER_CICERO * (PX_PER_INCH / MM_PER_INCH)),
-	},
-	in: {
-		name: 'Inches',
-		description: 'Imperial inch',
-		toPx: (v) => v * PX_PER_INCH,
-		fromPx: (px) => px / PX_PER_INCH,
-	},
-	mm: {
-		name: 'Millimeters',
-		description: 'Metric millimeter',
-		toPx: (v) => v * (PX_PER_INCH / MM_PER_INCH),
-		fromPx: (px) => px * (MM_PER_INCH / PX_PER_INCH),
-	},
-	cm: {
-		name: 'Centimeters',
-		description: 'Metric centimeter',
-		toPx: (v) => v * (PX_PER_INCH / (MM_PER_INCH / 10)),
-		fromPx: (px) => px * (MM_PER_INCH / 10 / PX_PER_INCH),
-	},
-	em: {
-		name: 'Em',
-		description: 'Relative to parent font-size',
-		toPx: (v, basePx) => v * basePx,
-		fromPx: (px, basePx) => px / basePx,
-	},
-	rem: {
-		name: 'Rem',
-		description: 'Relative to root font-size',
-		toPx: (v, basePx) => v * basePx,
-		fromPx: (px, basePx) => px / basePx,
-	},
-};
-
-export const UNIT_ORDER: Unit[] = [
-	'px',
-	'pt',
-	'pc',
-	'ag',
-	'cc',
-	'in',
-	'mm',
-	'cm',
-	'em',
-	'rem',
-];
-
-const QUICK_REF: { label: string; value: string }[] = [
-	{ label: '1 inch =', value: '96px / 72pt / 25.4mm' },
-	{ label: '1 pica =', value: '12 points' },
-	{ label: '1 point =', value: '1/72 inch' },
-	{ label: '1 agate =', value: '1/14 inch (≈5.14pt)' },
-	{ label: '1 cicero =', value: '12 Didot pts (≈4.512mm)' },
-];
-
-const DEFAULT_BASE_PX = 16;
-
-// round-trips small units
-export function formatValue(value: number): string {
-	const magnitude = Math.abs(value);
-	if (magnitude < 0.001) return '0';
-	if (magnitude >= 1000) return value.toFixed(2);
-	if (magnitude >= 100) return value.toFixed(3);
-	if (magnitude >= 10) return value.toFixed(4);
-	if (magnitude >= 1) return value.toFixed(5);
-	return value.toFixed(6);
-}
-
+/** The port of TypoCalcViewController. */
 export default class TypoCalcTool extends Component {
 	@tracked inputValue = '16';
 	@tracked inputUnit: Unit = 'px';
-	@tracked baseFontSize = String(DEFAULT_BASE_PX);
+	@tracked basePx = 16;
+	@tracked ppi = CSS_PPI;
 
-	get basePx() {
-		return Number.parseFloat(this.baseFontSize) || DEFAULT_BASE_PX;
+	// ?typoValue=<number> ?typoUnit=<px|pt|pc|ag|cc|in|mm|cm|em|rem> ?typoBase=<px> ?typoPPI=<ppi>: the iOS launch flags
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const value = query.get('typoValue');
+		if (value !== null) this.setValue(value);
+		const unit = query.get('typoUnit');
+		if (isUnit(unit)) this.inputUnit = unit;
+		const base = parseDecimal(query.get('typoBase') ?? '');
+		if (base !== undefined)
+			this.basePx = clamp(base, baseRange.min, baseRange.max);
+		const ppi = parseDecimal(query.get('typoPPI') ?? '');
+		if (ppi !== undefined)
+			this.ppi = clamp(ppi, ppiRange.min, ppiRange.max);
+	}
+
+	get typed() {
+		return parseDecimal(this.inputValue);
 	}
 
 	get pxValue() {
-		const num = Number.parseFloat(this.inputValue) || 0;
-		return UNITS[this.inputUnit].toPx(num, this.basePx);
+		return UNITS[this.inputUnit].toPx(
+			this.typed ?? 0,
+			this.basePx,
+			this.ppi,
+		);
 	}
 
-	get units() {
-		return UNIT_ORDER.map((unit) => ({ id: unit }));
+	valueIn(unit: Unit) {
+		return UNITS[unit].fromPx(this.pxValue, this.basePx, this.ppi);
+	}
+
+	get unitIndex() {
+		return UNIT_ORDER.indexOf(this.inputUnit);
+	}
+
+	get ppiText() {
+		return formatValue(this.ppi);
 	}
 
 	get rows() {
-		const px = this.pxValue;
-		const basePx = this.basePx;
 		return UNIT_ORDER.map((unit) => {
 			const info = UNITS[unit];
-			const isActive = unit === this.inputUnit;
 			return {
 				unit,
 				name: info.name,
-				description: info.description,
-				value: formatValue(info.fromPx(px, basePx)),
-				isActive,
-				rowClass: isActive
-					? 'dt-typo-row is-active'
-					: 'dt-typo-row',
+				// stock text says 96
+				detail:
+					unit === 'px' && this.ppi !== CSS_PPI
+						? `${this.ppiText} ppi`
+						: info.description,
+				value: formatValue(this.valueIn(unit)),
+				input: unit === this.inputUnit,
 			};
 		});
 	}
 
-	get quickRef() {
+	get presets() {
+		return ppiPresets.map((value) => ({
+			value,
+			text: String(value),
+			selected: value === this.ppi,
+		}));
+	}
+
+	get reference() {
+		const base = formatValue(this.basePx);
 		return [
-			...QUICK_REF,
 			{
-				label: '1 em/rem =',
-				value: `${this.basePx}px (base)`,
+				label: '1 in',
+				value: `${this.ppiText} px · 72 pt · 25.4 mm`,
 			},
+			{ label: '1 pc', value: '12 pt · 1/6 in' },
+			{ label: '1 pt', value: '1/72 in' },
+			{ label: '1 ag', value: '1/14 in · 5.14 pt' },
+			{ label: '1 cc', value: '12 Didot pt · 4.512 mm' },
+			{ label: '1 em · rem', value: `${base} px` },
 		];
 	}
 
-	setInputValue = (event: Event) => {
-		this.inputValue = (event.target as HTMLInputElement).value;
-	};
+	setValue(text: string) {
+		this.inputValue = text;
+	}
 
-	setBaseFontSize = (event: Event) => {
-		this.baseFontSize = (event.target as HTMLInputElement).value;
-	};
+	// the web field answered every keystroke; iOS waits 400 ms
+	type = (text: string) => (this.inputValue = text);
 
-	// dropdown re-reads, table converts
-	chooseUnit = (id: string) => {
-		this.inputUnit = id as Unit;
-	};
-
-	swapUnit = (unit: Unit) => {
-		this.inputValue = formatValue(
-			UNITS[unit].fromPx(this.pxValue, this.basePx),
+	nudge = (direction: -1 | 1) =>
+		this.setValue(
+			formatValue(
+				nudged(this.typed, this.inputUnit, direction),
+			),
 		);
+
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
+	};
+
+	// as the web picker: the typed number is read in the new unit
+	pickUnit = (index: number) => (this.inputUnit = UNIT_ORDER[index]!);
+
+	// as the web table: the value converts into the row's unit
+	convert = (unit: Unit) => {
+		if (unit === this.inputUnit) return;
+		this.setValue(formatValue(this.valueIn(unit)));
 		this.inputUnit = unit;
 	};
 
+	pickBase = (value: number) => (this.basePx = value);
+
+	usePPI = (value: number) =>
+		(this.ppi = clamp(value, ppiRange.min, ppiRange.max));
+
 	<template>
-		<div class="dt-typo">
-			<div class="dt-typo-base">
-				<div class="dt-typo-base-text">
-					<label for="dt-typo-base">Base Font Size</label>
-					<p>Used for em and rem calculations</p>
-				</div>
-				<div class="dt-typo-base-field">
-					<input
-						id="dt-typo-base"
-						type="number"
-						value={{this.baseFontSize}}
-						{{on
-							"input"
-							this.setBaseFontSize
-						}}
+		<CanonSplit class="typo-calc">
+			<:banner>
+				<CanonCanvas @height={{canvasHeight}}>
+					<Gauge
+						@px={{this.pxValue}}
+						@base={{this.basePx}}
+						@ppi={{this.ppi}}
+						@unit={{this.inputUnit}}
 					/>
-					<span class="dt-typo-unit">px</span>
-				</div>
-			</div>
-
-			<div class="dt-typo-from">
-				<div class="dt-typo-head">
-					<label for="dt-typo-value">Convert From</label>
-				</div>
-				<div class="dt-typo-from-row">
-					<input
-						id="dt-typo-value"
-						type="number"
-						step="any"
-						value={{this.inputValue}}
-						{{on
-							"input"
-							this.setInputValue
-						}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonBigNumberField
+						@value={{this.inputValue}}
+						@placeholder="0"
+						@unit={{upper this.inputUnit}}
+						@label="Convert From"
+						@onStep={{this.nudge}}
+						@onInput={{this.type}}
+						{{on "focusin" this.selectAll}}
 					/>
-					<div class="dt-typo-picker">
-						<Select
-							@value={{this.inputUnit}}
-							@onValueChange={{this.chooseUnit}}
-						>
-							<SelectTrigger>
-								<SelectValue
-								>{{this.inputUnit}}</SelectValue>
-							</SelectTrigger>
-							<SelectContent>
-								{{#each
-									this.units
-									key="id"
-									as |unit|
+					<CanonSegmented
+						aria-label="Unit"
+						@items={{UNIT_ORDER}}
+						@columns={{5}}
+						@selected={{this.unitIndex}}
+						@onChange={{this.pickUnit}}
+					/>
+					<CanonRow
+						@title="Base Font Size"
+						@detail="Used for em and rem"
+						@form="stacked"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.basePx}}
+							@min={{baseRange.min}}
+							@max={{baseRange.max}}
+							@unit="px"
+							@step={{1}}
+							@decimals={{2}}
+							@labelledBy={{titleId}}
+							@onChange={{this.pickBase}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Resolution"
+						@form="stacked"
+						as |titleId|
+					>
+						<CanonDecimalField
+							@value={{this.ppi}}
+							@min={{ppiRange.min}}
+							@max={{ppiRange.max}}
+							@unit="ppi"
+							@step={{1}}
+							@decimals={{0}}
+							@labelledBy={{titleId}}
+							@onChange={{this.usePPI}}
+						/>
+					</CanonRow>
+					<CanonGrid @columns={{4}}>
+						{{#each
+							this.presets key="value"
+							as |preset|
+						}}
+							<CanonButton
+								@kind="segment"
+								@text={{preset.text}}
+								@label="{{preset.text}} ppi"
+								@selected={{preset.selected}}
+								@onClick={{fn
+									this.usePPI
+									preset.value
 								}}
-									<SelectItem
-										@value={{unit.id}}
-									>{{unit.id}}</SelectItem>
-								{{/each}}
-							</SelectContent>
-						</Select>
-					</div>
-				</div>
-			</div>
-
-			<div class="dt-typo-table">
-				<div class="dt-typo-head">
-					<span class="dt-typo-heading">Converted
-						Values</span>
-				</div>
-				<div class="dt-typo-rows">
+							/>
+						{{/each}}
+					</CanonGrid>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text="Converted Values"
+					/>
 					{{#each this.rows key="unit" as |row|}}
 						<button
 							type="button"
-							class={{row.rowClass}}
-							disabled={{row.isActive}}
+							class="typo-row"
+							aria-label="{{row.name}}, {{row.value}} {{row.unit}}"
+							aria-current={{if
+								row.input
+								"true"
+							}}
 							{{on
 								"click"
 								(fn
-									this.swapUnit
+									this.convert
 									row.unit
 								)
 							}}
 						>
 							<span
-								class="dt-typo-badge"
+								class="typo-row-symbol"
 							>{{row.unit}}</span>
 							<span
-								class="dt-typo-value"
-							>{{row.value}}</span>
-							<span
-								class="dt-typo-meta"
+								class="typo-row-names"
 							>
 								<span
-									class="dt-typo-name"
+									class="typo-row-name"
 								>{{row.name}}</span>
 								<span
-									class="dt-typo-desc"
-								>{{row.description}}</span>
+									class="typo-row-detail"
+								>{{row.detail}}</span>
 							</span>
 							<span
-								class="dt-typo-swap"
-							>
-								<Icon
-									@name="arrow-right-left"
-								/>
-							</span>
+								class="typo-row-value"
+							>{{row.value}}</span>
 						</button>
 					{{/each}}
-				</div>
-			</div>
-
-			<div class="dt-typo-ref">
-				<span class="dt-typo-heading">Quick Reference</span>
-				<div class="segmented dt-typo-ref-grid">
-					{{#each
-						this.quickRef key="label"
-						as |ref|
-					}}
-						<div class="dt-typo-ref-cell">
-							<span
-								class="dt-typo-ref-label"
-							>{{ref.label}}</span>
-							<span
-								class="dt-typo-ref-value"
-							>{{ref.value}}</span>
-						</div>
-					{{/each}}
-				</div>
-			</div>
-		</div>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Quick Reference" />
+					<CanonTiles @items={{this.reference}} />
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function upper(text: string) {
+	return text.toUpperCase();
 }

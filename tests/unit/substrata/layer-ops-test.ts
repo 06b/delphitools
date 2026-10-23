@@ -23,6 +23,7 @@ import {
 	insertAfter,
 	moveLayer,
 	nudgeSelection,
+	renameLayer,
 	reorderLayers,
 	setFill,
 	setMask,
@@ -1075,6 +1076,22 @@ module('Unit | Substrata | layer-ops', function (hooks) {
 			const doc = load([leaf('a')]);
 			setFill('a', '#ff0000');
 			assert.strictEqual(live().layers[0], doc.layers[0]);
+		});
+	});
+	module('renameLayer', function () {
+		test('trims and writes the name of a nested layer', function (assert) {
+			load([group('g', [leaf('a')])]);
+			renameLayer('a', '  Sky  ');
+			assert.strictEqual(find('a').name, 'Sky');
+		});
+
+		test('a blank or unchanged name adds no undo step', function (assert) {
+			const doc = load([leaf('a')]);
+			renameLayer('a', '   ');
+			renameLayer('a', 'a');
+			renameLayer('missing', 'x');
+			assert.strictEqual(live(), doc);
+			assert.false(canUndo());
 		});
 	});
 });

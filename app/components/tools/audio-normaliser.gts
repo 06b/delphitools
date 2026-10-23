@@ -1,11 +1,18 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
@@ -13,11 +20,21 @@ import {
 	AudioIntake,
 	channelsOf,
 	encodeWav,
+	extractPeaks,
 	integratedLufs,
 	peakDb,
+	type WaveformPeaks,
 } from 'delphitools-v2/lib/audio';
 import { dbToGain, planGain } from 'delphitools-v2/lib/normalise';
 import { AUDIO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import { bandHeight } from 'delphitools-v2/components/tools/media/strips';
+import { peakBuckets } from 'delphitools-v2/components/tools/media/frames';
+import Picture from 'delphitools-v2/components/tools/audio-normaliser/picture';
+import './media/media.css';
+import './audio-normaliser/audio-normaliser.css';
 
 const ACCEPT = acceptAttr(AUDIO_ACCEPT);
 
@@ -26,26 +43,43 @@ const TARGETS: { lufs: number; label: string; hint: string }[] = [
 	{ lufs: -16, label: '-16', hint: 'Podcast' },
 	{ lufs: -23, label: '-23', hint: 'Broadcast' },
 ];
-
-const DROP_TITLE = 'Drop an audio file';
+const targetLabels = TARGETS.map((t) => t.label);
 
 const LIMITED_NOTE = 'Gain capped at -1 dBFS peak';
+const WRITE_ERROR = "Couldn't write the normalised file.";
 
+// iOS AVInfoProbe.levelFloor
+const levelFloor = -60;
+const level = (value: number) =>
+	Number.isFinite(value)
+		? Math.min(1, Math.max(0, 1 - value / levelFloor))
+		: undefined;
 const db = (value: number, unit: string) =>
 	Number.isFinite(value) ? `${value.toFixed(1)} ${unit}` : '–';
+const blankTiles = ['Loudness', 'Peak', 'Gain', 'Output peak'].map((label) => ({
+	label,
+	value: '\u2014',
+	level: label === 'Gain' ? undefined : 0,
+}));
 const signed = (value: number) =>
 	`${value >= 0 ? '+' : ''}${value.toFixed(1)} dB`;
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Gauge = <template><IconSvg @name="gauge" /></template>;
 
 interface Measurement {
 	lufs: number;
 	peakDb: number;
+	peaks: WaveformPeaks;
 }
 
-export default class AudioNormaliserTool extends Component {
+/** The port of AudioNormaliserViewController, on the web tool's BS.1770 measure and WAV render. */
+export default class AudioNormaliser extends Component {
 	intake = new AudioIntake({
 		onLoad: () => this.#reset(),
 		onDecoded: (buffer) => void this.#measure(buffer),
 	});
+	drop = new Drop(ACCEPT, (file) => this.intake.load(file));
 
 	@tracked measured: Measurement | null = null;
 	@tracked target = -14;
@@ -53,6 +87,7 @@ export default class AudioNormaliserTool extends Component {
 	@tracked resultUrl = '';
 	@tracked resultLufs = 0;
 	@tracked busy = false;
+	@tracked failed = false;
 
 	#token = 0;
 
@@ -62,36 +97,61 @@ export default class AudioNormaliserTool extends Component {
 		this.#releaseResult();
 	}
 
-	get hasFile() {
+	get loaded() {
 		return this.intake.fileName !== '';
 	}
 
 	get plan() {
 		const m = this.measured;
-		if (!m) return null;
-		return planGain(m.lufs, m.peakDb, this.target);
+		return m ? planGain(m.lufs, m.peakDb, this.target) : null;
 	}
 
-	get rows() {
+	get targetIndex() {
+		return TARGETS.findIndex((t) => t.lufs === this.target);
+	}
+
+	get hint() {
+		return TARGETS[this.targetIndex]?.hint ?? '';
+	}
+
+	get unreadable() {
+		return this.loaded && !!this.intake.error;
+	}
+
+	get measuring() {
+		return this.loaded && !this.intake.error && !this.measured;
+	}
+
+	get detail() {
+		if (this.intake.error) return this.intake.error;
+		const buffer = this.intake.buffer;
+		if (!buffer) return formatBytes(this.intake.fileBytes);
+		return `${buffer.duration.toFixed(2)} s · ${buffer.sampleRate} Hz · ${buffer.numberOfChannels} ch`;
+	}
+
+	get tiles() {
 		const m = this.measured;
 		const plan = this.plan;
+		if (!this.loaded) return blankTiles;
 		if (!m || !plan) return [];
 		return [
-			{ label: 'Loudness', value: db(m.lufs, 'LUFS') },
-			{ label: 'Peak', value: db(m.peakDb, 'dBFS') },
+			{
+				label: 'Loudness',
+				value: db(m.lufs, 'LUFS'),
+				level: level(m.lufs),
+			},
+			{
+				label: 'Peak',
+				value: db(m.peakDb, 'dBFS'),
+				level: level(m.peakDb),
+			},
 			{ label: 'Gain', value: signed(plan.gainDb) },
 			{
 				label: 'Output peak',
 				value: db(plan.outPeakDb, 'dBFS'),
+				level: level(plan.outPeakDb),
 			},
 		];
-	}
-
-	get status() {
-		if (this.intake.busy || (this.intake.buffer && !this.measured))
-			return 'Measuring…';
-		if (this.plan?.limited) return LIMITED_NOTE;
-		return '';
 	}
 
 	get ready() {
@@ -102,12 +162,19 @@ export default class AudioNormaliserTool extends Component {
 		return this.intake.baseName || 'audio';
 	}
 
-	get resultLabel() {
-		if (!this.result) return '';
-		return `wav · ${formatBytes(this.result.size)} · ${db(this.resultLufs, 'LUFS')}`;
+	get fileName() {
+		return `${this.baseName}-normalised.wav`;
 	}
 
-	// defer loudness scan.
+	get resultRow() {
+		if (!this.result) return null;
+		return {
+			name: this.fileName,
+			detail: `wav · ${formatBytes(this.result.size)} · ${db(this.resultLufs, 'LUFS')}`,
+		};
+	}
+
+	// defer loudness scan
 	async #measure(buffer: AudioBuffer) {
 		const token = ++this.#token;
 		await new Promise((resolve) => setTimeout(resolve, 0));
@@ -116,11 +183,15 @@ export default class AudioNormaliserTool extends Component {
 		this.measured = {
 			lufs: integratedLufs(channels, buffer.sampleRate),
 			peakDb: peakDb(channels),
+			peaks: extractPeaks(channels, peakBuckets),
 		};
 	}
 
-	setTarget = (lufs: number) => {
+	pickTarget = (index: number) => {
+		const lufs = TARGETS[index]?.lufs;
+		if (lufs === undefined || lufs === this.target) return;
 		this.target = lufs;
+		this.failed = false;
 		this.#releaseResult();
 	};
 
@@ -132,29 +203,36 @@ export default class AudioNormaliserTool extends Component {
 		if (!buffer || !plan || !this.ready) return;
 		const token = this.#token;
 		this.busy = true;
+		this.failed = false;
 		this.#releaseResult();
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		if (this.isDestroyed || token !== this.#token) return;
-		// skip output lufs scan.
-		const wav = encodeWav(
-			channelsOf(buffer),
-			buffer.sampleRate,
-			dbToGain(plan.gainDb),
-		);
-		this.result = new Blob([wav], { type: 'audio/wav' });
-		this.resultUrl = URL.createObjectURL(this.result);
-		this.resultLufs = this.measured!.lufs + plan.gainDb;
+		try {
+			// skip output lufs scan
+			const wav = encodeWav(
+				channelsOf(buffer),
+				buffer.sampleRate,
+				dbToGain(plan.gainDb),
+			);
+			this.result = new Blob([wav], { type: 'audio/wav' });
+			this.resultUrl = URL.createObjectURL(this.result);
+			this.resultLufs = this.measured!.lufs + plan.gainDb;
+		} catch (error) {
+			console.error('Normalise failed:', error);
+			this.failed = true;
+		}
 		this.busy = false;
 	}
 
-	download = () => {
-		if (!this.result) return;
-		downloadBlob(this.result, `${this.baseName}-normalised.wav`);
+	save = () => {
+		if (this.result) downloadBlob(this.result, this.fileName);
 	};
 
 	#releaseResult() {
-		if (this.resultUrl) URL.revokeObjectURL(this.resultUrl);
+		const url = this.resultUrl;
 		this.resultUrl = '';
+		// the player lets go of it on the next render
+		if (url) setTimeout(() => URL.revokeObjectURL(url));
 		this.result = null;
 	}
 
@@ -163,6 +241,7 @@ export default class AudioNormaliserTool extends Component {
 		this.#releaseResult();
 		this.measured = null;
 		this.busy = false;
+		this.failed = false;
 	}
 
 	clear = () => {
@@ -171,196 +250,151 @@ export default class AudioNormaliserTool extends Component {
 	};
 
 	<template>
-		<div class="dt-an" {{filePaste this.intake.load accept=ACCEPT}}>
-			<div
-				class="dt-an-frame"
-				{{on "drop" this.intake.drop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				<div class="dt-an-bar">
-					<label
-						class="dt-an-file"
-						aria-label="Open audio file"
-					>
-						<input
-							type="file"
-							class="dt-sr-only"
-							accept={{ACCEPT}}
-							{{on
-								"change"
-								this.intake.chooseFile
-							}}
-						/>
-						<Icon @name="audio-lines" />
-						<span
-							class="dt-an-filename"
-						>{{if
-								this.intake.fileName
-								this.intake.fileName
-								"Choose audio"
-							}}</span>
-					</label>
-					{{#if this.status}}
-						<span
-							class="dt-an-status"
-							role="status"
-						>{{this.status}}</span>
-					{{/if}}
-					<button
-						type="button"
-						class="dt-an-go"
-						disabled={{unless
-							this.ready
+		<CanonSplit
+			class="audio-normaliser"
+			{{filePaste this.intake.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas
+					@height={{bandHeight}}
+					@background="var(--canon-muted)"
+				>
+					<Picture
+						@peaks={{if
+							this.measured
+							this.measured.peaks
+							null
+						}}
+						@gainDb={{if
+							this.plan
+							this.plan.gainDb
+							null
+						}}
+						@limited={{if
+							this.plan.limited
+							true
+							false
+						}}
+						@blank={{if
+							this.loaded
+							false
 							true
 						}}
-						aria-busy={{if
-							this.busy
-							"true"
-							"false"
-						}}
-						{{on "click" this.normalise}}
-					>
-						{{#if this.busy}}
-							<NdsLoader />
-						{{else}}
-							<Icon @name="gauge" />
-						{{/if}}
-						<span>Normalise</span>
-					</button>
-					<button
-						type="button"
-						class="dt-an-clear"
-						disabled={{unless
-							this.hasFile
-							true
-						}}
-						aria-label="Clear"
-						{{on "click" this.clear}}
-					>
-						<Icon @name="x" />
-					</button>
-				</div>
-
-				<div class="dt-an-settings">
-					<div class="dt-an-set">
-						<span class="dt-an-label">Target
-							(LUFS)</span>
-						<div
-							class="segmented dt-an-targets"
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
+						<CanonRow
+							class="an-source"
+							@title={{this.intake.fileName}}
+							@detail={{this.detail}}
+							@form="flush"
 						>
-							{{#each
-								TARGETS
-								key="lufs"
-								as |t|
-							}}
-								<button
-									type="button"
-									class="dt-an-seg
-										{{if
-											(eq
-												this.target
-												t.lufs
-											)
-											'is-active'
-										}}"
-									aria-pressed={{if
-										(eq
-											this.target
-											t.lufs
-										)
-										"true"
-										"false"
-									}}
-									title={{t.hint}}
-									{{on
-										"click"
-										(fn
-											this.setTarget
-											t.lufs
-										)
-									}}
-								>
-									<span
-									>{{t.label}}</span>
-									<small
-									>{{t.hint}}</small>
-								</button>
-							{{/each}}
-						</div>
-					</div>
-				</div>
-
-				{{#if this.rows.length}}
-					<dl class="dt-an-meta">
-						{{#each
-							this.rows key="label"
-							as |row|
-						}}
-							<div class="dt-an-cell">
-								<dt
-								>{{row.label}}</dt>
-								<dd
-								>{{row.value}}</dd>
-							</div>
-						{{/each}}
-					</dl>
-				{{else}}{{#unless this.hasFile}}
-						<label class="dt-an-drop">
-							<input
-								type="file"
-								class="dt-sr-only"
-								accept={{ACCEPT}}
-								{{on
-									"change"
-									this.intake.chooseFile
-								}}
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							<Icon @name="gauge" />
-							<span
-								class="dt-an-drop-title"
-							>{{DROP_TITLE}}</span>
-							<span
-								class="dt-an-drop-hint"
-							>or click to select a
-								file, or paste</span>
-						</label>
-					{{/unless}}{{/if}}
-
-				{{#if this.result}}
-					<div class="dt-an-out">
-						<span
-							class="dt-an-out-label"
-						>Result</span>
+						</CanonRow>
+					{{else}}
+						<Slot
+							class="an-slot"
+							@prompt="Drop an audio file"
+							@icon="gauge"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.intake.error}}
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+					<CanonRow
+						class="an-target"
+						@title="Target (LUFS)"
+						@detail={{this.hint}}
+						@form="stacked"
+					>
+						<CanonSegmented
+							class="an-targets"
+							@items={{targetLabels}}
+							@selected={{this.targetIndex}}
+							@disabled={{this.busy}}
+							@onChange={{this.pickTarget}}
+						/>
+					</CanonRow>
+					<Job
+						@title="Normalise"
+						@icon={{Gauge}}
+						@failure={{WRITE_ERROR}}
+						@disabled={{if
+							this.ready
+							false
+							true
+						}}
+						@busy={{this.busy}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.normalise}}
+						@onSave={{this.save}}
+					/>
+					{{#if this.resultUrl}}
 						{{! user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<audio
-							class="dt-an-player"
+							class="an-player"
 							src={{this.resultUrl}}
 							controls
 						></audio>
-						<span
-							class="dt-an-result-label"
-						>{{this.resultLabel}}</span>
-						<button
-							type="button"
-							class="dt-an-btn is-primary"
-							{{on
-								"click"
-								this.download
+					{{/if}}
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				{{#unless this.unreadable}}
+					<CanonRows
+						class="an-readings"
+						@framed={{true}}
+					>
+						{{#if this.measuring}}
+							<CanonRow
+								class="an-measuring"
+								@title="Measuring…"
+							>
+								<CanonLoader
+									@cell={{5}}
+									@gap={{1}}
+								/>
+							</CanonRow>
+						{{else}}
+							<CanonHeading
+								@text="Loudness"
+							/>
+							<CanonTiles
+								@items={{this.tiles}}
+							/>
+							{{#if
+								this.plan.limited
 							}}
-						>
-							<DownloadLabel />
-						</button>
-					</div>
-				{{/if}}
-
-				{{#if this.intake.error}}
-					<p
-						class="dt-an-error"
-						role="alert"
-					>{{this.intake.error}}</p>
-				{{/if}}
-			</div>
-		</div>
+								<CanonEmptyRow
+									@text={{LIMITED_NOTE}}
+								/>
+							{{/if}}
+						{{/if}}
+					</CanonRows>
+				{{/unless}}
+			</:main>
+		</CanonSplit>
 	</template>
 }

@@ -20,4 +20,9 @@ const Icon: TOC<IconSignature> = <template>
 		}}</span>
 </template>;
 
+// canon icon slots size the bare svg
+export const IconSvg: TOC<{ Args: { name: string } }> = <template>
+	{{markup @name}}
+</template>;
+
 export default Icon;

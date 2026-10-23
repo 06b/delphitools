@@ -1,0 +1,282 @@
+/* the picture over the strip */
+.pp-stage {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+}
+
+.pp-picture {
+	position: relative;
+	flex: 1;
+	min-block-size: 0;
+	font-family: var(--canon-font);
+}
+
+.pp-area {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	outline: none;
+	cursor: crosshair;
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.pp-area:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--canon-primary);
+}
+
+.pp-image {
+	position: absolute;
+}
+
+.pp-canvas {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.pp-image--magnified .pp-canvas {
+	image-rendering: pixelated;
+}
+
+.pp-reticle {
+	position: absolute;
+	inset-block-start: -20px;
+	inset-inline-start: -20px;
+	inline-size: 40px;
+	block-size: 40px;
+	overflow: visible;
+	fill: none;
+	stroke: white;
+	stroke-width: 1.5;
+	filter: drop-shadow(0 0 1.5px rgb(0 0 0 / 60%));
+	pointer-events: none;
+}
+
+.pp-loupe {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	cursor: grab;
+}
+
+.pp-area--dragging,
+.pp-area--dragging .pp-loupe {
+	cursor: grabbing;
+}
+
+.pp-area--eases .pp-reticle,
+.pp-area--eases .pp-loupe,
+.pp-area--eases .pp-lens-pick,
+.pp-area--eases .pp-lens-detail {
+	transition: translate 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* geometry lensParts: the Pick button 64 x 36, the value line 24 tall */
+.pp-lens-pick {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: 64px;
+	block-size: 36px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 18px;
+	background: var(--canon-primary);
+	box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+	color: var(--canon-primary-foreground);
+	font: inherit;
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+	animation: pp-lens-in 0.2s ease-out;
+	appearance: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.pp-lens-pick:focus-visible {
+	outline: 2px solid var(--canon-foreground);
+	outline-offset: 2px;
+}
+
+.pp-lens-detail {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	box-sizing: border-box;
+	max-inline-size: calc(100% - 8px);
+	block-size: 24px;
+	padding: 0 8px;
+	overflow: hidden;
+	border-radius: 12px;
+	background: rgb(0 0 0 / 70%);
+	color: white;
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	line-height: 24px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+	animation: pp-lens-in 0.2s ease-out;
+}
+
+@keyframes pp-lens-in {
+	from {
+		opacity: 0;
+	}
+}
+
+.pp-reading {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.pp-slot {
+	--media-slot-inset: var(--canon-panel-padding);
+}
+
+.pp-note {
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.3;
+}
+
+.pp-note-title {
+	color: var(--canon-foreground);
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* four rows tall whatever the count, so a pick never moves the layout */
+.pp-picks {
+	display: flex;
+	flex-direction: column;
+	block-size: calc(4 * (var(--canon-row-height) + var(--canon-hairline)));
+	overflow-y: auto;
+	background: var(--canon-card);
+}
+
+.pp-picks-empty {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+/* picked rows: swatch 56, the recall cell, copy and remove cells */
+.pp-pick {
+	display: flex;
+	flex: none;
+	gap: var(--canon-hairline);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-border);
+	min-block-size: var(--canon-row-height);
+	animation: pp-pick-in 0.45s ease-out;
+}
+
+@keyframes pp-pick-in {
+	from {
+		opacity: 0;
+	}
+}
+
+.pp-pick-swatch {
+	flex: none;
+	inline-size: 56px;
+}
+
+.pp-pick-cell {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	justify-content: center;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 8px var(--canon-panel-padding);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	font-family: var(--canon-font);
+	line-height: 1.2;
+	text-align: start;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.pp-pick-cell:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.pp-pick--lit .pp-pick-cell {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	.pp-pick:not(.pp-pick--lit) .pp-pick-cell:hover {
+		background: color-mix(
+			in srgb,
+			var(--canon-accent-bg) 50%,
+			transparent
+		);
+	}
+}
+
+.pp-pick-name {
+	overflow: hidden;
+	font-size: var(--canon-text-body);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pp-pick--lit .pp-pick-name {
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.pp-pick-value {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pixel-picker .pp-pick > .canon-button {
+	flex: none;
+	inline-size: var(--canon-row-height);
+	background: var(--canon-card);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pp-area--eases .pp-reticle,
+	.pp-area--eases .pp-loupe,
+	.pp-area--eases .pp-lens-pick,
+	.pp-area--eases .pp-lens-detail {
+		transition: none;
+	}
+
+	.pp-pick,
+	.pp-lens-pick,
+	.pp-lens-detail {
+		animation: none;
+	}
+}

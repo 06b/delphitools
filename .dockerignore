@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+tmp
+wheelybin
+.claude
+.delta
+.emdash
+.context
+*.af

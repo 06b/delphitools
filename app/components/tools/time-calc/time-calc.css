@@ -1,0 +1,100 @@
+/* the picture */
+.tc-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--canon-card);
+}
+
+.tc-picture-label {
+	position: absolute;
+	inset: 0;
+}
+
+.tc-drawing {
+	position: absolute;
+	inset: 0;
+	display: block;
+}
+
+.tc-readout {
+	position: absolute;
+	inset-block-start: 2px;
+	inset-inline: var(--canon-panel-padding);
+	display: flex;
+	gap: 10px;
+	align-items: baseline;
+	block-size: 40px;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.tc-figure {
+	flex: none;
+}
+
+.tc-word {
+	min-inline-size: 0;
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	text-shadow: 0 0 2px var(--canon-card);
+	white-space: nowrap;
+}
+
+/* the field: iOS mono 28 bold, shrinking for long dates */
+.tc-field .canon-big-number-field-input {
+	font-family: var(--canon-mono-font);
+}
+
+.tc-source {
+	position: relative;
+}
+
+/* a native date picker opened from a cell */
+.tc-picker {
+	position: absolute;
+	inset-block-end: 0;
+	inset-inline-start: 0;
+	inline-size: 1px;
+	block-size: 1px;
+	padding: 0;
+	border: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* "−1 month" fits a quarter of the sidebar */
+.tc-offsets > .canon-button {
+	padding-inline: 4px;
+}
+
+.tc-date {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.tc-date-pick {
+	justify-content: flex-start;
+}
+
+/* a zone line with its remove cell */
+.tc-zone-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.tc-zone-row > .canon-button {
+	min-inline-size: var(--canon-control-height);
+}
+
+.tc-zone-cell {
+	justify-content: space-between;
+}

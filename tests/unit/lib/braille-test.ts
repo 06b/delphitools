@@ -1,8 +1,10 @@
 import { module, test } from 'qunit';
 import {
+	cell,
 	dots,
 	fromBraille,
 	looksLikeBraille,
+	read,
 	toBraille,
 } from 'delphitools-v2/lib/braille';
 
@@ -66,9 +68,27 @@ module('Unit | lib | braille', function () {
 		assert.strictEqual(dots('a'), '');
 	});
 
+	test('cell', function (assert) {
+		assert.strictEqual(cell('125'), '⠓');
+		assert.strictEqual(cell('521'), '⠓');
+		assert.strictEqual(cell(''), '⠀');
+	});
+
 	test('looksLikeBraille', function (assert) {
 		assert.true(looksLikeBraille('hi ⠓'));
 		assert.false(looksLikeBraille('hi'));
 		assert.false(looksLikeBraille(''));
+	});
+
+	test('read: the steps of a reading', function (assert) {
+		const readings = read(toBraille('Hi 1'));
+		assert.deepEqual(
+			readings.map((r) => r.text),
+			['', 'H', 'i', ' ', '', '1'],
+		);
+		assert.strictEqual(readings[0]?.kind, 'indicator');
+		assert.strictEqual(readings[3]?.kind, 'other');
+		assert.strictEqual(read(toBraille('(a)'))[0]?.cells.length, 2);
+		assert.strictEqual(read('⠠⠠⠝⠁')[0]?.cells, '⠠⠠');
 	});
 });

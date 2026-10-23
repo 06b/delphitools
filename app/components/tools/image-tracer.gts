@@ -1,1317 +1,853 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import { downloadText } from 'delphitools-v2/lib/download';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import {
-	Popover,
-	PopoverTrigger,
-	PopoverContent,
-} from 'delphitools-v2/components/ui/popover';
-import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
-import {
-	Tooltip,
-	TooltipTrigger,
-	TooltipContent,
-} from 'delphitools-v2/components/ui/tooltip';
-import type { TOC } from '@ember/component/template-only';
+import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
-
-export interface TracerOptions {
-	numberofcolors: number;
-	colorquantcycles: number;
-	ltres: number;
-	qtres: number;
-	pathomit: number;
-	strokewidth: number;
-	scale: number;
-	blurradius: number;
-	blurdelta: number;
-	colorsampling: number;
-	mincolorratio: number;
-	roundcoords: number;
-	lcpr: number;
-	qcpr: number;
-	layering: number;
-	rightangleenhance: boolean;
-	linefilter: boolean;
-}
-
-export const DEFAULT_OPTIONS: TracerOptions = {
-	numberofcolors: 16,
-	colorquantcycles: 3,
-	ltres: 1,
-	qtres: 1,
-	pathomit: 8,
-	strokewidth: 1,
-	scale: 1,
-	blurradius: 0,
-	blurdelta: 20,
-	colorsampling: 2,
-	mincolorratio: 0,
-	roundcoords: 1,
-	lcpr: 0,
-	qcpr: 0,
-	layering: 0,
-	rightangleenhance: true,
-	linefilter: false,
-};
-
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif';
-
-const COPIED_MS = 1500;
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import type { Rgb } from 'delphicanon/lib/colour';
+import { stem } from 'delphicanon/lib/files';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
+import { downloadText } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import { formatBytes } from 'delphitools-v2/lib/image-compress';
+import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import {
+	createTracerWorker,
+	displaySize,
+	drawTrace,
+	grounded,
+	type TraceReply,
+} from 'delphitools-v2/components/tools/image-tracer/engine';
+import Picture from 'delphitools-v2/components/tools/image-tracer/picture';
+import {
+	SliderRow,
+	Tip,
+	TitleRow,
+	type SliderSpec,
+} from 'delphitools-v2/components/tools/image-tracer/rows';
+import {
+	DEFAULT_OPTIONS,
+	LAYERING,
+	PRESETS,
+	SAMPLING,
+	SCALES,
+	STROKES,
+	fromPreset,
+	hundredths,
+	number,
+	outline,
+	palette,
+	parseTrace,
+	smoothing,
+	totals,
+	traceOptions,
+	whole,
+	type NumericOption,
+	type TraceVectors,
+	type TracerOptions,
+} from 'delphitools-v2/components/tools/image-tracer/trace';
+import './image-tracer/image-tracer.css';
 
 const HANDOFF_KEY = 'svg-optimiser-input';
+const TRACE_FAILED = 'This image could not be traced';
+const DASH = '—';
 
-// icons require registry entries
-const PRESETS: { id: string; label: string; icon: string }[] = [
-	{ id: 'default', label: 'Default', icon: 'scale' },
-	{ id: 'posterized1', label: 'Monoposto', icon: 'layers' },
-	{ id: 'posterized2', label: "Saul's World", icon: 'layers' },
-	{ id: 'posterized3', label: 'Powders', icon: 'layers' },
-	{ id: 'curvy', label: 'Bouba', icon: 'wind' },
-	{ id: 'sharp', label: 'Kiki', icon: 'crop' },
-	{ id: 'detailed', label: 'Intricate', icon: 'scan-line' },
-	{ id: 'smoothed', label: 'Papered', icon: 'blend' },
-	{ id: 'grayscale', label: 'Mono', icon: 'contrast' },
-	{ id: 'fixedpalette', label: 'Genlock', icon: 'layout-grid' },
-	{ id: 'randomsampling1', label: 'Logan', icon: 'pipette' },
-	{ id: 'randomsampling2', label: 'Clockwise', icon: 'pipette' },
-	{ id: 'artistic1', label: 'Theories', icon: 'brush' },
-	{ id: 'artistic2', label: 'Dustbowl', icon: 'pen-line' },
-	{ id: 'artistic3', label: 'Warrrant', icon: 'palette' },
-	{ id: 'artistic4', label: 'Sparkle', icon: 'sparkles' },
-];
+const presetNames = PRESETS.map((preset) => preset.name);
+const strokeNames = STROKES.map((width) =>
+	width === 0 ? 'None' : number(width),
+);
+const scaleNames = SCALES.map((scale) => `${number(scale)}×`);
 
-const STROKE_OPTIONS = [0, 0.5, 1, 2, 3, 5].map((width) => ({
-	width,
-	label: width === 0 ? 'None' : String(width),
-	bar: htmlSafe(
-		`width: ${Math.min(width * 6, 24)}px; height: ${Math.max(width, 1)}px`,
+const TIPS = {
+	colours: 'Number of colours used to quantise the image before tracing. Fewer colours = simpler, bolder result.',
+	stroke: 'Width of the outline drawn around each traced shape. 0 means no stroke.',
+	scale: 'Multiplier for the output SVG size relative to the source image.',
+	sampling: 'How initial colours are sampled. Generated uses k-means, Random picks randomly, Deterministic uses a fixed grid.',
+	layering: 'Sequential stacks colour layers back-to-front. Parallel creates independent layers per colour.',
+};
+
+const slider = (
+	key: NumericOption,
+	title: string,
+	tip: string,
+	min: number,
+	max: number,
+	step: number,
+	readout: (value: number) => string,
+): SliderSpec => ({ key, title, tip, min, max, step, readout });
+
+const TRACE_SLIDERS = [
+	slider(
+		'colorquantcycles',
+		'Quantise',
+		'Number of k-means iterations for colour clustering. More cycles = more accurate colours, slower trace.',
+		1,
+		20,
+		1,
+		whole,
 	),
-}));
-
-const SCALE_OPTIONS = [0.5, 1, 2, 3, 5];
-
-const MIN_COLOURS = 2;
-const MAX_COLOURS = 64;
-
-const COLOUR_SAMPLING = [
-	{ value: '0', label: 'Generated' },
-	{ value: '1', label: 'Random' },
-	{ value: '2', label: 'Deterministic' },
+	slider(
+		'ltres',
+		'Line smoothing',
+		'Controls how aggressively straight lines replace curves. Higher = smoother with fewer curves.',
+		0,
+		10,
+		0.1,
+		smoothing,
+	),
+	slider(
+		'qtres',
+		'Curve smoothing',
+		'Controls quadratic spline fitting. Higher = smoother curves with less detail.',
+		0,
+		10,
+		0.1,
+		smoothing,
+	),
+	slider(
+		'pathomit',
+		'Min path size',
+		'Paths with fewer than this many nodes are removed. Raise to filter out noise and small artefacts.',
+		0,
+		200,
+		1,
+		whole,
+	),
 ];
 
-const LAYERING = [
-	{ value: '0', label: 'Sequential' },
-	{ value: '1', label: 'Parallel' },
+const BLUR_SLIDERS = [
+	slider(
+		'blurradius',
+		'Blur radius',
+		'Gaussian blur pre-processing. Smooths the image before tracing to reduce noise.',
+		0,
+		20,
+		1,
+		whole,
+	),
+	slider(
+		'blurdelta',
+		'Blur delta',
+		'Threshold for the blur difference. Only relevant when blur radius > 0.',
+		0,
+		256,
+		1,
+		whole,
+	),
 ];
 
-export function formatSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+const RATIO_SLIDERS = [
+	slider(
+		'mincolorratio',
+		'Min colour ratio',
+		'Minimum proportion a colour must occupy to be kept. Raise to eliminate rare colours.',
+		0,
+		1,
+		0.01,
+		hundredths,
+	),
+	slider(
+		'roundcoords',
+		'Coordinate rounding',
+		'Decimal places for SVG path coordinates. Lower = smaller file, less precise.',
+		0,
+		5,
+		1,
+		whole,
+	),
+];
+
+const POINT_SLIDERS = [
+	slider(
+		'lcpr',
+		'Line control point ratio',
+		'Adjusts control points on straight line segments. 0 = default placement.',
+		0,
+		1,
+		0.01,
+		hundredths,
+	),
+	slider(
+		'qcpr',
+		'Quad control point ratio',
+		'Adjusts control points on quadratic curves. 0 = default placement.',
+		0,
+		1,
+		0.01,
+		hundredths,
+	),
+];
+
+const optionValue = (options: TracerOptions, key: string) =>
+	options[key as NumericOption];
+
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Wand = <template><IconSvg @name="wand-sparkles" /></template>;
+const Refresh = <template><IconSvg @name="refresh-cw" /></template>;
+
+interface Source {
+	name: string;
+	stem: string;
+	bytes: number;
+	width: number;
+	height: number;
+	shown: { width: number; height: number };
+	pixels: ImageData;
+	url?: string;
 }
 
-// add responsive viewbox
-export function makeResponsive(svg: string): string {
-	const width = /<svg[^>]*\swidth="([^"]+)"/.exec(svg)?.[1];
-	const height = /<svg[^>]*\sheight="([^"]+)"/.exec(svg)?.[1];
-	const result =
-		/<svg[^>]*\sviewBox="/.test(svg) || !width || !height
-			? svg
-			: svg.replace(
-					'<svg',
-					`<svg viewBox="0 0 ${width} ${height}"`,
-				);
-	return result
-		.replace(/(<svg[^>]*)\swidth="[^"]*"/, '$1 width="100%"')
-		.replace(/(<svg[^>]*)\sheight="[^"]*"/, '$1 height="auto"');
+interface Trace {
+	svg: string;
+	vectors: TraceVectors;
+	filled: string;
+	outlined: string;
+	palette: Rgb[];
 }
 
-function extractImageData(file: File): Promise<ImageData> {
-	return new Promise((resolve, reject) => {
-		const image = new Image();
-		const url = URL.createObjectURL(file);
-
-		image.onload = () => {
-			URL.revokeObjectURL(url);
-			const canvas = document.createElement('canvas');
-			canvas.width = image.width;
-			canvas.height = image.height;
-			const ctx = canvas.getContext('2d');
-			if (!ctx) {
-				reject(
-					new Error(
-						'Canvas 2D context unavailable',
-					),
-				);
-				return;
-			}
-			ctx.drawImage(image, 0, 0);
-			resolve(
-				ctx.getImageData(
-					0,
-					0,
-					image.width,
-					image.height,
-				),
-			);
-		};
-
-		image.onerror = () => {
-			URL.revokeObjectURL(url);
-			reject(new Error('Image failed to decode'));
-		};
-
-		image.src = url;
-	});
+function pixelsOf(bitmap: ImageBitmap) {
+	const canvas = document.createElement('canvas');
+	canvas.width = bitmap.width;
+	canvas.height = bitmap.height;
+	const context = canvas.getContext('2d', { willReadFrequently: true })!;
+	context.drawImage(bitmap, 0, 0);
+	return context.getImageData(0, 0, canvas.width, canvas.height);
 }
 
-// trace off main thread
-async function createTracerWorker(): Promise<Worker | null> {
-	try {
-		const response = await fetch('/lib/imagetracer_v1.2.6.js');
-		if (!response.ok) return null;
-		const source = await response.text();
-		const blob = new Blob(
-			[
-				source,
-				`self.onmessage = function (e) {
-					var imgd = new ImageData(
-						new Uint8ClampedArray(e.data.buffer),
-						e.data.width,
-						e.data.height
-					);
-					self.postMessage(self.ImageTracer.imagedataToSVG(imgd, e.data.opts));
-				};`,
-			],
-			{ type: 'application/javascript' },
-		);
-		const url = URL.createObjectURL(blob);
-		const worker = new Worker(url);
-		URL.revokeObjectURL(url);
-		return worker;
-	} catch {
-		return null;
-	}
-}
-
-const InfoTip: TOC<{ Args: { text: string } }> = <template>
-	<Tooltip>
-		<TooltipTrigger>
-			<button
-				type="button"
-				class="dt-trace-info"
-				aria-label={{@text}}
-			><Icon @name="info" /></button>
-		</TooltipTrigger>
-		<TooltipContent
-			@side="top"
-			class="dt-trace-tip"
-		>{{@text}}</TooltipContent>
-	</Tooltip>
-</template>;
-
-const SectionHeader: TOC<{ Args: { label: string } }> = <template>
-	<div class="dt-trace-section">
-		<span class="dt-trace-section-label">{{@label}}</span>
-		<span class="dt-trace-rule"></span>
-	</div>
-</template>;
-
-interface SliderArgs {
-	id: string;
-	label: string;
-	tip: string;
-	display: string;
-	value: number;
-	min: number;
-	max: number;
-	step: number;
-	onInput: (event: Event) => void;
-}
-
-const OptionSlider: TOC<{ Args: SliderArgs }> = <template>
-	<div class="dt-trace-field">
-		<div class="dt-trace-field-head">
-			<span class="dt-trace-field-label">
-				<label for={{@id}}>{{@label}}</label>
-				<InfoTip @text={{@tip}} />
-			</span>
-			<span class="dt-trace-readout">{{@display}}</span>
-		</div>
-		<input
-			id={{@id}}
-			type="range"
-			class="dt-trace-slider"
-			min={{@min}}
-			max={{@max}}
-			step={{@step}}
-			value={{@value}}
-			{{on "input" @onInput}}
-		/>
-	</div>
-</template>;
-
-interface StepperArgs {
-	label: string;
-	tip: string;
-	value: number;
-	min: number;
-	max: number;
-	onChange: (value: number) => void;
-}
-
-class Stepper extends Component<{ Args: StepperArgs }> {
-	get atMin() {
-		return this.args.value <= this.args.min;
-	}
-
-	get atMax() {
-		return this.args.value >= this.args.max;
-	}
-
-	decrement = () => this.args.onChange(this.args.value - 1);
-	increment = () => this.args.onChange(this.args.value + 1);
-
-	<template>
-		<div class="dt-trace-stepper">
-			<span class="dt-trace-field-label">
-				<span>{{@label}}</span>
-				<InfoTip @text={{@tip}} />
-			</span>
-			<div class="dt-trace-stepper-box">
-				<button
-					type="button"
-					class="dt-trace-step"
-					aria-label="Decrease"
-					disabled={{this.atMin}}
-					{{on "click" this.decrement}}
-				><Icon @name="minus" /></button>
-				<span
-					class="dt-trace-step-value"
-				>{{@value}}</span>
-				<button
-					type="button"
-					class="dt-trace-step"
-					aria-label="Increase"
-					disabled={{this.atMax}}
-					{{on "click" this.increment}}
-				><Icon @name="plus" /></button>
-			</div>
-		</div>
-	</template>
-}
-
-export default class ImageTracerTool extends Component {
+/** The port of ImageTracerViewController, on the web tool's tracer. */
+export default class ImageTracer extends Component {
 	@service declare router: RouterService;
-
-	@tracked imageSrc: string | null = null;
-	@tracked previewUrl: string | null = null;
-	@tracked fileName = '';
-	@tracked fileSize = 0;
-	@tracked svgSize = 0;
-	@tracked tracing = false;
-	@tracked copied = false;
-	@tracked dirty = false;
-	@tracked presetsOpen = false;
-	@tracked preset = 'default';
+	@service('canon-toast') declare toast: CanonToastService;
+	@tracked source?: Source;
+	@tracked trace?: Trace;
 	@tracked options: TracerOptions = { ...DEFAULT_OPTIONS };
+	@tracked preset?: number = 0;
+	@tracked dirty = false;
+	@tracked tracing = false;
+	@tracked failure = '';
+	@tracked outlines = false;
 
-	#imageData: ImageData | null = null;
-	#rawSvg: string | null = null;
-	#worker: Worker | null = null;
-	#workerInit: Promise<Worker | null> | null = null;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	drop = new Drop('image/*', (file) => void this.load(file));
 	#extras: Record<string, unknown> = {};
+	#run = 0;
+	#worker?: Promise<Worker | null>;
 
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-		this.#worker?.terminate();
-		this.#setSource(null);
-		this.#setPreview(null);
+	// ?traceSample ?tracePreset=<index> ?traceOutlines: the iOS -traceSample, -tracePreset, -traceOutlines launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		this.outlines = query.has('traceOutlines');
+		const preset = Number(query.get('tracePreset') ?? NaN);
+		void (async () => {
+			if (PRESETS[preset]) await this.pickPreset(preset);
+			if (query.has('traceSample'))
+				await this.load(await drawnSample());
+		})();
+		registerDestructor(this, () => {
+			this.#run++;
+			this.#release(this.source, this.trace);
+			void this.#worker?.then((worker) =>
+				worker?.terminate(),
+			);
+		});
 	}
 
-	get hasResult() {
-		return this.previewUrl !== null;
+	get pictureAspect() {
+		const shown = this.source?.shown;
+		return shown ? shown.width / shown.height : 4 / 3;
+	}
+
+	get aspect() {
+		return Math.min(Math.max(this.pictureAspect, 0.8), 1.6);
+	}
+
+	get sourceText() {
+		const { source } = this;
+		return source
+			? `${source.width} × ${source.height} · ${formatBytes(source.bytes)}`
+			: '';
+	}
+
+	get after() {
+		const { trace } = this;
+		if (!trace) return undefined;
+		return this.outlines ? trace.outlined : trace.filled;
+	}
+
+	get code() {
+		return this.trace ? outline(this.trace.svg) : '';
+	}
+
+	get tiles() {
+		const { trace } = this;
+		if (!trace)
+			return [
+				'Colours',
+				'Paths',
+				'Lines',
+				'Curves',
+				'Size',
+				'File Size',
+			].map((label) => ({ label, value: DASH }));
+		const sum = totals(trace.vectors);
+		const segments = Math.max(sum.lines + sum.curves, 1);
+		const count = (value: number) => value.toLocaleString();
+		return [
+			{
+				label: 'Colours',
+				value: count(trace.palette.length),
+			},
+			{ label: 'Paths', value: count(sum.paths) },
+			{ label: 'Lines', value: count(sum.lines) },
+			{
+				label: 'Curves',
+				value: count(sum.curves),
+				level: sum.curves / segments,
+			},
+			{
+				label: 'Size',
+				value: `${number(trace.vectors.width)} × ${number(trace.vectors.height)}`,
+			},
+			{
+				label: 'File Size',
+				value: formatBytes(new Blob([trace.svg]).size),
+			},
+		];
+	}
+
+	get strokeIndex() {
+		return STROKES.indexOf(this.options.strokewidth);
+	}
+
+	get scaleIndex() {
+		return SCALES.indexOf(this.options.scale);
+	}
+
+	get retraceShown() {
+		return !!this.source && this.dirty && !this.tracing;
 	}
 
 	get actionsDisabled() {
-		return !this.hasResult || this.tracing;
+		return !this.trace || this.tracing;
 	}
 
-	get showSvgSize() {
-		return this.hasResult && !this.tracing;
+	get downloadText() {
+		return passAlong('Download');
 	}
 
-	get retraceDisabled() {
-		return !this.dirty || this.tracing;
-	}
+	// a drop on the Source drop zone loads there
+	dropped = (event: DragEvent) => {
+		if (event.defaultPrevented) this.drop.over = false;
+		else this.drop.drop(event);
+	};
 
-	get fileSizeLabel() {
-		return formatSize(this.fileSize);
-	}
+	loadFiles = (files: File[]) => {
+		if (files[0]) void this.load(files[0]);
+	};
 
-	get svgSizeLabel() {
-		return formatSize(this.svgSize);
-	}
-
-	get activePreset() {
-		return PRESETS.find((entry) => entry.id === this.preset);
-	}
-
-	get presetLabel() {
-		return this.activePreset?.label ?? 'Custom';
-	}
-
-	get colourSampling() {
-		return String(this.options.colorsampling);
-	}
-
-	get colourSamplingLabel() {
-		return (
-			COLOUR_SAMPLING.find(
-				(entry) => entry.value === this.colourSampling,
-			)?.label ?? ''
-		);
-	}
-
-	get layering() {
-		return String(this.options.layering);
-	}
-
-	get layeringLabel() {
-		return (
-			LAYERING.find((entry) => entry.value === this.layering)
-				?.label ?? ''
-		);
-	}
-
-	get ltresLabel() {
-		return this.options.ltres.toFixed(1);
-	}
-
-	get qtresLabel() {
-		return this.options.qtres.toFixed(1);
-	}
-
-	get mincolorratioLabel() {
-		return this.options.mincolorratio.toFixed(2);
-	}
-
-	get lcprLabel() {
-		return this.options.lcpr.toFixed(2);
-	}
-
-	get qcprLabel() {
-		return this.options.qcpr.toFixed(2);
-	}
-
-	get pathomitLabel() {
-		return String(this.options.pathomit);
-	}
-
-	get blurdeltaLabel() {
-		return String(this.options.blurdelta);
-	}
-
-	get scaleLabel() {
-		return `${this.options.scale}x`;
-	}
-
-	get atMinColours() {
-		return this.options.numberofcolors <= MIN_COLOURS;
-	}
-
-	get atMaxColours() {
-		return this.options.numberofcolors >= MAX_COLOURS;
-	}
-
-	#setPreview(svg: string | null) {
-		if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
-		this.previewUrl =
-			svg === null
-				? null
-				: URL.createObjectURL(
-						new Blob([svg], {
-							type: 'image/svg+xml',
-						}),
-					);
-	}
-
-	#setSource(url: string | null) {
-		if (this.imageSrc) URL.revokeObjectURL(this.imageSrc);
-		this.imageSrc = url;
-	}
-
-	async #getWorker(): Promise<Worker | null> {
-		this.#workerInit ??= createTracerWorker();
-		const worker = await this.#workerInit;
-		if (worker && !this.#worker) {
-			worker.onmessage = (event: MessageEvent<string>) =>
-				this.#applyResult(event.data);
-			worker.onerror = () => {
-				console.error('Image tracing worker failed');
-				this.tracing = false;
-			};
-			this.#worker = worker;
+	load = async (file: File) => {
+		const run = ++this.#run;
+		this.tracing = true;
+		this.failure = '';
+		let bitmap: ImageBitmap;
+		try {
+			bitmap = await decodeImage(file);
+		} catch {
+			if (run !== this.#run) return;
+			this.tracing = false;
+			this.failure = TRACE_FAILED;
+			return;
 		}
-		return worker;
+		if (run !== this.#run || isDestroying(this)) {
+			bitmap.close();
+			return;
+		}
+		const shown = displaySize(bitmap.width, bitmap.height);
+		// CanonDropZone names a clipboard image "pasted"
+		const named = !!file.name && file.name !== 'pasted';
+		const source: Source = {
+			name: named ? file.name : 'Image',
+			stem: (named && stem(file.name)) || 'image',
+			bytes: file.size,
+			width: bitmap.width,
+			height: bitmap.height,
+			shown,
+			pixels: pixelsOf(bitmap),
+		};
+		source.url = await grounded(bitmap, shown.width, shown.height);
+		bitmap.close();
+		if (run !== this.#run || isDestroying(this)) {
+			this.#release(source);
+			return;
+		}
+		this.#release(this.source, this.trace);
+		this.source = source;
+		this.trace = undefined;
+		this.dirty = false;
+		void this.#trace();
+	};
+
+	clear = () => {
+		this.#run++;
+		this.#release(this.source, this.trace);
+		this.source = undefined;
+		this.trace = undefined;
+		this.tracing = false;
+		this.failure = '';
+		this.dirty = false;
+	};
+
+	#release(source?: Source, trace?: Trace) {
+		if (source?.url) URL.revokeObjectURL(source.url);
+		if (trace) {
+			URL.revokeObjectURL(trace.filled);
+			URL.revokeObjectURL(trace.outlined);
+		}
 	}
 
-	#applyResult(rawSvg: string) {
-		this.#rawSvg = rawSvg;
-		this.svgSize = new Blob([rawSvg]).size;
-		this.#setPreview(makeResponsive(rawSvg));
-		this.tracing = false;
+	#tracer() {
+		this.#worker ??= createTracerWorker(
+			(reply) => void this.#receive(reply),
+		).then((worker) => {
+			if (worker)
+				worker.onerror = () =>
+					void this.#receive({
+						id: this.#run,
+						error: 'worker failed',
+					});
+			return worker;
+		});
+		return this.#worker;
 	}
 
 	async #trace() {
-		const imgd = this.#imageData;
-		if (!imgd) return;
-
+		const { source } = this;
+		if (!source) return;
+		const id = ++this.#run;
 		this.tracing = true;
-		const opts = { ...this.#extras, ...this.options };
-
-		const worker = await this.#getWorker();
+		this.failure = '';
+		const opts = traceOptions(this.options, this.#extras);
+		const worker = await this.#tracer();
+		if (id !== this.#run) return;
 		if (worker) {
-			// transfer detaches buffer
-			const buffer = new Uint8ClampedArray(imgd.data).buffer;
+			// the transfer detaches the copy, not the source's pixels
+			const buffer = new Uint8ClampedArray(source.pixels.data)
+				.buffer;
 			worker.postMessage(
 				{
+					id,
 					buffer,
-					width: imgd.width,
-					height: imgd.height,
+					width: source.pixels.width,
+					height: source.pixels.height,
 					opts,
 				},
 				[buffer],
 			);
 			return;
 		}
-
+		let reply: TraceReply;
 		try {
 			const { default: tracer } =
 				await import('imagetracerjs');
-			this.#applyResult(tracer.imagedataToSVG(imgd, opts));
+			reply = {
+				id,
+				svg: tracer.imagedataToSVG(source.pixels, opts),
+			};
 		} catch (error) {
-			console.error('Image tracing failed:', error);
-			this.tracing = false;
+			reply = { id, error: String(error) };
 		}
+		await this.#receive(reply);
 	}
 
-	readFile = (file: File) => {
-		if (!file.type.startsWith('image/')) return;
-
-		this.fileName = file.name;
-		this.fileSize = file.size;
-		this.svgSize = 0;
-		this.#rawSvg = null;
-		this.#imageData = null;
-		this.#setPreview(null);
-		this.#setSource(URL.createObjectURL(file));
-
-		void this.#load(file);
-	};
-
-	async #load(file: File) {
-		try {
-			this.#imageData = await extractImageData(file);
-		} catch (error) {
-			console.error('Image decoding failed:', error);
+	async #receive({ id, svg, error }: TraceReply) {
+		if (id !== this.#run || isDestroying(this)) return;
+		const vectors = svg ? parseTrace(svg) : undefined;
+		const shown = this.source?.shown;
+		const drawn =
+			svg && vectors && shown
+				? await drawTrace(
+						svg,
+						vectors,
+						shown.width,
+						shown.height,
+					)
+				: undefined;
+		if (id !== this.#run || isDestroying(this)) {
+			if (drawn) {
+				URL.revokeObjectURL(drawn.filled);
+				URL.revokeObjectURL(drawn.outlined);
+			}
 			return;
 		}
-		await this.#trace();
+		this.tracing = false;
+		if (!svg || !vectors || !drawn) {
+			if (error)
+				console.error('Image tracing failed:', error);
+			this.failure = TRACE_FAILED;
+			return;
+		}
+		this.#release(undefined, this.trace);
+		this.trace = {
+			svg,
+			vectors,
+			...drawn,
+			palette: palette(vectors),
+		};
 	}
 
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// reset file input
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file) this.readFile(file);
-	};
-
-	// prevent file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	setOption = (key: keyof TracerOptions, value: number | boolean) => {
-		this.preset = 'custom';
+	setOption = (key: string, value: number) => {
+		if (optionValue(this.options, key) === value) return;
+		this.options = { ...this.options, [key]: value };
 		this.dirty = true;
-		this.options = Object.assign({}, this.options, {
-			[key]: value,
-		});
+		this.preset = undefined;
 	};
 
-	stepColours = (delta: number) => {
-		this.setOption(
-			'numberofcolors',
-			this.options.numberofcolors + delta,
-		);
-	};
+	pickStroke = (index: number) =>
+		this.setOption('strokewidth', STROKES[index] ?? 1);
 
-	setFromRange = (key: keyof TracerOptions, event: Event) => {
-		this.setOption(
-			key,
-			Number((event.target as HTMLInputElement).value),
-		);
-	};
-
-	setColourSampling = (value: string) => {
-		this.setOption('colorsampling', Number(value));
-	};
-
-	setLayering = (value: string) => {
-		this.setOption('layering', Number(value));
-	};
-
-	setPresetsOpen = (open: boolean) => {
-		this.presetsOpen = open;
-	};
-
-	choosePreset = (id: string) => {
-		this.presetsOpen = false;
-		void this.applyPreset(id);
-	};
-
-	applyPreset = async (id: string) => {
-		this.preset = id;
+	// presets never set scale
+	pickScale = (index: number) => {
+		const scale = SCALES[index] ?? 1;
+		if (scale === this.options.scale) return;
+		this.options = { ...this.options, scale };
 		this.dirty = true;
+	};
 
-		let presetOptions: Record<string, unknown> | undefined;
+	pickPreset = async (index: number) => {
+		const entry = PRESETS[index];
+		if (!entry) return;
+		let preset: Record<string, unknown> | undefined;
 		try {
 			const { default: tracer } =
 				await import('imagetracerjs');
-			presetOptions = tracer.optionpresets[id];
+			preset = tracer.optionpresets[entry.id];
 		} catch (error) {
 			console.error('Preset lookup failed:', error);
 		}
-		if (!presetOptions) return;
-
-		// preserve selected scale
-		const next = { ...DEFAULT_OPTIONS, scale: this.options.scale };
-		const extras: Record<string, unknown> = {};
-		for (const [key, value] of Object.entries(presetOptions)) {
-			if (key in next) Object.assign(next, { [key]: value });
-			else extras[key] = value;
-		}
-		this.options = next;
+		if (!preset || isDestroying(this)) return;
+		const { options, extras } = fromPreset(
+			preset,
+			this.options.scale,
+		);
+		this.options = options;
 		this.#extras = extras;
+		this.preset = index;
+		this.dirty = true;
 	};
+
+	pickOutlines = (on: boolean) => (this.outlines = on);
 
 	retrace = () => {
 		this.dirty = false;
 		void this.#trace();
 	};
 
-	clear = () => {
-		this.#imageData = null;
-		this.#rawSvg = null;
-		this.#extras = {};
-		this.#setPreview(null);
-		this.#setSource(null);
-		this.fileName = '';
-		this.fileSize = 0;
-		this.svgSize = 0;
-		this.tracing = false;
-		this.dirty = false;
-		this.copied = false;
-		this.preset = 'default';
-		this.options = { ...DEFAULT_OPTIONS };
+	copy = () => {
+		if (this.trace) void this.toast.copy(this.trace.svg);
 	};
 
 	download = () => {
-		if (!this.#rawSvg) return;
+		if (!this.trace || !this.source) return;
 		downloadText(
-			this.#rawSvg,
-			`${this.fileName.replace(/\.[^.]+$/, '')}-traced.svg`,
+			this.trace.svg,
+			`${this.source.stem}-traced.svg`,
 			'image/svg+xml',
 		);
 	};
 
-	copy = () => {
-		if (!this.#rawSvg) return;
-		void navigator.clipboard.writeText(this.#rawSvg).then(
-			() => {
-				this.copied = true;
-				clearTimeout(this.#copiedTimer);
-				this.#copiedTimer = setTimeout(
-					() => (this.copied = false),
-					COPIED_MS,
-				);
-			},
-			(error: unknown) =>
-				console.error('Copy failed:', error),
-		);
-	};
-
-	sendToOptimiser = () => {
-		if (!this.#rawSvg) return;
-		sessionStorage.setItem(HANDOFF_KEY, this.#rawSvg);
+	optimise = () => {
+		if (!this.trace) return;
+		sessionStorage.setItem(HANDOFF_KEY, this.trace.svg);
 		void this.router.transitionTo('tools.tool', 'svg-optimiser');
 	};
 
 	<template>
-		<div class="dt-trace" {{filePaste this.readFile accept=ACCEPT}}>
-			{{#if this.imageSrc}}
-				<div class="dt-trace-frame">
-					<div class="dt-trace-bar">
-						<div class="dt-trace-source">
-							<span
-								class="dt-trace-thumb"
-							><img
-									src={{this.imageSrc}}
-									alt=""
-								/></span>
-							<span
-								class="dt-trace-name"
-							>{{this.fileName}}</span>
-							<span
-								class="dt-trace-meta"
-							>{{this.fileSizeLabel}}</span>
-							{{#if this.showSvgSize}}
-								<span
-									class="dt-trace-meta"
-								>· SVG
-									{{this.svgSizeLabel}}</span>
-							{{/if}}
-						</div>
-						<button
-							type="button"
-							class="dt-trace-bar-btn"
-							aria-label="Clear"
-							{{on
-								"click"
-								this.clear
-							}}
-						><Icon @name="x" /></button>
-					</div>
-
-					<div class="dt-trace-stage">
-						{{#if this.tracing}}
-							<div
-								class="dt-trace-busy"
-							>
-								<NdsLoader
-									class="is-stage"
-								/>
-								<span>Tracing
-									image…</span>
-							</div>
-						{{else if this.previewUrl}}
-							<img
-								src={{this.previewUrl}}
-								alt="Traced SVG preview"
-							/>
-						{{else}}
-							<img
-								src={{this.imageSrc}}
-								alt="Source"
+		<CanonSplit
+			class="image-tracer"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.dropped}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
+				>
+					<Picture
+						@before={{this.source.url}}
+						@aspect={{this.pictureAspect}}
+						@after={{this.after}}
+						@palette={{this.trace.palette}}
+						@tracing={{this.tracing}}
+						@over={{this.drop.over}}
+						@onFile={{this.load}}
+					>
+						{{#if this.retraceShown}}
+							<CanonButton
+								class="trace-retrace"
+								@kind="primary"
+								@text="Retrace"
+								@icon={{Refresh}}
+								@onClick={{this.retrace}}
 							/>
 						{{/if}}
-					</div>
-
-					<div class="dt-trace-actions">
-						<button
-							type="button"
-							class="dt-trace-action is-primary"
-							disabled={{this.actionsDisabled}}
-							{{on
-								"click"
-								this.download
-							}}
+					</Picture>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.source}}
+						<CanonRow
+							class="trace-source"
+							@title={{this.source.name}}
+							@detail={{this.sourceText}}
+							@form="flush"
 						>
-							<DownloadLabel />
-						</button>
-						<button
-							type="button"
-							class="dt-trace-action"
-							disabled={{this.actionsDisabled}}
-							{{on "click" this.copy}}
-						>
-							<Icon
-								@name={{if
-									this.copied
-									"check"
-									"copy"
-								}}
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							{{if
-								this.copied
-								"Copied"
-								"Copy"
-							}}
-						</button>
-						<button
-							type="button"
-							class="dt-trace-action"
-							disabled={{this.actionsDisabled}}
-							{{on
-								"click"
-								this.sendToOptimiser
-							}}
-						>
-							<Icon
-								@name="arrow-right"
-							/>
-							Optimise
-						</button>
-					</div>
-				</div>
-
-				<div class="dt-trace-presetbar">
-					<Popover
-						@open={{this.presetsOpen}}
-						@onOpenChange={{this.setPresetsOpen}}
-					>
-						<PopoverTrigger
-							class="dt-trace-presetbtn"
-						>
-							<span
-								class="dt-trace-meta"
-							>Preset</span>
-							{{#if
-								this.activePreset
-							}}
-								<Icon
-									class="dt-trace-preseticon"
-									@name={{this.activePreset.icon}}
-								/>
-							{{/if}}
-							<span
-								class="dt-trace-presetname"
-							>{{this.presetLabel}}</span>
-							<Icon
-								@name="chevrons-up-down"
-							/>
-						</PopoverTrigger>
-						<PopoverContent
-							@align="start"
-							class="dt-trace-presetpanel"
-						>
-							<div
-								class="segmented dt-trace-presets"
-							>
-								{{#each
-									PRESETS
-									key="id"
-									as |entry|
-								}}
-									<button
-										type="button"
-										class="dt-trace-preset
-											{{if
-												(eq
-													this.preset
-													entry.id
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.choosePreset
-												entry.id
-											)
-										}}
-									>
-										<Icon
-											@name={{entry.icon}}
-										/>
-										<span
-										>{{entry.label}}</span>
-									</button>
-								{{/each}}
-							</div>
-						</PopoverContent>
-					</Popover>
-
-					<button
-						type="button"
-						class="dt-trace-retrace"
-						disabled={{this.retraceDisabled}}
-						{{on "click" this.retrace}}
-					>
-						{{#if this.tracing}}
-							<NdsLoader />
-							Tracing…
-						{{else}}
-							<Icon
-								@name="refresh-cw"
-							/>
-							Retrace
-						{{/if}}
-					</button>
-				</div>
-
-				<div class="segmented dt-trace-grid">
-					<div class="dt-trace-panel">
-						<SectionHeader
-							@label="Colours"
+						</CanonRow>
+					{{else}}
+						<CanonDropZone
+							class="trace-drop"
+							@prompt="Drop an image"
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
 						/>
-
-						<div class="dt-trace-card">
-							<span
-								class="dt-trace-field-label"
-							>
-								<label
-									for="dt-trace-colours"
-								>Colours</label>
-								<InfoTip
-									@text="Number of colours used to quantise the image before tracing. Fewer colours = simpler, bolder result."
-								/>
-							</span>
-							<div
-								class="dt-trace-card-row"
-							>
-								<button
-									type="button"
-									class="dt-trace-round"
-									aria-label="Decrease"
-									disabled={{this.atMinColours}}
-									{{on
-										"click"
-										(fn
-											this.stepColours
-											-1
-										)
-									}}
-								><Icon
-										@name="minus"
-									/></button>
-								<span
-									class="dt-trace-count"
-								>{{this.options.numberofcolors}}</span>
-								<button
-									type="button"
-									class="dt-trace-round"
-									aria-label="Increase"
-									disabled={{this.atMaxColours}}
-									{{on
-										"click"
-										(fn
-											this.stepColours
-											1
-										)
-									}}
-								><Icon
-										@name="plus"
-									/></button>
-							</div>
-							<input
-								id="dt-trace-colours"
-								type="range"
-								class="dt-trace-slider"
-								min="2"
-								max="64"
-								step="1"
-								value={{this.options.numberofcolors}}
-								{{on
-									"input"
-									(fn
-										this.setFromRange
-										"numberofcolors"
-									)
-								}}
-							/>
-						</div>
-
-						<Stepper
-							@label="Quantise"
-							@tip="Number of k-means iterations for colour clustering. More cycles = more accurate colours, slower trace."
-							@value={{this.options.colorquantcycles}}
-							@min={{1}}
-							@max={{20}}
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Trace" />
+					<CanonRow
+						class="trace-preset"
+						@title="Preset"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonMenuCell
+							@items={{presetNames}}
+							@selected={{this.preset}}
+							@placeholder="Custom"
+							@labelledBy={{titleId}}
+							@onChange={{this.pickPreset}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="trace-row trace-colours"
+						@title="Colours"
+						@form="flush"
+						as |titleId|
+					>
+						<Tip
+							@label="Colours"
+							@text={{TIPS.colours}}
+						/>
+						<CanonNumberField
+							@value={{this.options.numberofcolors}}
+							@min={{2}}
+							@max={{64}}
+							@labelledBy={{titleId}}
 							@onChange={{fn
 								this.setOption
-								"colorquantcycles"
+								"numberofcolors"
 							}}
 						/>
-					</div>
-
-					<div class="dt-trace-panel">
-						<SectionHeader
-							@label="Smoothing"
-						/>
-						<OptionSlider
-							@id="dt-trace-ltres"
-							@label="Paths"
-							@tip="Controls how aggressively straight lines replace curves. Higher = smoother with fewer curves."
-							@display={{this.ltresLabel}}
-							@value={{this.options.ltres}}
-							@min={{0.1}}
-							@max={{10}}
-							@step={{0.1}}
-							@onInput={{fn
-								this.setFromRange
-								"ltres"
+					</CanonRow>
+					{{#each TRACE_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
 							}}
+							@onChange={{this.setOption}}
 						/>
-						<OptionSlider
-							@id="dt-trace-qtres"
-							@label="Curves"
-							@tip="Controls quadratic spline fitting. Higher = smoother curves with less detail."
-							@display={{this.qtresLabel}}
-							@value={{this.options.qtres}}
-							@min={{0.1}}
-							@max={{10}}
-							@step={{0.1}}
-							@onInput={{fn
-								this.setFromRange
-								"qtres"
+					{{/each}}
+					<TitleRow
+						@title="Stroke Width"
+						@tip={{TIPS.stroke}}
+					/>
+					<CanonSegmented
+						class="trace-strokes"
+						@items={{strokeNames}}
+						@columns={{6}}
+						@selected={{this.strokeIndex}}
+						@onChange={{this.pickStroke}}
+						aria-label="Stroke Width"
+					/>
+					<TitleRow
+						@title="Scale"
+						@tip={{TIPS.scale}}
+					/>
+					<CanonSegmented
+						class="trace-scales"
+						@items={{scaleNames}}
+						@columns={{5}}
+						@selected={{this.scaleIndex}}
+						@onChange={{this.pickScale}}
+						aria-label="Scale"
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Advanced" />
+					{{#each BLUR_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
 							}}
+							@onChange={{this.setOption}}
 						/>
-						<OptionSlider
-							@id="dt-trace-pathomit"
-							@label="Threshold"
-							@tip="Paths with fewer than this many nodes are removed. Raise to filter out noise and small artifacts."
-							@display={{this.pathomitLabel}}
-							@value={{this.options.pathomit}}
-							@min={{0}}
-							@max={{200}}
-							@step={{1}}
-							@onInput={{fn
-								this.setFromRange
-								"pathomit"
+					{{/each}}
+					<TitleRow
+						@title="Colour sampling"
+						@tip={{TIPS.sampling}}
+					/>
+					<CanonSegmented
+						class="trace-sampling"
+						@items={{SAMPLING}}
+						@selected={{this.options.colorsampling}}
+						@onChange={{fn
+							this.setOption
+							"colorsampling"
+						}}
+						aria-label="Colour sampling"
+					/>
+					{{#each RATIO_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
 							}}
+							@onChange={{this.setOption}}
 						/>
-					</div>
-
-					<div class="dt-trace-panel">
-						<SectionHeader
-							@label="Output"
+					{{/each}}
+					<TitleRow
+						@title="Layering mode"
+						@tip={{TIPS.layering}}
+					/>
+					<CanonSegmented
+						class="trace-layering"
+						@items={{LAYERING}}
+						@selected={{this.options.layering}}
+						@onChange={{fn
+							this.setOption
+							"layering"
+						}}
+						aria-label="Layering mode"
+					/>
+					{{#each POINT_SLIDERS as |spec|}}
+						<SliderRow
+							@spec={{spec}}
+							@value={{optionValue
+								this.options
+								spec.key
+							}}
+							@onChange={{this.setOption}}
 						/>
-
-						<div class="dt-trace-field">
-							<div
-								class="dt-trace-field-head"
-							>
-								<span
-									class="dt-trace-field-label"
-								>
-									<span
-									>Stroke
-										width</span>
-									<InfoTip
-										@text="Width of the outline drawn around each traced shape. 0 means no stroke."
-									/>
-								</span>
-								<span
-									class="dt-trace-readout"
-								>{{this.options.strokewidth}}</span>
-							</div>
-							<div
-								class="segmented dt-trace-strokes"
-							>
-								{{#each
-									STROKE_OPTIONS
-									key="width"
-									as |option|
-								}}
-									<button
-										type="button"
-										class="dt-trace-choice
-											{{if
-												(eq
-													this.options.strokewidth
-													option.width
-												)
-												'is-active'
-											}}"
-										aria-label={{option.label}}
-										{{on
-											"click"
-											(fn
-												this.setOption
-												"strokewidth"
-												option.width
-											)
-										}}
-									>
-										{{#if
-											(eq
-												option.width
-												0
-											)
-										}}
-											<span
-												class="dt-trace-choice-none"
-											>None</span>
-										{{else}}
-											<span
-												class="dt-trace-swatch"
-												style={{option.bar}}
-											></span>
-										{{/if}}
-									</button>
-								{{/each}}
-							</div>
-						</div>
-
-						<div class="dt-trace-field">
-							<div
-								class="dt-trace-field-head"
-							>
-								<span
-									class="dt-trace-field-label"
-								>
-									<span
-									>Scale</span>
-									<InfoTip
-										@text="Multiplier for the output SVG size relative to the source image."
-									/>
-								</span>
-								<span
-									class="dt-trace-readout"
-								>{{this.scaleLabel}}</span>
-							</div>
-							<div
-								class="segmented dt-trace-scales"
-							>
-								{{#each
-									SCALE_OPTIONS
-									as |option|
-								}}
-									<button
-										type="button"
-										class="dt-trace-choice
-											{{if
-												(eq
-													this.options.scale
-													option
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.setOption
-												"scale"
-												option
-											)
-										}}
-									>{{option}}x</button>
-								{{/each}}
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<details class="dt-trace-advanced">
-					<summary class="dt-trace-summary">
-						<span>Advanced</span>
-						<Icon @name="chevron-down" />
-					</summary>
-					<div class="segmented dt-trace-grid">
-						<div class="dt-trace-panel">
-							<Stepper
-								@label="Blur radius"
-								@tip="Gaussian blur pre-processing. Smooths the image before tracing to reduce noise."
-								@value={{this.options.blurradius}}
-								@min={{0}}
-								@max={{20}}
-								@onChange={{fn
-									this.setOption
-									"blurradius"
-								}}
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Traced SVG" />
+					{{#if this.tracing}}
+						<CanonRow
+							class="trace-busy-row"
+							@title="Tracing…"
+						>
+							<CanonLoader
+								@cell={{5}}
+								@gap={{1}}
 							/>
-							<OptionSlider
-								@id="dt-trace-blurdelta"
-								@label="Blur delta"
-								@tip="Threshold for the blur difference. Only relevant when blur radius > 0."
-								@display={{this.blurdeltaLabel}}
-								@value={{this.options.blurdelta}}
-								@min={{0}}
-								@max={{256}}
-								@step={{1}}
-								@onInput={{fn
-									this.setFromRange
-									"blurdelta"
-								}}
-							/>
-							<div
-								class="dt-trace-field"
-							>
-								<span
-									class="dt-trace-field-label"
-								>
-									<span
-									>Colour
-										sampling</span>
-									<InfoTip
-										@text="How initial colours are sampled. Generated uses k-means, Random picks randomly, Deterministic uses a fixed grid."
-									/>
-								</span>
-								<Select
-									@value={{this.colourSampling}}
-									@onValueChange={{this.setColourSampling}}
-								>
-									<SelectTrigger
-									>
-										<SelectValue
-										>{{this.colourSamplingLabel}}</SelectValue>
-									</SelectTrigger>
-									<SelectContent
-									>
-										{{#each
-											COLOUR_SAMPLING
-											key="value"
-											as |entry|
-										}}
-											<SelectItem
-												@value={{entry.value}}
-											>{{entry.label}}</SelectItem>
-										{{/each}}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-
-						<div class="dt-trace-panel">
-							<OptionSlider
-								@id="dt-trace-mincolorratio"
-								@label="Min colour ratio"
-								@tip="Minimum proportion a colour must occupy to be kept. Raise to eliminate rare colours."
-								@display={{this.mincolorratioLabel}}
-								@value={{this.options.mincolorratio}}
-								@min={{0}}
-								@max={{1}}
-								@step={{0.01}}
-								@onInput={{fn
-									this.setFromRange
-									"mincolorratio"
-								}}
-							/>
-							<Stepper
-								@label="Coordinate rounding"
-								@tip="Decimal places for SVG path coordinates. Lower = smaller file, less precise."
-								@value={{this.options.roundcoords}}
-								@min={{0}}
-								@max={{5}}
-								@onChange={{fn
-									this.setOption
-									"roundcoords"
-								}}
-							/>
-							<div
-								class="dt-trace-field"
-							>
-								<span
-									class="dt-trace-field-label"
-								>
-									<span
-									>Layering
-										mode</span>
-									<InfoTip
-										@text="Sequential stacks colour layers back-to-front. Parallel creates independent layers per colour."
-									/>
-								</span>
-								<Select
-									@value={{this.layering}}
-									@onValueChange={{this.setLayering}}
-								>
-									<SelectTrigger
-									>
-										<SelectValue
-										>{{this.layeringLabel}}</SelectValue>
-									</SelectTrigger>
-									<SelectContent
-									>
-										{{#each
-											LAYERING
-											key="value"
-											as |entry|
-										}}
-											<SelectItem
-												@value={{entry.value}}
-											>{{entry.label}}</SelectItem>
-										{{/each}}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-
-						<div class="dt-trace-panel">
-							<OptionSlider
-								@id="dt-trace-lcpr"
-								@label="Line control point ratio"
-								@tip="Adjusts control points on straight line segments. 0 = default placement."
-								@display={{this.lcprLabel}}
-								@value={{this.options.lcpr}}
-								@min={{0}}
-								@max={{1}}
-								@step={{0.01}}
-								@onInput={{fn
-									this.setFromRange
-									"lcpr"
-								}}
-							/>
-							<OptionSlider
-								@id="dt-trace-qcpr"
-								@label="Quad control point ratio"
-								@tip="Adjusts control points on quadratic curves. 0 = default placement."
-								@display={{this.qcprLabel}}
-								@value={{this.options.qcpr}}
-								@min={{0}}
-								@max={{1}}
-								@step={{0.01}}
-								@onInput={{fn
-									this.setFromRange
-									"qcpr"
-								}}
-							/>
-						</div>
-					</div>
-				</details>
-			{{else}}
-				<div class="dt-trace-frame">
-					<label
-						class="dt-trace-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
+						</CanonRow>
+					{{/if}}
+					{{#if this.failure}}
+						<CanonStatus
+							class="trace-failure"
+							@text={{this.failure}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonRow
+						class="trace-outlines"
+						@title="Outlines"
+						as |titleId|
 					>
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+						<CanonSwitch
+							@on={{this.outlines}}
+							@onChange={{this.pickOutlines}}
+							aria-labelledby={{titleId}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-trace-drop-title"
-						>Drop an image here</span>
-						<span
-							class="dt-trace-drop-hint"
-						>or click to select, or paste —
-							PNG, JPG, WebP, GIF</span>
-					</label>
-				</div>
-			{{/if}}
-		</div>
+					</CanonRow>
+					<CanonTiles @items={{this.tiles}} />
+					<CanonCodeBlock
+						class="trace-code"
+						@code={{this.code}}
+						@maxHeight={{240}}
+					/>
+					<CanonGrid>
+						<CanonButton
+							class="trace-copy"
+							@text="Copy"
+							@icon={{Copy}}
+							@disabled={{this.actionsDisabled}}
+							@onClick={{this.copy}}
+						/>
+						<CanonButton
+							class="trace-optimise"
+							@text="Optimise"
+							@icon={{Wand}}
+							@disabled={{this.actionsDisabled}}
+							@onClick={{this.optimise}}
+						/>
+						<CanonButton
+							class="trace-download"
+							@kind="primary"
+							@text={{this.downloadText}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{this.actionsDisabled}}
+							@onClick={{this.download}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

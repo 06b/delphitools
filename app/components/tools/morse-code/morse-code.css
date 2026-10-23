@@ -1,0 +1,91 @@
+.mt-tape {
+	block-size: 100%;
+	background: var(--canon-card);
+}
+
+.mt-line {
+	position: absolute;
+	inset-block-start: 3px;
+	inset-inline: calc(-1 * var(--mt-reach));
+	block-size: 1px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 25%,
+		transparent
+	);
+}
+
+.mt-mark {
+	position: absolute;
+	inset-block-start: 0;
+	block-size: 7px;
+	background: var(--canon-foreground);
+}
+
+.mt-mark--dim {
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 50%,
+		transparent
+	);
+}
+
+.mt-mark--lit,
+.mt-mark--sounding {
+	background: var(--canon-primary);
+}
+
+.mt-mark--sounding {
+	box-shadow: 0 0 8px var(--canon-primary);
+}
+
+.mt-label {
+	position: absolute;
+	inset-block-start: 12px;
+	inset-inline-start: 50%;
+	color: var(--canon-muted-foreground);
+	font-size: 13px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1;
+	white-space: pre;
+	transform: translateX(-50%);
+}
+
+.mt-label--lit {
+	color: var(--canon-primary);
+}
+
+.mt-label--unknown {
+	color: var(--canon-destructive);
+}
+
+.mt-tape .canon-glyph-flow-empty {
+	display: flex;
+	align-items: center;
+}
+
+.mt-blank {
+	flex: 1;
+	block-size: 1px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 30%,
+		transparent
+	);
+}
+
+.mc-result .tt-result-text {
+	font-family: var(--canon-mono-font);
+	font-size: 17px;
+}
+
+.mc-keypad {
+	display: grid;
+	gap: var(--canon-frame);
+	margin-block-end: var(--canon-frame);
+}
+
+.mc-key {
+	min-block-size: 72px;
+	font-size: var(--canon-text-title2);
+}

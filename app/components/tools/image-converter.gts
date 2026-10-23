@@ -1,1516 +1,1161 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { LinkTo } from '@ember/routing';
-import { eq } from 'ember-truth-helpers';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
+import { on } from '@ember/modifier';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { clipboardImages } from 'delphitools-v2/lib/clipboard-images';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
-import { downloadBlob, downloadUrl } from 'delphitools-v2/lib/download';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import DownloadAll from 'delphitools-v2/components/tools/media/download-all';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import DropMore from 'delphitools-v2/components/tools/media/drop-more';
+import type { NamedBlob } from 'delphitools-v2/lib/zip-files';
+import Picture from 'delphitools-v2/components/tools/image-converter/picture';
 import {
-	Select,
-	SelectTrigger,
-	SelectValue,
-	SelectContent,
-	SelectItem,
-} from 'delphitools-v2/components/ui/select';
-import { encodeJxl } from 'delphitools-v2/lib/jxl';
-import { encodeGif, type GifQuantisation } from 'delphitools-v2/lib/gif';
-import { encodeTiff } from 'delphitools-v2/lib/tiff';
+	BIT_DEPTHS,
+	DEFAULTS,
+	FORMATS,
+	ICNS_SIZES,
+	ICO_SIZES,
+	QUANTISATIONS,
+	RESIZE_MODES,
+	SCALE_PRESETS,
+	convert,
+	hasAlpha,
+	isLossy,
+	keepsAlpha,
+	outputName,
+	outputSize,
+	targetSize,
+	type Settings,
+	type Size,
+} from 'delphitools-v2/components/tools/image-converter/encode';
+import './image-converter/image-converter.css';
 
-type ImageFormat =
-	| 'png'
-	| 'jpeg'
-	| 'webp'
-	| 'jxl'
-	| 'gif'
-	| 'bmp'
-	| 'tiff'
-	| 'ico'
-	| 'icns';
+const ACCEPT = 'image/*,.jxl';
+const FAILED = 'Conversion failed for this format.';
 
-type ResizeMode = 'original' | 'custom' | 'percentage';
+const formatLabels = FORMATS.map((f) => f.label);
+const resizeLabels = RESIZE_MODES.map((m) => m.label);
+const presetLabels = SCALE_PRESETS.map((p) => `${p}%`);
+const depthLabels = BIT_DEPTHS.map((d) => `${d}-bit`);
+const icoLabels = ICO_SIZES.map((s) => `${s}px`);
+const icnsLabels = ICNS_SIZES.map((s) => `${s}px`);
+const quantisationLabels = QUANTISATIONS.map((q) => q.label);
+const icoSizeList = ICO_SIZES.join(', ');
+const icnsSizeList = ICNS_SIZES.join(', ');
 
-const FORMATS: ImageFormat[] = [
-	'png',
-	'jpeg',
-	'webp',
-	'jxl',
-	'gif',
-	'bmp',
-	'tiff',
-	'ico',
-	'icns',
-];
+const whole = (value: number) => String(Math.round(value));
+const colourOf = (text: string): Rgb => parseHex(text) ?? [1, 1, 1];
+const is = (a: unknown, b: unknown) => a === b;
 
-const UNPREVIEWABLE: ImageFormat[] = ['ico', 'icns', 'bmp', 'tiff', 'jxl'];
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
 
-const ICO_SIZES = [16, 32, 48, 64, 128, 256];
-const ICNS_SIZES = [16, 32, 64, 128, 256, 512, 1024];
-const ICO_SIZE_LIST = ICO_SIZES.join(', ');
-const ICNS_SIZE_LIST = ICNS_SIZES.join(', ');
-const SCALE_PRESETS = [25, 50, 75, 150, 200];
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Eye = <template><IconSvg @name="eye" /></template>;
+const Folder = <template><IconSvg @name="folder-open" /></template>;
+const Paste = <template><IconSvg @name="clipboard-paste" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-const ICNS_TYPES: Record<number, string> = {
-	16: 'icp4',
-	32: 'icp5',
-	64: 'icp6',
-	128: 'ic07',
-	256: 'ic08',
-	512: 'ic09',
-	1024: 'ic10',
-};
+type FlagKey =
+	| 'pngTransparency'
+	| 'webpLossless'
+	| 'jxlLossless'
+	| 'icoMultiSize'
+	| 'icnsMultiSize';
+type NumberKey =
+	| 'percentage'
+	| 'jpegQuality'
+	| 'webpQuality'
+	| 'jxlQuality'
+	| 'gifMaxColours';
 
-const QUANTISATIONS: { value: GifQuantisation; label: string }[] = [
-	{ value: 'rgb565', label: 'RGB565 (best quality)' },
-	{ value: 'rgb444', label: 'RGB444 (smaller)' },
-	{ value: 'rgba4444', label: 'RGBA4444 (with transparency)' },
-];
-
-const RESIZE_MODES: { value: ResizeMode; label: string }[] = [
-	{ value: 'original', label: 'Original' },
-	{ value: 'custom', label: 'Dimensions' },
-	{ value: 'percentage', label: 'Scale' },
-];
-
-interface SourceImage {
+interface Source {
 	file: File;
 	url: string;
-	size: string;
-}
-
-interface ConvertedImage {
 	name: string;
-	blob: Blob;
-	size: string;
-	url: string;
-	previewable: boolean;
+	natural: Size;
+	alpha: boolean;
 }
 
-interface Dimensions {
-	width: number;
-	height: number;
-}
-
-function canvasToBlob(
-	canvas: HTMLCanvasElement,
-	mimeType: string,
-	quality?: number,
-): Promise<Blob> {
-	return new Promise((resolve, reject) => {
-		canvas.toBlob(
-			(blob) =>
-				blob
-					? resolve(blob)
-					: reject(
-							new Error(
-								'Canvas toBlob failed',
-							),
-						),
-			mimeType,
-			quality === undefined ? undefined : quality / 100,
-		);
-	});
-}
-
-function loadImage(file: File): Promise<HTMLImageElement> {
-	return new Promise((resolve, reject) => {
-		const image = new Image();
-		const url = URL.createObjectURL(file);
-		image.onload = () => {
-			URL.revokeObjectURL(url);
-			resolve(image);
+async function readSource(file: File): Promise<Source | string> {
+	const name = file.name || 'image';
+	try {
+		const image = await decodeImage(file);
+		const natural = {
+			width: image.width,
+			height: image.height,
 		};
-		image.onerror = () => {
-			URL.revokeObjectURL(url);
-			reject(new Error(`Failed to load image: ${file.name}`));
+		const alpha = hasAlpha(image, natural);
+		image.close();
+		return {
+			file,
+			url: URL.createObjectURL(file),
+			name,
+			natural,
+			alpha,
 		};
-		image.src = url;
-	});
-}
-
-function prepareCanvas(
-	image: HTMLImageElement,
-	{ width, height }: Dimensions,
-	background: string | null,
-): HTMLCanvasElement {
-	const canvas = document.createElement('canvas');
-	canvas.width = width;
-	canvas.height = height;
-	const ctx = canvas.getContext('2d')!;
-	if (background) {
-		ctx.fillStyle = background;
-		ctx.fillRect(0, 0, width, height);
+	} catch {
+		return `Failed to load image: ${name}`;
 	}
-	ctx.drawImage(image, 0, 0, width, height);
-	return canvas;
 }
 
-function imageData(canvas: HTMLCanvasElement): ImageData {
-	return canvas
-		.getContext('2d')!
-		.getImageData(0, 0, canvas.width, canvas.height);
+function divisor(a: number, b: number): number {
+	return b ? divisor(b, a % b) : a;
 }
 
-async function resizedPngs(
-	canvas: HTMLCanvasElement,
-	sizes: number[],
-): Promise<ArrayBuffer[]> {
-	const square = document.createElement('canvas');
-	const ctx = square.getContext('2d')!;
-	const buffers: ArrayBuffer[] = [];
-	for (const size of sizes) {
-		square.width = size;
-		square.height = size;
-		ctx.clearRect(0, 0, size, size);
-		ctx.drawImage(canvas, 0, 0, size, size);
-		buffers.push(
-			await (
-				await canvasToBlob(square, 'image/png')
-			).arrayBuffer(),
-		);
-	}
-	return buffers;
-}
-
-function encodeBmp(data: ImageData, bitDepth: 24 | 32): Blob {
-	const { width, height } = data;
-	const pixels = data.data;
-	const bytesPerPixel = bitDepth / 8;
-	const rowSize = Math.ceil((width * bytesPerPixel) / 4) * 4;
-	const pixelDataSize = rowSize * height;
-	const headerSize = 14 + 40;
-	const fileSize = headerSize + pixelDataSize;
-
-	const buffer = new ArrayBuffer(fileSize);
-	const view = new DataView(buffer);
-
-	view.setUint8(0, 0x42);
-	view.setUint8(1, 0x4d);
-	view.setUint32(2, fileSize, true);
-	view.setUint32(10, headerSize, true);
-
-	view.setUint32(14, 40, true);
-	view.setInt32(18, width, true);
-	// top-down bmp rows
-	view.setInt32(22, -height, true);
-	view.setUint16(26, 1, true);
-	view.setUint16(28, bitDepth, true);
-	view.setUint32(30, 0, true);
-	view.setUint32(34, pixelDataSize, true);
-	// 72 dpi
-	view.setUint32(38, 2835, true);
-	view.setUint32(42, 2835, true);
-
-	for (let y = 0; y < height; y++) {
-		let offset = headerSize + y * rowSize;
-		for (let x = 0; x < width; x++) {
-			const i = (y * width + x) * 4;
-			view.setUint8(offset++, pixels[i + 2]!);
-			view.setUint8(offset++, pixels[i + 1]!);
-			view.setUint8(offset++, pixels[i]!);
-			if (bitDepth === 32) {
-				view.setUint8(offset++, pixels[i + 3]!);
-			}
-		}
-	}
-
-	return new Blob([buffer], { type: 'image/bmp' });
-}
-
-// ico header with pngs
-function buildIco(sizes: number[], pngs: ArrayBuffer[]): Blob {
-	const headerSize = 6 + sizes.length * 16;
-	const buffer = new ArrayBuffer(
-		headerSize + pngs.reduce((sum, png) => sum + png.byteLength, 0),
+/**
+ * ?convFormat=<PNG|JPEG|WebP|JXL|GIF|BMP|TIFF|ICO|ICNS> ?convQuality=<1-100>
+ * ?convResize=<0 original, 1 percentage, 2 custom> ?convPercent=<1-1000>
+ * ?convFlatten=<hex> ?convSample: the iOS launch arguments, with a drawn image
+ */
+function launchFlags() {
+	const query = new URLSearchParams(window.location.search);
+	const settings = { ...DEFAULTS };
+	const label = query.get('convFormat')?.toLowerCase();
+	const format = FORMATS.find(
+		(f) => f.label.toLowerCase() === label || f.id === label,
 	);
-	const view = new DataView(buffer);
-
-	view.setUint16(0, 0, true);
-	view.setUint16(2, 1, true);
-	view.setUint16(4, sizes.length, true);
-
-	let dataOffset = headerSize;
-	sizes.forEach((size, i) => {
-		const entry = 6 + i * 16;
-		const png = pngs[i]!;
-		// zero encodes 256 pixels
-		view.setUint8(entry, size >= 256 ? 0 : size);
-		view.setUint8(entry + 1, size >= 256 ? 0 : size);
-		view.setUint8(entry + 2, 0);
-		view.setUint8(entry + 3, 0);
-		view.setUint16(entry + 4, 1, true);
-		view.setUint16(entry + 6, 32, true);
-		view.setUint32(entry + 8, png.byteLength, true);
-		view.setUint32(entry + 12, dataOffset, true);
-		new Uint8Array(buffer, dataOffset, png.byteLength).set(
-			new Uint8Array(png),
-		);
-		dataOffset += png.byteLength;
-	});
-
-	return new Blob([buffer], { type: 'image/x-icon' });
+	if (format) settings.format = format.id;
+	const number = (key: string, min: number, max: number) => {
+		const value = Number(query.get(key));
+		return query.has(key) && Number.isFinite(value)
+			? Math.min(max, Math.max(min, Math.round(value)))
+			: undefined;
+	};
+	const quality = number('convQuality', 1, 100);
+	if (quality !== undefined)
+		settings.jpegQuality =
+			settings.webpQuality =
+			settings.jxlQuality =
+				quality;
+	const resize = number('convResize', 0, 2);
+	if (resize !== undefined) settings.resize = RESIZE_MODES[resize]!.id;
+	settings.percentage = number('convPercent', 1, 1000) ?? 100;
+	const flatten = parseHex(query.get('convFlatten') ?? '');
+	if (flatten) {
+		settings.jpegBackground = settings.pngBackground = hex(flatten);
+		settings.pngTransparency = false;
+	}
+	return { settings, sample: query.has('convSample') };
 }
 
-// icns big-endian png blocks
-function buildIcns(types: string[], pngs: ArrayBuffer[]): Blob {
-	const fileSize =
-		8 + pngs.reduce((sum, png) => sum + 8 + png.byteLength, 0);
-	const buffer = new ArrayBuffer(fileSize);
-	const view = new DataView(buffer);
-	const bytes = new Uint8Array(buffer);
+/** The port of ImageConverterViewController, on the web tool's encoders, batch and zip. */
+export default class ImageConverter extends Component {
+	@tracked sources: Source[] = [];
+	@tracked current?: Source;
+	@tracked settings: Settings;
+	@tracked result?: { blob: Blob; url: string };
+	@tracked failed = false;
+	@tracked busy = false;
+	@tracked loadError = '';
+	// files added after the first; each one replays the arrival
+	@tracked arrivals = 0;
+	drop = new Drop(ACCEPT, (files) => void this.add(files), true);
 
-	bytes.set([0x69, 0x63, 0x6e, 0x73]);
-	view.setUint32(4, fileSize, false);
+	#queued = false;
+	#bitmap?: { source: Source; image: ImageBitmap };
+	#input?: HTMLInputElement;
 
-	let offset = 8;
-	types.forEach((type, i) => {
-		const png = pngs[i]!;
-		for (let c = 0; c < 4; c++) {
-			bytes[offset + c] = type.charCodeAt(c);
-		}
-		view.setUint32(offset + 4, 8 + png.byteLength, false);
-		new Uint8Array(buffer, offset + 8, png.byteLength).set(
-			new Uint8Array(png),
-		);
-		offset += 8 + png.byteLength;
-	});
-
-	return new Blob([buffer], { type: 'image/x-icns' });
-}
-
-export default class ImageConverterTool extends Component {
-	@tracked sources: SourceImage[] = [];
-	@tracked targetFormat: ImageFormat = 'webp';
-	@tracked converted: ConvertedImage[] = [];
-	@tracked converting = false;
-
-	@tracked resizeMode: ResizeMode = 'original';
-	@tracked resizeWidth = 0;
-	@tracked resizeHeight = 0;
-	@tracked percentage = 100;
-	@tracked lockAspect = true;
-
-	@tracked pngTransparency = true;
-	@tracked pngBackground = '#ffffff';
-	@tracked jpegQuality = 90;
-	@tracked jpegBackground = '#ffffff';
-	@tracked webpLossless = false;
-	@tracked webpQuality = 90;
-	@tracked jxlLossless = false;
-	@tracked jxlQuality = 90;
-	@tracked gifMaxColours = 256;
-	@tracked gifQuantisation: GifQuantisation = 'rgb565';
-	@tracked bmpBitDepth: 24 | 32 = 32;
-	@tracked icoMultiSize = false;
-	@tracked icoSize = 32;
-	@tracked icnsMultiSize = false;
-	@tracked icnsSize = 128;
-
-	willDestroy() {
-		super.willDestroy();
-		this.sources.forEach((source) =>
-			URL.revokeObjectURL(source.url),
-		);
-		this.#revokeConverted();
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags();
+		this.settings = flags.settings;
+		registerDestructor(this, () => {
+			this.sources.forEach((s) => URL.revokeObjectURL(s.url));
+			if (this.result) URL.revokeObjectURL(this.result.url);
+			this.#bitmap?.image.close();
+		});
+		if (flags.sample)
+			void drawnSample().then((file) => this.add([file]));
 	}
 
-	get formatName() {
-		return this.targetFormat.toUpperCase();
+	get many() {
+		return this.sources.length > 1;
 	}
 
-	get countLabel() {
-		const count = this.sources.length;
-		return `${count} image${count === 1 ? '' : 's'} selected`;
+	get formatIndex() {
+		return FORMATS.findIndex((f) => f.id === this.settings.format);
 	}
 
-	get quantisationLabel() {
-		return QUANTISATIONS.find(
-			(option) => option.value === this.gifQuantisation,
-		)!.label;
-	}
-
-	get widthValue() {
-		return this.resizeWidth || '';
-	}
-
-	get heightValue() {
-		return this.resizeHeight || '';
-	}
-
-	get canZip() {
-		return this.converted.length >= 2;
-	}
-
-	#revokeConverted() {
-		this.converted.forEach((image) =>
-			URL.revokeObjectURL(image.url),
+	get resizeIndex() {
+		return RESIZE_MODES.findIndex(
+			(m) => m.id === this.settings.resize,
 		);
 	}
 
-	#addFiles(files: File[]) {
-		const images = files.filter((file) =>
-			file.type.startsWith('image/'),
+	get presetIndex() {
+		return SCALE_PRESETS.indexOf(this.settings.percentage);
+	}
+
+	get depthIndex() {
+		return BIT_DEPTHS.indexOf(this.settings.bmpBitDepth);
+	}
+
+	get icoIndex() {
+		return ICO_SIZES.indexOf(this.settings.icoSize);
+	}
+
+	get icnsIndex() {
+		return ICNS_SIZES.indexOf(this.settings.icnsSize);
+	}
+
+	get quantisationIndex() {
+		return QUANTISATIONS.findIndex(
+			(q) => q.value === this.settings.gifQuantisation,
 		);
-		if (images.length === 0) return;
-		this.#revokeConverted();
-		this.converted = [];
-		this.sources = [
-			...this.sources,
-			...images.map((file) => ({
-				file,
-				url: URL.createObjectURL(file),
-				size: formatBytes(file.size),
-			})),
+	}
+
+	get depthDetail() {
+		return this.settings.bmpBitDepth === 24
+			? 'No transparency'
+			: 'With alpha';
+	}
+
+	get target() {
+		const { current } = this;
+		return current
+			? targetSize(current.natural, this.settings)
+			: undefined;
+	}
+
+	get output() {
+		const { current } = this;
+		return current
+			? outputSize(current.natural, this.settings)
+			: undefined;
+	}
+
+	get fieldWidth() {
+		return this.target?.width ?? Math.max(1, this.settings.width);
+	}
+
+	get fieldHeight() {
+		return this.target?.height ?? Math.max(1, this.settings.height);
+	}
+
+	get aspectDetail() {
+		const natural = this.current?.natural;
+		if (!natural) return undefined;
+		const d = divisor(natural.width, natural.height);
+		return `${natural.width / d}:${natural.height / d}`;
+	}
+
+	get lamps() {
+		const { settings } = this;
+		return [
+			keepsAlpha(settings) && (this.current?.alpha ?? false),
+			isLossy(settings),
+			settings.format === 'gif',
 		];
 	}
 
-	readFile = (file: File) => this.#addFiles([file]);
+	// iOS: the output's own shape, from 0.8 to 1.5; empty, the slot's 3:2
+	get aspect() {
+		const output = this.output;
+		if (!output) return 1.5;
+		const shape = Math.min(
+			1.5,
+			Math.max(0.8, output.width / output.height),
+		);
+		// ponytail: a fixed share for the film strip's row, not its measured 56 px
+		return this.many ? shape * 0.85 : shape;
+	}
 
-	handleFileSelect = (event: Event) => {
+	get resultName() {
+		const { current } = this;
+		return current
+			? outputName(current.name, this.settings.format)
+			: '—';
+	}
+
+	get resultDetail() {
+		const { result, output } = this;
+		if (!result || !output || this.busy) return '—';
+		return `${output.width} × ${output.height} · ${formatBytes(result.blob.size)}`;
+	}
+
+	get downloadDisabled() {
+		return !this.result || this.busy || this.failed;
+	}
+
+	get thumbs() {
+		return this.many
+			? this.sources.map((source) => ({
+					url: source.url,
+					name: source.name,
+					current: source === this.current,
+				}))
+			: [];
+	}
+
+	showAt = (index: number) => {
+		const source = this.sources[index];
+		if (source) this.show(source);
+	};
+
+	sourceDetail = (source: Source) =>
+		`${source.natural.width} × ${source.natural.height} · ${formatBytes(source.file.size)}`;
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
+
+	choose = () => this.#input?.click();
+
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
-		this.#addFiles([...(input.files ?? [])]);
-		// allows same file selection
+		const files = [...(input.files ?? [])];
+		// the same file twice fires change again
 		input.value = '';
+		void this.add(files);
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		this.#addFiles([...(event.dataTransfer?.files ?? [])]);
+	pasted = (file: File) => void this.add([file]);
+
+	pasteImages = async () => this.add(await clipboardImages());
+
+	add = async (files: File[]) => {
+		const images = files.filter((f) => matchesAccept(f, ACCEPT));
+		if (!images.length) return;
+		// sequential; bounds memory
+		const loaded: (Source | string)[] = [];
+		for (const file of images) loaded.push(await readSource(file));
+		if (isDestroying(this)) {
+			loaded.forEach(
+				(s) =>
+					typeof s !== 'string' &&
+					URL.revokeObjectURL(s.url),
+			);
+			return;
+		}
+		const added = loaded.filter(
+			(s): s is Source => typeof s !== 'string',
+		);
+		this.loadError =
+			loaded.find(
+				(s): s is string => typeof s === 'string',
+			) ?? '';
+		if (!added.length) return;
+		this.sources = [...this.sources, ...added];
+		if (!this.settings.width) {
+			const { width, height } = added[0]!.natural;
+			this.settings = { ...this.settings, width, height };
+		}
+		if (this.current) this.arrivals++;
+		this.show(added[0]!);
 	};
 
-	// prevent dropped-file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
+	show = (source: Source) => {
+		if (source === this.current) return;
+		this.current = source;
+		this.#setResult(undefined);
+		this.#convert();
 	};
 
-	removeImage = (source: SourceImage) => {
+	remove = (source: Source) => {
+		const at = this.sources.indexOf(source);
 		URL.revokeObjectURL(source.url);
-		this.sources = this.sources.filter((entry) => entry !== source);
-		this.#revokeConverted();
-		this.converted = [];
+		this.sources = this.sources.filter((s) => s !== source);
+		if (source !== this.current) return;
+		const next =
+			this.sources[Math.min(at, this.sources.length - 1)];
+		if (next) {
+			this.show(next);
+			return;
+		}
+		this.current = undefined;
+		this.#setResult(undefined);
+		this.failed = false;
 	};
 
 	clearAll = () => {
-		this.sources.forEach((source) =>
-			URL.revokeObjectURL(source.url),
-		);
-		this.#revokeConverted();
+		this.sources.forEach((s) => URL.revokeObjectURL(s.url));
 		this.sources = [];
-		this.converted = [];
+		this.current = undefined;
+		this.#setResult(undefined);
+		this.failed = false;
+		this.loadError = '';
 	};
 
-	setFormat = (format: ImageFormat) => (this.targetFormat = format);
-	setResizeMode = (mode: ResizeMode) => (this.resizeMode = mode);
-	setPercentage = (value: number) => (this.percentage = value);
-	setBmpBitDepth = (depth: 24 | 32) => (this.bmpBitDepth = depth);
-	setIcoSize = (size: number) => (this.icoSize = size);
-	setIcnsSize = (size: number) => (this.icnsSize = size);
-	setQuantisation = (value: string) =>
-		(this.gifQuantisation = value as GifQuantisation);
+	change = (patch: Partial<Settings>) => {
+		const keys = Object.keys(patch) as (keyof Settings)[];
+		if (keys.every((key) => this.settings[key] === patch[key]))
+			return;
+		this.settings = { ...this.settings, ...patch };
+		this.#convert();
+	};
 
-	toggleLockAspect = () => (this.lockAspect = !this.lockAspect);
-	togglePngTransparency = () =>
-		(this.pngTransparency = !this.pngTransparency);
-	toggleWebpLossless = () => (this.webpLossless = !this.webpLossless);
-	toggleJxlLossless = () => (this.jxlLossless = !this.jxlLossless);
-	toggleIcoMultiSize = () => (this.icoMultiSize = !this.icoMultiSize);
-	toggleIcnsMultiSize = () => (this.icnsMultiSize = !this.icnsMultiSize);
+	setFlag = (key: FlagKey, on: boolean) => this.change({ [key]: on });
 
-	setWidth = (event: Event) => (this.resizeWidth = numberFrom(event));
-	setHeight = (event: Event) => (this.resizeHeight = numberFrom(event));
-	setCustomPercentage = (event: Event) =>
-		(this.percentage = numberFrom(event));
-	setJpegQuality = (event: Event) =>
-		(this.jpegQuality = numberFrom(event));
-	setWebpQuality = (event: Event) =>
-		(this.webpQuality = numberFrom(event));
-	setJxlQuality = (event: Event) => (this.jxlQuality = numberFrom(event));
-	setGifMaxColours = (event: Event) =>
-		(this.gifMaxColours = numberFrom(event));
-	setPngBackground = (event: Event) =>
-		(this.pngBackground = valueFrom(event));
-	setJpegBackground = (event: Event) =>
-		(this.jpegBackground = valueFrom(event));
+	setNumber = (key: NumberKey, value: number) =>
+		this.change({ [key]: value });
 
-	#targetDimensions(image: HTMLImageElement): Dimensions {
-		const natural = {
-			width: image.naturalWidth,
-			height: image.naturalHeight,
+	setColour = (key: 'pngBackground' | 'jpegBackground', colour: Rgb) =>
+		this.change({ [key]: hex(colour) });
+
+	pickFormat = (index: number) =>
+		this.change({ format: FORMATS[index]!.id });
+
+	pickResize = (index: number) =>
+		this.change({ resize: RESIZE_MODES[index]!.id });
+
+	pickPreset = (index: number) =>
+		this.change({ percentage: SCALE_PRESETS[index]! });
+
+	pickDepth = (index: number) =>
+		this.change({ bmpBitDepth: BIT_DEPTHS[index]! });
+
+	pickIco = (index: number) =>
+		this.change({ icoSize: ICO_SIZES[index]! });
+
+	pickIcns = (index: number) =>
+		this.change({ icnsSize: ICNS_SIZES[index]! });
+
+	pickQuantisation = (index: number) =>
+		this.change({ gifQuantisation: QUANTISATIONS[index]!.value });
+
+	// iOS: a locked side follows the typed one; the batch keeps the typed side
+	setWidth = (width: number) => {
+		this.settings = {
+			...this.settings,
+			width,
+			drives: 'width',
 		};
-		if (this.resizeMode === 'percentage') {
-			const scale = this.percentage / 100;
-			return {
-				width: Math.round(natural.width * scale),
-				height: Math.round(natural.height * scale),
-			};
-		}
-		if (this.resizeMode !== 'custom') return natural;
+		this.#convert();
+	};
 
-		const width = this.resizeWidth || natural.width;
-		const height = this.resizeHeight || natural.height;
-		if (!this.lockAspect) return { width, height };
+	setHeight = (height: number) => {
+		this.settings = {
+			...this.settings,
+			height,
+			drives: 'height',
+		};
+		this.#convert();
+	};
 
-		// width overrides locked height
-		const aspect = natural.width / natural.height;
-		if (this.resizeHeight && !this.resizeWidth) {
-			return { width: Math.round(height * aspect), height };
-		}
-		return { width, height: Math.round(width / aspect) };
-	}
+	setLock = (lock: boolean) => {
+		const { target } = this;
+		this.settings = lock
+			? // iOS: relocking follows the width
+				{ ...this.settings, lock, drives: 'width' }
+			: {
+					...this.settings,
+					lock,
+					...(target ?? {}),
+				};
+		this.#convert();
+	};
 
-	get backgroundFill(): string | null {
-		if (this.targetFormat === 'jpeg') return this.jpegBackground;
-		if (this.targetFormat === 'png' && !this.pngTransparency) {
-			return this.pngBackground;
-		}
-		if (this.targetFormat === 'bmp' && this.bmpBitDepth === 24) {
-			return '#ffffff';
-		}
-		return null;
-	}
+	download = () => {
+		const { result, current } = this;
+		if (result && current)
+			downloadBlob(
+				result.blob,
+				outputName(current.name, this.settings.format),
+			);
+	};
 
-	async #encode(canvas: HTMLCanvasElement): Promise<Blob> {
-		switch (this.targetFormat) {
-			case 'png':
-				return canvasToBlob(canvas, 'image/png');
-			case 'jpeg':
-				return canvasToBlob(
-					canvas,
-					'image/jpeg',
-					this.jpegQuality,
-				);
-			case 'webp':
-				return canvasToBlob(
-					canvas,
-					'image/webp',
-					this.webpLossless
-						? 100
-						: this.webpQuality,
-				);
-			case 'jxl':
-				return encodeJxl(canvas, {
-					quality: this.jxlQuality,
-					lossless: this.jxlLossless,
-				});
-			case 'gif': {
-				const data = imageData(canvas);
-				return new Blob(
-					[
-						encodeGif(
-							data.data,
-							data.width,
-							data.height,
-							this.gifMaxColours,
-							this.gifQuantisation,
-						),
-					],
-					{ type: 'image/gif' },
-				);
-			}
-			case 'bmp':
-				return encodeBmp(
-					imageData(canvas),
-					this.bmpBitDepth,
-				);
-			case 'tiff': {
-				const data = imageData(canvas);
-				return new Blob(
-					[
-						encodeTiff(
-							data.data,
-							data.width,
-							data.height,
-						),
-					],
-					{ type: 'image/tiff' },
-				);
-			}
-			case 'ico': {
-				const sizes = this.icoMultiSize
-					? ICO_SIZES
-					: [this.icoSize];
-				return buildIco(
-					sizes,
-					await resizedPngs(canvas, sizes),
-				);
-			}
-			case 'icns': {
-				const sizes = (
-					this.icnsMultiSize
-						? ICNS_SIZES
-						: [this.icnsSize]
-				).filter((size) => ICNS_TYPES[size]);
-				return buildIcns(
-					sizes.map((size) => ICNS_TYPES[size]!),
-					await resizedPngs(canvas, sizes),
-				);
-			}
-		}
-	}
-
-	convert = async () => {
-		this.converting = true;
-		this.#revokeConverted();
-		const extension =
-			this.targetFormat === 'jpeg'
-				? 'jpg'
-				: this.targetFormat;
-		const previewable = !UNPREVIEWABLE.includes(this.targetFormat);
-		const results: ConvertedImage[] = [];
-
+	convertedFiles = async () => {
+		const settings = this.settings;
+		const files: NamedBlob[] = [];
 		for (const source of this.sources) {
 			try {
-				const image = await loadImage(source.file);
-				const canvas = prepareCanvas(
-					image,
-					this.#targetDimensions(image),
-					this.backgroundFill,
-				);
-				const blob = await this.#encode(canvas);
-				results.push({
-					name: source.file.name.replace(
-						/\.[^.]+$/,
-						`.${extension}`,
-					),
-					blob,
-					size: formatBytes(blob.size),
-					url: URL.createObjectURL(blob),
-					previewable,
-				});
+				const image = await decodeImage(source.file);
+				try {
+					files.push({
+						name: outputName(
+							source.name,
+							settings.format,
+						),
+						blob: await convert(
+							image,
+							source.natural,
+							settings,
+						),
+					});
+				} finally {
+					image.close();
+				}
 			} catch (error) {
 				console.error(
-					`Failed to convert ${source.file.name}:`,
+					`Failed to convert ${source.name}:`,
 					error,
 				);
 			}
 		}
-
-		this.converted = results;
-		this.converting = false;
+		return files;
 	};
 
-	download = (image: ConvertedImage) => {
-		downloadUrl(image.url, image.name);
-	};
+	#setResult(next?: { blob: Blob; url: string }) {
+		if (this.result) URL.revokeObjectURL(this.result.url);
+		this.result = next;
+	}
 
-	downloadZip = async () => {
-		const { default: JSZip } = await import('jszip');
-		const zip = new JSZip();
-		for (const image of this.converted) {
-			zip.file(image.name, image.blob);
+	async #bitmapOf(source: Source) {
+		if (this.#bitmap?.source === source) return this.#bitmap.image;
+		this.#bitmap?.image.close();
+		this.#bitmap = undefined;
+		const image = await decodeImage(source.file);
+		this.#bitmap = { source, image };
+		return image;
+	}
+
+	// live on every change; one encode in flight, the newest settings run next
+	#convert() {
+		if (!this.current) return;
+		if (this.busy) {
+			this.#queued = true;
+			return;
 		}
-		const blob = await zip.generateAsync({ type: 'blob' });
-		downloadBlob(blob, 'converted-images.zip');
-	};
+		void this.#drain();
+	}
+
+	async #drain() {
+		this.busy = true;
+		for (;;) {
+			this.#queued = false;
+			const { current: source, settings } = this;
+			if (!source) break;
+			let blob: Blob | undefined;
+			try {
+				blob = await convert(
+					await this.#bitmapOf(source),
+					source.natural,
+					settings,
+				);
+			} catch (error) {
+				console.error(
+					`Failed to convert ${source.name}:`,
+					error,
+				);
+			}
+			if (isDestroying(this)) return;
+			if (this.#queued) continue;
+			if (source !== this.current) break;
+			this.#setResult(
+				blob
+					? {
+							blob,
+							url: URL.createObjectURL(
+								blob,
+							),
+						}
+					: undefined,
+			);
+			this.failed = !blob;
+			break;
+		}
+		this.busy = false;
+	}
 
 	<template>
-		<div
-			class="dt-conv"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="image-converter"
+			@halves={{true}}
+			@collapsesTo={{200}}
+			{{filePaste this.pasted accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div class="dt-conv-frame">
-				<label
-					class="dt-conv-drop"
-					{{on "drop" this.handleDrop}}
-					{{on "dragover" this.allowDrop}}
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
 				>
-					<input
-						type="file"
-						accept="image/*"
-						multiple
-						class="dt-sr-only"
-						{{on
-							"change"
-							this.handleFileSelect
-						}}
+					<Picture
+						@source={{this.current.url}}
+						@result={{this.result.url}}
+						@sourceSize={{this.current.natural}}
+						@outputSize={{this.output}}
+						@bytes={{this.result.blob.size}}
+						@working={{this.busy}}
+						@failed={{this.failed}}
+						@lamps={{this.lamps}}
+						@over={{this.drop.over}}
+						@thumbs={{this.thumbs}}
+						@arrival={{this.arrivals}}
+						@onChoose={{this.choose}}
+						@onPick={{this.showAt}}
 					/>
-					<Icon @name="upload" />
-					<span class="dt-conv-drop-title">Drop
-						images here</span>
-					<span class="dt-conv-drop-hint">or click
-						to select files, or paste</span>
-				</label>
-
-				<div class="dt-conv-section">
-					<span class="dt-conv-label">Convert to</span>
-					<div class="segmented dt-conv-formats">
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows class="conv-source" @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.sources.length}}
 						{{#each
-							FORMATS key="@index"
-							as |format|
+							this.sources
+							as |source|
 						}}
-							<button
-								type="button"
-								class="dt-conv-format
-									{{if
-										(eq
-											this.targetFormat
-											format
-										)
-										'is-active'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.setFormat
-										format
-									)
+							<CanonRow
+								class="conv-file"
+								@title={{source.name}}
+								@detail={{this.sourceDetail
+									source
 								}}
-							>{{format}}</button>
-						{{/each}}
-						<LinkTo
-							class="dt-conv-format"
-							@route="tools.tool"
-							@model="image-tracer"
-						>
-							<Icon @name="link" />
-							SVG
-						</LinkTo>
-					</div>
-				</div>
-
-				<div class="dt-conv-panels">
-					<div class="dt-conv-panel">
-						<span
-							class="dt-conv-label"
-						>{{this.formatName}}
-							Options</span>
-
-						{{#if
-							(eq
-								this.targetFormat
-								"png"
-							)
-						}}
-							<label
-								class="dt-conv-row"
-							>
-								<span>Preserve
-									transparency</span>
-								<input
-									type="checkbox"
-									class="dt-conv-switch"
-									checked={{this.pngTransparency}}
-									{{on
-										"change"
-										this.togglePngTransparency
-									}}
-								/>
-							</label>
-							{{#unless
-								this.pngTransparency
-							}}
-								<label
-									class="dt-conv-row"
-								>
-									<span
-									>Background
-										colour</span>
-									<span
-										class="dt-conv-swatch"
-									>
-										<input
-											type="color"
-											value={{this.pngBackground}}
-											{{on
-												"input"
-												this.setPngBackground
-											}}
-										/>
-										<code
-										>{{this.pngBackground}}</code>
-									</span>
-								</label>
-							{{/unless}}
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"jpeg"
-							)
-						}}
-							<div
-								class="dt-conv-slider"
-							>
-								<label
-									for="dt-conv-jpeg-quality"
-								>Quality</label>
-								<input
-									id="dt-conv-jpeg-quality"
-									type="range"
-									min="1"
-									max="100"
-									step="1"
-									value={{this.jpegQuality}}
-									{{on
-										"input"
-										this.setJpegQuality
-									}}
-								/>
-								<span
-									class="dt-conv-readout"
-								>{{this.jpegQuality}}%</span>
-							</div>
-							<label
-								class="dt-conv-row"
-							>
-								<span>Background
-									colour</span>
-								<span
-									class="dt-conv-swatch"
-								>
-									<input
-										type="color"
-										value={{this.jpegBackground}}
-										{{on
-											"input"
-											this.setJpegBackground
-										}}
-									/>
-									<code
-									>{{this.jpegBackground}}</code>
-								</span>
-							</label>
-							<p
-								class="dt-conv-note"
-							>Used when input has
-								transparency</p>
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"webp"
-							)
-						}}
-							<label
-								class="dt-conv-row"
-							>
-								<span
-								>Lossless</span>
-								<input
-									type="checkbox"
-									class="dt-conv-switch"
-									checked={{this.webpLossless}}
-									{{on
-										"change"
-										this.toggleWebpLossless
-									}}
-								/>
-							</label>
-							{{#unless
-								this.webpLossless
-							}}
-								<div
-									class="dt-conv-slider"
-								>
-									<label
-										for="dt-conv-webp-quality"
-									>Quality</label>
-									<input
-										id="dt-conv-webp-quality"
-										type="range"
-										min="1"
-										max="100"
-										step="1"
-										value={{this.webpQuality}}
-										{{on
-											"input"
-											this.setWebpQuality
-										}}
-									/>
-									<span
-										class="dt-conv-readout"
-									>{{this.webpQuality}}%</span>
-								</div>
-							{{/unless}}
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"jxl"
-							)
-						}}
-							<label
-								class="dt-conv-row"
-							>
-								<span
-								>Lossless</span>
-								<input
-									type="checkbox"
-									class="dt-conv-switch"
-									checked={{this.jxlLossless}}
-									{{on
-										"change"
-										this.toggleJxlLossless
-									}}
-								/>
-							</label>
-							{{#unless
-								this.jxlLossless
-							}}
-								<div
-									class="dt-conv-slider"
-								>
-									<label
-										for="dt-conv-jxl-quality"
-									>Quality</label>
-									<input
-										id="dt-conv-jxl-quality"
-										type="range"
-										min="1"
-										max="100"
-										step="1"
-										value={{this.jxlQuality}}
-										{{on
-											"input"
-											this.setJxlQuality
-										}}
-									/>
-									<span
-										class="dt-conv-readout"
-									>{{this.jxlQuality}}%</span>
-								</div>
-							{{/unless}}
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"gif"
-							)
-						}}
-							<div
-								class="dt-conv-slider"
-							>
-								<label
-									for="dt-conv-gif-colours"
-								>Max colours</label>
-								<input
-									id="dt-conv-gif-colours"
-									type="range"
-									min="2"
-									max="256"
-									step="1"
-									value={{this.gifMaxColours}}
-									{{on
-										"input"
-										this.setGifMaxColours
-									}}
-								/>
-								<span
-									class="dt-conv-readout"
-								>{{this.gifMaxColours}}</span>
-							</div>
-							<div
-								class="dt-conv-field"
-							>
-								<span
-									class="dt-conv-sublabel"
-								>Quantisation</span>
-								<Select
-									@value={{this.gifQuantisation}}
-									@onValueChange={{this.setQuantisation}}
-								>
-									<SelectTrigger
-									>
-										<SelectValue
-										>{{this.quantisationLabel}}</SelectValue>
-									</SelectTrigger>
-									<SelectContent
-									>
-										{{#each
-											QUANTISATIONS
-											key="value"
-											as |option|
-										}}
-											<SelectItem
-												@value={{option.value}}
-											>{{option.label}}</SelectItem>
-										{{/each}}
-									</SelectContent>
-								</Select>
-							</div>
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"bmp"
-							)
-						}}
-							<div
-								class="dt-conv-field"
-							>
-								<span
-									class="dt-conv-sublabel"
-								>Bit depth</span>
-								<div
-									class="segmented dt-conv-depths"
-								>
-									<button
-										type="button"
-										class="dt-conv-depth
-											{{if
-												(eq
-													this.bmpBitDepth
-													24
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.setBmpBitDepth
-												24
-											)
-										}}
-									>
-										24-bit
-										<span
-										>No
-											transparency</span>
-									</button>
-									<button
-										type="button"
-										class="dt-conv-depth
-											{{if
-												(eq
-													this.bmpBitDepth
-													32
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.setBmpBitDepth
-												32
-											)
-										}}
-									>
-										32-bit
-										<span
-										>With
-											alpha</span>
-									</button>
-								</div>
-							</div>
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"tiff"
-							)
-						}}
-							<p
-								class="dt-conv-note"
-							>TIFF output is
-								uncompressed.
-								Output files
-								will be large.</p>
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"ico"
-							)
-						}}
-							<label
-								class="dt-conv-row"
-							>
-								<span
-								>Multi-size</span>
-								<input
-									type="checkbox"
-									class="dt-conv-switch"
-									checked={{this.icoMultiSize}}
-									{{on
-										"change"
-										this.toggleIcoMultiSize
-									}}
-								/>
-							</label>
-							{{#if
-								this.icoMultiSize
-							}}
-								<p
-									class="dt-conv-note"
-								>Embeds all
-									sizes:
-									{{ICO_SIZE_LIST}}px</p>
-							{{else}}
-								<div
-									class="dt-conv-field"
-								>
-									<span
-										class="dt-conv-sublabel"
-									>Icon
-										size</span>
-									<div
-										class="segmented dt-conv-sizes"
-									>
-										{{#each
-											ICO_SIZES
-											key="@index"
-											as |size|
-										}}
-											<button
-												type="button"
-												class="dt-conv-size
-													{{if
-														(eq
-															this.icoSize
-															size
-														)
-														'is-active'
-													}}"
-												{{on
-													"click"
-													(fn
-														this.setIcoSize
-														size
-													)
-												}}
-											>{{size}}px</button>
-										{{/each}}
-									</div>
-								</div>
-							{{/if}}
-						{{/if}}
-
-						{{#if
-							(eq
-								this.targetFormat
-								"icns"
-							)
-						}}
-							<label
-								class="dt-conv-row"
-							>
-								<span
-								>Multi-size</span>
-								<input
-									type="checkbox"
-									class="dt-conv-switch"
-									checked={{this.icnsMultiSize}}
-									{{on
-										"change"
-										this.toggleIcnsMultiSize
-									}}
-								/>
-							</label>
-							{{#if
-								this.icnsMultiSize
-							}}
-								<p
-									class="dt-conv-note"
-								>Embeds all
-									sizes:
-									{{ICNS_SIZE_LIST}}px</p>
-							{{else}}
-								<div
-									class="dt-conv-field"
-								>
-									<span
-										class="dt-conv-sublabel"
-									>Icon
-										size</span>
-									<div
-										class="segmented dt-conv-sizes is-icns"
-									>
-										{{#each
-											ICNS_SIZES
-											key="@index"
-											as |size|
-										}}
-											<button
-												type="button"
-												class="dt-conv-size
-													{{if
-														(eq
-															this.icnsSize
-															size
-														)
-														'is-active'
-													}}"
-												{{on
-													"click"
-													(fn
-														this.setIcnsSize
-														size
-													)
-												}}
-											>{{size}}px</button>
-										{{/each}}
-									</div>
-								</div>
-							{{/if}}
-						{{/if}}
-					</div>
-
-					<div class="dt-conv-panel">
-						<span
-							class="dt-conv-label"
-						>Resize</span>
-
-						<div
-							class="segmented dt-conv-modes"
-						>
-							{{#each
-								RESIZE_MODES
-								key="value"
-								as |mode|
-							}}
-								<button
-									type="button"
-									class="dt-conv-mode
-										{{if
-											(eq
-												this.resizeMode
-												mode.value
-											)
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setResizeMode
-											mode.value
-										)
-									}}
-								>{{mode.label}}</button>
-							{{/each}}
-						</div>
-
-						{{#if
-							(eq
-								this.resizeMode
-								"original"
-							)
-						}}
-							<p class="dt-conv-note">
-								<Icon
-									@name="scaling"
-								/>
-								<span>Images
-									will
-									keep
-									their
-									original
-									dimensions</span>
-							</p>
-						{{/if}}
-
-						{{#if
-							(eq
-								this.resizeMode
-								"custom"
-							)
-						}}
-							<div
-								class="dt-conv-dims"
-							>
-								<span
-									class="dt-conv-dim"
-								>
-									<label
-										for="dt-conv-width"
-									>Width</label>
-									<input
-										id="dt-conv-width"
-										type="number"
-										placeholder="Auto"
-										value={{this.widthValue}}
-										{{on
-											"input"
-											this.setWidth
-										}}
-									/>
-								</span>
-								<button
-									type="button"
-									class="dt-conv-lock
-										{{if
-											this.lockAspect
-											'is-active'
-										}}"
-									title={{if
-										this.lockAspect
-										"Unlock aspect ratio"
-										"Lock aspect ratio"
-									}}
-									{{on
-										"click"
-										this.toggleLockAspect
-									}}
-								>
-									<Icon
-										@name={{if
-											this.lockAspect
-											"lock"
-											"unlock"
-										}}
-									/>
-								</button>
-								<span
-									class="dt-conv-dim"
-								>
-									<label
-										for="dt-conv-height"
-									>Height</label>
-									<input
-										id="dt-conv-height"
-										type="number"
-										placeholder="Auto"
-										value={{this.heightValue}}
-										{{on
-											"input"
-											this.setHeight
-										}}
-									/>
-								</span>
-							</div>
-							{{#if this.lockAspect}}
-								<p
-									class="dt-conv-note"
-								>Aspect ratio
-									locked —
-									leave
-									one
-									field
-									empty to
-								auto-calculate</p>
-							{{else}}
-								<p
-									class="dt-conv-note"
-								>Aspect ratio
-									unlocked
-									— both
-									dimensions
-									are
-									independent</p>
-							{{/if}}
-						{{/if}}
-
-						{{#if
-							(eq
-								this.resizeMode
-								"percentage"
-							)
-						}}
-							<div
-								class="segmented dt-conv-scales"
-							>
-								{{#each
-									SCALE_PRESETS
-									key="@index"
-									as |preset|
-								}}
-									<button
-										type="button"
-										class="dt-conv-scale
-											{{if
-												(eq
-													this.percentage
-													preset
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.setPercentage
-												preset
-											)
-										}}
-									>{{preset}}%</button>
-								{{/each}}
-							</div>
-							<div
-								class="dt-conv-custom"
-							>
-								<label
-									for="dt-conv-percentage"
-								>Custom:</label>
-								<input
-									id="dt-conv-percentage"
-									type="number"
-									min="1"
-									max="1000"
-									value={{this.percentage}}
-									{{on
-										"input"
-										this.setCustomPercentage
-									}}
-								/>
-								<span>%</span>
-							</div>
-						{{/if}}
-					</div>
-				</div>
-			</div>
-
-			{{#if this.sources.length}}
-				<div class="dt-conv-frame">
-					<div class="dt-conv-bar">
-						<span
-							class="dt-conv-bar-title"
-						>{{this.countLabel}}</span>
-						<button
-							type="button"
-							class="dt-conv-bar-btn"
-							{{on
-								"click"
-								this.clearAll
-							}}
-						>Clear all</button>
-					</div>
-
-					{{#each
-						this.sources key="url"
-						as |source|
-					}}
-						<div class="dt-conv-item">
-							<span
-								class="dt-conv-thumb"
-							>
-								<img
-									src={{source.url}}
-									alt={{source.file.name}}
-								/>
-							</span>
-							<span
-								class="dt-conv-item-meta"
-							>
-								<span
-									class="dt-conv-item-name"
-								>{{source.file.name}}</span>
-								<span
-									class="dt-conv-item-size"
-								>{{source.size}}</span>
-							</span>
-							<button
-								type="button"
-								class="dt-conv-remove"
-								title="Remove"
-								{{on
-									"click"
-									(fn
-										this.removeImage
-										source
-									)
-								}}
-							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-						</div>
-					{{/each}}
-
-					<button
-						type="button"
-						class="dt-conv-run"
-						disabled={{this.converting}}
-						{{on "click" this.convert}}
-					>
-						{{#if this.converting}}
-							Converting…
-						{{else}}
-							<Icon @name="image" />
-							Convert to
-							{{this.formatName}}
-						{{/if}}
-					</button>
-				</div>
-			{{/if}}
-
-			{{#if this.converted.length}}
-				<div class="dt-conv-frame">
-					<div class="dt-conv-bar">
-						<span
-							class="dt-conv-bar-title"
-						>Converted</span>
-						{{#if this.canZip}}
-							<button
-								type="button"
-								class="dt-conv-bar-btn"
-								{{on
-									"click"
-									this.downloadZip
-								}}
-							>
-								<DownloadLabel
-									@label="Download All as ZIP"
-								/>
-							</button>
-						{{/if}}
-					</div>
-
-					{{#each
-						this.converted key="url"
-						as |image|
-					}}
-						<div class="dt-conv-item">
-							<span
-								class="dt-conv-thumb"
+								@form="flush"
 							>
 								{{#if
-									image.previewable
+									this.many
 								}}
-									<img
-										src={{image.url}}
-										alt={{image.name}}
+									<CanonButton
+										class="conv-show"
+										aria-pressed={{if
+											(is
+												source
+												this.current
+											)
+											"true"
+											"false"
+										}}
+										@kind="segment"
+										@icon={{Eye}}
+										@label="Preview"
+										@selected={{is
+											source
+											this.current
+										}}
+										@onClick={{fn
+											this.show
+											source
+										}}
+									/>
+									<CanonButton
+										class="conv-remove"
+										@kind="cell"
+										@icon={{Trash}}
+										@label="Remove"
+										@onClick={{fn
+											this.remove
+											source
+										}}
 									/>
 								{{else}}
-									<Icon
-										@name="image"
+									<CanonButton
+										class="conv-clear"
+										@kind="cell"
+										@text="Clear"
+										@icon={{Trash}}
+										@onClick={{fn
+											this.remove
+											source
+										}}
 									/>
 								{{/if}}
-							</span>
-							<span
-								class="dt-conv-item-meta"
-							>
-								<span
-									class="dt-conv-item-name"
-								>{{image.name}}</span>
-								<span
-									class="dt-conv-item-size"
-								>{{image.size}}</span>
-							</span>
-							<button
-								type="button"
-								class="dt-conv-download"
-								{{on
-									"click"
-									(fn
-										this.download
-										image
-									)
-								}}
-							>
-								<DownloadLabel
+							</CanonRow>
+						{{/each}}
+						<DropMore
+							class="conv-more"
+							@accept={{ACCEPT}}
+							@onFiles={{this.add}}
+						/>
+						<CanonGrid class="conv-add">
+							<CanonButton
+								class="conv-files"
+								@kind="cell"
+								@text="Files"
+								@icon={{Folder}}
+								@onClick={{this.choose}}
+							/>
+							<CanonButton
+								class="conv-paste"
+								@kind="cell"
+								@text="Paste"
+								@icon={{Paste}}
+								@onClick={{this.pasteImages}}
+							/>
+							{{#if this.many}}
+								<CanonButton
+									class="conv-clear-all"
+									@kind="cell"
+									@text="Clear all"
+									@icon={{Trash}}
+									@onClick={{this.clearAll}}
 								/>
-							</button>
-						</div>
-					{{/each}}
-				</div>
-			{{/if}}
-		</div>
+							{{/if}}
+						</CanonGrid>
+					{{else}}
+						<CanonDropZone
+							class="conv-drop"
+							@prompt="Drop images here"
+							@accept={{ACCEPT}}
+							@multiple={{true}}
+							@onFiles={{this.add}}
+							{{on "paste" keepPaste}}
+						/>
+					{{/if}}
+					{{#if this.loadError}}
+						<CanonStatus
+							class="conv-load-error"
+							@text={{this.loadError}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+				<CanonRows class="conv-output" @framed={{true}}>
+					<CanonHeading @text="Output Format" />
+					<CanonSegmented
+						class="conv-formats"
+						@items={{formatLabels}}
+						@columns={{3}}
+						@selected={{this.formatIndex}}
+						@onChange={{this.pickFormat}}
+					/>
+					{{#if (is this.settings.format "png")}}
+						<CanonRow
+							class="conv-png-alpha"
+							@title="Preserve Transparency"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.settings.pngTransparency}}
+								@onChange={{fn
+									this.setFlag
+									"pngTransparency"
+								}}
+							/>
+						</CanonRow>
+						{{#unless
+							this.settings.pngTransparency
+						}}
+							<CanonColourWell
+								class="conv-png-background"
+								@label="Background Colour"
+								@colour={{colourOf
+									this.settings.pngBackground
+								}}
+								@onChange={{fn
+									this.setColour
+									"pngBackground"
+								}}
+							/>
+						{{/unless}}
+					{{else if
+						(is this.settings.format "jpeg")
+					}}
+						<CanonRow
+							class="conv-quality"
+							@title="Quality"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.settings.jpegQuality}}
+								@min={{1}}
+								@max={{100}}
+								@step={{1}}
+								@readout={{whole}}
+								@labelledBy={{titleId}}
+								@onChange={{fn
+									this.setNumber
+									"jpegQuality"
+								}}
+							/>
+						</CanonRow>
+						<CanonColourWell
+							class="conv-jpeg-background"
+							@label="Background Colour"
+							@colour={{colourOf
+								this.settings.jpegBackground
+							}}
+							@onChange={{fn
+								this.setColour
+								"jpegBackground"
+							}}
+						/>
+						<CanonStatus
+							@text="Used when input has transparency"
+							@tone="muted"
+							@row={{true}}
+						/>
+					{{else if
+						(is this.settings.format "webp")
+					}}
+						<CanonRow
+							class="conv-lossless"
+							@title="Lossless"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.settings.webpLossless}}
+								@onChange={{fn
+									this.setFlag
+									"webpLossless"
+								}}
+							/>
+						</CanonRow>
+						{{#unless
+							this.settings.webpLossless
+						}}
+							<CanonRow
+								class="conv-quality"
+								@title="Quality"
+								@form="flush"
+								as |titleId|
+							>
+								<CanonSlider
+									@value={{this.settings.webpQuality}}
+									@min={{1}}
+									@max={{100}}
+									@step={{1}}
+									@readout={{whole}}
+									@labelledBy={{titleId}}
+									@onChange={{fn
+										this.setNumber
+										"webpQuality"
+									}}
+								/>
+							</CanonRow>
+						{{/unless}}
+					{{else if
+						(is this.settings.format "jxl")
+					}}
+						<CanonRow
+							class="conv-lossless"
+							@title="Lossless"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.settings.jxlLossless}}
+								@onChange={{fn
+									this.setFlag
+									"jxlLossless"
+								}}
+							/>
+						</CanonRow>
+						{{#unless
+							this.settings.jxlLossless
+						}}
+							<CanonRow
+								class="conv-quality"
+								@title="Quality"
+								@form="flush"
+								as |titleId|
+							>
+								<CanonSlider
+									@value={{this.settings.jxlQuality}}
+									@min={{1}}
+									@max={{100}}
+									@step={{1}}
+									@readout={{whole}}
+									@labelledBy={{titleId}}
+									@onChange={{fn
+										this.setNumber
+										"jxlQuality"
+									}}
+								/>
+							</CanonRow>
+						{{/unless}}
+					{{else if
+						(is this.settings.format "gif")
+					}}
+						<CanonRow
+							class="conv-colours"
+							@title="Max Colours"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.settings.gifMaxColours}}
+								@min={{2}}
+								@max={{256}}
+								@step={{1}}
+								@readout={{whole}}
+								@labelledBy={{titleId}}
+								@onChange={{fn
+									this.setNumber
+									"gifMaxColours"
+								}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="conv-quantisation"
+							@title="Quantisation"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonMenuCell
+								@items={{quantisationLabels}}
+								@selected={{this.quantisationIndex}}
+								@labelledBy={{titleId}}
+								@onChange={{this.pickQuantisation}}
+							/>
+						</CanonRow>
+					{{else if
+						(is this.settings.format "bmp")
+					}}
+						<CanonRow
+							class="conv-depth"
+							@title="Bit Depth"
+							@detail={{this.depthDetail}}
+							@form="flush"
+						>
+							<CanonSegmented
+								@items={{depthLabels}}
+								@selected={{this.depthIndex}}
+								@onChange={{this.pickDepth}}
+							/>
+						</CanonRow>
+					{{else if
+						(is this.settings.format "tiff")
+					}}
+						<CanonStatus
+							class="conv-tiff-note"
+							@text="TIFF output is uncompressed. Output files will be large."
+							@tone="muted"
+							@row={{true}}
+						/>
+					{{else if
+						(is this.settings.format "ico")
+					}}
+						<CanonRow
+							class="conv-multi"
+							@title="Multi-size"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.settings.icoMultiSize}}
+								@onChange={{fn
+									this.setFlag
+									"icoMultiSize"
+								}}
+							/>
+						</CanonRow>
+						{{#if
+							this.settings.icoMultiSize
+						}}
+							<CanonStatus
+								class="conv-sizes-note"
+								@text="Embeds all sizes: {{icoSizeList}}px"
+								@tone="muted"
+								@row={{true}}
+							/>
+						{{else}}
+							<CanonHeading
+								@text="Icon Size"
+							/>
+							<CanonSegmented
+								class="conv-icon-sizes"
+								@items={{icoLabels}}
+								@columns={{6}}
+								@selected={{this.icoIndex}}
+								@onChange={{this.pickIco}}
+							/>
+						{{/if}}
+					{{else}}
+						<CanonRow
+							class="conv-multi"
+							@title="Multi-size"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.settings.icnsMultiSize}}
+								@onChange={{fn
+									this.setFlag
+									"icnsMultiSize"
+								}}
+							/>
+						</CanonRow>
+						{{#if
+							this.settings.icnsMultiSize
+						}}
+							<CanonStatus
+								class="conv-sizes-note"
+								@text="Embeds all sizes: {{icnsSizeList}}px"
+								@tone="muted"
+								@row={{true}}
+							/>
+						{{else}}
+							<CanonHeading
+								@text="Icon Size"
+							/>
+							<CanonSegmented
+								class="conv-icon-sizes"
+								@items={{icnsLabels}}
+								@columns={{4}}
+								@selected={{this.icnsIndex}}
+								@onChange={{this.pickIcns}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+				<CanonRows class="conv-sizing" @framed={{true}}>
+					<CanonHeading @text="Resize" />
+					<CanonSegmented
+						class="conv-resize"
+						@items={{resizeLabels}}
+						@selected={{this.resizeIndex}}
+						@onChange={{this.pickResize}}
+					/>
+					{{#if
+						(is
+							this.settings.resize
+							"percentage"
+						)
+					}}
+						<CanonSegmented
+							class="conv-presets"
+							@items={{presetLabels}}
+							@selected={{this.presetIndex}}
+							@onChange={{this.pickPreset}}
+						/>
+						<CanonRow
+							class="conv-percent"
+							@title="Scale"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.settings.percentage}}
+								@min={{1}}
+								@max={{1000}}
+								@unit="%"
+								@labelledBy={{titleId}}
+								@onChange={{fn
+									this.setNumber
+									"percentage"
+								}}
+							/>
+						</CanonRow>
+					{{else if
+						(is
+							this.settings.resize
+							"custom"
+						)
+					}}
+						<CanonRow
+							class="conv-width"
+							@title="Width"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.fieldWidth}}
+								@min={{1}}
+								@unit="px"
+								@labelledBy={{titleId}}
+								@disabled={{if
+									this.current
+									false
+									true
+								}}
+								@onChange={{this.setWidth}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="conv-height"
+							@title="Height"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonNumberField
+								@value={{this.fieldHeight}}
+								@min={{1}}
+								@unit="px"
+								@labelledBy={{titleId}}
+								@disabled={{if
+									this.current
+									false
+									true
+								}}
+								@onChange={{this.setHeight}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="conv-lock"
+							@title="Aspect Ratio"
+							@detail={{this.aspectDetail}}
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.settings.lock}}
+								@onChange={{this.setLock}}
+							/>
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				<CanonRows class="conv-result" @framed={{true}}>
+					<CanonHeading @text="Result" />
+					<CanonRow
+						class="conv-result-file"
+						@title={{this.resultName}}
+						@detail={{this.resultDetail}}
+					/>
+					{{#if this.failed}}
+						<CanonStatus
+							class="conv-failure"
+							@text={{FAILED}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonGrid>
+						<CanonButton
+							class="conv-download"
+							@kind="primary"
+							@text={{passAlong
+								"Download"
+							}}
+							@icon={{Save}}
+							@iconStyle="oversized"
+							@disabled={{this.downloadDisabled}}
+							@onClick={{this.download}}
+						/>
+					</CanonGrid>
+					{{#if this.many}}
+						<DownloadAll
+							class="conv-all"
+							@kind="secondary"
+							@files={{this.convertedFiles}}
+							@zipName="converted-images.zip"
+						/>
+					{{/if}}
+				</CanonRows>
+				{{! the empty picture and the Files cell open it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept={{ACCEPT}}
+					multiple
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
-}
-
-function valueFrom(event: Event): string {
-	return (event.target as HTMLInputElement).value;
-}
-
-function numberFrom(event: Event): number {
-	return Number(valueFrom(event)) || 0;
 }

@@ -11,6 +11,8 @@ export interface SelectSettings {
 	tolerance: number;
 	magnetic: boolean;
 	wandMode: 'flood' | 'global';
+	// iOS selectRemoves: new shapes take pixels out instead of adding
+	removes: boolean;
 }
 
 export interface TextSettings {
@@ -52,6 +54,7 @@ const DEFAULTS: ToolSettings = {
 		tolerance: 32,
 		magnetic: false,
 		wandMode: 'flood',
+		removes: false,
 	},
 	text: {
 		fontFamily: 'sans',

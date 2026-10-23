@@ -76,6 +76,7 @@ import { fieldDraft, newField } from 'delphitools-v2/lib/errata/fields';
 import { FONT, fieldVisual } from 'delphitools-v2/lib/errata/field-visual';
 import { STAMP_RED, textObject } from 'delphitools-v2/lib/errata/stamps';
 import { takenNames } from 'delphitools-v2/lib/errata/widgets';
+import Backdrop from 'delphitools-v2/components/errata/backdrop';
 import {
 	registerViewportController,
 	reportZoom,
@@ -87,8 +88,6 @@ const NOTE_PATH = 'M1 1H19V14H8L3 19V14H1Z';
 const ZMIN = 0.1;
 const ZMAX = 16;
 const FIT_PAD = 24;
-// floating tool rail height plus its bottom offset
-const RAIL_INSET = 72;
 const GAP = 24;
 // tiles kept this many viewport heights beyond the visible range
 const KEEP_MARGIN = 1.5;
@@ -266,48 +265,71 @@ export default class PageCanvas extends Component {
 			return best;
 		};
 
+		// the frame's floating pieces, written by errata-shell; FIT_PAD without it
+		const area = wrap.closest<HTMLElement>(
+			'.sub-shell-canvas-area',
+		);
+		const insets = () => {
+			const v = area?.dataset['inset']
+				?.split(',')
+				.map(Number);
+			return v?.length === 4 && v.every(Number.isFinite)
+				? {
+						top: v[0]!,
+						right: v[1]!,
+						bottom: v[2]!,
+						left: v[3]!,
+					}
+				: {
+						top: FIT_PAD,
+						right: FIT_PAD,
+						bottom: FIT_PAD,
+						left: FIT_PAD,
+					};
+		};
+
 		const clampViewport = () => {
 			const vpt =
 				canvas.viewportTransform.slice() as typeof canvas.viewportTransform;
 			const z = vpt[0];
-			const W = canvas.getWidth();
-			const H = canvas.getHeight();
+			const { top, right, bottom, left } = insets();
+			const W = canvas.getWidth() - left - right;
+			const H = canvas.getHeight() - top - bottom;
 			const cw = sceneWidth * z;
 			const ch = sceneHeight * z;
 			vpt[4] =
-				cw + FIT_PAD * 2 <= W
-					? (W - cw) / 2
+				cw <= W
+					? left + (W - cw) / 2
 					: Math.min(
-							FIT_PAD,
+							left,
 							Math.max(
-								W -
-									cw -
-									FIT_PAD,
+								left + W - cw,
 								vpt[4],
 							),
 						);
 			vpt[5] =
-				ch + FIT_PAD * 2 <= H
-					? (H - ch) / 2
+				ch <= H
+					? top + (H - ch) / 2
 					: Math.min(
-							FIT_PAD,
+							top,
 							Math.max(
-								H -
-									ch -
-									FIT_PAD,
+								top + H - ch,
 								vpt[5],
 							),
 						);
 			canvas.setViewportTransform(vpt);
 		};
 
+		// the zoom the last fit chose; a frame change refits while it holds
+		let fitted = 0;
 		const fitPage = (index: number) => {
 			const slot = slotAt(index);
 			if (!slot) return;
-			const w = Math.max(1, canvas.getWidth() - FIT_PAD * 2);
+			const { top, right, bottom, left } = insets();
+			const w = Math.max(1, canvas.getWidth() - left - right);
 			const h = Math.max(
 				1,
-				canvas.getHeight() - FIT_PAD * 2 - RAIL_INSET,
+				canvas.getHeight() - top - bottom,
 			);
 			const z = Math.min(
 				w / slot.width,
@@ -319,9 +341,10 @@ export default class PageCanvas extends Component {
 				0,
 				0,
 				z,
-				FIT_PAD + (w - slot.width * z) / 2 - slot.x * z,
-				FIT_PAD - slot.y * z,
+				left + (w - slot.width * z) / 2 - slot.x * z,
+				top - slot.y * z,
 			]);
+			fitted = z;
 			clampViewport();
 			reportZoom(z);
 		};
@@ -331,7 +354,7 @@ export default class PageCanvas extends Component {
 			if (!slot) return;
 			const vpt =
 				canvas.viewportTransform.slice() as typeof canvas.viewportTransform;
-			vpt[5] = FIT_PAD - (slot.y - GAP / 2) * vpt[0];
+			vpt[5] = insets().top - (slot.y - GAP / 2) * vpt[0];
 			canvas.setViewportTransform(vpt);
 			clampViewport();
 			canvas.requestRenderAll();
@@ -350,7 +373,7 @@ export default class PageCanvas extends Component {
 			if (top >= seen.top && bottom <= seen.bottom) return;
 			const vpt =
 				canvas.viewportTransform.slice() as typeof canvas.viewportTransform;
-			vpt[5] = FIT_PAD - top * vpt[0];
+			vpt[5] = insets().top - top * vpt[0];
 			canvas.setViewportTransform(vpt);
 			clampViewport();
 			scheduleVisible();
@@ -544,6 +567,17 @@ export default class PageCanvas extends Component {
 		};
 		const ro = new ResizeObserver(size);
 		ro.observe(wrap);
+		const onInset = () => {
+			if (
+				order.length &&
+				Math.abs(canvas.getZoom() - fitted) < 1e-6
+			)
+				fitPage(getPageIndex());
+			else clampViewport();
+			scheduleVisible();
+			canvas.requestRenderAll();
+		};
+		area?.addEventListener('err-inset', onInset);
 		size();
 
 		const hatchTile = document.createElement('canvas');
@@ -2444,6 +2478,7 @@ export default class PageCanvas extends Component {
 			if (tileTimer) clearTimeout(tileTimer);
 			for (const slot of slots.values()) slot.job?.cancel();
 			ro.disconnect();
+			area?.removeEventListener('err-inset', onInset);
 			wrap.removeEventListener('wheel', onWheel);
 			registerCanvasActions(null);
 			registerViewportController(null);
@@ -2454,6 +2489,7 @@ export default class PageCanvas extends Component {
 
 	<template>
 		<div class="sub-canvas-wrap" {{this.mount}}>
+			<Backdrop />
 			<canvas></canvas>
 			<div class="err-hud" hidden></div>
 		</div>

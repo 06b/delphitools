@@ -186,6 +186,22 @@ export function setBlendMode(id: string, blendMode: BlendMode): void {
 	}));
 }
 
+// a blank name or the same name leaves the doc and the undo stack alone
+export function renameLayer(id: string, name: string): void {
+	const next = name.trim();
+	const doc = getSnapshot();
+	const layer = doc ? findLayer(doc.layers, id) : null;
+	if (!next || !layer || layer.name === next) return;
+	update((d) => ({
+		...d,
+		layers: mapLayerInTree(d.layers, id, (l) => ({
+			...l,
+			name: next,
+		})),
+		updatedAt: Date.now(),
+	}));
+}
+
 export function toggleVisibility(id: string): void {
 	update((doc) => ({
 		...doc,

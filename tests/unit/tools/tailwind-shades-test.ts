@@ -1,8 +1,13 @@
 import { module, test } from 'qunit';
 import {
+	cleanName,
+	cssBlock,
 	generateShades,
 	GENERATION_MODES,
-} from 'delphitools-v2/components/tools/tailwind-shades';
+	place,
+	tailwindBlock,
+	targetLightness,
+} from 'delphitools-v2/components/tools/tailwind-shades/shades';
 import { colourFromQuery } from 'delphitools-v2/lib/colour-query';
 import { maxOklchChroma } from 'delphitools-v2/lib/colour-maths';
 
@@ -175,5 +180,36 @@ module('Unit | Tool | tailwind-shades', function () {
 			assert.strictEqual(colourFromQuery(''), null);
 			assert.strictEqual(colourFromQuery('?other=1'), null);
 		});
+	});
+
+	test('places a lightness on the scale', function (assert) {
+		assert.deepEqual(place(0.55, targetLightness), {
+			index: 5,
+			level: 500,
+			nearest: 5,
+		});
+		assert.strictEqual(place(0.99, targetLightness).level, 50);
+		assert.strictEqual(place(0.05, targetLightness).level, 950);
+		const between = place(0.605, targetLightness);
+		assert.true(Math.abs(between.index - 4.5) < 1e-9);
+		assert.strictEqual(between.level, 450);
+		assert.strictEqual(between.nearest, 5);
+		assert.strictEqual(place(0.95, targetLightness).level, 80);
+	});
+
+	test('writes the blocks with the name and notation', function (assert) {
+		const shades = generateShades(BASE, 'classic')!;
+		const upper = (hex: string) => hex.toUpperCase();
+		assert.true(
+			cssBlock(shades, 'brand', upper).includes(
+				`  --brand-500: ${upper(shades[5]!.hex)};`,
+			),
+		);
+		assert.true(
+			tailwindBlock(shades, 'brand', upper).startsWith(
+				"brand: {\n      50: '#",
+			),
+		);
+		assert.strictEqual(cleanName('Brand Ink-2!'), 'brandink-2');
 	});
 });

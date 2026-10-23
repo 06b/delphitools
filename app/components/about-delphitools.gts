@@ -1,4 +1,6 @@
 import type { TOC } from '@ember/component/template-only';
+import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import CastLineup from 'delphitools-v2/components/cast-lineup';
 import ColourPaletteDialog from 'delphitools-v2/components/colour-palette-dialog';
 
@@ -40,7 +42,8 @@ const DONORS = [
 	},
 ];
 
-export const BUILT_WITH = [
+// a route is a page in the app, opened in place
+export const BUILT_WITH: { name: string; url?: string; route?: string }[] = [
 	{ name: 'Ember', url: 'https://emberjs.com' },
 	{ name: 'Glimmer', url: 'https://github.com/glimmerjs/glimmer-vm' },
 	{
@@ -49,12 +52,31 @@ export const BUILT_WITH = [
 	},
 	{ name: 'Vite', url: 'https://vite.dev' },
 	{ name: 'Crayon', url: 'https://crayoncss.com' },
-	{
-		name: 'shadcn-ember',
-		url: 'https://github.com/IgnaceMaes/shadcn-ember',
-	},
+	{ name: "Delphi's Canon UI Kit", route: 'canon' },
 	{ name: 'Lucide', url: 'https://lucide.dev' },
 ];
+
+const FONTS = [
+	{
+		name: 'Open Sans',
+		by: 'Steve Matteson',
+		url: 'https://fonts.google.com/specimen/Open+Sans',
+	},
+	{
+		name: 'Iosevka',
+		by: 'Renzhi Li',
+		url: 'https://typeof.net/Iosevka/',
+	},
+	{
+		name: 'FluoWrite',
+		by: 'Speak the Sky',
+		url: 'https://speakthesky.com',
+	},
+];
+
+// the about text sits in a modal dialog; a page link leaves it
+const closeDialog = (event: MouseEvent) =>
+	(event.currentTarget as HTMLElement).closest('dialog')?.close();
 
 const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 	<div class="dt-about-body" ...attributes>
@@ -169,15 +191,27 @@ const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 			<h3>Built with</h3>
 			<div class="dt-chips">
 				{{#each BUILT_WITH as |lib|}}
-					<a
-						href={{lib.url}}
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						{{lib.name}}<span
-							class="dt-sr-only"
-						>(opens in new tab)</span>
-					</a>
+					{{#if lib.route}}
+						<LinkTo
+							@route={{lib.route}}
+							{{on
+								"click"
+								closeDialog
+							}}
+						>{{lib.name}}</LinkTo>
+					{{else if lib.url}}
+						<a
+							href={{lib.url}}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							{{lib.name}}<span
+								class="dt-sr-only"
+							>(opens in new tab)</span>
+						</a>
+					{{else}}
+						<span>{{lib.name}}</span>
+					{{/if}}
 				{{/each}}
 			</div>
 			<p class="dt-about-note">
@@ -192,6 +226,25 @@ const AboutDelphitoolsBody: TOC<{ Element: HTMLDivElement }> = <template>
 					>(opens in new tab)</span>
 				</a>.
 			</p>
+		</div>
+
+		<div class="dt-about-block">
+			<h3>Fonts used</h3>
+			<div class="dt-chips">
+				{{#each FONTS as |font|}}
+					<a
+						href={{font.url}}
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{{font.name}}
+						·
+						{{font.by}}<span
+							class="dt-sr-only"
+						>(opens in new tab)</span>
+					</a>
+				{{/each}}
+			</div>
 		</div>
 	</div>
 </template>;

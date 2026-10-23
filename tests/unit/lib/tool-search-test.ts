@@ -19,6 +19,11 @@ module('Unit | Lib | tool-search', function () {
 		);
 	});
 
+	test('a US spelling finds the colour tools', function (assert) {
+		assert.true(hits('color').includes('colour-converter'));
+		assert.true(hits('color blindness').includes('colorblind-sim'));
+	});
+
 	test('finds tools by a file type they accept', function (assert) {
 		assert.true(hits('md').includes('doc-converter'));
 		assert.true(hits('.md').includes('doc-converter'));
@@ -53,6 +58,18 @@ module('Unit | Lib | tool-search', function () {
 
 	test('ignores case and surrounding space', function (assert) {
 		assert.true(hits('  MD to HTML ').includes('doc-converter'));
+	});
+
+	test('px2rem, rem2px and spelt-out variants find px-to-rem', function (assert) {
+		for (const query of [
+			'px2rem',
+			'rem2px',
+			'pxtorem',
+			'px-to-rem',
+			'rem to px',
+			'PX2REM',
+		])
+			assert.true(hits(query).includes('px-to-rem'), query);
 	});
 
 	test('does not match unknown types', function (assert) {

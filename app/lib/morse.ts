@@ -56,7 +56,7 @@ export const MORSE: Record<string, string> = {
 	'@': '.--.-.',
 };
 
-const FROM_MORSE: Record<string, string> = Object.fromEntries(
+export const FROM_MORSE: Record<string, string> = Object.fromEntries(
 	Object.entries(MORSE).map(([char, code]) => [code, char]),
 );
 
@@ -74,7 +74,7 @@ export function encode(text: string): string {
 		.join(' / ');
 }
 
-function words(morse: string): string[][] {
+export function words(morse: string): string[][] {
 	return morse
 		.trim()
 		.replace(/[·•]/g, '.')

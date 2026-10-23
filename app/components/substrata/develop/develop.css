@@ -1,0 +1,243 @@
+.sub-develop {
+	position: absolute;
+	inset: 0;
+	z-index: 60;
+	background: var(--canon-background);
+	outline: none;
+}
+
+/* iOS pictureShare 0.7, the settings never narrower than a row needs */
+.sub-develop .canon-split--halves > .canon-split-body {
+	--canon-split-columns: minmax(0, 1fr) var(--canon-hairline)
+		max(30%, 360px);
+}
+
+.sub-dev-picture {
+	position: relative;
+	inline-size: 100%;
+	block-size: 100%;
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0 25%,
+			var(--canon-card) 0 50%
+		)
+		0 0 / 16px 16px;
+	touch-action: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+}
+
+.sub-dev-picture-canvas {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.sub-dev-before {
+	position: absolute;
+	inset-block-start: 12px;
+	inset-inline-start: 50%;
+	box-sizing: border-box;
+	min-inline-size: 88px;
+	padding: 8px 12px;
+	border: var(--canon-frame) solid var(--canon-border);
+	background: var(--canon-card);
+	text-align: center;
+	opacity: 0;
+	translate: -50% 0;
+	transition: opacity 150ms ease;
+	pointer-events: none;
+}
+
+.sub-dev-before.is-shown {
+	opacity: 1;
+}
+
+.sub-dev-histogram {
+	display: block;
+	inline-size: 100%;
+	block-size: 96px;
+	background: var(--canon-muted);
+}
+
+/* the slider's control: the faint symbol ends where the slider starts */
+.sub-dev-row {
+	position: relative;
+	overflow: hidden;
+}
+
+.sub-dev-row > .canon-row-control {
+	flex: 999 1 var(--canon-row-shrink-basis);
+}
+
+.sub-dev-control {
+	position: relative;
+	display: flex;
+	flex: 1 1 auto;
+	min-inline-size: 0;
+}
+
+.sub-dev-control > .canon-slider {
+	flex: 1 1 auto;
+	min-inline-size: 0;
+}
+
+.sub-dev-mark {
+	position: absolute;
+	inset-block-start: -1px;
+	inset-inline-end: 100%;
+	inline-size: 66px;
+	block-size: 66px;
+	color: var(--canon-foreground);
+	opacity: 0.08;
+	rotate: -14deg;
+	pointer-events: none;
+}
+
+.sub-dev-mark svg {
+	inline-size: 100%;
+	block-size: 100%;
+	stroke-width: 2.5;
+}
+
+.sub-dev-control .canon-slider-readout {
+	inline-size: 52px;
+	min-inline-size: 52px;
+	padding: 0 4px;
+}
+
+.sub-dev-slider {
+	--sub-dev-lo: min(var(--sub-dev-origin), var(--canon-slider-fraction));
+	--sub-dev-hi: max(var(--sub-dev-origin), var(--canon-slider-fraction));
+}
+
+/* zero line over the fill, from the origin to the value */
+.sub-dev-slider .canon-slider-track {
+	background:
+		linear-gradient(
+				var(--canon-muted-foreground),
+				var(--canon-muted-foreground)
+			)
+			calc(var(--sub-dev-origin) * 100%) 0 /
+			var(--canon-hairline) 100% no-repeat,
+		var(--canon-muted);
+}
+
+.sub-dev-slider .canon-slider-fill {
+	inset-inline-start: calc(var(--sub-dev-lo) * 100%);
+	inline-size: calc((var(--sub-dev-hi) - var(--sub-dev-lo)) * 100%);
+}
+
+/* inside the fill's end */
+.sub-dev-slider .canon-slider-marker {
+	inset-inline-start: clamp(
+		0px,
+		calc(
+			var(--canon-slider-fraction) * 100% -
+				var(--sub-dev-shift) *
+				var(--canon-slider-thickness)
+		),
+		100% - var(--canon-slider-thickness)
+	);
+}
+
+/* a colour track: the gradient, veiled outside the origin-to-value span */
+.sub-dev-slider.is-gradient .canon-slider-track {
+	background:
+		linear-gradient(
+				var(--canon-muted-foreground),
+				var(--canon-muted-foreground)
+			)
+			calc(var(--sub-dev-origin) * 100%) 0 /
+			var(--canon-hairline) 100% no-repeat,
+		linear-gradient(
+			to right,
+			color-mix(in srgb, var(--canon-card) 60%, transparent)
+				calc(var(--sub-dev-lo) * 100%),
+			transparent calc(var(--sub-dev-lo) * 100%)
+				calc(var(--sub-dev-hi) * 100%),
+			color-mix(in srgb, var(--canon-card) 60%, transparent)
+				calc(var(--sub-dev-hi) * 100%)
+		),
+		var(--sub-dev-track);
+}
+
+.sub-dev-slider.is-gradient .canon-slider-fill {
+	background: transparent;
+}
+
+.sub-dev-slider.is-gradient .canon-slider-marker {
+	box-shadow: 0 0 0 1px var(--canon-card);
+}
+
+.sub-dev-intensity.is-off {
+	opacity: 0.4;
+	pointer-events: none;
+}
+
+.sub-dev-looks {
+	display: flex;
+	gap: var(--canon-hairline);
+	overflow-x: auto;
+	background: var(--canon-border);
+	scrollbar-width: none;
+}
+
+.sub-dev-look {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: 6px;
+	box-sizing: border-box;
+	inline-size: 112px;
+	padding: 8px;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	cursor: pointer;
+}
+
+.sub-dev-look:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-dev-look-thumb {
+	display: block;
+	box-sizing: border-box;
+	aspect-ratio: 4 / 3;
+	overflow: hidden;
+	background: var(--canon-muted);
+}
+
+.sub-dev-look.is-active .sub-dev-look-thumb {
+	border: var(--canon-frame) solid var(--canon-primary);
+}
+
+.sub-dev-look-thumb img {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+}
+
+.sub-dev-look-name {
+	overflow: hidden;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sub-dev-actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--canon-frame);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-dev-before {
+		transition: none;
+	}
+}

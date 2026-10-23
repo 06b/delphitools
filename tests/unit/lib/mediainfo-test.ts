@@ -14,7 +14,7 @@ const general: Track = {
 	Format: 'MPEG-4',
 	Format_Profile: 'Base Media',
 	FileSize: 1048576,
-	Duration: 61500,
+	Duration: 61.5,
 	OverallBitRate: 1536000,
 	OverallBitRate_Mode: 'VBR',
 	VideoCount: 1,

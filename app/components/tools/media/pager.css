@@ -1,0 +1,11 @@
+.media-pager-text {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+}

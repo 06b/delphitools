@@ -3,7 +3,13 @@ import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq } from 'ember-truth-helpers';
-import { htmlSafe } from '@ember/template';
+import { htmlSafe, type SafeString } from '@ember/template';
+import type { ComponentLike } from '@glint/template';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import PaperMenu from 'delphitools-v2/components/errata/paper-menu';
 import ToolPanel, {
 	AnchorPicker,
 	Field,
@@ -16,19 +22,6 @@ import ToolPanel, {
 	readText,
 	type SegmentedOption,
 } from 'delphitools-v2/components/errata/tool-panel';
-import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
-import Switch from 'delphitools-v2/components/ui/switch';
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from 'delphitools-v2/components/ui/select';
-import {
-	PresetRow,
-	type PresetOption,
-} from 'delphitools-v2/components/substrata/preset-row';
 import { replaceDocument } from 'delphitools-v2/lib/errata/source';
 import {
 	addStamped,
@@ -61,6 +54,7 @@ import {
 	formatBytes,
 } from 'delphitools-v2/lib/pdf-compress';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './box-mode.css';
 
 const CUSTOM = 'Custom';
 const STAMPS = ['Approved', 'Draft', 'Final', 'Confidential', 'Void', CUSTOM];
@@ -70,10 +64,19 @@ const STAMP_COLOURS = [
 	{ value: '#000000', label: 'Black' },
 	{ value: '#0550ae', label: 'Blue' },
 	{ value: '#1a7f37', label: 'Green' },
-].map((c) => ({ ...c, style: htmlSafe(`background-color: ${c.value}`) }));
+];
 
-const numbers = (values: number[], unit = ''): PresetOption[] =>
-	values.map((v) => ({ value: v, label: `${v}${unit}` }));
+const swatch = (style: SafeString): ComponentLike => <template>
+	<span class="err-swatch" style={{style}}></span>
+</template>;
+
+const COLOUR_LABELS = STAMP_COLOURS.map((c) => c.label);
+const COLOUR_ICONS = STAMP_COLOURS.map((c) =>
+	swatch(htmlSafe(`background-color: ${c.value}`)),
+);
+
+const numbers = (values: number[]): SegmentedOption<number>[] =>
+	values.map((v) => ({ value: v, label: String(v) }));
 
 const NUMBER_SIZES = numbers([8, 10, 12]);
 const STAMP_SIZES = numbers([18, 24, 36]);
@@ -106,21 +109,74 @@ const FLIPS: SegmentedOption<Flip>[] = [
 	{ value: 'short-edge', label: 'Short edge' },
 ];
 
+const LAYOUT_NAMES = IMPOSITION_LAYOUTS.map((l) => l.name);
+
 const COPIES: SegmentedOption<number>[] = Object.keys(GANG_RUN_GRIDS).map(
 	(n) => ({ value: Number(n), label: n }),
 );
 
-const clampGrid = (event: Event) =>
-	Math.max(
-		1,
-		Math.min(
-			10,
-			parseInt(
-				(event.target as HTMLInputElement).value,
-				10,
-			) || 1,
-		),
-	);
+const CUSTOM_SIZE = -1;
+
+/** presets, and a stepper behind Custom for any other size */
+class SizeField extends Component<{
+	Args: {
+		options: SegmentedOption<number>[];
+		value: number;
+		min: number;
+		max: number;
+		onChange: (value: number) => void;
+	};
+}> {
+	@tracked open = false;
+
+	get options(): SegmentedOption<number>[] {
+		return [
+			...this.args.options,
+			{ value: CUSTOM_SIZE, label: CUSTOM },
+		];
+	}
+
+	get preset() {
+		return this.args.options.some(
+			(o) => o.value === this.args.value,
+		);
+	}
+
+	get custom() {
+		return this.open || !this.preset;
+	}
+
+	get picked() {
+		return this.custom ? CUSTOM_SIZE : this.args.value;
+	}
+
+	pick = (value: number) => {
+		this.open = value === CUSTOM_SIZE;
+		if (!this.open) this.args.onChange(value);
+	};
+
+	<template>
+		<Field @label="Size">
+			<Segmented
+				@options={{this.options}}
+				@value={{this.picked}}
+				@onChange={{this.pick}}
+				@label="Size"
+			/>
+			{{#if this.custom}}
+				<CanonNumberField
+					class="err-size-number"
+					@value={{@value}}
+					@min={{@min}}
+					@max={{@max}}
+					@unit="pt"
+					@label="Custom size"
+					@onChange={{@onChange}}
+				/>
+			{{/if}}
+		</Field>
+	</template>
+}
 
 interface Signature {
 	Args: { open: boolean };
@@ -209,6 +265,20 @@ export default class StampPanel extends Component<{
 		(this as unknown as Record<string, unknown>)[key] = value;
 	};
 
+	get stampIndex() {
+		return STAMPS.indexOf(this.stamp);
+	}
+
+	get colourIndex() {
+		return STAMP_COLOURS.findIndex(
+			(c) => c.value === this.stampColour,
+		);
+	}
+
+	pickStamp = (index: number) => (this.stamp = STAMPS[index]!);
+	pickColour = (index: number) =>
+		(this.stampColour = STAMP_COLOURS[index]!.value);
+
 	apply = () => {
 		addStamped(this.items);
 		closeMode();
@@ -249,19 +319,13 @@ export default class StampPanel extends Component<{
 						"numberAnchor"
 					}}
 				/>
-				<Field @label="Size">
-					<PresetRow
-						@options={{NUMBER_SIZES}}
-						@value={{this.numberSize}}
-						@onChange={{fn
-							this.pick
-							"numberSize"
-						}}
-						@min={{4}}
-						@max={{72}}
-						@unit="pt"
-					/>
-				</Field>
+				<SizeField
+					@options={{NUMBER_SIZES}}
+					@value={{this.numberSize}}
+					@min={{4}}
+					@max={{72}}
+					@onChange={{fn this.pick "numberSize"}}
+				/>
 
 			{{else if (eq @mode "watermark")}}
 				<InputField @label="Text">
@@ -299,28 +363,16 @@ export default class StampPanel extends Component<{
 
 			{{else}}
 				<Field @label="Label">
-					<Select
-						@value={{this.stamp}}
-						@onValueChange={{fn
-							this.pick
-							"stamp"
-						}}
-					>
-						<SelectTrigger
-							aria-label="Label"
-						>
-							<SelectValue
-							>{{this.stamp}}</SelectValue>
-						</SelectTrigger>
-						<SelectContent>
-							{{#each STAMPS as |s|}}
-								<SelectItem
-									@value={{s}}
-								>{{s}}</SelectItem>
-							{{/each}}
-						</SelectContent>
-					</Select>
-					{{#if (eq this.stamp CUSTOM)}}
+					<CanonMenuCell
+						class="err-menu-cell"
+						@items={{STAMPS}}
+						@selected={{this.stampIndex}}
+						@label="Label"
+						@onChange={{this.pickStamp}}
+					/>
+				</Field>
+				{{#if (eq this.stamp CUSTOM)}}
+					<Field @label="Text">
 						<input
 							class="err-mode-input"
 							aria-label="Custom label"
@@ -335,69 +387,37 @@ export default class StampPanel extends Component<{
 								)
 							}}
 						/>
-					{{/if}}
-				</Field>
+					</Field>
+				{{/if}}
 				<AnchorPicker
 					@value={{this.stampAnchor}}
 					@onChange={{fn this.pick "stampAnchor"}}
 				/>
 				<Field @label="Colour">
-					<span class="segmented err-swatches">
-						{{#each STAMP_COLOURS as |c|}}
-							<button
-								type="button"
-								class="err-swatch
-									{{if
-										(eq
-											this.stampColour
-											c.value
-										)
-										'is-active'
-									}}"
-								style={{c.style}}
-								aria-label={{c.label}}
-								aria-pressed={{if
-									(eq
-										this.stampColour
-										c.value
-									)
-									"true"
-									"false"
-								}}
-								title={{c.label}}
-								{{on
-									"click"
-									(fn
-										this.pick
-										"stampColour"
-										c.value
-									)
-								}}
-							></button>
-						{{/each}}
-					</span>
-				</Field>
-				<Field @label="Size">
-					<PresetRow
-						@options={{STAMP_SIZES}}
-						@value={{this.stampSize}}
-						@onChange={{fn
-							this.pick
-							"stampSize"
-						}}
-						@min={{6}}
-						@max={{144}}
-						@unit="pt"
+					<CanonSegmented
+						class="err-mode-seg err-swatches"
+						@items={{COLOUR_LABELS}}
+						@icons={{COLOUR_ICONS}}
+						@selected={{this.colourIndex}}
+						@onChange={{this.pickColour}}
+						aria-label="Colour"
 					/>
 				</Field>
+				<SizeField
+					@options={{STAMP_SIZES}}
+					@value={{this.stampSize}}
+					@min={{6}}
+					@max={{144}}
+					@onChange={{fn this.pick "stampSize"}}
+				/>
 				<InputField @label="Bold">
-					<Switch
-						@checked={{this.stampBold}}
+					<CanonSwitch
+						@on={{this.stampBold}}
 						@onChange={{fn
 							this.pick
 							"stampBold"
 						}}
-						@label="Bold"
+						aria-label="Bold"
 					/>
 				</InputField>
 
@@ -520,7 +540,7 @@ export class CompressPanel extends ReplacePanel {
 			<:status>
 				{{#if this.result}}
 					<span
-						class="sub-omni-tag"
+						class="err-mode-tag"
 						data-compress-result
 					>{{this.result}}</span>
 				{{/if}}
@@ -568,13 +588,6 @@ export class ImposePanel extends ReplacePanel {
 		this.#off();
 	}
 
-	get layoutName() {
-		return (
-			IMPOSITION_LAYOUTS.find((l) => l.id === this.layout)
-				?.name ?? ''
-		);
-	}
-
 	get duplexAware() {
 		return DUPLEX_AWARE_LAYOUTS.has(this.layout);
 	}
@@ -617,8 +630,17 @@ export class ImposePanel extends ReplacePanel {
 	setGutter = (mm: number) => (this.gutter = mm);
 	setCreep = (mm: number) => (this.creep = mm);
 	setCropMarks = (on: boolean) => (this.cropMarks = on);
-	setRows = (event: Event) => (this.rows = clampGrid(event));
-	setCols = (event: Event) => (this.cols = clampGrid(event));
+	setRows = (rows: number) => (this.rows = rows);
+	setCols = (cols: number) => (this.cols = cols);
+
+	get layoutIndex() {
+		return IMPOSITION_LAYOUTS.findIndex(
+			(l) => l.id === this.layout,
+		);
+	}
+
+	pickLayout = (index: number) =>
+		this.setLayout(IMPOSITION_LAYOUTS[index]!.id);
 
 	<template>
 		<ToolPanel
@@ -632,32 +654,19 @@ export class ImposePanel extends ReplacePanel {
 			@failed={{this.failed}}
 		>
 			<Field @label="Layout">
-				<Select
-					@value={{this.layout}}
-					@onValueChange={{this.setLayout}}
-				>
-					<SelectTrigger aria-label="Layout">
-						<SelectValue
-						>{{this.layoutName}}</SelectValue>
-					</SelectTrigger>
-					<SelectContent>
-						{{#each
-							IMPOSITION_LAYOUTS
-							key="id"
-							as |l|
-						}}
-							<SelectItem
-								@value={{l.id}}
-							>{{l.name}}</SelectItem>
-						{{/each}}
-					</SelectContent>
-				</Select>
+				<CanonMenuCell
+					class="err-menu-cell"
+					@items={{LAYOUT_NAMES}}
+					@selected={{this.layoutIndex}}
+					@label="Layout"
+					@onChange={{this.pickLayout}}
+				/>
 			</Field>
 			<Field @label="Sheet">
-				<PaperSizeCombobox
+				<PaperMenu
 					@value={{this.paper}}
-					@onValueChange={{fn this.pick "paper"}}
-					@caret="chevron-down"
+					@label="Sheet"
+					@onChange={{fn this.pick "paper"}}
 				/>
 			</Field>
 			{{#if (eq this.layout "gang-run")}}
@@ -673,30 +682,27 @@ export class ImposePanel extends ReplacePanel {
 				</Field>
 			{{else if (eq this.layout "custom-nup")}}
 				<Field @label="Grid">
-					<input
-						type="number"
-						class="err-mode-input is-narrow"
-						aria-label="Rows"
-						min="1"
-						max="10"
-						value={{this.rows}}
-						{{on "change" this.setRows}}
+					<CanonNumberField
+						class="err-grid-number"
+						@value={{this.rows}}
+						@min={{1}}
+						@max={{10}}
+						@label="Rows"
+						@onChange={{this.setRows}}
 					/>
-					<span
-						class="sub-tool-row-label"
-					>&times;</span>
-					<input
-						type="number"
-						class="err-mode-input is-narrow"
-						aria-label="Columns"
-						min="1"
-						max="10"
-						value={{this.cols}}
-						{{on "change" this.setCols}}
+					<span class="err-unit">&times;</span>
+					<CanonNumberField
+						class="err-grid-number"
+						@value={{this.cols}}
+						@min={{1}}
+						@max={{10}}
+						@label="Columns"
+						@onChange={{this.setCols}}
 					/>
 				</Field>
 			{{/if}}
 			<Field @label="Orientation">
+				{{! fold layouts force landscape }}
 				<Segmented
 					@options={{ORIENTATIONS}}
 					@value={{this.orientation}}
@@ -743,10 +749,10 @@ export class ImposePanel extends ReplacePanel {
 				/>
 			{{/if}}
 			<InputField @label="Crop marks">
-				<Switch
-					@checked={{this.cropMarks}}
+				<CanonSwitch
+					@on={{this.cropMarks}}
 					@onChange={{this.setCropMarks}}
-					@label="Crop marks"
+					aria-label="Crop marks"
 				/>
 			</InputField>
 		</ToolPanel>
@@ -802,9 +808,9 @@ export class RedactPanel extends ReplacePanel {
 		>
 			<:status>
 				<span
-					class="sub-omni-tag"
+					class="err-mode-tag"
 				>{{this.redactHint}}</span>
-				<span class="sub-omni-tag">{{this.marks}}
+				<span class="err-mode-tag">{{this.marks}}
 					marked</span>
 			</:status>
 		</ToolPanel>

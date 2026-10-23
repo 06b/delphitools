@@ -9,7 +9,10 @@ import { htmlSafe } from '@ember/template';
 import type { SafeString } from '@ember/template';
 import { LinkTo } from '@ember/routing';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonJumpHeading from 'delphicanon/components/canon-jump-heading';
+import Icon, { IconSvg } from 'delphitools-v2/components/icon';
 import ToolGrid from 'delphitools-v2/components/tool-grid';
 import SuiteBox from 'delphitools-v2/components/suite-box';
 import {
@@ -27,8 +30,14 @@ import {
 	type OmniReading,
 } from 'delphitools-v2/lib/omni';
 import { HERO_ART } from 'delphitools-v2/lib/hero-art';
+import { heroPatternStyle } from 'delphitools-v2/lib/icon-pattern';
 import WhatsNew from 'delphitools-v2/components/whats-new';
 import ChangelogPopup from 'delphitools-v2/components/changelog-popup';
+import './omnibox.css';
+
+const FileIcon = <template><IconSvg @name="file-up" /></template>;
+const PasteIcon = <template><IconSvg @name="clipboard-paste" /></template>;
+const DiceIcon = <template><IconSvg @name="dices" /></template>;
 
 const PLACEHOLDER = 'Drop a file, search for a tool, paste in text';
 
@@ -66,6 +75,7 @@ export default class Omnibox extends Component<OmniboxSignature> {
 	@tracked file: File | null = null;
 	@tracked fileTools: Tool[] = [];
 	@tracked artIndex = Math.floor(Math.random() * HERO_ART.length);
+	heroPattern = heroPatternStyle(allTools.map((tool) => tool.icon));
 
 	#readTimer?: ReturnType<typeof setTimeout>;
 	#readToken = 0;
@@ -282,7 +292,10 @@ export default class Omnibox extends Component<OmniboxSignature> {
 	};
 
 	<template>
-		<header class="dt-hero is-doodle">
+		<header class="dt-hero">
+			<div class="dt-hero-pattern" aria-hidden="true">
+				<div style={{this.heroPattern}}></div>
+			</div>
 			<div class="dt-hero-pills">
 				<ChangelogPopup />
 				<WhatsNew />
@@ -308,16 +321,12 @@ export default class Omnibox extends Component<OmniboxSignature> {
 								class="dt-omni-file-meta"
 							>{{this.fileMeta}}</span>
 						</div>
-						<button
-							type="button"
+						<CanonButton
+							@kind="cell"
+							@text="Clear"
+							@onClick={{this.clearFile}}
 							class="dt-omni-clear"
-							{{on
-								"click"
-								this.clearFile
-							}}
-						>
-							Clear
-						</button>
+						/>
 					</div>
 				{{else}}
 					<div class="dt-omni-field">
@@ -339,57 +348,40 @@ export default class Omnibox extends Component<OmniboxSignature> {
 						/>
 					</div>
 					{{#if this.isIdle}}
-						<div class="dt-omni-legend">
-							<button
-								type="button"
-								class="dt-omni-legend-btn"
-								{{on
-									"click"
-									this.chooseFile
-								}}
-							>
-								<Icon
-									@name="file-up"
-								/>Choose a file
-							</button>
-							<input
-								type="file"
-								class="dt-omni-pick"
-								aria-label="Choose a file"
-								tabindex="-1"
-								{{this.picker}}
-								{{on
-									"change"
-									this.pickFile
-								}}
+						<CanonGrid
+							@columns={{3}}
+							class="dt-omni-legend"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Choose a file"
+								@icon={{FileIcon}}
+								@onClick={{this.chooseFile}}
 							/>
-							<button
-								type="button"
-								class="dt-omni-legend-btn"
-								{{on
-									"click"
-									this.pasteClipboard
-								}}
-							>
-								<Icon
-									@name="clipboard-paste"
-								/>Paste from
-								clipboard
-							</button>
-							<button
-								type="button"
-								class="dt-omni-legend-btn"
-								{{on
-									"click"
-									this.feelingLucky
-								}}
-							>
-								<Icon
-									@name="dices"
-								/>I'm feeling
-								lucky
-							</button>
-						</div>
+							<CanonButton
+								@kind="cell"
+								@text="Paste from clipboard"
+								@icon={{PasteIcon}}
+								@onClick={{this.pasteClipboard}}
+							/>
+							<CanonButton
+								@kind="cell"
+								@text="I'm feeling lucky"
+								@icon={{DiceIcon}}
+								@onClick={{this.feelingLucky}}
+							/>
+						</CanonGrid>
+						<input
+							type="file"
+							class="dt-omni-pick"
+							aria-label="Choose a file"
+							tabindex="-1"
+							{{this.picker}}
+							{{on
+								"change"
+								this.pickFile
+							}}
+						/>
 					{{/if}}
 				{{/if}}
 			</div>
@@ -491,12 +483,12 @@ export default class Omnibox extends Component<OmniboxSignature> {
 
 		{{#if this.carry.length}}
 			<section class="dt-section">
-				<h2 class="dt-section-title">
+				<h3 class="canon-heading dt-section-title">
 					Takes a colour
 					<span
 						class="dt-section-count"
 					>{{this.carry.length}}</span>
-				</h2>
+				</h3>
 				<ToolGrid
 					@tools={{this.carry}}
 					@query={{this.carryQuery}}
@@ -507,12 +499,12 @@ export default class Omnibox extends Component<OmniboxSignature> {
 
 		{{#if this.showMatches}}
 			<section class="dt-section">
-				<h2 class="dt-section-title">
+				<h3 class="canon-heading dt-section-title">
 					Matches
 					<span
 						class="dt-section-count"
 					>{{this.matches.length}}</span>
-				</h2>
+				</h3>
 				<ToolGrid
 					@tools={{this.matches}}
 					@onPick={{this.pick}}
@@ -526,12 +518,10 @@ export default class Omnibox extends Component<OmniboxSignature> {
 		>
 
 			<section class="dt-section">
-				<h2 class="dt-section-title">
-					Greatest Hits
-					<span
-						class="dt-section-count"
-					>{{homeFeatured.length}}</span>
-				</h2>
+				<CanonJumpHeading
+					@text="Greatest Hits"
+					@detail={{String homeFeatured.length}}
+				/>
 				<ToolGrid
 					@tools={{homeFeatured}}
 					class="is-featured"
@@ -539,12 +529,10 @@ export default class Omnibox extends Component<OmniboxSignature> {
 			</section>
 
 			<section class="dt-section">
-				<h2 class="dt-section-title">
-					Suites
-					<span
-						class="dt-section-count"
-					>{{suites.length}}</span>
-				</h2>
+				<CanonJumpHeading
+					@text="Suites"
+					@detail={{String suites.length}}
+				/>
 				<div class="dt-suites">
 					{{#each suites as |suite|}}
 						<SuiteBox @suite={{suite}} />
@@ -554,12 +542,12 @@ export default class Omnibox extends Component<OmniboxSignature> {
 
 			{{#each homeCategories as |category|}}
 				<section class="dt-section">
-					<h2 class="dt-section-title">
-						{{category.name}}
-						<span
-							class="dt-section-count"
-						>{{category.tools.length}}</span>
-					</h2>
+					<CanonJumpHeading
+						@text={{category.name}}
+						@detail={{String
+							category.tools.length
+						}}
+					/>
 					<ToolGrid @tools={{category.tools}} />
 				</section>
 			{{/each}}

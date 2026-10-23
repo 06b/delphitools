@@ -1,85 +1,193 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import Switch from 'delphitools-v2/components/ui/switch';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import { resolveDuration } from 'delphitools-v2/lib/video';
+import {
+	capturing,
+	downloadIcon,
+	passAlong,
+} from 'delphitools-v2/lib/flow-hooks';
+import {
+	Capture,
+	overview,
+} from 'delphitools-v2/components/tools/media/capture';
+import {
+	peakBuckets,
+	release,
+	thumbnails,
+} from 'delphitools-v2/components/tools/media/frames';
+import Playback from 'delphitools-v2/components/tools/media/playback';
+import {
+	RecorderBand,
+	RecorderTransport,
+} from 'delphitools-v2/components/tools/media/recorder';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
+import './media/media.css';
+import './screen-recorder/screen-recorder.css';
 
 const EMPTY_HINT = 'Choose a screen, window or tab to start recording.';
-
 const DISPLAY_FAILED = 'Screen sharing failed. Check browser permissions.';
-
 const MIC_DENIED =
 	'Microphone access was denied, so audio will not be mixed in.';
-
 const UNSUPPORTED = 'Screen recording is not supported in this browser.';
-
 const MIC_LABEL = 'Mix in microphone audio';
+const ASIDE = "Isn't it crazy that your browser can do this, by the way?";
+
+const overviewHeight = 96;
+// iOS AVEdit preview: height over width at most 1.25
+const tallest = 1.25;
+const tallestPreview = 480;
 
 // cancel throws NotAllowedError
 const isCancel = (err: unknown) => {
 	const name = (err as Error)?.name;
 	return name === 'NotAllowedError' || name === 'AbortError';
 };
-const ECHO_LABEL = 'Echo cancellation';
-const NOISE_LABEL = 'Noise suppression';
-const GAIN_LABEL = 'Auto gain control';
 
-export default class ScreenRecorderTool extends Component {
-	@tracked status: 'idle' | 'recording' | 'paused' | 'finished' = 'idle';
-	@tracked elapsedMs = 0;
+function clock(seconds: number) {
+	const total = Math.round(seconds);
+	return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+class Take {
+	@tracked width = 0;
+	@tracked height = 0;
+	@tracked frames: string[] = [];
+	date = new Date();
+	url: string;
+	name: string;
+
+	constructor(
+		readonly id: number,
+		readonly blob: Blob,
+		readonly peaks: number[],
+		readonly duration: number,
+		readonly audio: boolean,
+	) {
+		this.url = URL.createObjectURL(blob);
+		this.name = `screen-recording-${this.date.toISOString().replace(/[:.]/g, '-')}`;
+	}
+
+	get aspect() {
+		return this.width && this.height
+			? this.width / this.height
+			: 16 / 9;
+	}
+
+	get detail() {
+		const parts = [clock(this.duration)];
+		if (this.width) parts.push(`${this.width} × ${this.height}`);
+		parts.push(
+			this.date.toLocaleString(undefined, {
+				dateStyle: 'medium',
+				timeStyle: 'short',
+			}),
+		);
+		return parts.join(' · ');
+	}
+}
+
+const PlayIcon = <template><IconSvg @name="play" /></template>;
+const StopIcon = <template><IconSvg @name="square" /></template>;
+const TrashIcon = <template><IconSvg @name="trash-2" /></template>;
+const SaveIcon = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+/**
+ * The web screen recorder in the iOS voice recorder's frame: the recorder
+ * band, the screen in the main pane, options and takes in the sidebar and
+ * the transport footer. getDisplayMedia and MediaRecorder as on the web.
+ */
+export default class ScreenRecorder extends Component {
+	capture = new Capture();
+	playback = new Playback();
+
+	@tracked takes: Take[] = [];
+	@tracked current: Take | null = null;
 	@tracked micMixIn = false;
 	@tracked echoCancellation = false;
 	@tracked noiseSuppression = false;
 	@tracked autoGainControl = false;
-	@tracked videoBlob: Blob | null = null;
-	@tracked videoUrl: string | null = null;
-	@tracked duration = 0;
-	@tracked width = 0;
-	@tracked height = 0;
 	@tracked error = '';
-	@tracked playing = false;
+	@tracked starting = false;
+	@tracked liveSize: [number, number] = [0, 0];
 
 	#recorder: MediaRecorder | null = null;
-	#displayStream: MediaStream | null = null;
-	#micStream: MediaStream | null = null;
-	#combinedStream: MediaStream | null = null;
-	#audioCtx: AudioContext | null = null;
-	#chunks: Blob[] = [];
-	#startedAt = 0;
-	#pausedAt = 0;
-	#rafId = 0;
-	#video: HTMLVideoElement | null = null;
+	#display: MediaStream | null = null;
+	#mic: MediaStream | null = null;
+	#mix: AudioContext | null = null;
+	#finish: (() => void) | null = null;
+	#queued: Take | null = null;
+	#ids = 0;
 
 	willDestroy() {
 		super.willDestroy();
-		this.#stopRecording();
-		this.#releaseTake();
+		const recorder = this.#recorder;
+		if (recorder) {
+			// discard in-flight take on detach
+			recorder.ondataavailable = null;
+			recorder.onstop = null;
+			if (recorder.state !== 'inactive') recorder.stop();
+		}
+		this.#release();
+		this.capture.stop();
+		this.playback.unload();
+		for (const take of this.takes) {
+			URL.revokeObjectURL(take.url);
+			release(take.frames);
+		}
 	}
 
-	get elapsedLabel() {
-		const total = Math.floor(this.elapsedMs / 1000);
-		const m = Math.floor(total / 60);
-		const s = total % 60;
-		return `${m}:${s.toString().padStart(2, '0')}`;
+	get loaded() {
+		return this.current && !this.capture.active
+			? [this.current]
+			: [];
 	}
 
-	get meta() {
-		if (!this.duration) return '';
-		return `${this.width} × ${this.height} · ${this.duration.toFixed(2)} s`;
+	get previewAspect() {
+		const aspect = this.capture.active
+			? this.liveSize[0] / this.liveSize[1] || 16 / 9
+			: (this.current?.aspect ?? 16 / 9);
+		return Math.max(aspect, 1 / tallest);
 	}
 
-	#tickElapsed = () => {
-		if (this.status !== 'recording') return;
-		this.elapsedMs = performance.now() - this.#startedAt;
-		this.#rafId = requestAnimationFrame(this.#tickElapsed);
-	};
+	get previewBackground() {
+		return this.capture.active || this.current
+			? '#000'
+			: 'var(--canon-muted)';
+	}
 
-	start = async () => {
+	@cached
+	get overview() {
+		return this.current?.audio
+			? overview(this.current.peaks, peakBuckets)
+			: null;
+	}
+
+	get newest() {
+		return this.takes[0];
+	}
+
+	isPlaying = (take: Take) =>
+		this.current === take && this.playback.active;
+
+	record = () => void this.#record();
+
+	async #record() {
+		if (this.capture.active || this.starting) return;
 		this.error = '';
 		if (
 			!navigator.mediaDevices?.getDisplayMedia ||
@@ -88,10 +196,20 @@ export default class ScreenRecorderTool extends Component {
 			this.error = UNSUPPORTED;
 			return;
 		}
+		this.playback.stop();
+		this.starting = true;
+		try {
+			await this.#open();
+		} finally {
+			this.starting = false;
+		}
+	}
 
+	async #open() {
+		let display: MediaStream;
 		try {
 			try {
-				this.#displayStream =
+				display =
 					await navigator.mediaDevices.getDisplayMedia(
 						{
 							video: true,
@@ -107,93 +225,75 @@ export default class ScreenRecorderTool extends Component {
 			} catch (err) {
 				// rethrow, no second picker
 				if (isCancel(err)) throw err;
-				this.#displayStream =
+				display =
 					await navigator.mediaDevices.getDisplayMedia(
-						{
-							video: true,
-							audio: true,
-						},
+						{ video: true, audio: true },
 					);
 			}
 		} catch (err) {
-			if (!isCancel(err)) this.error = DISPLAY_FAILED;
+			if (!isCancel(err) && !this.isDestroyed)
+				this.error = DISPLAY_FAILED;
 			return;
 		}
-
-		if (!this.#displayStream) return;
-
-		this.#micStream = null;
+		if (this.isDestroyed) {
+			display.getTracks().forEach((track) => track.stop());
+			return;
+		}
+		this.#display = display;
 
 		if (this.micMixIn) {
 			try {
-				this.#micStream =
+				this.#mic =
 					await navigator.mediaDevices.getUserMedia(
 						{
-							audio: {
-								echoCancellation:
-									{
-										ideal: this
-											.echoCancellation,
-									},
-								noiseSuppression:
-									{
-										ideal: this
-											.noiseSuppression,
-									},
-								autoGainControl:
-									{
-										ideal: this
-											.autoGainControl,
-									},
-							},
+							audio: this.#micConstraints(),
 						},
 					);
 			} catch {
 				this.error = MIC_DENIED;
 			}
 		}
-
-		const displayAudio = this.#displayStream.getAudioTracks();
-		const micAudio = this.#micStream?.getAudioTracks() ?? [];
-		const audioTracks = [...displayAudio, ...micAudio];
-		const videoTrack = this.#displayStream.getVideoTracks()[0];
-		const finalTracks: MediaStreamTrack[] = [];
-		if (videoTrack) finalTracks.push(videoTrack);
-
-		// Always normalize audio through AudioContext @ 48kHz to avoid Opus
-		// clock drift: tab/system audio is often 44.1kHz while Opus expects 48kHz.
-		// Raw track → slow/pitch-down playback. For >1 tracks this also mixes.
-		if (audioTracks.length >= 1) {
-			try {
-				const ctx = new AudioContext({
-					sampleRate: 48000,
-				});
-				this.#audioCtx = ctx;
-				if (ctx.state === 'suspended')
-					await ctx.resume();
-				const dest = ctx.createMediaStreamDestination();
-				for (const t of audioTracks) {
-					const src = ctx.createMediaStreamSource(
-						new MediaStream([t]),
-					);
-					src.connect(dest);
-				}
-				const mixed = dest.stream.getAudioTracks()[0];
-				if (mixed) finalTracks.push(mixed);
-				else {
-					for (const t of audioTracks)
-						if (t) finalTracks.push(t);
-				}
-			} catch {
-				for (const t of audioTracks)
-					if (t) finalTracks.push(t);
-			}
+		if (this.isDestroyed) {
+			this.#release();
+			return;
 		}
 
-		this.#combinedStream = new MediaStream(finalTracks);
+		const video = display.getVideoTracks()[0];
+		const tracks: MediaStreamTrack[] = video ? [video] : [];
+		const audio = [
+			...display.getAudioTracks(),
+			...(this.#mic?.getAudioTracks() ?? []),
+		];
+		// tab audio is often 44.1 kHz; a raw track into Opus plays back slow. This also mixes.
+		if (audio.length) {
+			try {
+				const context = new AudioContext({
+					sampleRate: 48000,
+				});
+				this.#mix = context;
+				if (context.state === 'suspended')
+					await context.resume();
+				if (this.isDestroyed) {
+					this.#release();
+					return;
+				}
+				const destination =
+					context.createMediaStreamDestination();
+				for (const track of audio)
+					context.createMediaStreamSource(
+						new MediaStream([track]),
+					).connect(destination);
+				const mixed =
+					destination.stream.getAudioTracks()[0];
+				tracks.push(...(mixed ? [mixed] : audio));
+			} catch {
+				tracks.push(...audio);
+			}
+		}
+		const stream = new MediaStream(tracks);
 
-		// omit opus codec when no audio tracks exist to prevent recorder onstop hangs
-		const hasAudio = finalTracks.some((t) => t.kind === 'audio');
+		// opus with no audio track hangs onstop
+		const hasAudio = tracks.some((track) => track.kind === 'audio');
 		const candidates = hasAudio
 			? [
 					'video/webm;codecs=vp9,opus',
@@ -205,466 +305,468 @@ export default class ScreenRecorderTool extends Component {
 					'video/webm;codecs=vp8',
 					'video/webm',
 				];
-		const mimeType =
-			candidates.find((t) => {
-				try {
-					return MediaRecorder.isTypeSupported(t);
-				} catch {
-					return false;
-				}
-			}) ?? '';
-		const recorderOpts: MediaRecorderOptions = {};
-		if (mimeType) recorderOpts.mimeType = mimeType;
-		if (hasAudio) recorderOpts.audioBitsPerSecond = 128000;
-		recorderOpts.videoBitsPerSecond = 2500000;
-		this.#recorder = new MediaRecorder(
-			this.#combinedStream,
-			recorderOpts,
-		);
-		this.#chunks = [];
-		this.#recorder.ondataavailable = (event) => {
-			if (event.data.size > 0) this.#chunks.push(event.data);
-		};
-		this.#recorder.onstop = () => this.#onStop();
-		this.#recorder.onpause = () => {
-			this.status = 'paused';
-			this.#pausedAt = performance.now();
-			cancelAnimationFrame(this.#rafId);
-		};
-		this.#recorder.onresume = () => {
-			this.status = 'recording';
-			this.#startedAt += performance.now() - this.#pausedAt;
-			this.#rafId = requestAnimationFrame(this.#tickElapsed);
-		};
-
-		this.#displayStream
-			.getVideoTracks()[0]
-			?.addEventListener('ended', () => {
-				// chrome stop fires 'ended'
-				this.stop();
+		const mimeType = candidates.find((type) => {
+			try {
+				return MediaRecorder.isTypeSupported(type);
+			} catch {
+				return false;
+			}
+		});
+		let recorder: MediaRecorder;
+		try {
+			recorder = new MediaRecorder(stream, {
+				...(mimeType ? { mimeType } : {}),
+				...(hasAudio
+					? { audioBitsPerSecond: 128000 }
+					: {}),
+				videoBitsPerSecond: 2500000,
 			});
-
-		this.elapsedMs = 0;
-		this.#startedAt = performance.now();
-		this.status = 'recording';
-		this.#recorder.start();
-		this.#rafId = requestAnimationFrame(this.#tickElapsed);
-	};
-
-	#onStop() {
-		this.#displayStream
-			?.getTracks()
-			.forEach((track) => track.stop());
-		this.#micStream?.getTracks().forEach((track) => track.stop());
-		this.#displayStream = null;
-		this.#micStream = null;
-		this.#combinedStream = null;
-		void this.#audioCtx?.close().catch(() => {});
-		this.#audioCtx = null;
-		cancelAnimationFrame(this.#rafId);
-
-		if (this.#chunks.length === 0) {
-			this.#recorder = null;
-			this.status = 'idle';
+		} catch {
+			this.#release();
+			this.error = UNSUPPORTED;
 			return;
 		}
 
-		const blob = new Blob(this.#chunks, {
-			type: this.#recorder?.mimeType || 'video/webm',
-		});
-		this.#recorder = null;
-		this.#finishTake(blob);
+		const chunks: Blob[] = [];
+		let ended = { peaks: [] as number[], duration: 0 };
+		recorder.ondataavailable = (event) => {
+			if (event.data.size > 0) chunks.push(event.data);
+		};
+		recorder.onstop = () => {
+			if (this.isDestroyed || chunks.length === 0) return;
+			this.#keep(
+				new Blob(chunks, {
+					type: recorder.mimeType || 'video/webm',
+				}),
+				ended.peaks,
+				ended.duration,
+				hasAudio,
+			);
+		};
+		this.#finish = () => {
+			ended = this.capture.stop();
+			this.#finish = null;
+			this.#recorder = null;
+			if (recorder.state !== 'inactive') recorder.stop();
+			this.#release();
+		};
+		// the browser's own Stop sharing bar
+		video?.addEventListener('ended', this.stop);
+		this.#recorder = recorder;
+		this.liveSize = [0, 0];
+		recorder.start(100);
+		this.capture.start(stream);
 	}
 
-	#finishTake(blob: Blob) {
-		this.videoBlob = blob;
-		this.videoUrl = URL.createObjectURL(blob);
-		this.status = 'finished';
+	#micConstraints() {
+		return {
+			echoCancellation: { ideal: this.echoCancellation },
+			noiseSuppression: { ideal: this.noiseSuppression },
+			autoGainControl: { ideal: this.autoGainControl },
+		};
 	}
 
-	#stopRecording() {
-		void this.#audioCtx?.close().catch(() => {});
-		this.#audioCtx = null;
-		const recorder = this.#recorder;
-		if (recorder) {
-			// prevent resurrecting discarded takes
-			recorder.ondataavailable = null;
-			recorder.onstop = null;
-			recorder.onpause = null;
-			recorder.onresume = null;
-			try {
-				recorder.stop();
-			} catch {
-				// stop() throws when idle
-			}
-		}
-		this.#recorder = null;
-		this.#displayStream
-			?.getTracks()
-			.forEach((track) => track.stop());
-		this.#micStream?.getTracks().forEach((track) => track.stop());
-		this.#displayStream = null;
-		this.#micStream = null;
-		this.#combinedStream = null;
-		cancelAnimationFrame(this.#rafId);
+	#release() {
+		this.#display?.getTracks().forEach((track) => track.stop());
+		this.#mic?.getTracks().forEach((track) => track.stop());
+		this.#display = null;
+		this.#mic = null;
+		void this.#mix?.close().catch(() => {});
+		this.#mix = null;
 	}
 
-	#releaseTake() {
-		const url = this.videoUrl;
-		this.videoUrl = null;
-		if (url) setTimeout(() => URL.revokeObjectURL(url), 500);
-		this.videoBlob = null;
-		this.duration = 0;
-		this.width = 0;
-		this.height = 0;
-		this.elapsedMs = 0;
-		this.playing = false;
-	}
-
-	stop = () => {
-		if (
-			this.#recorder?.state === 'recording' ||
-			this.#recorder?.state === 'paused'
-		) {
-			this.#recorder.stop();
-		}
-	};
+	stop = () => this.#finish?.();
 
 	togglePause = () => {
-		// bookkeeping in onpause/onresume handlers
-		if (this.status === 'recording') this.#recorder?.pause();
-		else if (this.status === 'paused') this.#recorder?.resume();
+		const recorder = this.#recorder;
+		if (!recorder) return;
+		if (this.capture.state === 'recording') {
+			recorder.pause();
+			this.capture.pause();
+		} else {
+			recorder.resume();
+			this.capture.resume();
+		}
 	};
 
-	// dynamically update filters on active mic tracks
-	#applyMicConstraints() {
-		for (const track of this.#micStream?.getAudioTracks() ?? []) {
-			void track
-				.applyConstraints({
-					echoCancellation: {
-						ideal: this.echoCancellation,
-					},
-					noiseSuppression: {
-						ideal: this.noiseSuppression,
-					},
-					autoGainControl: {
-						ideal: this.autoGainControl,
-					},
-				})
-				.catch(() => {});
-		}
+	#keep(blob: Blob, peaks: number[], duration: number, audio: boolean) {
+		const take = new Take(
+			++this.#ids,
+			blob,
+			peaks,
+			duration,
+			audio,
+		);
+		[take.width, take.height] = this.liveSize;
+		this.playback.unload();
+		this.takes = [take, ...this.takes];
+		this.current = take;
+		void thumbnails(blob, () => this.takes.includes(take)).then(
+			(urls) => {
+				if (this.takes.includes(take))
+					take.frames = urls;
+				else release(urls);
+			},
+		);
 	}
 
-	setMicMixIn = (value: boolean) => {
-		this.micMixIn = value;
+	setMicMixIn = (on: boolean) => (this.micMixIn = on);
+
+	// filters apply to a live mic at once
+	#applyMic() {
+		for (const track of this.#mic?.getAudioTracks() ?? [])
+			void track
+				.applyConstraints(this.#micConstraints())
+				.catch(() => {});
+	}
+
+	setEchoCancellation = (on: boolean) => {
+		this.echoCancellation = on;
+		this.#applyMic();
 	};
 
-	setEchoCancellation = (value: boolean) => {
-		this.echoCancellation = value;
-		this.#applyMicConstraints();
+	setNoiseSuppression = (on: boolean) => {
+		this.noiseSuppression = on;
+		this.#applyMic();
 	};
 
-	setNoiseSuppression = (value: boolean) => {
-		this.noiseSuppression = value;
-		this.#applyMicConstraints();
+	setAutoGainControl = (on: boolean) => {
+		this.autoGainControl = on;
+		this.#applyMic();
 	};
 
-	setAutoGainControl = (value: boolean) => {
-		this.autoGainControl = value;
-		this.#applyMicConstraints();
-	};
-
-	clear = () => {
-		this.#stopRecording();
-		this.#releaseTake();
-		this.status = 'idle';
-		this.error = '';
-	};
-
-	download = () => {
-		if (this.videoBlob) {
-			const stamp = new Date()
-				.toISOString()
-				.replace(/[:.]/g, '-');
-			downloadBlob(
-				this.videoBlob,
-				`screen-recording-${stamp}.webm`,
-			);
-		}
-	};
-
-	onVideoReady = async (event: Event) => {
-		const video = event.target as HTMLVideoElement;
-		this.duration = await resolveDuration(video);
-		this.width = video.videoWidth;
-		this.height = video.videoHeight;
-	};
-
-	registerLive = modifier((video: HTMLVideoElement) => {
-		const vTrack =
-			this.#displayStream?.getVideoTracks()[0] ??
-			this.#combinedStream?.getVideoTracks()[0];
-		if (vTrack) {
-			video.srcObject = new MediaStream([vTrack]);
-			video.muted = true;
-			// Firefox can ignore muted attribute on MediaStream with audio
-			video.volume = 0;
-			void video.play();
+	live = modifier((video: HTMLVideoElement) => {
+		const track = this.#display?.getVideoTracks()[0];
+		if (track) {
+			video.srcObject = new MediaStream([track]);
+			void video.play().catch(() => {});
 		}
 		return () => {
 			video.srcObject = null;
 		};
 	});
 
-	registerPlayback = modifier((video: HTMLVideoElement) => {
-		this.#video = video;
-		if (this.videoUrl) {
-			video.src = this.videoUrl;
-			video.load();
+	liveMetadata = (event: Event) => {
+		const video = event.target as HTMLVideoElement;
+		if (video.videoWidth && video.videoHeight)
+			this.liveSize = [video.videoWidth, video.videoHeight];
+	};
+
+	takeMetadata = (take: Take, event: Event) => {
+		const video = event.target as HTMLVideoElement;
+		take.width = video.videoWidth;
+		take.height = video.videoHeight;
+	};
+
+	play = (take: Take) => {
+		if (this.capture.active) return;
+		if (this.current === take) {
+			if (this.playback.active) this.playback.stop();
+			else this.playback.play();
+			return;
 		}
-		return () => {
-			if (this.#video === video) this.#video = null;
-			video.pause();
-			video.removeAttribute('src');
-			video.load();
-		};
+		this.playback.unload();
+		this.#queued = take;
+		this.current = take;
+	};
+
+	// after playback.register on the same element: the new take's player is bound
+	playQueued = modifier((_element: HTMLVideoElement, [take]: [Take]) => {
+		if (this.#queued !== take) return;
+		this.#queued = null;
+		queueMicrotask(() => {
+			if (this.current === take) this.playback.play();
+		});
 	});
 
-	togglePlay = () => {
-		const video = this.#video;
-		if (!video) return;
-		if (video.paused) {
-			void video.play();
-		} else {
-			video.pause();
+	save = (take: Take) => downloadBlob(take.blob, `${take.name}.webm`);
+
+	passNewest = () => {
+		if (this.newest) this.save(this.newest);
+	};
+
+	remove = (take: Take) => {
+		if (this.current === take) {
+			this.playback.unload();
+			this.current =
+				this.takes.find((other) => other !== take) ??
+				null;
 		}
-	};
-
-	handlePlay = () => {
-		this.playing = true;
-	};
-
-	handlePause = () => {
-		this.playing = false;
-	};
-
-	handleEnded = () => {
-		this.playing = false;
+		this.takes = this.takes.filter((other) => other !== take);
+		release(take.frames);
+		// the player lets go of it on the next render
+		setTimeout(() => URL.revokeObjectURL(take.url));
 	};
 
 	<template>
-		<div class="dt-sr">
-			<div class="dt-sr-frame">
-				<div class="dt-sr-bar">
-					{{#if (eq this.status "idle")}}
-						<button
-							type="button"
-							class="dt-sr-btn is-primary"
-							{{on
-								"click"
-								this.start
-							}}
+		<CanonSplit
+			class="screen-recorder"
+			@bannerSticks={{true}}
+			@mainLeadsStacked={{true}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<RecorderBand
+						@capture={{this.capture}}
+						@playback={{this.playback}}
+						@take={{this.current}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					{{#if this.error}}
+						<CanonStatus
+							class="sr-error"
+							@text={{this.error}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonRow
+						class="sr-mic"
+						@title="Microphone"
+						@detail={{MIC_LABEL}}
+						as |titleId|
+					>
+						<CanonSwitch
+							aria-labelledby={{titleId}}
+							@on={{this.micMixIn}}
+							@disabled={{this.capture.active}}
+							@onChange={{this.setMicMixIn}}
+						/>
+					</CanonRow>
+					{{#if this.micMixIn}}
+						<CanonRow
+							class="sr-echo"
+							@title="Echo cancellation"
+							as |titleId|
 						>
-							<Icon
-								@name="monitor-up"
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.echoCancellation}}
+								@onChange={{this.setEchoCancellation}}
 							/>
-							Share screen
-						</button>
+						</CanonRow>
+						<CanonRow
+							class="sr-noise"
+							@title="Noise suppression"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.noiseSuppression}}
+								@onChange={{this.setNoiseSuppression}}
+							/>
+						</CanonRow>
+						<CanonRow
+							class="sr-gain"
+							@title="Auto gain"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.autoGainControl}}
+								@onChange={{this.setAutoGainControl}}
+							/>
+						</CanonRow>
 					{{/if}}
-
-					{{#if (eq this.status "recording")}}
-						<button
-							type="button"
-							class="dt-sr-btn"
-							{{on
-								"click"
-								this.togglePause
-							}}
+					<CanonHeading @text="Takes" />
+					{{#each this.takes key="id" as |take|}}
+						<div
+							class="sr-take
+								{{if
+									(this.isPlaying
+										take
+									)
+									'sr-take--playing'
+								}}"
 						>
-							<Icon @name="pause" />
-							Pause
-						</button>
-						<button
-							type="button"
-							class="dt-sr-btn"
-							{{on "click" this.stop}}
-						>
-							<Icon @name="square" />
-							Stop
-						</button>
-					{{/if}}
-
-					{{#if (eq this.status "paused")}}
-						<button
-							type="button"
-							class="dt-sr-btn is-primary"
-							{{on
-								"click"
-								this.togglePause
-							}}
-						>
-							<Icon @name="play" />
-							Resume
-						</button>
-						<button
-							type="button"
-							class="dt-sr-btn"
-							{{on "click" this.stop}}
-						>
-							<Icon @name="square" />
-							Stop
-						</button>
-					{{/if}}
-
-					{{#if (eq this.status "finished")}}
-						<button
-							type="button"
-							class="dt-sr-btn is-primary"
-							{{on
-								"click"
-								this.togglePlay
-							}}
-						>
-							<Icon
-								@name={{if
-									this.playing
-									"pause"
-									"play"
+							<CanonButton
+								class="sr-take-play"
+								@kind="cell"
+								@label={{if
+									(this.isPlaying
+										take
+									)
+									"Stop"
+									"Play"
+								}}
+								@icon={{if
+									(this.isPlaying
+										take
+									)
+									StopIcon
+									PlayIcon
+								}}
+								@disabled={{this.capture.active}}
+								@onClick={{fn
+									this.play
+									take
 								}}
 							/>
-							{{if
-								this.playing
-								"Pause"
-								"Play"
-							}}
-						</button>
-						<button
-							type="button"
-							class="dt-sr-btn"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel />
-						</button>
-						<button
-							type="button"
-							class="dt-sr-btn"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					{{/if}}
-
-					<span
-						class="dt-sr-time"
-					>{{this.elapsedLabel}}</span>
-				</div>
-
-				<div class="dt-sr-fields">
-					<label class="dt-sr-field">
-						<span>Microphone</span>
-						<Switch
-							@checked={{this.micMixIn}}
-							@onChange={{this.setMicMixIn}}
-							@label={{MIC_LABEL}}
+							<div
+								class="sr-take-text"
+							>
+								<span
+									class="sr-take-name"
+								>{{take.name}}</span>
+								<span
+									class="sr-take-detail"
+								>{{take.detail}}</span>
+							</div>
+							<CanonButton
+								class="sr-take-save"
+								@kind="cell"
+								@label={{passAlong
+									"Download"
+								}}
+								@icon={{SaveIcon}}
+								@onClick={{fn
+									this.save
+									take
+								}}
+							/>
+							<CanonButton
+								class="sr-take-delete"
+								@kind="cell"
+								@label="Delete"
+								@icon={{TrashIcon}}
+								@onClick={{fn
+									this.remove
+									take
+								}}
+							/>
+						</div>
+					{{else}}
+						<CanonEmptyRow
+							@text="No takes"
 						/>
-					</label>
-				</div>
-				{{#if this.micMixIn}}
-					<div class="dt-sr-fields">
-						<label class="dt-sr-field">
-							<span>Echo cancellation</span>
-							<Switch
-								@checked={{this.echoCancellation}}
-								@onChange={{this.setEchoCancellation}}
-								@label={{ECHO_LABEL}}
+					{{/each}}
+					{{#if (capturing)}}
+						{{#if this.newest}}
+							<CanonButton
+								class="sr-pass"
+								@kind="primary"
+								@text={{passAlong
+									"Download"
+								}}
+								@icon={{SaveIcon}}
+								@onClick={{this.passNewest}}
 							/>
-						</label>
-						<label class="dt-sr-field">
-							<span>Noise suppression</span>
-							<Switch
-								@checked={{this.noiseSuppression}}
-								@onChange={{this.setNoiseSuppression}}
-								@label={{NOISE_LABEL}}
-							/>
-						</label>
-						<label class="dt-sr-field">
-							<span>Auto gain</span>
-							<Switch
-								@checked={{this.autoGainControl}}
-								@onChange={{this.setAutoGainControl}}
-								@label={{GAIN_LABEL}}
-							/>
-						</label>
-					</div>
-				{{/if}}
-
-				<div class="dt-sr-surface">
-					{{#if (eq this.status "idle")}}
-						<p
-							class="dt-sr-hint"
-						>{{EMPTY_HINT}}</p>
+						{{/if}}
 					{{/if}}
-
-					{{#if (eq this.status "recording")}}
+				</CanonRows>
+				<p class="sr-aside">{{ASIDE}}</p>
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					class="sr-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{this.previewBackground}}
+				>
+					{{#if this.capture.active}}
+						{{! a muted live picture; captions do not apply }}
 						{{! template-lint-disable require-media-caption }}
 						<video
-							class="dt-sr-live"
+							class="sr-video sr-live"
 							autoplay
 							muted
 							playsinline
-							{{this.registerLive}}
-						></video>
-					{{/if}}
-
-					{{#if (eq this.status "finished")}}
-						{{#if this.meta}}
-							<p
-								class="dt-sr-meta"
-							>{{this.meta}}</p>
-						{{/if}}
-						{{! template-lint-disable require-media-caption }}
-						<video
-							class="dt-sr-video"
-							controls
-							playsinline
-							preload="metadata"
-							{{this.registerPlayback}}
+							{{this.live}}
 							{{on
 								"loadedmetadata"
-								this.onVideoReady
+								this.liveMetadata
 							}}
 							{{on
-								"play"
-								this.handlePlay
-							}}
-							{{on
-								"pause"
-								this.handlePause
-							}}
-							{{on
-								"ended"
-								this.handleEnded
+								"resize"
+								this.liveMetadata
 							}}
 						></video>
+					{{else if this.current}}
+						{{#each
+							this.loaded key="id"
+							as |take|
+						}}
+							{{! the transport is its control; user media lacks captions }}
+							{{! template-lint-disable require-media-caption }}
+							<video
+								class="sr-video sr-player"
+								src={{take.url}}
+								playsinline
+								preload="auto"
+								{{this.playback.register}}
+								{{this.playQueued
+									take
+								}}
+								{{on
+									"loadedmetadata"
+									(fn
+										this.takeMetadata
+										take
+									)
+								}}
+							></video>
+						{{/each}}
+					{{else}}
+						<button
+							type="button"
+							class="media-slot sr-slot"
+							disabled={{this.starting}}
+							{{on
+								"click"
+								this.record
+							}}
+						>
+							<span
+								class="media-slot-icon"
+							><IconSvg
+									@name="monitor-up"
+								/></span>
+							<span
+								class="media-slot-prompt"
+							>{{EMPTY_HINT}}</span>
+						</button>
 					{{/if}}
-				</div>
-			</div>
-
-			{{#if this.error}}
-				<p
-					class="dt-sr-error"
-					role="alert"
-				>{{this.error}}</p>
-			{{/if}}
-			<p class="dt-sr-aside">Isn't it crazy that your browser
-				can do this, by the way?</p>
-		</div>
+				</CanonCanvas>
+				{{#if this.current}}
+					{{#unless this.capture.active}}
+						<CanonCanvas
+							class="sr-overview"
+							@height={{overviewHeight}}
+							@background="var(--canon-muted)"
+						>
+							<Strips
+								@thumbnails={{this.current.frames}}
+								@aspect={{this.current.aspect}}
+								@waveform={{this.current.audio}}
+								@peaks={{this.overview}}
+								@duration={{this.current.duration}}
+								@playhead={{this.playback.playhead}}
+								@onScrub={{this.playback.scrub}}
+							/>
+						</CanonCanvas>
+					{{/unless}}
+				{{/if}}
+			</:main>
+			<:footer>
+				<RecorderTransport
+					@capture={{this.capture}}
+					@playback={{this.playback}}
+					@duration={{if
+						this.current
+						this.current.duration
+						0
+					}}
+					@recordText="Share screen"
+					@disabled={{this.starting}}
+					@onRecord={{this.record}}
+					@onStop={{this.stop}}
+					@onPause={{this.togglePause}}
+				/>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

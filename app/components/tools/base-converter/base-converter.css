@@ -1,0 +1,202 @@
+/* the picture: entry, caption and figure, then the register in what is left */
+.bc-picture {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.bc-entry {
+	flex: none;
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+/* iOS shrinks the entry to fit its width, down to 15 pt */
+.bc-entry .canon-big-number-field-input {
+	font-size: clamp(
+		15px,
+		(100cqi - 120px) / (var(--bc-chars) * 0.56),
+		var(--canon-text-big-number)
+	);
+}
+
+.bc-entry--error .canon-big-number-field-input {
+	color: var(--canon-destructive);
+}
+
+.bc-entry-status {
+	padding: 0 var(--canon-panel-padding) 10px;
+	background: var(--canon-card);
+	text-align: center;
+}
+
+.bc-head {
+	display: flex;
+	flex: none;
+	gap: 8px;
+	align-items: last baseline;
+	justify-content: space-between;
+	box-sizing: border-box;
+	block-size: calc(44px + 12px);
+	padding: 12px var(--canon-panel-padding) 0;
+}
+
+.bc-caption {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.bc-area {
+	position: relative;
+	flex: 1 1 auto;
+	min-block-size: 0;
+	margin: 0 var(--canon-panel-padding) 12px;
+}
+
+.bc-register {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	align-items: center;
+	justify-content: center;
+}
+
+.bc-operand {
+	display: grid;
+	grid-template-columns: var(--bc-sign) auto;
+}
+
+.bc-sign {
+	display: flex;
+	align-items: center;
+	block-size: var(--bc-cell);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: clamp(12px, var(--bc-cell) * 0.6, 17px);
+	font-weight: var(--canon-weight-bold);
+	white-space: nowrap;
+}
+
+.bc-sign--numbered {
+	margin-block-start: 12px;
+}
+
+.bc-operand--result .bc-sign {
+	color: var(--canon-primary);
+}
+
+.bc-rule {
+	flex: none;
+	align-self: stretch;
+	block-size: 2px;
+	margin-block: -4px;
+	background: var(--canon-primary);
+}
+
+.bc-lines {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.bc-line {
+	display: flex;
+	gap: 9px;
+}
+
+.bc-nibble {
+	display: grid;
+	grid-template-columns: repeat(4, var(--bc-cell));
+	column-gap: 3px;
+}
+
+.bc-index {
+	grid-column: 1 / -1;
+	block-size: 12px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 9px;
+	font-weight: var(--canon-weight-medium);
+	line-height: 12px;
+}
+
+.bc-lamp {
+	--bc-lit: var(--canon-primary);
+
+	box-sizing: border-box;
+	block-size: var(--bc-cell);
+	margin: 0;
+	padding: 0;
+	border: var(--canon-hairline) solid var(--canon-border);
+	border-radius: 0;
+	background: var(--canon-muted);
+	transition:
+		background-color 220ms cubic-bezier(0.33, 1, 0.68, 1),
+		border-color 220ms cubic-bezier(0.33, 1, 0.68, 1);
+	transition-delay: calc(var(--bc-bit) * 6ms);
+	appearance: none;
+}
+
+.bc-operand--operand .bc-lamp {
+	--bc-lit: var(--canon-foreground);
+}
+
+.bc-lamp--on {
+	border-color: var(--bc-lit);
+	background: var(--bc-lit);
+}
+
+button.bc-lamp {
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+button.bc-lamp:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+@media (hover: hover) {
+	button.bc-lamp:not(.bc-lamp--on):hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.bc-hex {
+	grid-column: 1 / -1;
+	block-size: 15px;
+	padding-block-start: 2px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: clamp(9px, var(--bc-cell) * 0.5, 13px);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 13px;
+	text-align: center;
+}
+
+.bc-operand--result .bc-hex {
+	color: var(--canon-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.bc-lamp {
+		transition: none;
+	}
+}
+
+/* a 64-bit binary value wraps instead of being cut off */
+.bc-values .canon-value-line-value {
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+
+.bc-operand-field {
+	font-family: var(--canon-mono-font);
+}

@@ -1,295 +1,278 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonMenuCell from 'delphicanon/components/canon-menu-cell';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import TimecodeField from 'delphitools-v2/components/tools/timecode-calc/field';
+import Picture from 'delphitools-v2/components/tools/timecode-calc/picture';
 import {
-	formatClock,
-	formatTc,
-	framesToSeconds,
-	framesToTc,
-	parseTc,
-	RATES,
-	rateById,
-	type ParseError,
-	type Parts,
-} from 'delphitools-v2/lib/timecode';
+	blank,
+	clock,
+	digitsOf,
+	format,
+	parse,
+	parts,
+	rates,
+	register,
+	seconds,
+	type ParseResult,
+	type Rate,
+} from 'delphitools-v2/components/tools/timecode-calc/smpte';
+import './timecode-calc/timecode-calc.css';
 
-type Op = '+' | '-';
+const rateLabels = rates.map((rate) => rate.label);
+const operations = ['+', '−'];
+const dash = '—';
+const defaultRate = 4;
 
-const MESSAGE: Record<ParseError, string | null> = {
-	empty: null,
-	'not-numeric': 'Numbers only',
-	'too-many': 'Too many fields',
-	'frame-range': 'Frame too high',
-	'seconds-range': 'Seconds too high',
-	'minutes-range': 'Minutes too high',
-};
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
 
-interface Feedback {
-	tone: 'error' | 'info';
-	text: string;
-	data?: string;
+function note(parsed: ParseResult, rate: Rate) {
+	if (parsed.ok)
+		return parsed.snappedFrom
+			? {
+					tone: 'muted' as const,
+					text: `Dropped frame · ${parsed.snappedFrom} → ${format(parsed.parts, rate)}`,
+				}
+			: undefined;
+	const { error } = parsed;
+	const text = {
+		empty: undefined,
+		'not-numeric': 'Numbers only',
+		'too-many': 'Too many fields',
+		'frame-range': `Frame too high · 00–${String(error.kind === 'frame-range' ? error.max : 0).padStart(2, '0')}`,
+		'seconds-range': 'Seconds too high',
+		'minutes-range': 'Minutes too high',
+	}[error.kind];
+	return text ? { tone: 'warn' as const, text } : undefined;
 }
 
-export default class TimecodeCalcTool extends Component {
-	@tracked rateId = '29.97df';
-	@tracked aInput = '';
-	@tracked bInput = '';
-	@tracked op: Op = '+';
+/** The port of TimecodeCalcViewController. */
+export default class TimecodeCalc extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
+	@tracked rateIndex = defaultRate;
+	@tracked subtracts = false;
+	@tracked a = '';
+	@tracked b = '';
+	/** The fields' starting text; the fields own what is typed after. */
+	startA = '';
+	startB = '';
+
+	// ?tcA=01:00:00;00 ?tcB=00:10:00;02 ?tcSubtract ?tcRate=29.97df: the iOS -tca, -tcb, -tcsubtract, -tcrate flags
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const picked = rates.findIndex(
+			(rate) => rate.id === query.get('tcRate'),
+		);
+		if (picked >= 0) this.rateIndex = picked;
+		const { drop } = this.rate;
+		this.startA = this.a = register(
+			digitsOf(query.get('tcA') ?? ''),
+			drop,
+		);
+		this.startB = this.b = register(
+			digitsOf(query.get('tcB') ?? ''),
+			drop,
+		);
+		this.subtracts = query.has('tcSubtract');
+	}
 
 	get rate() {
-		return rateById(this.rateId);
+		return rates[this.rateIndex]!;
 	}
 
-	get rates() {
-		return RATES;
+	get parsedA() {
+		return parse(this.a, this.rate);
 	}
 
-	get placeholder() {
-		return this.rate.drop ? '00:00:00;00' : '00:00:00:00';
+	get parsedB() {
+		return parse(this.b, this.rate);
 	}
 
-	get #a() {
-		return parseTc(this.aInput, this.rate);
-	}
-
-	get #b() {
-		return parseTc(this.bInput, this.rate);
-	}
-
-	get resultFrames(): number | null {
-		const a = this.#a;
-		if (!a.ok) return null;
-		if (this.bInput.trim() === '') return a.frames;
-		const b = this.#b;
+	/** A alone gives A, B alone gives nothing. */
+	get frames(): number | undefined {
+		const { parsedA: a, parsedB: b } = this;
+		if (!a.ok) return undefined;
 		if (!b.ok) return a.frames;
-		return this.op === '+'
-			? a.frames + b.frames
-			: a.frames - b.frames;
+		return this.subtracts
+			? a.frames - b.frames
+			: a.frames + b.frames;
 	}
 
-	get #resultParts(): Parts | null {
-		const f = this.resultFrames;
-		return f === null ? null : framesToTc(f, this.rate);
+	get result() {
+		const { frames } = this;
+		return frames === undefined
+			? undefined
+			: format(parts(frames, this.rate), this.rate);
 	}
 
-	get resultTc() {
-		const p = this.#resultParts;
-		return p ? formatTc(p, this.rate) : '—';
+	line(parsed: ParseResult) {
+		return parsed.ok
+			? format(parsed.parts, this.rate)
+			: blank(this.rate);
 	}
 
-	get resultFrameLabel() {
-		return this.resultFrames === null
-			? '—'
-			: this.resultFrames.toLocaleString('en');
+	get lineA() {
+		return this.line(this.parsedA);
 	}
 
-	get resultClock() {
-		const f = this.resultFrames;
-		return f === null
-			? '—'
-			: formatClock(framesToSeconds(f, this.rate));
+	get lineB() {
+		return this.line(this.parsedB);
 	}
 
-	#feedback(
-		input: string,
-		parsed: ReturnType<typeof parseTc>,
-	): Feedback | null {
-		if (input.trim() === '') return null;
-		if (!parsed.ok) {
-			const text = MESSAGE[parsed.error];
-			if (!text) return null;
-			const data =
-				parsed.detail && parsed.error === 'frame-range'
-					? `00–${String(parsed.detail.max).padStart(2, '0')}`
-					: undefined;
-			return { tone: 'error', text, data };
-		}
-		if (parsed.snappedFrom) {
-			return {
-				tone: 'info',
-				text: 'Dropped frame',
-				data: `${parsed.snappedFrom} → ${formatTc(parsed.parts, this.rate)}`,
-			};
-		}
-		return null;
+	get lineResult() {
+		return this.result ?? blank(this.rate);
 	}
 
-	get aFeedback() {
-		return this.#feedback(this.aInput, this.#a);
+	get noteA() {
+		return note(this.parsedA, this.rate);
 	}
 
-	get bFeedback() {
-		return this.#feedback(this.bInput, this.#b);
+	get noteB() {
+		return note(this.parsedB, this.rate);
 	}
 
-	pickRate = (id: string) => {
-		this.rateId = id;
-	};
+	get copyDisabled() {
+		return this.result === undefined;
+	}
 
-	setA = (event: Event) => {
-		this.aInput = (event.target as HTMLInputElement).value;
-	};
+	get tiles() {
+		const { frames } = this;
+		return [
+			{
+				label: 'Frames',
+				value:
+					frames === undefined
+						? dash
+						: frames.toLocaleString('en'),
+			},
+			{
+				label: 'Real time',
+				value:
+					frames === undefined
+						? dash
+						: clock(
+								seconds(
+									frames,
+									this
+										.rate,
+								),
+							),
+			},
+		];
+	}
 
-	setB = (event: Event) => {
-		this.bInput = (event.target as HTMLInputElement).value;
-	};
+	// the web fields answered every keystroke; iOS waits 400 ms
+	typeA = (text: string) => (this.a = text);
+	typeB = (text: string) => (this.b = text);
 
-	setOp = (op: Op) => {
-		this.op = op;
-	};
+	pickRate = (index: number) => (this.rateIndex = index);
+
+	pickOperation = (index: number) => (this.subtracts = index === 1);
 
 	copyResult = () => {
-		if (this.resultFrames !== null) {
-			void navigator.clipboard?.writeText(this.resultTc);
-		}
+		if (this.result) void this.toast.copy(this.result);
 	};
 
 	<template>
-		<div class="dt-tcc">
-			<div
-				class="segmented dt-tcc-rates"
-				role="group"
-				aria-label="Frame rate"
-			>
-				{{#each this.rates key="id" as |r|}}
-					<button
-						type="button"
-						class="dt-tcc-rate
-							{{if
-								(eq
-									r.id
-									this.rateId
-								)
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn this.pickRate r.id)
-						}}
-					>{{r.label}}</button>
-				{{/each}}
-			</div>
-
-			<div class="dt-tcc-strip">
-				<div class="dt-tcc-cell">
-					<label
-						class="dt-tcc-label"
-						for="dt-tcc-a"
-					>Timecode A</label>
-					<input
-						id="dt-tcc-a"
-						class="dt-tcc-input"
-						inputmode="numeric"
-						autocomplete="off"
-						spellcheck="false"
-						placeholder={{this.placeholder}}
-						value={{this.aInput}}
-						{{on "input" this.setA}}
+		<CanonSplit class="timecode-calc">
+			<:banner>
+				<CanonCanvas @fitting={{true}}>
+					<Picture
+						@a={{this.lineA}}
+						@b={{this.lineB}}
+						@subtracts={{this.subtracts}}
+						@result={{this.lineResult}}
 					/>
-					{{#if this.aFeedback}}
-						<p
-							class="dt-tcc-msg
-								{{this.aFeedback.tone}}"
-						>
-							<span
-							>{{this.aFeedback.text}}</span>
-							{{#if
-								this.aFeedback.data
-							}}
-								<code
-								>{{this.aFeedback.data}}</code>
-							{{/if}}
-						</p>
-					{{/if}}
-				</div>
-
-				<div class="segmented dt-tcc-op">
-					<button
-						type="button"
-						class="dt-tcc-op-cell
-							{{if
-								(eq this.op '+')
-								'is-active'
-							}}"
-						aria-label="Add"
-						{{on
-							"click"
-							(fn this.setOp "+")
-						}}
-					>+</button>
-					<button
-						type="button"
-						class="dt-tcc-op-cell
-							{{if
-								(eq this.op '-')
-								'is-active'
-							}}"
-						aria-label="Subtract"
-						{{on
-							"click"
-							(fn this.setOp "-")
-						}}
-					>−</button>
-				</div>
-
-				<div class="dt-tcc-cell">
-					<label
-						class="dt-tcc-label"
-						for="dt-tcc-b"
-					>Timecode B</label>
-					<input
-						id="dt-tcc-b"
-						class="dt-tcc-input"
-						inputmode="numeric"
-						autocomplete="off"
-						spellcheck="false"
-						placeholder={{this.placeholder}}
-						value={{this.bInput}}
-						{{on "input" this.setB}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Timecode A" />
+					<TimecodeField
+						@value={{this.startA}}
+						@dropFrame={{this.rate.drop}}
+						@label="Timecode A"
+						@onChange={{this.typeA}}
 					/>
-					{{#if this.bFeedback}}
-						<p
-							class="dt-tcc-msg
-								{{this.bFeedback.tone}}"
-						>
-							<span
-							>{{this.bFeedback.text}}</span>
-							{{#if
-								this.bFeedback.data
-							}}
-								<code
-								>{{this.bFeedback.data}}</code>
-							{{/if}}
-						</p>
+					{{#if this.noteA}}
+						<CanonStatus
+							class="tcc-note"
+							@text={{this.noteA.text}}
+							@tone={{this.noteA.tone}}
+							@row={{true}}
+						/>
 					{{/if}}
-				</div>
-			</div>
-
-			<button
-				type="button"
-				class="dt-tcc-result"
-				aria-label="Copy result"
-				{{on "click" this.copyResult}}
-			>
-				<span
-					class="dt-tcc-result-tc"
-				>{{this.resultTc}}</span>
-				<Icon @name="copy" />
-			</button>
-
-			<dl class="dt-tcc-readout">
-				<div class="dt-tcc-readout-cell">
-					<dt>Frames</dt>
-					<dd>{{this.resultFrameLabel}}</dd>
-				</div>
-				<div class="dt-tcc-readout-cell">
-					<dt>Real time</dt>
-					<dd>{{this.resultClock}}</dd>
-				</div>
-			</dl>
-		</div>
+					<CanonHeading @text="Operation" />
+					<CanonSegmented
+						aria-label="Operation"
+						@items={{operations}}
+						@selected={{if
+							this.subtracts
+							1
+							0
+						}}
+						@onChange={{this.pickOperation}}
+					/>
+					<CanonHeading @text="Timecode B" />
+					<TimecodeField
+						@value={{this.startB}}
+						@dropFrame={{this.rate.drop}}
+						@label="Timecode B"
+						@onChange={{this.typeB}}
+					/>
+					{{#if this.noteB}}
+						<CanonStatus
+							class="tcc-note"
+							@text={{this.noteB.text}}
+							@tone={{this.noteB.tone}}
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Frame rate" />
+					<CanonRow
+						@title="Frame rate"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonMenuCell
+							@items={{rateLabels}}
+							@selected={{this.rateIndex}}
+							@labelledBy={{titleId}}
+							@onChange={{this.pickRate}}
+						/>
+					</CanonRow>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Result" />
+					<CanonTiles @items={{this.tiles}} />
+					<CanonButton
+						@text="Copy"
+						@icon={{CopyIcon}}
+						@iconStyle="oversized"
+						@kind="primary"
+						@disabled={{this.copyDisabled}}
+						@onClick={{this.copyResult}}
+					/>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

@@ -53,7 +53,7 @@ const clickScene = async (sx, sy) => {
   await page.mouse.click(p.x, p.y);
   await sleep(250);
 };
-// popup keys anchor by epoch, wait for it
+// the select tool's bar cells
 const popupReady = (action = "extract") =>
   page.waitForSelector(`[data-select-action="${action}"]`, { visible: true, timeout: 5000 });
 const popupClick = async (action) => {
@@ -140,6 +140,8 @@ s = await sel();
 check("wand global: both squares selected", s?.area, s && Math.abs(s.area - 2 * 300 * 200) <= 3000);
 await page.evaluate(() => window.__substrata.toolSettings("select", { wandMode: "flood" }));
 
+// new shapes add to the selection (iOS); start the lasso from none
+await page.evaluate(() => window.__substrata.selectOps.deselect());
 await page.evaluate(() => {
   window.__substrata.setTool("select", "lasso");
   window.__substrata.toolSettings("select", { magnetic: true, sensitivity: 100 });
@@ -178,7 +180,7 @@ const popupVisible = await popupReady().then(
   (h) => !!h,
   () => false,
 );
-check("popup: appears with a live selection", String(popupVisible), popupVisible);
+check("bar: selection actions shown", String(popupVisible), popupVisible);
 await popupClick("extract");
 ls = await layers();
 check("extract: new layer above the source", ls.map((l) => l.name).join(","), ls.length === 2);

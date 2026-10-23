@@ -1,0 +1,235 @@
+/* the picture: the image at the export's aspect, handles over it */
+.gg-picture {
+	position: relative;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: hidden;
+	font-family: var(--canon-font);
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+.gg-picture.is-dragging {
+	cursor: grabbing;
+}
+
+.gg-paint {
+	position: absolute;
+	display: block;
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.gg-lines {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: visible;
+	pointer-events: none;
+	fill: none;
+	stroke-linecap: round;
+}
+
+.gg-lines-shade {
+	stroke: rgb(0 0 0 / 30%);
+	stroke-width: 3;
+}
+
+.gg-lines-ink {
+	stroke: white;
+	stroke-width: 1.25;
+}
+
+/* grip, centre and ring knob */
+.gg-hub {
+	position: absolute;
+	inline-size: 44px;
+	block-size: 44px;
+	translate: -50% -50%;
+	cursor: grab;
+	touch-action: none;
+}
+
+.gg-hub svg {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: visible;
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.gg-mark-shade {
+	stroke: rgb(0 0 0 / 30%);
+	stroke-width: 4;
+}
+
+.gg-mark-ink {
+	stroke: white;
+	stroke-width: 2;
+}
+
+.gg-hub-control,
+.gg-dial-control {
+	position: absolute;
+	inset: 0;
+}
+
+.gg-hub-control:focus-visible,
+.gg-handle:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 4px;
+}
+
+/* a stop or point: a square of its colour in a white frame, larger while chosen */
+.gg-handle {
+	position: absolute;
+	inline-size: 24px;
+	block-size: 24px;
+	padding: 0;
+	box-sizing: border-box;
+	border: 2.5px solid white;
+	background: var(--gg-colour);
+	box-shadow: 0 0 2px rgb(0 0 0 / 40%);
+	translate: -50% -50%;
+	cursor: grab;
+	touch-action: none;
+	transition:
+		scale 0.2s,
+		opacity 0.15s;
+}
+
+/* a finger-sized target */
+.gg-handle::before {
+	position: absolute;
+	inset: -12px;
+	content: "";
+}
+
+.gg-handle::after {
+	position: absolute;
+	inset: -7px;
+	border: 1px solid white;
+	box-shadow: 0 0 1px rgb(0 0 0 / 40%);
+	opacity: 0;
+	content: "";
+}
+
+.gg-handle.is-chosen {
+	z-index: 1;
+	scale: 1.3;
+}
+
+.gg-handle.is-chosen::after {
+	opacity: 1;
+}
+
+.gg-handle.is-pulled {
+	opacity: 0.45;
+}
+
+.gg-figure {
+	position: absolute;
+	z-index: 2;
+	pointer-events: none;
+}
+
+.gg-hint {
+	position: absolute;
+	inset-inline: 16px;
+	margin: 0;
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	line-height: 22px;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: opacity 0.2s;
+	pointer-events: none;
+}
+
+.gg-picture.is-dragging .gg-hint {
+	opacity: 0;
+}
+
+/* the angle row: dial | field */
+.gg-angle {
+	display: flex;
+	align-self: stretch;
+	gap: 0;
+}
+
+.gg-dial {
+	position: relative;
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 72px;
+	min-block-size: 60px;
+	background: var(--canon-card);
+	cursor: pointer;
+	touch-action: none;
+}
+
+.gg-dial svg {
+	inline-size: 44px;
+	block-size: 44px;
+	overflow: visible;
+}
+
+.gg-dial-face {
+	fill: none;
+	stroke: var(--canon-muted-foreground);
+	stroke-width: var(--canon-hairline);
+}
+
+.gg-dial-needle {
+	transform-origin: 22px 22px;
+	fill: var(--canon-primary);
+	stroke: var(--canon-primary);
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.gg-dial-control:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* the solid over the strip */
+.gg-solid {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+}
+
+.gg-solid-body {
+	flex: 1;
+	min-block-size: 0;
+}
+
+.gradient-genny .gg-colour .canon-text-cell {
+	padding-inline: var(--canon-panel-padding);
+}
+
+.gg-type {
+	container-type: inline-size;
+}
+
+/* five cells: freeform needs 49 px */
+@container (width < 400px) {
+	.gg-modes .canon-button--segment {
+		padding-inline: 4px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.gg-handle,
+	.gg-hint {
+		transition: none;
+	}
+}

@@ -1,0 +1,117 @@
+/* the picture: the solid over the strip */
+.colour-atlas-picture {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+}
+
+.colour-atlas-solid {
+	flex: 1;
+	min-block-size: 0;
+}
+
+/* first and large: typing a colour is the main way in */
+.colour-atlas .colour-atlas-input {
+	min-block-size: var(--canon-primary-height);
+}
+
+.colour-atlas .colour-atlas-input .canon-text-cell {
+	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-big-number);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.colour-atlas .colour-atlas-input > .canon-button {
+	inline-size: var(--canon-primary-height);
+}
+
+/* contrast rows: chip 56 wide, the ratio cell beside it */
+.colour-atlas-contrast {
+	display: flex;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-row-height);
+	background: var(--canon-border);
+	font-family: var(--canon-font);
+}
+
+.colour-atlas-contrast-chip {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 56px;
+	background: black;
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-bold);
+}
+
+.colour-atlas-contrast-chip--white {
+	background: white;
+}
+
+.colour-atlas-contrast-cell {
+	display: flex;
+	flex: 1;
+	gap: 12px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 8px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+}
+
+.colour-atlas-contrast-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+	line-height: 1.2;
+}
+
+.colour-atlas-contrast-ratio {
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-body);
+	font-variant-numeric: tabular-nums;
+}
+
+.colour-atlas-contrast-against {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.colour-atlas-contrast-lamps {
+	display: flex;
+	flex: none;
+	gap: 12px;
+}
+
+.colour-atlas-contrast-lamp {
+	color: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 30%,
+		transparent
+	);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+}
+
+.colour-atlas-contrast-lamp--on {
+	color: var(--canon-primary);
+}
+
+.colour-atlas-hidden {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* expanded, the picture meets the folder tab; the shell reads --dt-tab-fill */
+@container (width > 1300px) {
+	.dt-sheet:has(.dt-canon-tool.is-expanded > .colour-atlas) {
+		--dt-tab-fill: var(--canon-muted);
+	}
+}

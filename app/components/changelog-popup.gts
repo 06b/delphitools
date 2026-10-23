@@ -1,24 +1,31 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { eq, not } from 'ember-truth-helpers';
+import { guidFor } from '@ember/object/internals';
+import { eq } from 'ember-truth-helpers';
 import { LinkTo } from '@ember/routing';
-import Dialog from 'delphitools-v2/components/ui/dialog';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonDialog from 'delphicanon/components/canon-dialog';
+import CanonGrid from 'delphicanon/components/canon-grid';
 import Icon from 'delphitools-v2/components/icon';
-import {
-	Tabs,
-	TabsList,
-	TabsTrigger,
-	TabsContent,
-} from 'delphitools-v2/components/ui/tabs';
 import { RELEASES, type Release } from 'delphitools-v2/lib/changelog';
 import { allTools, type Tool } from 'delphitools-v2/lib/tools';
+import './changelog-popup.css';
 
 const PILL_TEXT = "what's new?";
 
 const TOOLS_BY_NAME = new Map(
 	allTools.map((tool) => [tool.name.toLowerCase(), tool]),
 );
+
+type TabId = 'features' | 'fixes' | 'technical';
+
+const TABS: { id: TabId; title: string }[] = [
+	{ id: 'features', title: 'Features' },
+	{ id: 'fixes', title: 'Fixes' },
+	{ id: 'technical', title: 'Technical' },
+];
 
 interface Entry {
 	line: string;
@@ -35,43 +42,118 @@ function parse(line: string): Entry {
 	return { line, tool, lead, rest: line.slice(colon + 1) };
 }
 
-const entries = (lines: string[]) => lines.map(parse);
-
 // a release need not fill every tab
-function firstFilledTab(release: Release): string {
-	if (release.features.length) return 'features';
-	if (release.fixes.length) return 'fixes';
-	return 'technical';
+function filledTabs(release: Release): TabId[] {
+	return TABS.map((tab) => tab.id).filter((id) => release[id].length > 0);
 }
 
 export default class ChangelogPopup extends Component {
+	@tracked isOpen = false;
 	@tracked release: Release = RELEASES[0]!;
-	@tracked tab = firstFilledTab(RELEASES[0]!);
+	@tracked tab: TabId = filledTabs(RELEASES[0]!)[0] ?? 'technical';
+
+	uid = guidFor(this);
+	titleId = `${this.uid}-title`;
+
+	get tabs() {
+		const filled = filledTabs(this.release);
+		return TABS.map((tab) => ({
+			...tab,
+			tabId: `${this.uid}-tab-${tab.id}`,
+			selected: tab.id === this.tab,
+			disabled: !filled.includes(tab.id),
+		}));
+	}
+
+	get panelId() {
+		return `${this.uid}-panel`;
+	}
+
+	get activeTabId() {
+		return `${this.uid}-tab-${this.tab}`;
+	}
+
+	get entries(): Entry[] {
+		const lines = this.release[this.tab];
+		return this.tab === 'features'
+			? lines.map(parse)
+			: lines.map((line) => ({ line, lead: line, rest: '' }));
+	}
+
+	open = (event: Event) => {
+		// webkit leaves a clicked button unfocused; the dialog returns focus to it
+		(event.currentTarget as HTMLElement).focus();
+		this.isOpen = true;
+	};
+
+	closed = () => {
+		this.isOpen = false;
+	};
 
 	selectVersion = (event: Event) => {
 		const version = (event.target as HTMLSelectElement).value;
 		this.release =
 			RELEASES.find((entry) => entry.version === version) ??
 			RELEASES[0]!;
-		this.tab = firstFilledTab(this.release);
+		this.tab = filledTabs(this.release)[0] ?? 'technical';
 	};
 
-	setTab = (value: string) => {
-		this.tab = value;
+	setTab = (id: TabId) => {
+		this.tab = id;
+	};
+
+	// selection follows focus, in a ring over the enabled tabs
+	tabKey = (event: KeyboardEvent) => {
+		const list = event.currentTarget as HTMLElement;
+		const enabled = filledTabs(this.release);
+		const at = enabled.indexOf(this.tab);
+		let next: TabId | undefined;
+		switch (event.key) {
+			case 'ArrowRight':
+			case 'ArrowDown':
+				next = enabled[(at + 1) % enabled.length];
+				break;
+			case 'ArrowLeft':
+			case 'ArrowUp':
+				next =
+					enabled[
+						(at - 1 + enabled.length) %
+							enabled.length
+					];
+				break;
+			case 'Home':
+				next = enabled[0];
+				break;
+			case 'End':
+				next = enabled.at(-1);
+				break;
+			default:
+				return;
+		}
+		event.preventDefault();
+		if (!next) return;
+		this.tab = next;
+		list.querySelector<HTMLElement>(
+			`#${this.uid}-tab-${next}`,
+		)?.focus();
 	};
 
 	<template>
-		<Dialog as |d|>
-			<button
-				type="button"
-				class="dt-hero-link"
-				{{d.focusOnClose}}
-				{{on "click" d.open}}
-			>
-				{{PILL_TEXT}}
-			</button>
-			<d.Content class="dt-wn dt-cl">
-				<h2 class="dt-cl-title">
+		<button
+			type="button"
+			class="dt-hero-link"
+			{{on "click" this.open}}
+		>
+			{{PILL_TEXT}}
+		</button>
+		<CanonDialog
+			class="dt-cl"
+			@open={{this.isOpen}}
+			@onClose={{this.closed}}
+			aria-labelledby={{this.titleId}}
+		>
+			<:header>
+				<h2 class="dt-cl-title" id={{this.titleId}}>
 					What's new in version
 					<select
 						class="dt-cl-version"
@@ -95,121 +177,88 @@ export default class ChangelogPopup extends Component {
 						{{/each}}
 					</select>?
 				</h2>
-				<Tabs
-					@value={{this.tab}}
-					@onValueChange={{this.setTab}}
+				<CanonGrid
+					class="dt-cl-tabs"
+					role="tablist"
+					{{on "keydown" this.tabKey}}
 				>
-					<TabsList class="dt-cl-tabs">
-						<TabsTrigger
+					{{#each this.tabs key="id" as |tab|}}
+						<CanonButton
 							class="dt-cl-tab"
-							@value="features"
-							@disabled={{not
-								this.release.features.length
+							role="tab"
+							id={{tab.tabId}}
+							aria-selected={{if
+								tab.selected
+								"true"
+								"false"
 							}}
-						>
-							Features
-						</TabsTrigger>
-						<TabsTrigger
-							class="dt-cl-tab"
-							@value="fixes"
-							@disabled={{not
-								this.release.fixes.length
+							aria-controls={{this.panelId}}
+							tabindex={{if
+								tab.selected
+								"0"
+								"-1"
 							}}
-						>
-							Fixes
-						</TabsTrigger>
-						<TabsTrigger
-							class="dt-cl-tab"
-							@value="technical"
-							@disabled={{not
-								this.release.technical.length
+							@kind="segment"
+							@text={{tab.title}}
+							@selected={{tab.selected}}
+							@disabled={{tab.disabled}}
+							@onClick={{fn
+								this.setTab
+								tab.id
 							}}
-						>
-							Technical
-						</TabsTrigger>
-					</TabsList>
-					<TabsContent
-						class="dt-cl-body"
-						@value="features"
-					>
-						<ul class="dt-cl-list">
-							{{#each
-								(entries
-									this.release.features
-								)
-								as |entry|
-							}}
-								<li
-									class="dt-cl-item"
-								>
-									{{#if
-										entry.tool
-									}}
-										<LinkTo
-											@route="tools.tool"
-											@model={{entry.tool.id}}
-											class="dt-cl-tool"
+						/>
+					{{/each}}
+				</CanonGrid>
+			</:header>
+			<:default>
+				<div
+					class="dt-cl-body"
+					role="tabpanel"
+					id={{this.panelId}}
+					aria-labelledby={{this.activeTabId}}
+					tabindex="0"
+				>
+					<ul class="dt-cl-list">
+						{{#each
+							this.entries
+							as |entry|
+						}}
+							<li class="dt-cl-item">
+								{{#if
+									entry.tool
+								}}
+									<LinkTo
+										@route="tools.tool"
+										@model={{entry.tool.id}}
+										class="dt-cl-tool"
+									>
+										<span
+											class="dt-cl-badge"
+											aria-hidden="true"
 										>
-											<span
-												class="dt-cl-badge"
-												aria-hidden="true"
-											>
-												<Icon
-													@name="star"
-												/>
-												<Icon
-													@name="wrench"
-												/>
-											</span>
-											{{entry.lead}}</LinkTo>:{{entry.rest}}
-									{{else}}
-										{{entry.line}}
-									{{/if}}
-								</li>
-							{{/each}}
-						</ul>
-					</TabsContent>
-					<TabsContent
-						class="dt-cl-body"
-						@value="fixes"
-					>
-						<ul class="dt-cl-list">
-							{{#each
-								this.release.fixes
-								as |line|
-							}}
-								<li
-									class="dt-cl-item"
-								>{{line}}</li>
-							{{/each}}
-						</ul>
-					</TabsContent>
-					<TabsContent
-						class="dt-cl-body"
-						@value="technical"
-					>
-						<ul class="dt-cl-list">
-							{{#each
-								this.release.technical
-								as |line|
-							}}
-								<li
-									class="dt-cl-item"
-								>{{line}}</li>
-							{{/each}}
-						</ul>
-					</TabsContent>
-				</Tabs>
-				<div class="dt-cl-actions">
-					<button
-						type="button"
-						class="dt-cl-close"
-						{{on "click" d.close}}
-					>
-						Close
-					</button>
+											<Icon
+												@name="star"
+											/>
+											<Icon
+												@name="wrench"
+											/>
+										</span>
+										{{entry.lead}}</LinkTo>:{{entry.rest}}
+								{{else}}
+									{{entry.line}}
+								{{/if}}
+							</li>
+						{{/each}}
+					</ul>
 				</div>
-			</d.Content>
-		</Dialog>
+			</:default>
+			<:footer as |close|>
+				<CanonButton
+					class="dt-cl-close"
+					@text="Close"
+					@onClick={{fn close ""}}
+				/>
+			</:footer>
+		</CanonDialog>
 	</template>
 }

@@ -1,0 +1,145 @@
+/* the picture: the solid over the strip */
+.cc-picture {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	container: cc-picture / size;
+}
+
+.cc-solid {
+	flex: 1;
+	min-block-size: 0;
+}
+
+/* every space at once: 2 x 4 in a tall pane, 4 x 2 in a wide one */
+.cc-grid {
+	display: grid;
+	flex: 1;
+	grid-template: repeat(4, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr));
+	gap: var(--canon-hairline);
+	min-block-size: 0;
+	background: var(--canon-border);
+}
+
+@container cc-picture (aspect-ratio > 1) {
+	.cc-grid {
+		grid-template-rows: repeat(2, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
+.cc-cell {
+	position: relative;
+	min-block-size: 0;
+	background: var(--canon-muted);
+}
+
+.cc-cell .canon-colour-solid-hint {
+	display: none;
+}
+
+/* bottom centre: clear of the toggle and the expanded edge chevron */
+.cc-cell-label {
+	position: absolute;
+	inset-block-end: 6px;
+	inset-inline-start: 50%;
+	translate: -50% 0;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	pointer-events: none;
+}
+
+.cc-cell--current .cc-cell-label {
+	color: var(--canon-primary);
+}
+
+.colour-converter .cc-grid-toggle {
+	position: absolute;
+	z-index: 1;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+	inline-size: var(--canon-row-height);
+	block-size: var(--canon-row-height);
+}
+
+/* first and large: typing a colour is the main way in */
+.colour-converter .cc-input {
+	min-block-size: var(--canon-primary-height);
+}
+
+.colour-converter .cc-input .canon-text-cell {
+	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-big-number);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.colour-converter .cc-input > .canon-button {
+	inline-size: var(--canon-primary-height);
+}
+
+/* ribbons: letters in the label column, bands in the value column of the lines above */
+.cc-ribbons {
+	--cc-ribbon: 12px;
+
+	display: grid;
+	grid-template-columns: 76px 1fr;
+	gap: 8px;
+	align-items: center;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	font-family: var(--canon-font);
+}
+
+.cc-ribbon-letter {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	line-height: var(--cc-ribbon);
+}
+
+.cc-ribbon-letter--lit {
+	color: var(--canon-primary);
+}
+
+.cc-ribbon {
+	position: relative;
+	block-size: var(--cc-ribbon);
+	background-color: var(--canon-muted);
+	cursor: pointer;
+	touch-action: pan-y;
+}
+
+.cc-ribbon:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+.cc-ribbon-tick {
+	position: absolute;
+	inset-block: -2px;
+	inline-size: 5px;
+	box-sizing: border-box;
+	margin-inline-start: -2.5px;
+	border: 1.5px solid var(--canon-foreground);
+	pointer-events: none;
+}
+
+.cc-ribbons--eases .cc-ribbon-tick {
+	transition: inset-inline-start 300ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cc-ribbons--eases .cc-ribbon-tick {
+		transition: none;
+	}
+}
+
+/* expanded, the picture meets the folder tab; the shell reads --dt-tab-fill */
+@container (width > 1300px) {
+	.dt-sheet:has(.dt-canon-tool.is-expanded > .colour-converter) {
+		--dt-tab-fill: var(--canon-muted);
+	}
+}

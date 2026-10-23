@@ -2,9 +2,9 @@
 @forward "crayon-css" hide dark with (
 	$font-families: (
 			"sans": (
-				"iA Writer Quattro",
-				ui-monospace,
-				monospace,
+				"Open Sans Condensed",
+				system-ui,
+				sans-serif,
 			),
 			"serif": (
 				Georgia,
@@ -12,7 +12,7 @@
 				serif,
 			),
 			"mono": (
-				"iA Writer Quattro",
+				Iosevka,
 				ui-monospace,
 				"Cascadia Mono",
 				Menlo,
@@ -21,7 +21,6 @@
 				monospace,
 			)
 		),
-	$default-font: "mono",
 
 	// opacity variants: 1.1 mb
 	$use-color-opacity-modifiers: false,

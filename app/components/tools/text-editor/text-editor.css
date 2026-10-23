@@ -1,0 +1,478 @@
+/* inlined from prosemirror-view,-gapcursor,-tables css; keyframes renamed; white-space fallback dropped */
+.ProseMirror {
+	position: relative;
+	overflow-wrap: break-word;
+	white-space: break-spaces;
+	font-variant-ligatures: none;
+	font-feature-settings: "liga" 0;
+}
+
+.ProseMirror pre {
+	white-space: pre-wrap;
+}
+
+.ProseMirror li {
+	position: relative;
+}
+
+.ProseMirror-hideselection *::selection {
+	background: transparent;
+}
+
+.ProseMirror-hideselection {
+	caret-color: transparent;
+}
+
+.ProseMirror [draggable][contenteditable="false"] {
+	user-select: text;
+}
+
+.ProseMirror-selectednode {
+	outline: 2px solid var(--canon-primary);
+}
+
+/* outline wraps list markers */
+li.ProseMirror-selectednode {
+	outline: none;
+}
+
+li.ProseMirror-selectednode::after {
+	position: absolute;
+	inset: -2px -2px -2px -32px;
+	border: 2px solid var(--canon-primary);
+	content: "";
+	pointer-events: none;
+}
+
+/* override generic img rules */
+img.ProseMirror-separator {
+	display: inline !important;
+	margin: 0 !important;
+	border: none !important;
+}
+
+.ProseMirror-gapcursor {
+	position: absolute;
+	display: none;
+	pointer-events: none;
+}
+
+.ProseMirror-gapcursor::after {
+	position: absolute;
+	top: -2px;
+	display: block;
+	inline-size: 20px;
+	border-top: 1px solid var(--canon-foreground);
+	content: "";
+	animation: te-cursor-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes te-cursor-blink {
+	to {
+		visibility: hidden;
+	}
+}
+
+.ProseMirror-focused .ProseMirror-gapcursor {
+	display: block;
+}
+
+.ProseMirror .tableWrapper {
+	overflow-x: auto;
+}
+
+.ProseMirror table {
+	overflow: hidden;
+	inline-size: 100%;
+	border-collapse: collapse;
+	table-layout: fixed;
+}
+
+.ProseMirror td,
+.ProseMirror th {
+	position: relative;
+	box-sizing: border-box;
+	vertical-align: top;
+}
+
+.ProseMirror td:not([data-colwidth], .column-resize-dragging),
+.ProseMirror th:not([data-colwidth], .column-resize-dragging) {
+	min-inline-size: var(--default-cell-min-width);
+}
+
+.ProseMirror .column-resize-handle {
+	position: absolute;
+	top: 0;
+	right: -2px;
+	bottom: 0;
+	z-index: 20;
+	inline-size: 4px;
+	background-color: var(--canon-primary);
+	pointer-events: none;
+}
+
+.ProseMirror.resize-cursor {
+	cursor: col-resize;
+}
+
+.ProseMirror .selectedCell::after {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	background: color-mix(in srgb, var(--canon-primary) 20%, transparent);
+	content: "";
+	pointer-events: none;
+}
+
+.text-editor {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	block-size: 100%;
+	min-block-size: 0;
+	background: var(--canon-card);
+}
+
+.te-bar {
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.te-bar > .canon-button.canon-button {
+	min-block-size: var(--canon-control-height);
+}
+
+.te-figures {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 4px 16px;
+	padding: 6px var(--canon-panel-padding);
+	border-block-start: var(--canon-hairline) solid var(--canon-border);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+}
+
+.te-figure-value {
+	color: var(--canon-foreground);
+	font-variant-numeric: tabular-nums;
+}
+
+/* the picture: iOS ManuscriptView */
+.te-pane {
+	/* gutter: lead 12, labels 48, rule 8, text 12 */
+	--te-rule: 68px;
+	--te-text: 80px;
+	--te-lead: var(--canon-panel-padding);
+	--te-size: var(--canon-text-body);
+
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-block-size: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.te-scroll {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+.te-page {
+	position: relative;
+	display: flex;
+	flex: 1 0 auto;
+	flex-direction: column;
+	box-sizing: border-box;
+	inline-size: 100%;
+
+	/* ios 680px measure */
+	max-inline-size: calc(
+		680px + var(--te-lead) + var(--canon-panel-padding)
+	);
+	margin-inline: auto;
+}
+
+.te-page--hidden {
+	display: none;
+}
+
+.te-host {
+	display: flex;
+	flex: 1 0 auto;
+	flex-direction: column;
+	padding-inline-start: var(--te-lead);
+}
+
+.te-pane--pad {
+	--te-lead: var(--te-text);
+}
+
+.te-pane .dt-editor {
+	flex: 1 0 auto;
+	box-sizing: border-box;
+	min-block-size: 0;
+	padding: 16px var(--canon-panel-padding) 32px 0;
+	color: var(--canon-foreground);
+	font-size: var(--te-size);
+	line-height: 1.7;
+}
+
+.te-pane--serif .dt-editor {
+	font-family: "Iowan Old Style", Georgia, serif;
+}
+
+.te-pane--mono .dt-editor {
+	font-family: var(--canon-mono-font);
+}
+
+.te-pane .dt-editor pre,
+.te-pane .dt-editor :not(pre) > code {
+	border-radius: 0;
+	background: var(--canon-muted);
+	font-family: var(--canon-mono-font);
+}
+
+.te-pane .dt-editor pre {
+	border: var(--canon-hairline) solid var(--canon-border);
+}
+
+.te-pane .dt-editor blockquote {
+	border-inline-start-color: var(--canon-primary);
+	color: var(--canon-muted-foreground);
+}
+
+.te-pane .dt-editor a {
+	color: var(--canon-primary);
+}
+
+.te-pane .dt-editor .dt-empty::before {
+	color: var(--canon-muted-foreground);
+	opacity: 1;
+}
+
+/* empty: the dashed box, the place to type */
+.te-page--empty .dt-editor {
+	margin-block: 16px;
+	margin-inline-end: var(--canon-panel-padding);
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.te-page--empty .dt-editor.ProseMirror-focused {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+.te-page--empty .te-gutter {
+	display: none;
+}
+
+.te-pane--typewriter .dt-editor {
+	padding-block-end: 50vh;
+}
+
+.te-gutter {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: calc(var(--te-rule) - 8px);
+	pointer-events: none;
+	user-select: none;
+}
+
+.te-gutter-row {
+	position: absolute;
+	inset-inline: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	color: var(--canon-muted-foreground);
+	line-height: 1.25;
+}
+
+.te-gutter-row--lit {
+	color: var(--canon-primary);
+}
+
+.te-block-trigger {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font-family: var(--canon-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+	cursor: pointer;
+	pointer-events: auto;
+}
+
+.te-block-trigger:hover {
+	color: var(--canon-foreground);
+}
+
+.te-block-trigger:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 1px;
+}
+
+.te-gutter-field {
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	white-space: nowrap;
+	opacity: 0.7;
+}
+
+.te-margin {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: var(--te-rule);
+	inline-size: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.te-menu-point {
+	position: absolute;
+	inset-inline-start: 12px;
+	inline-size: 0;
+	block-size: 0;
+}
+
+.te-source {
+	flex: 1 0 auto;
+	box-sizing: border-box;
+	inline-size: 100%;
+	max-inline-size: calc(680px + 2 * var(--canon-panel-padding));
+	min-block-size: 100%;
+	margin: 0 auto;
+	padding: 16px var(--canon-panel-padding) 32px;
+	border: 0;
+	background: transparent;
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-subheadline);
+	line-height: 1.6;
+	resize: none;
+	outline: none;
+}
+
+.te-source:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--canon-primary);
+}
+
+/* the selection's format bar */
+.te-bubble {
+	position: absolute;
+	z-index: 5;
+	display: flex;
+	gap: var(--canon-hairline);
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-border);
+	box-shadow: var(--canon-popover-shadow);
+	transform: translate(-50%, -100%);
+}
+
+.te-bubble--below {
+	transform: translate(-50%, 0);
+}
+
+.te-bubble-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 36px;
+	block-size: 36px;
+	padding: 0;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	cursor: pointer;
+}
+
+.te-bubble-btn svg {
+	inline-size: 16px;
+	block-size: 16px;
+}
+
+.te-bubble-btn:hover {
+	background: var(--canon-muted);
+}
+
+.te-bubble-btn[aria-pressed="true"] {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.te-bubble-btn:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* ios ManuscriptFullScreenViewController size */
+.te-pane--zen {
+	--te-size: 20px;
+}
+
+.te-pane--zen .te-page {
+	padding-block-start: 44px;
+}
+
+/* a manual popover: undo the UA popover box */
+.te-pane--overlay {
+	position: fixed;
+	inset: 0;
+	inline-size: auto;
+	block-size: auto;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+}
+
+.te-zen-bar {
+	position: absolute;
+	inset-block-start: 4px;
+	inset-inline-end: 8px;
+	z-index: 6;
+	transition: opacity 0.3s;
+}
+
+.te-count {
+	position: absolute;
+	inset-block-end: 16px;
+	inset-inline-start: 50%;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	transform: translateX(-50%);
+	transition: opacity 0.3s;
+	pointer-events: none;
+}
+
+.te-pane--faded .te-zen-bar:not(:hover, :focus-within),
+.te-pane--faded .te-count {
+	opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.te-zen-bar,
+	.te-count {
+		transition: none;
+	}
+
+	.ProseMirror-gapcursor::after {
+		animation: none;
+	}
+}
+
+/* square corners, as the kit */
+.te-pane .pm-para-active,
+.te-pane .pm-sentence-active {
+	border-radius: 0;
+}

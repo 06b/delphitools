@@ -1,0 +1,150 @@
+/* picture: the text as the editor */
+.wc-picture {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	container-type: inline-size;
+}
+
+.wc-picture-head,
+.wc-picture-text {
+	box-sizing: border-box;
+	inline-size: min(100%, 736px);
+	margin-inline: auto;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.wc-picture-head {
+	display: flex;
+	flex: none;
+	gap: 24px;
+	align-items: center;
+	block-size: 44px;
+	margin-block-start: 6px;
+}
+
+.wc-picture-tools {
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-inline-start: auto;
+}
+
+.wc-picture-scroll {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+.wc-picture-text {
+	display: grid;
+	padding-block: 4px var(--canon-panel-padding);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: 17px;
+	line-height: 1.5;
+}
+
+@container (min-width: 560px) {
+	.wc-picture-text {
+		font-size: 19px;
+	}
+}
+
+/* both in one cell, set alike, so the mirror's height is the text's */
+.wc-mirror,
+.wc-editor {
+	grid-area: 1 / 1;
+	min-inline-size: 0;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+.wc-mirror {
+	visibility: hidden;
+}
+
+.wc-editor {
+	box-sizing: border-box;
+	min-block-size: 240px;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	caret-color: var(--canon-primary);
+	font: inherit;
+	line-height: inherit;
+	resize: none;
+	outline: none;
+}
+
+.wc-editor::placeholder {
+	color: var(--canon-muted-foreground);
+}
+
+/* empty: the dashed box iOS shows, now the place to type */
+.wc-editor:placeholder-shown {
+	padding: 12px;
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	font-size: var(--canon-text-subheadline);
+}
+
+.wc-editor:focus-visible:placeholder-shown {
+	border-style: solid;
+	border-color: var(--canon-primary);
+}
+
+/* counts: figure over its caption */
+.wc-figure {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: flex-start;
+	min-inline-size: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.wc-figure-label {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+}
+
+/* most frequent: word, times, the share as a 4 px bar along the bottom */
+.wc-frequent {
+	position: relative;
+	display: flex;
+	gap: 12px;
+	align-items: baseline;
+	padding: 12px var(--canon-panel-padding) 14px;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+}
+
+.wc-frequent-word {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: 16px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wc-frequent-times {
+	flex: none;
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.word-counter .wc-frequent-bar {
+	position: absolute;
+	inset: auto 0 0;
+	block-size: 4px;
+}

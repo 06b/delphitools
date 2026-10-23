@@ -155,8 +155,62 @@ export function globalMask(
 
 export function invertMask(mask: PixelMask): PixelMask {
 	const data = new Uint8Array(mask.data.length);
-	for (let i = 0; i < data.length; i++) data[i] = mask.data[i] ? 0 : 255;
+	for (let i = 0; i < data.length; i++) data[i] = 255 - mask.data[i]!;
 	return { data, width: mask.width, height: mask.height };
+}
+
+// iOS SelectionMask.combined: Add takes the larger cover, Remove cuts the
+// shape out of the base
+export function combineMask(
+	base: PixelMask,
+	shape: PixelMask,
+	removing: boolean,
+): PixelMask {
+	const data = new Uint8Array(base.data.length);
+	for (let i = 0; i < data.length; i++) {
+		const a = base.data[i]!;
+		const b = shape.data[i] ?? 0;
+		data[i] = removing ? Math.min(a, 255 - b) : Math.max(a, b);
+	}
+	return { data, width: base.width, height: base.height };
+}
+
+function boxBlur(
+	src: Uint8Array,
+	dst: Uint8Array,
+	width: number,
+	height: number,
+	r: number,
+	horizontal: boolean,
+): void {
+	const lines = horizontal ? height : width;
+	const len = horizontal ? width : height;
+	const step = horizontal ? 1 : width;
+	const span = 2 * r + 1;
+	for (let l = 0; l < lines; l++) {
+		const start = horizontal ? l * width : l;
+		const at = (i: number) =>
+			src[start + Math.min(len - 1, Math.max(0, i)) * step]!;
+		let sum = 0;
+		for (let i = -r; i <= r; i++) sum += at(i);
+		for (let i = 0; i < len; i++) {
+			dst[start + i * step] = Math.round(sum / span);
+			sum += at(i + r + 1) - at(i - r);
+		}
+	}
+}
+
+// three box passes approximate a gaussian of the radius (iOS feathered)
+export function featherMask(mask: PixelMask, radius: number): PixelMask {
+	const r = Math.max(1, Math.round(radius / 3));
+	const { width, height } = mask;
+	const a = Uint8Array.from(mask.data);
+	const b = new Uint8Array(a.length);
+	for (let pass = 0; pass < 3; pass++) {
+		boxBlur(a, b, width, height, r, true);
+		boxBlur(b, a, width, height, r, false);
+	}
+	return { data: a, width, height };
 }
 
 function morphMask(
@@ -255,7 +309,7 @@ export function traceOutline(mask: PixelMask): Path2D {
 		py >= 0 &&
 		px < width &&
 		py < height &&
-		data[py * width + px]
+		data[py * width + px]! >= 128
 			? 1
 			: 0;
 	for (let cy = 0; cy <= height; cy++) {

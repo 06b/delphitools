@@ -1,11 +1,14 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { eq } from 'ember-truth-helpers';
 import { LinkTo } from '@ember/routing';
-import Dialog from 'delphitools-v2/components/ui/dialog';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonDialog from 'delphicanon/components/canon-dialog';
 import Icon from 'delphitools-v2/components/icon';
+import './whats-new.css';
 
 const PILL_TEXT = 'welcome to delphitools 2.0!';
 
@@ -17,8 +20,16 @@ const SLIDES = [0, 1, 2, 3];
 export default class WhatsNew extends Component {
 	@tracked slide = 0;
 	@tracked revealed = false;
+	@tracked isOpen = false;
 
 	pillId = `${guidFor(this)}-pill`;
+	titleId = `${guidFor(this)}-title`;
+
+	open = (event: Event) => {
+		// webkit leaves a clicked button unfocused; the dialog returns focus to it
+		(event.currentTarget as HTMLElement).focus();
+		this.isOpen = true;
+	};
 
 	toggle = () => {
 		this.revealed = !this.revealed;
@@ -40,44 +51,48 @@ export default class WhatsNew extends Component {
 		this.slide = Math.min(SLIDES.length - 1, this.slide + 1);
 	};
 
-	reset = () => {
+	closed = () => {
+		this.isOpen = false;
 		this.slide = 0;
 	};
 
 	<template>
-		<Dialog @onClose={{this.reset}} as |d|>
+		<button
+			type="button"
+			class="dt-hero-reveal"
+			aria-label={{if
+				this.revealed
+				"Hide welcome"
+				"Show welcome"
+			}}
+			aria-expanded={{if this.revealed "true" "false"}}
+			aria-controls={{if this.revealed this.pillId}}
+			{{on "click" this.toggle}}
+		>
+			<Icon @name="chevron-right" />
+		</button>
+		{{#if this.revealed}}
 			<button
 				type="button"
-				class="dt-hero-reveal"
-				aria-label={{if
-					this.revealed
-					"Hide welcome"
-					"Show welcome"
-				}}
-				aria-expanded={{if
-					this.revealed
-					"true"
-					"false"
-				}}
-				aria-controls={{if this.revealed this.pillId}}
-				{{on "click" this.toggle}}
+				id={{this.pillId}}
+				class="dt-hero-pill"
+				{{on "click" this.open}}
 			>
-				<Icon @name="chevron-right" />
+				<Icon @name="party-popper" />
+				{{PILL_TEXT}}
 			</button>
-			{{#if this.revealed}}
-				<button
-					type="button"
-					id={{this.pillId}}
-					class="dt-hero-pill"
-					{{d.focusOnClose}}
-					{{on "click" d.open}}
-				>
-					<Icon @name="party-popper" />
-					{{PILL_TEXT}}
-				</button>
-			{{/if}}
-			<d.Content class="dt-wn">
-				<h2 class="dt-sr-only">delphitools 2.0</h2>
+		{{/if}}
+		<CanonDialog
+			class="dt-wn"
+			@open={{this.isOpen}}
+			@onClose={{this.closed}}
+			aria-labelledby={{this.titleId}}
+		>
+			<:default>
+				<h2
+					class="dt-sr-only"
+					id={{this.titleId}}
+				>delphitools 2.0</h2>
 				<div class="dt-wn-slide">
 					{{#if (eq this.slide 0)}}
 						<img
@@ -223,34 +238,30 @@ export default class WhatsNew extends Component {
 						></span>
 					{{/each}}
 				</div>
-				<div class="dt-wn-footer">
-					<button
-						type="button"
-						class="dt-wn-btn is-ghost"
-						disabled={{this.atStart}}
-						{{on "click" this.back}}
-					>
-						Back
-					</button>
-					{{#if this.atEnd}}
-						<button
-							type="button"
-							class="dt-wn-btn is-primary"
-							{{on "click" d.close}}
-						>
-							let’s go
-						</button>
-					{{else}}
-						<button
-							type="button"
-							class="dt-wn-btn is-primary"
-							{{on "click" this.next}}
-						>
-							Next
-						</button>
-					{{/if}}
-				</div>
-			</d.Content>
-		</Dialog>
+			</:default>
+			<:footer as |close|>
+				<CanonButton
+					class="dt-wn-btn is-ghost"
+					@text="Back"
+					@disabled={{this.atStart}}
+					@onClick={{this.back}}
+				/>
+				{{#if this.atEnd}}
+					<CanonButton
+						class="dt-wn-btn is-primary"
+						@kind="primary"
+						@text="let’s go"
+						@onClick={{fn close ""}}
+					/>
+				{{else}}
+					<CanonButton
+						class="dt-wn-btn is-primary"
+						@kind="primary"
+						@text="Next"
+						@onClick={{this.next}}
+					/>
+				{{/if}}
+			</:footer>
+		</CanonDialog>
 	</template>
 }

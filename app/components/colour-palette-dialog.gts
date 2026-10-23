@@ -3,14 +3,16 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonDialog from 'delphicanon/components/canon-dialog';
 import Icon from 'delphitools-v2/components/icon';
-import Dialog from 'delphitools-v2/components/ui/dialog';
 import {
 	contrastText,
 	rgbToCmyk,
 	rgbToHex,
 	rgbToHsl,
 } from 'delphitools-v2/lib/colour-maths';
+import './colour-palette-dialog.css';
 
 // canvas resolves theme tokens
 
@@ -93,6 +95,18 @@ function readPalette(nameOf: (hex: string) => string): Entry[] {
 
 export default class ColourPaletteDialog extends Component {
 	@tracked entries: Entry[] = [];
+	@tracked isOpen = false;
+
+	open = (event: Event) => {
+		// webkit leaves a clicked button unfocused; the dialog returns focus to it
+		(event.currentTarget as HTMLElement).focus();
+		this.isOpen = true;
+		void this.load();
+	};
+
+	closed = () => {
+		this.isOpen = false;
+	};
 
 	// defer colour-name database
 	load = async () => {
@@ -106,30 +120,22 @@ export default class ColourPaletteDialog extends Component {
 	};
 
 	<template>
-		<Dialog as |d|>
-			<button
-				type="button"
-				class="dt-palette-trigger"
-				{{d.focusOnClose}}
-				{{on "click" d.open}}
-				{{on "click" this.load}}
-			>
-				<Icon @name="swatch-book" />
-				View colour palette
-			</button>
+		<button
+			type="button"
+			class="dt-palette-trigger"
+			{{on "click" this.open}}
+		>
+			<Icon @name="swatch-book" />
+			View colour palette
+		</button>
 
-			<d.Content class="dt-dialog dt-palette-dialog">
-				<header class="dt-dialog-head">
-					<h2>Colour palette</h2>
-					<button
-						type="button"
-						class="dt-dialog-close"
-						aria-label="Close"
-						{{on "click" d.close}}
-					>
-						<Icon @name="x" />
-					</button>
-				</header>
+		<CanonDialog
+			class="dt-palette-dialog"
+			@open={{this.isOpen}}
+			@title="Colour palette"
+			@onClose={{this.closed}}
+		>
+			<:default>
 
 				<div class="dt-swatches">
 					{{#each this.entries key="hex" as |e|}}
@@ -210,7 +216,13 @@ export default class ColourPaletteDialog extends Component {
 				</div>
 
 				<p class="dt-swatches-note">{{CMYK_NOTE}}</p>
-			</d.Content>
-		</Dialog>
+			</:default>
+			<:footer as |close|>
+				<CanonButton
+					@text="Close"
+					@onClick={{fn close ""}}
+				/>
+			</:footer>
+		</CanonDialog>
 	</template>
 }

@@ -439,6 +439,8 @@ const families: [string, (i: number, t: number, rnd: Rnd) => string][] = [
 
 export const MASK_COLUMNS = families.length;
 
+export const MASK_FAMILIES = families.map(([id]) => id);
+
 // shuffle breaks family columns
 export const MASK_SHAPES: MaskShape[] = (() => {
 	const all = families.flatMap(([id, at], f) =>

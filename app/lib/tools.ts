@@ -38,16 +38,23 @@ export interface Tool {
 	icon: IconName;
 	href: string;
 	beta?: boolean;
-	new?: boolean;
 	external?: boolean;
+	// opens the magazine at the page with this id
+	magazine?: boolean;
 	route?: string;
 	highlight?: boolean;
 	atlas?: boolean;
-	wide?: boolean;
+	// kit-built; drawer marker
+	canon?: boolean;
+	// a canon tool whose picture may grow past the 1200 px column
+	expands?: boolean;
 	accepts?: string[];
 	carryColour?: boolean;
 	// same vocabulary as accepts
 	produces?: string[];
+	keywords?: string[];
+	// registry file when not id
+	component?: string;
 }
 
 export interface ToolCategory {
@@ -55,6 +62,8 @@ export interface ToolCategory {
 	name: string;
 	tools: Tool[];
 }
+
+export const CANON_KIT_ID = 'canon-ui-kit';
 
 export const toolCategories: ToolCategory[] = [
 	{
@@ -68,6 +77,8 @@ export const toolCategories: ToolCategory[] = [
 					'Put non-square images on a square matte',
 				icon: 'square',
 				href: '/tools/matte-genny',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
@@ -78,6 +89,8 @@ export const toolCategories: ToolCategory[] = [
 					'Split images for Instagram carousel scrolls',
 				icon: 'gallery-vertical',
 				href: '/tools/scroll-genny',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
@@ -90,6 +103,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/social-cropper',
 				produces: ['image/png'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'watermarker',
@@ -97,6 +112,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Add watermarks to images',
 				icon: 'stamp',
 				href: '/tools/watermarker',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
@@ -115,7 +132,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/colour-atlas',
 				atlas: true,
 				carryColour: true,
-				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'colorblind-sim',
@@ -126,6 +144,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/colorblind-sim',
 				accepts: ['image/*'],
 				carryColour: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'colour-converter',
@@ -135,6 +155,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/colour-converter',
 				produces: [COLOUR_OUTPUT],
 				carryColour: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'contrast-checker',
@@ -144,16 +166,19 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'contrast',
 				href: '/tools/contrast-checker',
 				carryColour: true,
+				canon: true,
 			},
 			{
 				id: 'gradient-genny',
 				name: 'Gradient Generator',
 				description:
-					'Create linear, corner, and mesh gradients',
+					'Create linear, corner, and freeform gradients',
 				icon: 'blend',
 				href: '/tools/gradient-genny',
 				produces: ['image/png'],
 				carryColour: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'harmony-genny',
@@ -162,6 +187,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'rainbow',
 				href: '/tools/harmony-genny',
 				carryColour: true,
+				canon: true,
 			},
 			{
 				id: 'palette-collection',
@@ -169,6 +195,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Browse curated colour palettes',
 				icon: 'library',
 				href: '/tools/palette-collection',
+				canon: true,
 			},
 			{
 				id: 'palette-extractor',
@@ -178,6 +205,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'palette',
 				href: '/tools/palette-extractor',
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'palette-genny',
@@ -187,6 +216,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'pen-line',
 				href: '/tools/palette-genny',
 				produces: ['image/png'],
+				canon: true,
 			},
 			{
 				id: 'pixel-picker',
@@ -197,6 +227,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/pixel-picker',
 				produces: [COLOUR_OUTPUT],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'tailwind-shades',
@@ -205,6 +237,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'wind',
 				href: '/tools/tailwind-shades',
 				carryColour: true,
+				canon: true,
 			},
 		],
 	},
@@ -221,8 +254,9 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-atlas',
 				atlas: true,
 				accepts: ['image/*'],
-				new: true,
 				beta: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'substrata',
@@ -256,6 +290,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/artwork-enhancer',
 				produces: ['image/png'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'background-remover',
@@ -267,6 +303,8 @@ export const toolCategories: ToolCategory[] = [
 				produces: ['image/png'],
 				accepts: ['image/*'],
 				beta: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'favicon-genny',
@@ -274,6 +312,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Generate favicons from any image',
 				icon: 'image',
 				href: '/tools/favicon-genny',
+				canon: true,
 				produces: [
 					'image/png',
 					'image/x-icon',
@@ -290,6 +329,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-clipper',
 				produces: ['image/png'],
 				accepts: ['.png'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'image-compressor',
@@ -298,6 +339,7 @@ export const toolCategories: ToolCategory[] = [
 					'Shrink JPEG, WebP, PNG and AVIF files',
 				icon: 'shrink',
 				href: '/tools/image-compressor',
+				canon: true,
 				produces: [
 					'image/webp',
 					'image/jpeg',
@@ -305,7 +347,6 @@ export const toolCategories: ToolCategory[] = [
 					'image/avif',
 				],
 				accepts: ['image/*'],
-				new: true,
 			},
 			{
 				id: 'image-converter',
@@ -314,6 +355,8 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between PNG, JPEG, WebP, JXL, GIF, BMP, TIFF, ICO, ICNS with resize and format options',
 				icon: 'refresh-cw',
 				href: '/tools/image-converter',
+				canon: true,
+				expands: true,
 				produces: [
 					'image/png',
 					'image/jpeg',
@@ -334,7 +377,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-deskewer',
 				produces: ['image/png'],
 				accepts: ['image/*'],
-				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'image-masker',
@@ -344,7 +388,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-masker',
 				produces: ['image/png'],
 				accepts: ['image/*'],
-				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'image-splitter',
@@ -352,6 +397,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Split images into tiles',
 				icon: 'scissors',
 				href: '/tools/image-splitter',
+				canon: true,
+				expands: true,
 				produces: ['image/png'],
 				accepts: ['image/*'],
 			},
@@ -361,6 +408,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Combine multiple images into one',
 				icon: 'combine',
 				href: '/tools/image-stitcher',
+				canon: true,
+				expands: true,
 				produces: [
 					'image/png',
 					'image/jpeg',
@@ -378,6 +427,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/image-tracer',
 				produces: ['image/svg+xml'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'metadata-stripper',
@@ -386,14 +437,15 @@ export const toolCategories: ToolCategory[] = [
 					'Strip EXIF and GPS metadata from images',
 				icon: 'shield-check',
 				href: '/tools/metadata-stripper',
+				canon: true,
 				produces: [
 					'image/jpeg',
 					'image/png',
 					'image/webp',
 					'image/gif',
+					'application/pdf',
 				],
-				accepts: ['image/*'],
-				new: true,
+				accepts: ['image/*', 'application/pdf'],
 			},
 			{
 				id: 'paste-image',
@@ -404,6 +456,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/paste-image',
 				produces: ['image/png'],
 				accepts: ['image/*'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'placeholder-genny',
@@ -412,6 +466,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'layout-grid',
 				href: '/tools/placeholder-genny',
 				produces: ['image/png', 'image/svg+xml'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'svg-optimiser',
@@ -419,6 +475,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Optimise and minify SVG files',
 				icon: 'file-image',
 				href: '/tools/svg-optimiser',
+				canon: true,
 				produces: ['image/svg+xml'],
 				accepts: ['.svg'],
 			},
@@ -430,6 +487,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'file-code',
 				href: '/tools/base64-image-encoder',
 				accepts: ['image/*'],
+				canon: true,
 			},
 		],
 	},
@@ -446,7 +504,8 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/audio-atlas',
 				atlas: true,
 				accepts: AUDIO_ACCEPT,
-				new: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'video-atlas',
@@ -454,9 +513,9 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Everything about one video file',
 				icon: 'clapperboard',
 				href: '/tools/video-atlas',
+				canon: true,
 				atlas: true,
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'audio-extractor',
@@ -465,6 +524,7 @@ export const toolCategories: ToolCategory[] = [
 					'Extract the audio out of a video file',
 				icon: 'file-audio',
 				href: '/tools/audio-extractor',
+				canon: true,
 				produces: [
 					'audio/wav',
 					'audio/mp4',
@@ -472,7 +532,6 @@ export const toolCategories: ToolCategory[] = [
 					'audio/flac',
 				],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'audio-normaliser',
@@ -480,9 +539,9 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Normalise audio loudness',
 				icon: 'gauge',
 				href: '/tools/audio-normaliser',
+				canon: true,
 				produces: ['audio/wav'],
 				accepts: AUDIO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'audio-trimmer',
@@ -491,9 +550,9 @@ export const toolCategories: ToolCategory[] = [
 					'Cut and fade audio, export as WAV',
 				icon: 'scissors',
 				href: '/tools/audio-trimmer',
+				canon: true,
 				produces: ['audio/wav'],
 				accepts: AUDIO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'auto-subtitle',
@@ -502,9 +561,9 @@ export const toolCategories: ToolCategory[] = [
 					'Transcribe audio and video to subtitles',
 				icon: 'captions',
 				href: '/tools/auto-subtitle',
+				canon: true,
 				produces: ['.srt', '.vtt'],
 				accepts: [...AUDIO_ACCEPT, ...VIDEO_ACCEPT],
-				new: true,
 			},
 			{
 				id: 'frame-extractor',
@@ -513,9 +572,10 @@ export const toolCategories: ToolCategory[] = [
 					'Grab stills and contact sheets from video',
 				icon: 'film',
 				href: '/tools/frame-extractor',
+				canon: true,
+				expands: true,
 				produces: ['image/png', 'application/zip'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'screen-recorder',
@@ -525,7 +585,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'monitor-up',
 				href: '/tools/screen-recorder',
 				produces: ['video/webm'],
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'subtitle-converter',
@@ -536,7 +596,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/subtitle-converter',
 				produces: ['.srt', '.vtt'],
 				accepts: SUBTITLE_ACCEPT,
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'subtitle-studio',
@@ -546,7 +606,7 @@ export const toolCategories: ToolCategory[] = [
 				href: '/tools/subtitle-studio',
 				produces: ['video/webm'],
 				accepts: [...VIDEO_ACCEPT, ...SUBTITLE_ACCEPT],
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'timecode-calc',
@@ -555,7 +615,7 @@ export const toolCategories: ToolCategory[] = [
 					'Add and subtract timecodes, drop-frame aware',
 				icon: 'clock',
 				href: '/tools/timecode-calc',
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'video-muter',
@@ -563,9 +623,9 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Strip the audio from a video',
 				icon: 'volume-x',
 				href: '/tools/video-muter',
+				canon: true,
 				produces: ['video/mp4', 'video/webm'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'video-to-gif',
@@ -574,9 +634,9 @@ export const toolCategories: ToolCategory[] = [
 					'Turn video clips into looping GIFs',
 				icon: 'clapperboard',
 				href: '/tools/video-to-gif',
+				canon: true,
 				produces: ['image/gif'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'video-trimmer',
@@ -584,9 +644,9 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Cut a video in/out style',
 				icon: 'scissors',
 				href: '/tools/video-trimmer',
+				canon: true,
 				produces: ['video/mp4', 'video/webm'],
 				accepts: VIDEO_ACCEPT,
-				new: true,
 			},
 			{
 				id: 'voice-recorder',
@@ -596,7 +656,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'mic',
 				href: '/tools/voice-recorder',
 				produces: ['audio/webm'],
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'waveform-genny',
@@ -605,9 +665,10 @@ export const toolCategories: ToolCategory[] = [
 					'Render audio waveforms as PNG or SVG',
 				icon: 'audio-waveform',
 				href: '/tools/waveform-genny',
+				canon: true,
+				expands: true,
 				produces: ['image/png', 'image/svg+xml'],
 				accepts: AUDIO_ACCEPT,
-				new: true,
 			},
 		],
 	},
@@ -622,6 +683,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert documents between Markdown, HTML, Word, LaTeX, EPUB and more',
 				icon: 'file-type-2',
 				href: '/tools/doc-converter',
+				canon: true,
 				produces: [
 					'.md',
 					'.html',
@@ -643,6 +705,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Distraction-free Markdown writer',
 				icon: 'pen-line',
 				href: '/tools/text-editor',
+				canon: true,
 				accepts: TEXT_ACCEPT,
 			},
 			{
@@ -651,6 +714,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Explore font file contents',
 				icon: 'file-type',
 				href: '/tools/font-explorer',
+				canon: true,
+				expands: true,
 				accepts: ['.ttf', '.otf', '.woff', '.woff2'],
 			},
 			{
@@ -659,6 +724,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Browse unicode glyphs',
 				icon: 'type',
 				href: '/tools/glyph-browser',
+				canon: true,
 			},
 			{
 				id: 'large-type',
@@ -666,7 +732,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Text, but big',
 				icon: 'case-upper',
 				href: '/tools/large-type',
-				wide: true,
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'line-height-calc',
@@ -674,6 +741,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Calculate optimal line heights',
 				icon: 'type',
 				href: '/tools/line-height-calc',
+				canon: true,
 			},
 			{
 				id: 'paper-sizes',
@@ -681,6 +749,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Reference for paper dimensions',
 				icon: 'file-text',
 				href: '/tools/paper-sizes',
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'px-to-rem',
@@ -688,6 +758,8 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Convert pixels to rem units',
 				icon: 'ruler',
 				href: '/tools/px-to-rem',
+				canon: true,
+				keywords: ['rem to px'],
 			},
 			{
 				id: 'text-diff',
@@ -697,7 +769,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'git-compare',
 				href: '/tools/text-diff',
 				accepts: ['text/*', '.txt', '.md'],
-				wide: true,
+				canon: true,
 			},
 			{
 				id: 'typo-calc',
@@ -706,6 +778,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between typographic units',
 				icon: 'hash',
 				href: '/tools/typo-calc',
+				canon: true,
 			},
 			{
 				id: 'word-counter',
@@ -713,6 +786,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Count words, characters and more',
 				icon: 'book-open',
 				href: '/tools/word-counter',
+				canon: true,
 			},
 		],
 	},
@@ -727,6 +801,7 @@ export const toolCategories: ToolCategory[] = [
 					'Analyse PDFs for print-readiness issues',
 				icon: 'file-search',
 				href: '/tools/pdf-preflight',
+				canon: true,
 				accepts: ['.pdf'],
 			},
 			{
@@ -736,6 +811,7 @@ export const toolCategories: ToolCategory[] = [
 					'Merge, split and rearrange PDF pages',
 				icon: 'file-stack',
 				href: '/tools/pdf-organiser',
+				canon: true,
 				produces: [
 					'application/pdf',
 					'application/zip',
@@ -745,16 +821,28 @@ export const toolCategories: ToolCategory[] = [
 			{
 				id: 'image-to-pdf',
 				name: 'Images to PDF',
-				description:
-					'Turn images into a PDF, or pages into PNGs',
+				description: 'Turn images into a PDF',
 				icon: 'file-image',
 				href: '/tools/image-to-pdf',
+				canon: true,
+				produces: ['application/pdf'],
+				accepts: ['image/*'],
+			},
+			{
+				id: 'pdf-to-images',
+				name: 'PDF to Images',
+				description: 'Turn PDF pages into images',
+				icon: 'images',
+				href: '/tools/pdf-to-images',
+				component: 'image-to-pdf',
+				canon: true,
 				produces: [
-					'application/pdf',
 					'image/png',
+					'image/jpeg',
+					'image/webp',
 					'application/zip',
 				],
-				accepts: ['image/*', '.pdf'],
+				accepts: ['.pdf'],
 			},
 			{
 				id: 'pdf-rotate-crop',
@@ -763,6 +851,7 @@ export const toolCategories: ToolCategory[] = [
 					'Rotate or crop pages or entire documents',
 				icon: 'crop',
 				href: '/tools/pdf-rotate-crop',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},
@@ -773,6 +862,7 @@ export const toolCategories: ToolCategory[] = [
 					'Add page numbers or stamps to documents',
 				icon: 'file-digit',
 				href: '/tools/pdf-page-numberer',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},
@@ -782,6 +872,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Shrink PDF filesizes',
 				icon: 'shrink',
 				href: '/tools/pdf-compressor',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},
@@ -798,6 +889,7 @@ export const toolCategories: ToolCategory[] = [
 					'Impose PDF pages for booklet, saddle-stitch, and N-up printing',
 				icon: 'layers',
 				href: '/tools/imposer',
+				canon: true,
 				produces: ['application/pdf'],
 				accepts: ['.pdf'],
 			},
@@ -809,7 +901,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'book-open',
 				href: '/tools/zine-imposer',
 				produces: ['application/pdf'],
-				accepts: ['.pdf'],
+				accepts: ['.pdf', 'image/*'],
+				canon: true,
 			},
 		],
 	},
@@ -824,7 +917,7 @@ export const toolCategories: ToolCategory[] = [
 					'Build a cron expression field by field or decode one',
 				icon: 'calendar-clock',
 				href: '/tools/cron-builder',
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'http-status',
@@ -833,7 +926,7 @@ export const toolCategories: ToolCategory[] = [
 					'Search HTTP status codes with phrases and spec references',
 				icon: 'server',
 				href: '/tools/http-status',
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'json-formatter',
@@ -843,8 +936,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'braces',
 				href: '/tools/json-formatter',
 				produces: ['application/json'],
-				new: true,
 				accepts: ['.json'],
+				canon: true,
 			},
 			{
 				id: 'jwt-decoder',
@@ -853,7 +946,7 @@ export const toolCategories: ToolCategory[] = [
 					"Decode a JWT's header, payload & claims",
 				icon: 'key-square',
 				href: '/tools/jwt-decoder',
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'meta-tag-genny',
@@ -861,6 +954,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Generate HTML meta tags',
 				icon: 'tag',
 				href: '/tools/meta-tag-genny',
+				canon: true,
 			},
 			{
 				id: 'regex-tester',
@@ -868,6 +962,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Test regular expressions',
 				icon: 'regex',
 				href: '/tools/regex-tester',
+				canon: true,
 			},
 			{
 				id: 'request-builder',
@@ -875,7 +970,7 @@ export const toolCategories: ToolCategory[] = [
 				description: 'Compose a cURL or HTTP request',
 				icon: 'terminal',
 				href: '/tools/request-builder',
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'tailwind-cheatsheet',
@@ -884,6 +979,7 @@ export const toolCategories: ToolCategory[] = [
 					'Quick reference for Tailwind classes',
 				icon: 'book-open',
 				href: '/tools/tailwind-cheatsheet',
+				canon: true,
 			},
 			{
 				id: 'uuid-genny',
@@ -892,7 +988,7 @@ export const toolCategories: ToolCategory[] = [
 					'Generate bulk UUID v4 or v7 and Nano IDs',
 				icon: 'fingerprint',
 				href: '/tools/uuid-genny',
-				new: true,
+				canon: true,
 			},
 		],
 	},
@@ -908,6 +1004,8 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'barcode',
 				href: '/tools/code-genny',
 				produces: ['image/png', 'application/zip'],
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'decoder',
@@ -916,6 +1014,7 @@ export const toolCategories: ToolCategory[] = [
 					'Decode classical ciphers manually or auto-detect the cipher',
 				icon: 'key-round',
 				href: '/tools/decoder',
+				canon: true,
 			},
 			{
 				id: 'password-genny',
@@ -924,15 +1023,17 @@ export const toolCategories: ToolCategory[] = [
 					'Generate strong passwords or multi-word passphrases',
 				icon: 'key-square',
 				href: '/tools/password-genny',
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'qr-genny',
 				name: 'QR Generator',
 				description:
-					'Generate styled QR codes with custom colors, shapes, and logos',
+					'Generate styled QR codes with custom colours, shapes, and logos',
 				icon: 'qr-code',
 				href: '/tools/qr-genny',
+				canon: true,
+				expands: true,
 				produces: [
 					'image/png',
 					'image/svg+xml',
@@ -946,6 +1047,7 @@ export const toolCategories: ToolCategory[] = [
 					'Text editor with manipulation tools',
 				icon: 'pen-line',
 				href: '/tools/markdown-writer',
+				canon: true,
 				produces: ['text/plain'],
 				accepts: TEXT_ACCEPT,
 			},
@@ -962,6 +1064,7 @@ export const toolCategories: ToolCategory[] = [
 					'Symbolic algebra: simplify, factor, solve, derivatives',
 				icon: 'variable',
 				href: '/tools/algebra-calc',
+				canon: true,
 			},
 			{
 				id: 'base-converter',
@@ -970,6 +1073,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between decimal, hex, binary, and octal',
 				icon: 'binary',
 				href: '/tools/base-converter',
+				canon: true,
 			},
 			{
 				id: 'encoder',
@@ -978,6 +1082,7 @@ export const toolCategories: ToolCategory[] = [
 					'Base64, URL encoding, and hash generation',
 				icon: 'file-code',
 				href: '/tools/encoder',
+				canon: true,
 			},
 			{
 				id: 'graph-calc',
@@ -986,6 +1091,8 @@ export const toolCategories: ToolCategory[] = [
 					'Plot and visualise mathematical functions',
 				icon: 'line-chart',
 				href: '/tools/graph-calc',
+				canon: true,
+				expands: true,
 			},
 			{
 				id: 'sci-calc',
@@ -994,6 +1101,7 @@ export const toolCategories: ToolCategory[] = [
 					'Full-featured scientific calculator with history',
 				icon: 'calculator',
 				href: '/tools/sci-calc',
+				canon: true,
 			},
 			{
 				id: 'time-calc',
@@ -1002,6 +1110,7 @@ export const toolCategories: ToolCategory[] = [
 					'Unix timestamps, date arithmetic, timezone conversion',
 				icon: 'clock',
 				href: '/tools/time-calc',
+				canon: true,
 			},
 			{
 				id: 'unit-converter',
@@ -1010,6 +1119,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between units of length, weight, data, and more',
 				icon: 'scale',
 				href: '/tools/unit-converter',
+				canon: true,
 			},
 		],
 	},
@@ -1025,6 +1135,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'languages',
 				href: '/tools/shavian-transliterator',
 				produces: ['image/png'],
+				canon: true,
 			},
 			{
 				id: 'morse-code',
@@ -1034,7 +1145,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'radio',
 				href: '/tools/morse-code',
 				produces: ['text/plain'],
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'braille-converter',
@@ -1043,7 +1154,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'grip-vertical',
 				href: '/tools/braille-converter',
 				produces: ['text/plain'],
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'ipa-transcriber',
@@ -1052,7 +1163,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'ear',
 				href: '/tools/ipa-transcriber',
 				produces: ['text/plain'],
-				new: true,
+				canon: true,
 			},
 			{
 				id: 'nato-phonetic',
@@ -1062,7 +1173,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'radio-tower',
 				href: '/tools/nato-phonetic',
 				produces: ['text/plain'],
-				new: true,
+				canon: true,
 			},
 		],
 	},
@@ -1078,6 +1189,7 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'smartphone',
 				href: 'https://apps.apple.com/us/app/delphitools/id6761313703',
 				external: true,
+				magazine: true,
 			},
 			{
 				id: 'cli',
@@ -1087,6 +1199,17 @@ export const toolCategories: ToolCategory[] = [
 				icon: 'square-terminal',
 				href: 'https://github.com/1612elphi/delphitools-cli',
 				external: true,
+				magazine: true,
+			},
+			{
+				id: CANON_KIT_ID,
+				name: "Delphi's Canon UI Kit",
+				description:
+					'The components that make up delphitools',
+				icon: 'component',
+				href: '/canon',
+				route: 'canon',
+				magazine: true,
 			},
 		],
 	},
@@ -1101,6 +1224,7 @@ export const toolCategories: ToolCategory[] = [
 					'Convert between bananas, Waleses and Warhols',
 				icon: 'banana',
 				href: '/tools/stupid-units',
+				canon: true,
 			},
 			{
 				id: 'recipe-table',
@@ -1109,13 +1233,14 @@ export const toolCategories: ToolCategory[] = [
 					'Write a recipe as a Cooking for Engineers table',
 				icon: 'chef-hat',
 				href: '/tools/recipe-table',
-				wide: true,
+				canon: true,
+				expands: true,
 			},
 		],
 	},
 ];
 
-export const EXPERIMENTS_ID = 'experiments';
+const EXPERIMENTS_ID = 'experiments';
 
 export const experimentsCategory = toolCategories.find(
 	(category) => category.id === EXPERIMENTS_ID,

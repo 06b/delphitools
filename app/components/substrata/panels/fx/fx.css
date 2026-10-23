@@ -1,0 +1,1062 @@
+/* iOS FxPanel: blocks under hairlines, a 2 px rule between the stacks */
+.sub-fxp-panel .sub-rail-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.sub-fxp-zone {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+}
+
+.sub-fxp-zone:empty {
+	display: none;
+}
+
+.sub-fxp-rule {
+	flex: none;
+	block-size: calc(var(--sub-frame) - var(--canon-hairline));
+	background: var(--canon-border);
+}
+
+.sub-fxp-add-one {
+	min-block-size: var(--canon-row-height);
+	inline-size: 100%;
+}
+
+/* the block */
+.sub-fxp-block {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.sub-fxp-slot {
+	position: relative;
+	overflow: hidden;
+	background: var(--canon-destructive);
+}
+
+.sub-fxp-delete {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: center;
+	justify-content: center;
+	inline-size: 88px;
+	padding: 0;
+	border: 0;
+	background: var(--canon-destructive);
+	color: var(--canon-primary-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	cursor: pointer;
+}
+
+.sub-fxp-delete svg {
+	inline-size: 20px;
+	block-size: 20px;
+}
+
+.sub-fxp-bar {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	min-block-size: var(--canon-row-height);
+	background: var(--canon-card);
+	touch-action: pan-y;
+	translate: var(--sub-fxp-slide, 0) 0;
+	transition: translate 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.05);
+}
+
+.sub-fxp-block[data-dnd-dragging] .sub-fxp-bar,
+.sub-fxp-block[data-dnd-placeholder] .sub-fxp-bar {
+	background: var(--canon-accent-bg);
+}
+
+.sub-fxp-bar button {
+	border: 0;
+	background: none;
+	color: inherit;
+	cursor: pointer;
+}
+
+.sub-fxp-bar button:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-fxp-grip {
+	display: flex;
+	flex: none;
+	align-items: center;
+	padding: 0 6px 0 var(--canon-panel-padding);
+	color: var(--canon-muted-foreground);
+	cursor: grab;
+	touch-action: none;
+}
+
+.sub-fxp-grip svg,
+.sub-fxp-more svg {
+	flex: none;
+	inline-size: 18px;
+	block-size: 18px;
+}
+
+.sub-fxp-title {
+	display: flex;
+	flex: 1 1 auto;
+	gap: 6px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 0 4px 0 6px;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	text-align: start;
+}
+
+.sub-fxp-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sub-fxp-block.is-off .sub-fxp-name {
+	color: var(--canon-muted-foreground);
+}
+
+.sub-fxp-chevron {
+	display: flex;
+	flex: none;
+	color: var(--canon-muted-foreground);
+	transition: rotate 0.2s ease;
+}
+
+.sub-fxp-chevron svg {
+	inline-size: 13px;
+	block-size: 13px;
+}
+
+.sub-fxp-block.is-open .sub-fxp-chevron {
+	rotate: 180deg;
+}
+
+.sub-fxp-lamp,
+.sub-fxp-more {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 40px;
+	padding: 0;
+}
+
+.sub-fxp-more {
+	margin-inline-end: 4px;
+	color: var(--canon-muted-foreground);
+}
+
+.sub-fxp-lamp span {
+	box-sizing: border-box;
+	inline-size: 10px;
+	block-size: 10px;
+	border: var(--canon-hairline) solid var(--canon-muted-foreground);
+	border-radius: 50%;
+	background: var(--canon-muted);
+}
+
+.sub-fxp-lamp[aria-pressed="true"] span {
+	border-color: var(--canon-primary);
+	background: var(--canon-primary);
+}
+
+.sub-fxp-body {
+	animation: sub-fxp-open 0.2s ease both;
+}
+
+@keyframes sub-fxp-open {
+	from {
+		opacity: 0;
+		translate: 0 -6px;
+	}
+}
+
+/* rows */
+.sub-fxp-row .canon-slider,
+.sub-fxp-row .sub-fxp-cslider {
+	max-inline-size: 180px;
+}
+
+.sub-fxp-row .canon-row-control:has(> .sub-fxp-cslider) {
+	flex: 999 1 var(--canon-row-shrink-basis);
+	justify-content: flex-end;
+}
+
+.sub-fxp-figure-row .canon-row-control {
+	justify-content: flex-end;
+}
+
+/* colour well: the swatch opens the ring, the hex takes typing */
+.sub-fxp-well {
+	display: flex;
+	inline-size: 180px;
+	max-inline-size: 100%;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-control-height);
+	background: var(--canon-border);
+}
+
+.sub-fxp-well-swatch {
+	flex: none;
+	inline-size: 64px;
+	padding: 0;
+	border: 0;
+	cursor: pointer;
+}
+
+.sub-fxp-well-swatch:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-fxp-well-field {
+	display: flex;
+	flex: 1;
+	gap: 3px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 0 12px;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font, var(--canon-font));
+	font-size: var(--canon-text-body);
+}
+
+.sub-fxp-well-field input {
+	flex: 1;
+	min-inline-size: 0;
+	inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	font: inherit;
+	text-transform: uppercase;
+	caret-color: var(--canon-primary);
+	outline: none;
+}
+
+.sub-fxp-well-field:focus-within {
+	box-shadow: inset 0 -2px 0 var(--canon-primary);
+}
+
+.sub-fxp-choice {
+	min-block-size: var(--canon-row-height);
+}
+
+/* centred slider over the filter's colours (iOS FxColourSlider) */
+.sub-fxp-cslider {
+	--sub-cs-thickness: 2px;
+
+	display: flex;
+	flex: 1 1 auto;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-control-height);
+	background: var(--canon-border);
+	cursor: pointer;
+	touch-action: pan-y;
+	user-select: none;
+}
+
+.sub-fxp-cslider.is-active,
+.sub-fxp-cslider:focus-visible {
+	--sub-cs-thickness: 6px;
+}
+
+@media (hover: hover) {
+	.sub-fxp-cslider:hover {
+		--sub-cs-thickness: 6px;
+	}
+}
+
+.sub-fxp-cslider:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-fxp-cslider-track {
+	position: relative;
+	flex: 1 1 auto;
+	min-inline-size: 72px;
+	overflow: hidden;
+	background: var(--sub-cs-track, var(--canon-muted));
+}
+
+.sub-fxp-cslider-span,
+.sub-fxp-cslider-zero,
+.sub-fxp-cslider-marker,
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-track::before,
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-track::after {
+	position: absolute;
+	inset-block: 0;
+}
+
+.sub-fxp-cslider-span {
+	inset-inline-start: calc(var(--sub-cs-from) * 100%);
+	inline-size: calc((var(--sub-cs-to) - var(--sub-cs-from)) * 100%);
+	background: var(--sub-cs-fill);
+}
+
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-span {
+	background: none;
+}
+
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-track::before,
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-track::after {
+	content: "";
+	background: var(--canon-card);
+	opacity: 0.6;
+}
+
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-track::before {
+	inset-inline-start: 0;
+	inline-size: calc(var(--sub-cs-from) * 100%);
+}
+
+.sub-fxp-cslider.is-gradient .sub-fxp-cslider-track::after {
+	inset-inline-end: 0;
+	inline-size: calc((1 - var(--sub-cs-to)) * 100%);
+}
+
+.sub-fxp-cslider-zero {
+	inset-inline-start: calc(var(--sub-cs-origin) * 100% - 0.5px);
+	inline-size: var(--canon-hairline);
+	background: var(--canon-muted-foreground);
+}
+
+.sub-fxp-cslider-marker {
+	inset-inline-start: clamp(
+		0px,
+		calc(var(--sub-cs-at) * 100% - var(--sub-cs-thickness) / 2),
+		calc(100% - var(--sub-cs-thickness))
+	);
+	inline-size: var(--sub-cs-thickness);
+	background: var(--canon-foreground);
+	box-shadow:
+		-1px 0 0 var(--canon-card),
+		1px 0 0 var(--canon-card);
+	transition: inline-size 0.15s ease;
+}
+
+.sub-fxp-cslider.is-up .sub-fxp-cslider-marker {
+	inset-inline-start: clamp(
+		0px,
+		calc(var(--sub-cs-at) * 100% - var(--sub-cs-thickness)),
+		calc(100% - var(--sub-cs-thickness))
+	);
+}
+
+.sub-fxp-cslider-readout,
+.sub-fxp-hue-readout {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-inline-size: 64px;
+	padding: 0 10px;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* gamma curves */
+.sub-fxp-gamma {
+	box-sizing: border-box;
+	block-size: 112px;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.sub-fxp-gamma svg {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: visible;
+}
+
+.sub-fxp-gamma path,
+.sub-fxp-gamma rect {
+	fill: none;
+	vector-effect: non-scaling-stroke;
+	stroke-linejoin: round;
+}
+
+.sub-fxp-gamma-frame {
+	stroke: var(--canon-border);
+	stroke-width: 1;
+}
+
+.sub-fxp-gamma-identity {
+	stroke: var(--canon-muted-foreground);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+
+/* a focusable cover over a drawn control carries its slider role */
+.sub-fxp-cover {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	outline: none;
+}
+
+.sub-fxp-cover:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* hue bands */
+.sub-fxp-hue {
+	position: relative;
+	display: flex;
+	gap: var(--canon-hairline);
+	block-size: 53px;
+	background: var(--canon-border);
+	cursor: ew-resize;
+	touch-action: pan-y;
+	user-select: none;
+}
+
+.sub-fxp-hue-bands {
+	position: relative;
+	display: grid;
+	flex: 1 1 auto;
+	grid-template-rows: 1fr 1fr;
+	gap: var(--canon-hairline);
+	min-inline-size: 0;
+}
+
+.sub-fxp-hue-bands canvas {
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.sub-fxp-hue-seam {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-start: calc(50% - 1.5px);
+	block-size: 3px;
+	background: var(--canon-foreground);
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+
+.sub-fxp-hue.is-active .sub-fxp-hue-seam,
+.sub-fxp-hue:has(> .sub-fxp-cover:focus-visible) .sub-fxp-hue-seam {
+	opacity: 1;
+}
+
+@media (hover: hover) {
+	.sub-fxp-hue:hover .sub-fxp-hue-seam {
+		opacity: 1;
+	}
+}
+
+/* tones graph (iOS FxTonesGraph) */
+.sub-fxp-tones {
+	position: relative;
+	background: var(--canon-card);
+	touch-action: pan-y;
+	user-select: none;
+}
+
+.sub-fxp-tones-plot {
+	position: absolute;
+	inset-block-start: 12px;
+	inset-inline: 22px;
+	inline-size: calc(100% - 44px);
+	block-size: 80px;
+	background: var(--canon-muted);
+}
+
+.sub-fxp-tones-plot path {
+	fill: var(--canon-muted-foreground);
+}
+
+.sub-fxp-tones-shade {
+	position: absolute;
+	inset-block-start: 12px;
+	inset-inline-start: 22px;
+	block-size: 80px;
+	background: color-mix(
+		in srgb,
+		var(--canon-foreground) 18%,
+		transparent
+	);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.4s ease;
+}
+
+.sub-fxp-tones-shade.is-above {
+	inset-inline-end: 22px;
+}
+
+.sub-fxp-tones.is-shaded .sub-fxp-tones-shade {
+	opacity: 1;
+	transition-duration: 0.15s;
+}
+
+.sub-fxp-tones-bar {
+	position: absolute;
+	inset-inline: 22px;
+	box-sizing: border-box;
+	block-size: 12px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--sub-tones-bar);
+}
+
+.sub-fxp-tones-handle {
+	position: absolute;
+	inline-size: 44px;
+	block-size: 44px;
+	cursor: ew-resize;
+	transition:
+		inset-inline-start 0.3s ease,
+		inset-block-start 0.3s ease;
+}
+
+.sub-fxp-tones.is-shaded .sub-fxp-tones-handle {
+	transition: none;
+}
+
+.sub-fxp-tones-handle::before,
+.sub-fxp-tones-handle::after {
+	content: "";
+	position: absolute;
+	clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+/* the outline is a larger triangle behind the fill */
+.sub-fxp-tones-handle::before {
+	inset-block-start: 9px;
+	inset-inline-start: 13.5px;
+	inline-size: 17px;
+	block-size: 13px;
+	background: var(--canon-foreground);
+}
+
+.sub-fxp-tones-handle::after {
+	inset-block-start: 11px;
+	inset-inline-start: 15.5px;
+	inline-size: 13px;
+	block-size: 10px;
+	background: var(--sub-tri);
+}
+
+.sub-fxp-tones-handle.is-black {
+	--sub-tri: #000;
+}
+
+.sub-fxp-tones-handle.is-grey {
+	--sub-tri: #808080;
+}
+
+.sub-fxp-tones-handle.is-white {
+	--sub-tri: #fff;
+}
+
+.sub-fxp-tones-handle:focus-visible {
+	outline: none;
+}
+
+.sub-fxp-tones-handle:focus-visible::before,
+.sub-fxp-tones-handle:hover::before {
+	inset-block-start: 7px;
+	inset-inline-start: 11.5px;
+	inline-size: 21px;
+	block-size: 16px;
+	background: var(--canon-primary);
+}
+
+/* posterise bands */
+.sub-fxp-bands {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	min-block-size: var(--canon-row-height);
+	padding: 0 var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.sub-fxp-bands-strip {
+	position: relative;
+	flex: 1;
+	box-sizing: border-box;
+	block-size: 24px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	overflow: hidden;
+}
+
+.sub-fxp-bands-strip span {
+	position: absolute;
+	inset-block: 0;
+	transition:
+		inset-inline-start 0.35s ease,
+		inline-size 0.35s ease,
+		background 0.35s ease;
+}
+
+/* effects sample: a square wearing the effect */
+.sub-fxp-sample {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background: var(--canon-card);
+}
+
+.sub-fxp-sample-row {
+	block-size: 112px;
+}
+
+.sub-fxp-sample-square {
+	flex: none;
+	background: var(--canon-muted-foreground);
+	transition: box-shadow 0.25s ease;
+}
+
+:root.dark .sub-fxp-sample.is-deep,
+:root:not(.dark) .sub-fxp-sample.is-pale {
+	background: var(--canon-foreground);
+}
+
+:root.dark .sub-fxp-sample.is-deep .sub-fxp-sample-square,
+:root:not(.dark) .sub-fxp-sample.is-pale .sub-fxp-sample-square {
+	background: var(--canon-muted);
+}
+
+/* shadow pad */
+.sub-fxp-pad {
+	position: relative;
+	block-size: 200px;
+	background: var(--canon-card);
+	cursor: grab;
+	touch-action: none;
+	user-select: none;
+}
+
+.sub-fxp-pad .sub-fxp-sample {
+	position: absolute;
+	inset: 0;
+	background: transparent;
+}
+
+.sub-fxp-pad.is-guided .sub-fxp-sample-square {
+	transition: none;
+}
+
+.sub-fxp-pad-cross,
+.sub-fxp-pad-line,
+.sub-fxp-pad-dot {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.4s ease;
+}
+
+.sub-fxp-pad.is-guided .sub-fxp-pad-cross,
+.sub-fxp-pad.is-guided .sub-fxp-pad-line,
+.sub-fxp-pad.is-guided .sub-fxp-pad-dot {
+	opacity: 1;
+	transition-duration: 0.15s;
+}
+
+@media (hover: hover) {
+	.sub-fxp-pad:hover .sub-fxp-pad-cross,
+	.sub-fxp-pad:hover .sub-fxp-pad-line,
+	.sub-fxp-pad:hover .sub-fxp-pad-dot {
+		opacity: 1;
+	}
+}
+
+.sub-fxp-pad-cross {
+	inset: 0;
+	background:
+		linear-gradient(
+				to right,
+				transparent calc(50% - 0.5px),
+				var(--canon-muted-foreground) calc(50% - 0.5px)
+					calc(50% + 0.5px),
+				transparent calc(50% + 0.5px)
+			)
+			0 0 / 100% 8px repeat-y,
+		linear-gradient(
+				to bottom,
+				transparent calc(50% - 0.5px),
+				var(--canon-muted-foreground) calc(50% - 0.5px)
+					calc(50% + 0.5px),
+				transparent calc(50% + 0.5px)
+			)
+			0 0 / 8px 100% repeat-x;
+	mask: repeating-linear-gradient(
+		to right,
+		#000 0 4px,
+		transparent 4px 8px
+	);
+}
+
+.sub-fxp-pad-line {
+	inset-block-start: calc(50% - 0.75px);
+	inset-inline-start: 50%;
+	inline-size: var(--sub-pad-length);
+	block-size: 1.5px;
+	background: var(--canon-primary);
+	transform-origin: 0 50%;
+	rotate: var(--sub-pad-angle);
+}
+
+.sub-fxp-pad-dot {
+	inset-block-start: calc(50% + var(--sub-pad-y) - 3.5px);
+	inset-inline-start: calc(50% + var(--sub-pad-x) - 3.5px);
+	inline-size: 7px;
+	block-size: 7px;
+	border-radius: 50%;
+	background: var(--canon-primary);
+}
+
+.sub-fxp-pad-range {
+	position: absolute;
+	inset-block-end: 6px;
+	inset-inline-end: 8px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font, var(--canon-font));
+	font-size: 11px;
+}
+
+.sub-fxp-pad-figures {
+	min-block-size: var(--canon-row-height);
+}
+
+.sub-fxp-pad-figure {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 6px 4px;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+/* stroke position cells */
+.sub-fxp-position {
+	display: grid;
+	flex: 1;
+	min-inline-size: 180px;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.sub-fxp-position-cell {
+	--sub-ink: var(--canon-foreground);
+
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: center;
+	justify-content: center;
+	min-block-size: var(--canon-row-height);
+	padding: 4px;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--sub-ink);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-medium);
+	cursor: pointer;
+}
+
+.sub-fxp-position-cell:hover {
+	background: var(--canon-accent-bg);
+}
+
+.sub-fxp-position-cell.is-selected {
+	--sub-ink: var(--canon-primary-foreground);
+
+	background: var(--canon-primary);
+}
+
+.sub-fxp-position-cell:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-fxp-position-mark {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: 12px;
+	block-size: 12px;
+	margin: 6px;
+	outline: 1px dashed color-mix(in srgb, var(--sub-ink) 60%, transparent);
+	background: color-mix(in srgb, var(--sub-ink) 25%, transparent);
+}
+
+.sub-fxp-position-cell.is-outer .sub-fxp-position-mark {
+	box-shadow: 0 0 0 4px var(--sub-ink);
+}
+
+.sub-fxp-position-cell.is-centre .sub-fxp-position-mark {
+	box-shadow:
+		0 0 0 2px var(--sub-ink),
+		inset 0 0 0 2px var(--sub-ink);
+}
+
+.sub-fxp-position-cell.is-inner .sub-fxp-position-mark {
+	box-shadow: inset 0 0 0 4px var(--sub-ink);
+}
+
+/* cut-out state */
+.sub-fxp-matte {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	box-sizing: border-box;
+	min-block-size: var(--canon-row-height);
+	padding: 0 var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.sub-fxp-matte .canon-status {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.sub-fxp-matte-note {
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+/* duotone */
+.sub-fxp-duo-bar {
+	display: flex;
+	gap: var(--canon-hairline);
+	block-size: var(--canon-row-height);
+	background: var(--canon-border);
+	direction: ltr;
+}
+
+.sub-fxp-duo-end {
+	flex: none;
+	inline-size: var(--canon-row-height);
+	padding: 0;
+	border: 0;
+	cursor: pointer;
+}
+
+.sub-fxp-duo-end:focus-visible,
+.sub-fxp-duo-track:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.sub-fxp-duo-track {
+	--sub-duo-thick: 4px;
+
+	position: relative;
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	background: var(--sub-duo-ramp);
+	cursor: ew-resize;
+	touch-action: pan-y;
+	user-select: none;
+}
+
+.sub-fxp-duo-track.is-active {
+	--sub-duo-thick: 8px;
+}
+
+@media (hover: hover) {
+	.sub-fxp-duo-track:hover {
+		--sub-duo-thick: 8px;
+	}
+}
+
+.sub-fxp-duo-handle {
+	position: absolute;
+	inset-block: -1px;
+	inset-inline-start: calc(
+		var(--sub-duo-at) * 100% - var(--sub-duo-thick) / 2
+	);
+	box-sizing: border-box;
+	inline-size: var(--sub-duo-thick);
+	border: var(--canon-hairline) solid var(--canon-foreground);
+	background: var(--canon-card);
+	transition:
+		inset-inline-start 0.3s ease,
+		inline-size 0.15s ease;
+}
+
+.sub-fxp-duo-track.is-active .sub-fxp-duo-handle {
+	transition: inline-size 0.15s ease;
+}
+
+.sub-fxp-duo-figure {
+	position: absolute;
+	inset-block-end: 0;
+	inset-inline-start: clamp(
+		0px,
+		calc(var(--sub-duo-at) * 100% - 20px),
+		calc(100% - 40px)
+	);
+	box-sizing: border-box;
+	inline-size: 40px;
+	block-size: 18px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font, var(--canon-font));
+	font-size: 11px;
+	line-height: 16px;
+	text-align: center;
+}
+
+.sub-fxp-chip {
+	position: relative;
+	box-sizing: border-box;
+	min-block-size: var(--canon-control-height);
+	padding: 6px;
+	border: 0;
+	background: var(--canon-card);
+	cursor: pointer;
+}
+
+.sub-fxp-chip::before {
+	content: "";
+	position: absolute;
+	inset: 6px;
+	background: var(--sub-chip);
+}
+
+.sub-fxp-chip.is-active {
+	box-shadow: inset 0 0 0 var(--canon-frame) var(--canon-primary);
+}
+
+.sub-fxp-chip:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -4px;
+}
+
+.sub-fxp-chip-badge {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 26px;
+	block-size: 22px;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+}
+
+.sub-fxp-chip-badge svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+/* vignette diagram */
+.sub-fxp-vignette {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	block-size: 160px;
+	background: var(--canon-card);
+	cursor: crosshair;
+	touch-action: none;
+	user-select: none;
+}
+
+.sub-fxp-vignette canvas {
+	box-sizing: border-box;
+	border: var(--canon-hairline) solid var(--canon-border);
+}
+
+.sub-fxp-vignette-ring {
+	position: absolute;
+	box-sizing: border-box;
+	border: 1.5px dashed var(--canon-primary);
+	border-radius: 50%;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.3s ease;
+}
+
+.sub-fxp-vignette.is-guided .sub-fxp-vignette-ring {
+	opacity: 1;
+	transition-duration: 0s;
+}
+
+/* noise swatch and pixelate field */
+.sub-fxp-noise {
+	display: flex;
+	gap: var(--canon-hairline);
+	block-size: var(--canon-row-height);
+	background: var(--canon-border);
+}
+
+.sub-fxp-noise canvas {
+	flex: none;
+	inline-size: var(--canon-row-height);
+	block-size: var(--canon-row-height);
+	image-rendering: pixelated;
+}
+
+.sub-fxp-noise .sub-fxp-choice {
+	flex: 1;
+}
+
+.sub-fxp-pixelate {
+	block-size: 88px;
+	overflow: hidden;
+	background: var(--canon-card);
+}
+
+.sub-fxp-pixelate canvas {
+	display: block;
+	image-rendering: pixelated;
+}
+
+/* picker */
+.sub-fxp-picker .canon-heading {
+	background: var(--canon-card);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-fxp-bar,
+	.sub-fxp-chevron,
+	.sub-fxp-body,
+	.sub-fxp-tones-handle,
+	.sub-fxp-bands-strip span,
+	.sub-fxp-sample-square,
+	.sub-fxp-duo-handle {
+		transition: none;
+		animation: none;
+	}
+}

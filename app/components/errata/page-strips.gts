@@ -3,7 +3,9 @@ import { cached } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import ToolPanel, {
 	Field,
 	PageScope,
@@ -29,6 +31,7 @@ import {
 import { closeMode } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
 import type { ErrataPage } from 'delphitools-v2/lib/errata/doc-model';
+import './page-strips.css';
 
 type Turn = (pages: readonly ErrataPage[], ids: Set<string>) => ErrataPage[];
 type Insert = (pageId: string) => void;
@@ -79,25 +82,27 @@ class Strips<T> extends Component<{
 		strips: readonly Strip<T>[];
 		onRun: (run: T) => void;
 		disabled?: boolean;
+		columns?: number;
 	};
 	Blocks: { default: [] };
 }> {
 	<template>
-		<span class="segmented err-mode-seg">
+		<CanonGrid
+			class="err-mode-seg err-strips"
+			@columns={{@columns}}
+		>
 			{{#each @strips key="text" as |s|}}
-				<button
-					type="button"
-					class="sub-seg-cell err-strip-cell"
-					aria-label={{s.label}}
-					disabled={{@disabled}}
-					{{on "click" (fn @onRun s.run)}}
-				>
-					<Icon @name={{s.icon}} />
-					{{s.text}}
-				</button>
+				<CanonButton
+					@kind="cell"
+					@icon={{component IconSvg name=s.icon}}
+					@text={{s.text}}
+					@label={{s.label}}
+					@disabled={{@disabled}}
+					@onClick={{fn @onRun s.run}}
+				/>
 			{{/each}}
 			{{yield}}
-		</span>
+		</CanonGrid>
 	</template>
 }
 
@@ -214,21 +219,24 @@ export class InsertPanel extends Component<Signature> {
 			<Field @label="Page">
 				<Strips
 					@strips={{INSERTS}}
+					@columns={{3}}
 					@onRun={{this.insert}}
 				>
-					<button
-						type="button"
-						class="sub-seg-cell err-strip-cell"
-						{{on "click" this.pickImage}}
-					>
-						<Icon @name="file-image" />
-						Image
-					</button>
+					<CanonButton
+						@kind="cell"
+						@icon={{component
+							IconSvg
+							name="file-image"
+						}}
+						@text="Image"
+						@onClick={{this.pickImage}}
+					/>
 				</Strips>
 				<input
 					type="file"
 					accept="image/*"
-					class="sub-topbar-file-input"
+					class="dt-sr-only"
+					tabindex="-1"
 					aria-label="Image page"
 					{{this.bindInput}}
 					{{on "change" this.onImage}}

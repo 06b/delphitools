@@ -1,0 +1,147 @@
+.pf-strip .canon-page-strip-name {
+	font-variant-numeric: tabular-nums;
+}
+
+.pf-preview {
+	display: grid;
+	place-items: center;
+	padding: var(--canon-panel-padding);
+	background: var(--canon-muted);
+}
+
+.pf-paper {
+	position: relative;
+	inline-size: min(100%, 360px * var(--pf-ratio));
+	aspect-ratio: var(--pf-ratio);
+	background: var(--canon-paper);
+	box-shadow: 0 1px 3px var(--canon-paper-shadow);
+}
+
+.pf-picture {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	max-inline-size: none;
+}
+
+.pf-box {
+	position: absolute;
+	outline: 1.5px dashed var(--pf-box);
+	pointer-events: none;
+}
+
+.pf-box--trim {
+	--pf-box: var(--canon-math-blue);
+}
+
+.pf-box--bleed {
+	--pf-box: var(--canon-destructive);
+}
+
+.pf-box--crop {
+	--pf-box: var(--canon-copied);
+}
+
+.pf-flag {
+	position: absolute;
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: 2px;
+	background: color-mix(in srgb, var(--canon-primary) 15%, transparent);
+	pointer-events: none;
+}
+
+.pf-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	font-size: var(--canon-text-footnote);
+}
+
+.pf-legend-item {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.pf-legend-item::before {
+	inline-size: 16px;
+	border-block-start: 1.5px dashed var(--pf-box);
+	content: "";
+}
+
+.pf-issue {
+	display: flex;
+	gap: 10px;
+	align-items: baseline;
+	padding: 12px var(--canon-panel-padding);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+}
+
+.pf-issue:disabled {
+	cursor: default;
+}
+
+.pf-issue:not(:disabled):hover,
+.pf-issue:focus-visible {
+	outline: none;
+	background: var(--canon-accent-bg);
+}
+
+.pf-sev {
+	flex: none;
+	inline-size: 16px;
+	block-size: 16px;
+	align-self: center;
+}
+
+.pf-sev--error {
+	color: var(--canon-destructive);
+}
+
+.pf-sev--info {
+	color: var(--canon-muted-foreground);
+}
+
+.pf-issue-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+}
+
+.pf-issue-message {
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-medium);
+	overflow-wrap: anywhere;
+}
+
+.pf-issue-detail {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	line-height: 1.3;
+}
+
+.pf-issue-page {
+	flex: none;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	font-variant-numeric: tabular-nums;
+}
+
+.pf-font--missing .canon-row-detail {
+	color: var(--canon-destructive);
+}
+
+.pf-font .canon-row-title {
+	overflow-wrap: anywhere;
+}

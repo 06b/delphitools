@@ -22,11 +22,29 @@ function lists(types: string[] | undefined, ext: string): boolean {
 	return !!types?.some((t) => t === ext || t === MIME[ext]);
 }
 
+// "px2rem", "px-to-rem" and "PX to REM" all compact to "pxtorem"
+function compact(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/color/g, 'colour')
+		.replace(/([a-z])2(?=[a-z])/g, '$1to')
+		.replace(/[^a-z0-9]/g, '');
+}
+
 export function matchesQuery(tool: Tool, query: string): boolean {
 	const q = query.trim().toLowerCase();
 	if (
 		tool.name.toLowerCase().includes(q) ||
 		tool.description.toLowerCase().includes(q)
+	)
+		return true;
+
+	const short = compact(q);
+	if (
+		short &&
+		[tool.name, tool.description, ...(tool.keywords ?? [])].some(
+			(text) => compact(text).includes(short),
+		)
 	)
 		return true;
 

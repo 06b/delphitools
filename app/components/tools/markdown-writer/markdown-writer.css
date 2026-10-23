@@ -1,0 +1,107 @@
+/* picture: counts over the text, the text as the editor */
+.mw-editor {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.mw-strip {
+	display: flex;
+	flex: none;
+	gap: 14px;
+	align-items: center;
+	block-size: var(--canon-control-height);
+	padding-inline: var(--canon-panel-padding);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.mw-counts {
+	display: flex;
+	gap: 14px;
+	align-items: baseline;
+	min-inline-size: 0;
+}
+
+.mw-saved {
+	margin-inline-start: auto;
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.mw-scroll {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+.mw-text {
+	box-sizing: border-box;
+	min-block-size: 100%;
+	padding: 14px var(--canon-panel-padding) 32px;
+	font-family: var(--canon-mono-font);
+	font-size: 16px;
+	line-height: 1.45;
+}
+
+.mw-text .media-marked-source {
+	caret-color: var(--canon-primary);
+}
+
+.mw-hit {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--canon-primary) 20%, transparent);
+	box-shadow: 0 0 0 1px
+		color-mix(in srgb, var(--canon-primary) 20%, transparent);
+}
+
+/* find and replace: symbol, then the field to the row's end */
+.mw-field {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	padding-inline-start: var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+}
+
+.mw-field > svg {
+	flex: none;
+	inline-size: 15px;
+	block-size: 15px;
+}
+
+.markdown-writer .mw-field > .canon-text-cell {
+	flex: 1 1 auto;
+	inline-size: auto;
+	padding-inline-start: 0;
+	font-family: var(--canon-mono-font);
+	font-size: 16px;
+}
+
+.mw-find-status {
+	display: flex;
+	align-items: center;
+	padding-inline-end: var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.mw-find-status > .canon-row {
+	flex: 1 1 auto;
+	min-inline-size: 0;
+}
+
+.mw-find-count {
+	flex: none;
+}
+
+/* 390px fits button label */
+.dt-canon-tool .markdown-writer.canon-split--halves > .canon-split-body {
+	--canon-split-columns: minmax(0, 7fr) var(--canon-hairline)
+		minmax(min(390px, 50%), 3fr);
+}

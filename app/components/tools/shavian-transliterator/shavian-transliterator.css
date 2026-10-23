@@ -1,0 +1,77 @@
+@font-face {
+	font-family: "Noto Sans Shavian";
+	src: url("/fonts/NotoSansShavian-Regular.woff2") format("woff2");
+	font-display: swap;
+}
+
+.shavian-transliterator {
+	--gl-font: "Noto Sans Shavian", var(--canon-font);
+	--sh-rule-band: var(--canon-muted);
+	--sh-rule-base: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 45%,
+		var(--canon-card)
+	);
+	--sh-rule-dot: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 40%,
+		var(--canon-card)
+	);
+}
+
+/* noto sans shavian metrics */
+.shavian-transliterator .gl-gloss {
+	block-size: 1.36em;
+	background:
+		repeating-linear-gradient(
+				to right,
+				var(--sh-rule-dot) 0 1px,
+				transparent 1px 4px
+			)
+			0 0.299em / 100% 1px no-repeat,
+		repeating-linear-gradient(
+				to right,
+				var(--sh-rule-dot) 0 1px,
+				transparent 1px 4px
+			)
+			0 1.305em / 100% 1px no-repeat,
+		linear-gradient(var(--sh-rule-base), var(--sh-rule-base)) 0
+			1.07em / 100% 1px no-repeat,
+		linear-gradient(var(--sh-rule-band), var(--sh-rule-band)) 0
+			0.524em / 100% 0.546em no-repeat;
+}
+
+.sh-result .tt-result-text {
+	font-family: var(--gl-font);
+	font-size: 24px;
+	line-height: 1.5;
+}
+
+.sh-run-marker {
+	color: var(--canon-primary);
+}
+
+.sh-run--guess {
+	color: var(--canon-muted-foreground);
+}
+
+.sh-legend {
+	display: flex;
+	gap: 24px;
+	align-items: baseline;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.sh-legend .sh-run--guess {
+	text-decoration: underline dashed;
+	text-underline-offset: 3px;
+}
+
+.sh-legend-mark {
+	margin-inline-end: 4px;
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-bold);
+}

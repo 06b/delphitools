@@ -12,7 +12,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { allTools } = await import('../app/lib/tools.ts');
 const { FX_ICONS, FX_ICON_FALLBACK } =
 	await import('../app/lib/substrata/fx-icons.ts');
-const { TOOL_ORDER } = await import('../app/lib/errata/tool.ts');
+// read, not imported: tool.ts imports app modules node cannot resolve
+const errataIcons = [
+	...readFileSync(join(root, 'app/lib/errata/tool.ts'), 'utf8').matchAll(
+		/icon: '([a-z0-9-]+)'/g,
+	),
+].map((m) => m[1]);
 
 // runtime icon names
 const EXTRA = [
@@ -36,8 +41,29 @@ const EXTRA = [
 	'carrot',
 	'list-checks',
 	'settings-2',
+	// names built at runtime outside templates
+	'alert-circle',
+	'arrow-right-left',
+	'axis-3d',
+	'circle-check-big',
+	'map-pin',
+	'triangle-alert',
+	// canon-docs tiles pass these through variables
+	'panel-bottom',
+	'panel-left',
+	'panel-right',
+	'panel-top',
+	// drawn into the colour ring's canvas by name
+	'clock',
+	'droplet',
+	'hash',
+	'highlighter',
+	'pipette',
+	'sliders-horizontal',
+	'star',
+	'swatch-book',
 	...Object.values(FX_ICONS),
-	...TOOL_ORDER.map((t) => t.icon),
+	...errataIcons,
 	FX_ICON_FALLBACK,
 ];
 
@@ -66,6 +92,9 @@ for (const file of walk(join(root, 'app')).filter((f) => f.endsWith('.gts'))) {
 	for (const m of src.matchAll(/@icon=["']([a-z0-9-]+)["']/g)) {
 		candidates.add(m[1]);
 	}
+	for (const m of src.matchAll(/IconSvg\s+name=["']([a-z0-9-]+)["']/g)) {
+		candidates.add(m[1]);
+	}
 }
 
 const isIcon = (n) =>
@@ -74,7 +103,8 @@ const isIcon = (n) =>
 const names = [
 	...new Set([
 		...allTools.map((t) => t.icon),
-		...fromTemplates,
+		// @name also names non-icon components (app-sidebar's wordmark)
+		...[...fromTemplates].filter(isIcon),
 		...[...candidates].filter(isIcon),
 		...EXTRA,
 	]),

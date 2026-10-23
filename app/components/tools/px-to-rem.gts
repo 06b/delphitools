@@ -1,317 +1,242 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import type { TOC } from '@ember/component/template-only';
+import CanonBigNumberField from 'delphicanon/components/canon-big-number-field';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import press from 'delphicanon/modifiers/canon-press';
+import { clamp, parseInteger } from 'delphicanon/lib/number';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import {
+	baseRange,
+	commonPx,
+	convert,
+	format,
+	nudged,
+	parse,
+} from 'delphitools-v2/components/tools/px-to-rem/rem';
+import Specimen from 'delphitools-v2/components/tools/px-to-rem/specimen';
+import './px-to-rem/px-to-rem.css';
 
-export type Direction = 'px-to-rem' | 'rem-to-px';
+const directions = ['PX → REM', 'REM → PX'];
 
-const REFERENCE_PX = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48];
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
 
-const DEFAULT_BASE = 16;
-const COPIED_MS = 1500;
-
-// strips toFixed padding; "10.0000" keeps its integer zeros
-function trimZeros(value: string): string {
-	return value.replace(/\.?0+$/, '');
+interface ReferenceRowSignature {
+	Args: { px: number; rem: string; current: boolean; onPick: () => void };
 }
 
-export function pxToRem(px: number, base: number): string {
-	return trimZeros((px / base).toFixed(4));
+const ReferenceRow: TOC<ReferenceRowSignature> = <template>
+	<button
+		type="button"
+		class="px-to-rem-row"
+		aria-label="{{@px}}px, {{@rem}}rem"
+		aria-current={{if @current "true"}}
+		{{press}}
+		{{on "click" @onPick}}
+	>
+		<span>{{@px}}px</span>
+		<span class="px-to-rem-row-rem">{{@rem}}</span>
+	</button>
+</template>;
+
+function upper(text: string) {
+	return text.toUpperCase();
 }
 
-export function remToPx(rem: number, base: number): string {
-	return trimZeros((rem * base).toFixed(2));
-}
+/** The port of PxToRemViewController. */
+export default class PxToRem extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 
-export default class PxToRemTool extends Component {
-	@tracked pxValue = '';
-	@tracked remValue = '';
-	@tracked baseSize = String(DEFAULT_BASE);
-	@tracked mode: Direction = 'px-to-rem';
-	@tracked copied: 'px' | 'rem' | null = null;
+	@tracked text = '16';
+	@tracked remToPixel = false;
+	@tracked base: number = baseRange.start;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-	}
-
-	get base() {
-		return Number.parseFloat(this.baseSize) || DEFAULT_BASE;
-	}
-
-	get pxIsSource() {
-		return this.mode === 'px-to-rem';
-	}
-
-	get pxReadOnly() {
-		return !this.pxIsSource;
-	}
-
-	get remReadOnly() {
-		return this.pxIsSource;
-	}
-
-	get pxCopied() {
-		return this.copied === 'px';
-	}
-
-	get remCopied() {
-		return this.copied === 'rem';
-	}
-
-	// next app wording
-	get pxHeading() {
-		return this.pxIsSource ? 'Pixels (input)' : 'Pixels (result)';
-	}
-
-	// next app wording
-	get remHeading() {
-		return this.pxIsSource ? 'REM (result)' : 'REM (input)';
-	}
-
-	get pxCopyLabel() {
-		return `Copy ${this.pxValue}px`;
-	}
-
-	get remCopyLabel() {
-		return `Copy ${this.remValue}rem`;
-	}
-
-	get refRemHeading() {
-		return `rem (base ${this.base}px)`;
-	}
-
-	get reference() {
-		const base = this.base;
-		return REFERENCE_PX.map((px) => ({
-			px,
-			pxLabel: `${px}px`,
-			remLabel: `${pxToRem(px, base)}rem`,
-		}));
-	}
-
-	applyPx(value: string) {
-		this.pxValue = value;
-		const num = Number.parseFloat(value);
-		this.remValue = Number.isNaN(num)
-			? ''
-			: pxToRem(num, this.base);
-	}
-
-	applyRem(value: string) {
-		this.remValue = value;
-		const num = Number.parseFloat(value);
-		this.pxValue = Number.isNaN(num) ? '' : remToPx(num, this.base);
-	}
-
-	setPx = (event: Event) => {
-		if (!this.pxIsSource) return;
-		this.applyPx((event.target as HTMLInputElement).value);
-	};
-
-	setRem = (event: Event) => {
-		if (this.pxIsSource) return;
-		this.applyRem((event.target as HTMLInputElement).value);
-	};
-
-	// never rewrite the field being typed
-	setBase = (event: Event) => {
-		const value = (event.target as HTMLInputElement).value;
-		this.baseSize = value;
-		const base = Number.parseFloat(value) || DEFAULT_BASE;
-
-		if (this.pxIsSource && this.pxValue) {
-			const num = Number.parseFloat(this.pxValue);
-			if (!Number.isNaN(num))
-				this.remValue = pxToRem(num, base);
-		} else if (!this.pxIsSource && this.remValue) {
-			const num = Number.parseFloat(this.remValue);
-			if (!Number.isNaN(num))
-				this.pxValue = remToPx(num, base);
-		}
-	};
-
-	// fills px side; rem derives
-	useReference = (px: number) => this.applyPx(String(px));
-
-	toggleMode = () => {
-		this.mode = this.pxIsSource ? 'rem-to-px' : 'px-to-rem';
-	};
-
-	copyPx = () => void this.copy(`${this.pxValue}px`, 'px');
-	copyRem = () => void this.copy(`${this.remValue}rem`, 'rem');
-
-	async copy(text: string, which: 'px' | 'rem') {
-		await navigator.clipboard.writeText(text);
-		this.copied = which;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
+	// ?pxValue=<number>: the iOS -pxvalue flag; ?pxDirection=1 starts in REM → PX, ?pxBase=<1-48> sets the base
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		this.text = query.get('pxValue') ?? '16';
+		this.remToPixel = query.get('pxDirection') === '1';
+		this.base = clamp(
+			parseInteger(query.get('pxBase') ?? '') ??
+				baseRange.start,
+			baseRange.min,
+			baseRange.max,
 		);
 	}
 
+	get inputUnit() {
+		return this.remToPixel ? 'rem' : 'px';
+	}
+
+	get outputUnit() {
+		return this.remToPixel ? 'px' : 'rem';
+	}
+
+	resultOf(text: string) {
+		return convert(
+			parse(text, this.inputUnit),
+			this.base,
+			this.remToPixel,
+		);
+	}
+
+	get result() {
+		return this.resultOf(this.text);
+	}
+
+	get pixels() {
+		const typed = parse(this.text, this.inputUnit);
+		if (typed === undefined) return undefined;
+		return this.remToPixel ? typed * this.base : typed;
+	}
+
+	get figure() {
+		const { result } = this;
+		return result === undefined
+			? { text: '—', unit: '' }
+			: { text: format(result), unit: this.outputUnit };
+	}
+
+	get copyDisabled() {
+		return this.result === undefined;
+	}
+
+	get rows() {
+		return commonPx.map((px) => ({
+			px,
+			rem: format(px / this.base),
+			current: px === this.pixels,
+		}));
+	}
+
+	// the web fields answered every keystroke; iOS waits 400 ms
+	typed = (text: string) => (this.text = text);
+
+	nudge = (direction: -1 | 1) =>
+		(this.text = nudged(
+			parse(this.text, this.inputUnit),
+			direction,
+			this.remToPixel,
+		));
+
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
+	};
+
+	// the result becomes the input, so the pair on screen stays
+	pickDirection = (index: number) => {
+		const { result } = this;
+		this.remToPixel = index === 1;
+		if (result !== undefined) this.text = format(result);
+	};
+
+	pickBase = (base: number) => (this.base = base);
+
+	use = (px: number) =>
+		(this.text = format(this.remToPixel ? px / this.base : px));
+
+	copy = () => {
+		const { result } = this;
+		if (result === undefined) return;
+		void this.toast.copy(`${format(result)}${this.outputUnit}`);
+	};
+
 	<template>
-		<div class="dt-ptr">
-			<div class="dt-ptr-base">
-				{{! next app wording }}
-				<label
-					class="dt-ptr-base-label"
-					for="dt-ptr-base"
-				>Base font size</label>
-				<div class="dt-ptr-base-field">
-					<input
-						id="dt-ptr-base"
-						type="number"
-						value={{this.baseSize}}
-						{{on "input" this.setBase}}
+		<CanonSplit class="px-to-rem">
+			<:banner>
+				<CanonCanvas @height={{200}}>
+					<Specimen
+						@pixels={{this.pixels}}
+						@base={{this.base}}
+						@result={{this.figure.text}}
+						@unit={{this.figure.unit}}
 					/>
-					<span class="dt-ptr-unit">px</span>
-				</div>
-			</div>
-
-			<div class="dt-ptr-convert">
-				<div class="dt-ptr-col">
-					<div class="dt-ptr-col-head">
-						<label
-							for="dt-ptr-px"
-						>{{this.pxHeading}}</label>
-					</div>
-					<div class="dt-ptr-field">
-						<input
-							id="dt-ptr-px"
-							type="number"
-							placeholder="0"
-							readonly={{this.pxReadOnly}}
-							value={{this.pxValue}}
-							{{on
-								"input"
-								this.setPx
-							}}
-						/>
-						<span
-							class="dt-ptr-suffix"
-						>px</span>
-					</div>
-					{{#if this.pxValue}}
-						<button
-							type="button"
-							class="dt-ptr-copy"
-							{{on
-								"click"
-								this.copyPx
-							}}
-						>
-							<Icon
-								@name={{if
-									this.pxCopied
-									"check"
-									"copy"
-								}}
-							/>
-							{{#if this.pxCopied}}
-								Copied!
-							{{else}}
-								{{this.pxCopyLabel}}
-							{{/if}}
-						</button>
-					{{/if}}
-				</div>
-
-				<div class="dt-ptr-swap">
-					<button
-						type="button"
-						aria-label="Swap direction"
-						{{on "click" this.toggleMode}}
-					>
-						<Icon
-							@name="arrow-right-left"
-						/>
-					</button>
-				</div>
-
-				<div class="dt-ptr-col">
-					<div class="dt-ptr-col-head">
-						<label
-							for="dt-ptr-rem"
-						>{{this.remHeading}}</label>
-					</div>
-					<div class="dt-ptr-field">
-						<input
-							id="dt-ptr-rem"
-							type="number"
-							placeholder="0"
-							readonly={{this.remReadOnly}}
-							value={{this.remValue}}
-							{{on
-								"input"
-								this.setRem
-							}}
-						/>
-						<span
-							class="dt-ptr-suffix"
-						>rem</span>
-					</div>
-					{{#if this.remValue}}
-						<button
-							type="button"
-							class="dt-ptr-copy"
-							{{on
-								"click"
-								this.copyRem
-							}}
-						>
-							<Icon
-								@name={{if
-									this.remCopied
-									"check"
-									"copy"
-								}}
-							/>
-							{{#if this.remCopied}}
-								Copied!
-							{{else}}
-								{{this.remCopyLabel}}
-							{{/if}}
-						</button>
-					{{/if}}
-				</div>
-			</div>
-
-			<div>
-				<div class="dt-ptr-ref-head">
-					{{! next app wording }}
-					<span class="dt-ptr-heading">Quick
-						Reference</span>
-				</div>
-				<div class="dt-ptr-ref-cols">
-					<span>px</span>
-					<span>{{this.refRemHeading}}</span>
-				</div>
-				{{#each this.reference key="px" as |row|}}
-					<button
-						type="button"
-						class="dt-ptr-ref-row"
-						{{on
-							"click"
-							(fn
-								this.useReference
-								row.px
-							)
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonBigNumberField
+						@value={{this.text}}
+						@placeholder="0"
+						@unit={{upper this.inputUnit}}
+						@label="Value"
+						@onStep={{this.nudge}}
+						@onInput={{this.typed}}
+						{{on "focusin" this.selectAll}}
+					/>
+					<CanonSegmented
+						aria-label="Direction"
+						@items={{directions}}
+						@selected={{if
+							this.remToPixel
+							1
+							0
 						}}
+						@onChange={{this.pickDirection}}
+					/>
+					<CanonRow
+						@title="Base"
+						@form="flush"
+						as |titleId|
 					>
+						<CanonNumberField
+							@value={{this.base}}
+							@min={{baseRange.min}}
+							@max={{baseRange.max}}
+							@unit="px"
+							@labelledBy={{titleId}}
+							@onChange={{this.pickBase}}
+						/>
+					</CanonRow>
+					<CanonButton
+						@text="Copy"
+						@icon={{CopyIcon}}
+						@disabled={{this.copyDisabled}}
+						@onClick={{this.copy}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Quick Reference" />
+					<div
+						class="px-to-rem-row px-to-rem-row--header"
+						aria-hidden="true"
+					>
+						<span>Pixels</span>
 						<span
-							class="dt-ptr-ref-px"
-						>{{row.pxLabel}}</span>
-						<span
-							class="dt-ptr-ref-rem"
-						>{{row.remLabel}}</span>
-					</button>
-				{{/each}}
-			</div>
-		</div>
+							class="px-to-rem-row-rem"
+						>REM</span>
+					</div>
+					{{#each this.rows key="px" as |row|}}
+						<ReferenceRow
+							@px={{row.px}}
+							@rem={{row.rem}}
+							@current={{row.current}}
+							@onPick={{fn
+								this.use
+								row.px
+							}}
+						/>
+					{{/each}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

@@ -1,0 +1,231 @@
+.deskew-board,
+.deskew-result {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.deskew-image,
+.deskew-slot,
+.deskew-marks,
+.deskew-handle,
+.deskew-hint,
+.deskew-loupe {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.deskew-image canvas {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.deskew-board .deskew-slot:not(.media-slot--over) {
+	background: var(--canon-card);
+}
+
+/* the prompt over the empty quad drawn after the slot */
+.deskew-slot > * {
+	position: relative;
+	z-index: 1;
+}
+
+.deskew-marks {
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.deskew-shade {
+	fill: var(--canon-accent-bg);
+	opacity: 0.7;
+}
+
+.deskew-board--loaded .deskew-shade {
+	fill: rgb(0 0 0 / 50%);
+	opacity: 1;
+}
+
+.deskew-grid {
+	fill: none;
+	stroke: var(--canon-border);
+	stroke-width: var(--canon-hairline);
+}
+
+.deskew-board--loaded .deskew-grid {
+	stroke: rgb(255 255 255 / 45%);
+}
+
+.deskew-outline,
+.deskew-brackets {
+	fill: none;
+	stroke: var(--canon-muted-foreground);
+	stroke-linejoin: miter;
+}
+
+.deskew-outline {
+	stroke-width: var(--canon-frame);
+}
+
+.deskew-brackets {
+	stroke-linecap: butt;
+	stroke-width: 4px;
+}
+
+.deskew-board--loaded .deskew-outline,
+.deskew-board--loaded .deskew-brackets {
+	stroke: var(--canon-primary);
+}
+
+.deskew-board--crossed .deskew-outline,
+.deskew-board--crossed .deskew-brackets {
+	stroke: var(--canon-destructive);
+}
+
+.deskew-board--dragging {
+	cursor: grabbing;
+}
+
+.deskew-handle {
+	inline-size: 44px;
+	block-size: 44px;
+	margin: -22px 0 0 -22px;
+	outline: none;
+	cursor: grab;
+}
+
+.deskew-handle:focus-visible::after {
+	position: absolute;
+	inset: 12px;
+	border: var(--canon-frame) solid var(--canon-foreground);
+	content: "";
+}
+
+.deskew-hint {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 5px 10px 5px 8px;
+	background: color-mix(in srgb, var(--canon-card) 88%, transparent);
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 200ms;
+}
+
+.deskew-hint svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+.deskew-hint--shown {
+	opacity: 1;
+}
+
+.deskew-loupe {
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	pointer-events: none;
+}
+
+.deskew-rays {
+	position: absolute;
+	inset: var(--canon-loupe-frame);
+	inline-size: calc(100% - 2 * var(--canon-loupe-frame));
+	block-size: calc(100% - 2 * var(--canon-loupe-frame));
+	overflow: hidden;
+}
+
+.deskew-rays path {
+	fill: none;
+	stroke: var(--canon-primary);
+	stroke-width: 2px;
+	vector-effect: non-scaling-stroke;
+}
+
+.deskew-board--crossed .deskew-rays path {
+	stroke: var(--canon-destructive);
+}
+
+.deskew-sheet,
+.deskew-dimension {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.deskew-sheet {
+	overflow: hidden;
+	background: var(--canon-card);
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.deskew-sheet-picture,
+.deskew-sheet-picture canvas {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.deskew-result--crossed .deskew-sheet-picture {
+	opacity: 0.35;
+}
+
+.deskew-guide {
+	position: absolute;
+	inset-block: 0;
+	inline-size: var(--canon-hairline);
+	background: rgb(255 255 255 / 60%);
+	opacity: 0;
+	mix-blend-mode: difference;
+	transition: opacity 500ms;
+}
+
+.deskew-guide--across {
+	inset-block: auto;
+	inset-inline: 0;
+	inline-size: auto;
+	block-size: var(--canon-hairline);
+}
+
+.deskew-result--guides .deskew-guide {
+	opacity: 1;
+	transition-duration: 150ms;
+}
+
+.deskew-result-loader {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	color: var(--canon-muted-foreground);
+	translate: -50% -50%;
+}
+
+.deskew-result--springs .deskew-sheet,
+.deskew-result--springs .deskew-dimension {
+	transition-duration: 550ms;
+	transition-property:
+		inset-inline-start, inset-block-start, inline-size, block-size;
+	transition-timing-function: var(--deskew-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.deskew-hint,
+	.deskew-guide,
+	.deskew-result--springs .deskew-sheet,
+	.deskew-result--springs .deskew-dimension {
+		transition: none;
+	}
+}
+
+.deskew-result-name {
+	position: absolute;
+	inset: 0;
+}

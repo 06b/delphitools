@@ -1,0 +1,516 @@
+.contrast-checker {
+	--contrast-flip: 52px;
+	--contrast-fade: 250ms;
+}
+
+.contrast-hidden {
+	position: absolute;
+	inline-size: 1px;
+	block-size: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* banner */
+.contrast-specimen {
+	display: flex;
+
+	/* stacked, the band collapses from the bottom and keeps the figure */
+	align-items: flex-start;
+	box-sizing: border-box;
+	block-size: 100%;
+	padding: var(--canon-panel-padding);
+	overflow: hidden;
+	background: var(--contrast-ground);
+	color: var(--contrast-ink);
+	font-family: var(--canon-font);
+	transition:
+		background-color var(--contrast-fade),
+		color var(--contrast-fade);
+}
+
+.contrast-specimen-columns {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	inline-size: 100%;
+	min-inline-size: 0;
+}
+
+.contrast-specimen-type {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-inline-size: 0;
+	max-inline-size: 480px;
+}
+
+.contrast-specimen-line {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	min-inline-size: 0;
+}
+
+.contrast-specimen-text {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	line-height: 1.2;
+}
+
+/* wcag 2.2 sizes: 24 px, 18.67 px bold, 16 px */
+.contrast-specimen--large {
+	font-size: 24px;
+}
+
+.contrast-specimen--bold {
+	font-size: 18.67px;
+	font-weight: var(--canon-weight-bold);
+}
+
+.contrast-specimen--normal {
+	font-size: 16px;
+}
+
+.contrast-specimen-note {
+	flex: none;
+	font-size: var(--canon-text-footnote);
+	font-variant-numeric: tabular-nums;
+}
+
+.contrast-specimen-controls {
+	align-items: center;
+	margin-block-start: 6px;
+}
+
+.contrast-specimen-symbols {
+	display: flex;
+	flex: 1;
+	gap: 14px;
+}
+
+.contrast-specimen-symbol {
+	display: flex;
+	inline-size: 22px;
+	block-size: 22px;
+}
+
+.contrast-specimen-symbol svg {
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+@container (min-width: 600px) {
+	.contrast-specimen {
+		align-items: center;
+	}
+
+	.contrast-specimen-columns {
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		gap: 48px;
+	}
+
+	.contrast-specimen-type {
+		flex: 0 1 480px;
+	}
+}
+
+/* wells */
+.contrast-wells {
+	position: relative;
+	display: grid;
+	grid-template-columns: 1fr var(--contrast-flip) 1fr;
+	gap: var(--canon-hairline);
+	block-size: var(--canon-row-height);
+	background: var(--canon-border);
+}
+
+.contrast-well {
+	display: flex;
+	container-type: inline-size;
+	align-items: center;
+	gap: 10px;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	appearance: none;
+}
+
+.contrast-well:first-child {
+	grid-column: 1;
+}
+
+.contrast-well + .contrast-well {
+	grid-column: 3;
+	grid-row: 1;
+}
+
+.contrast-flip {
+	grid-column: 2;
+	grid-row: 1;
+}
+
+.contrast-flip svg {
+	rotate: calc(var(--contrast-flips, 0) * 180deg);
+	transition: rotate 400ms var(--contrast-well-spring);
+}
+
+.contrast-well--on {
+	background: var(--canon-accent-bg);
+}
+
+.contrast-well:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.contrast-well-swatch {
+	flex: none;
+	box-sizing: border-box;
+	inline-size: 28px;
+	block-size: 28px;
+	border: var(--canon-hairline) solid var(--canon-border);
+}
+
+.contrast-well-text {
+	display: flex;
+	flex-direction: column;
+	min-inline-size: 0;
+	line-height: 1.25;
+}
+
+.contrast-well-title,
+.contrast-well-hex {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.contrast-well-title {
+	/* shrinks to fit down to 80 %, as the iOS label's minimumScaleFactor; the title is about 6.6 em */
+	font-size: clamp(
+		calc(var(--canon-text-subheadline) * 0.8),
+		(100cqi - 38px) / 6.6,
+		var(--canon-text-subheadline)
+	);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.contrast-well--on .contrast-well-title {
+	color: var(--canon-primary);
+}
+
+.contrast-well-hex {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-variant-numeric: tabular-nums;
+}
+
+.contrast-wells-indicator {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	inline-size: calc(
+		(100% - var(--contrast-flip)) / 2 - var(--canon-hairline)
+	);
+	block-size: 3px;
+	background: var(--canon-primary);
+	pointer-events: none;
+	transition: inset-inline-start 400ms var(--contrast-well-spring);
+}
+
+.contrast-wells-indicator--end {
+	inset-inline-start: calc(
+		50% + var(--contrast-flip) / 2 + var(--canon-hairline)
+	);
+}
+
+/* solid over its strip */
+.contrast-solid {
+	display: flex;
+	flex-direction: column;
+	background: var(--canon-muted);
+}
+
+.contrast-solid-picture {
+	aspect-ratio: 1 / 0.66;
+	max-block-size: 240px;
+}
+
+/* scale */
+.contrast-scale {
+	box-sizing: border-box;
+	block-size: 56px;
+	padding: 14px var(--canon-panel-padding) 0;
+	background: var(--canon-card);
+}
+
+.contrast-scale-track {
+	position: relative;
+}
+
+.contrast-scale .canon-bar {
+	block-size: 10px;
+}
+
+.contrast-scale .canon-bar-fill {
+	transition:
+		inline-size 450ms var(--contrast-scale-spring),
+		background-color 450ms;
+}
+
+.contrast-scale-notch {
+	position: absolute;
+	inset-block-start: -4px;
+	inline-size: var(--canon-hairline);
+	block-size: 18px;
+	margin-inline-start: -0.5px;
+	background: var(--canon-foreground);
+}
+
+.contrast-scale-label {
+	position: absolute;
+	inset-block-start: 16px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+	translate: -50%;
+}
+
+.contrast-scale-label:dir(rtl) {
+	translate: 50%;
+}
+
+.contrast-scale-label--edge,
+.contrast-scale-label--edge:dir(rtl) {
+	translate: none;
+}
+
+/* lamps */
+.contrast-lamps {
+	display: grid;
+	grid-template-columns: 1fr 96px 96px;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.contrast-lamps-row {
+	display: contents;
+}
+
+.contrast-lamps-head {
+	padding: 6px 12px;
+	background: var(--canon-heading-background);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.3;
+}
+
+.contrast-lamps-name,
+.contrast-lamp {
+	display: flex;
+	align-items: center;
+	block-size: var(--canon-row-height);
+	background: var(--canon-card);
+}
+
+.contrast-lamps-name {
+	padding-inline: var(--canon-panel-padding) 8px;
+	font-size: var(--canon-text-body);
+}
+
+.contrast-lamp {
+	gap: 8px;
+	padding-inline-start: 12px;
+}
+
+.contrast-lamp-dot {
+	inline-size: 10px;
+	block-size: 10px;
+	border-radius: 50%;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 25%,
+		transparent
+	);
+	transition:
+		background-color 200ms,
+		box-shadow 200ms;
+}
+
+.contrast-lamp-threshold {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-variant-numeric: tabular-nums;
+	transition: color 200ms;
+}
+
+.contrast-lamp--lit .contrast-lamp-dot {
+	background: var(--canon-primary);
+	box-shadow: 0 0 8px
+		color-mix(in srgb, var(--canon-primary) 80%, transparent);
+}
+
+.contrast-lamp--lit .contrast-lamp-threshold {
+	color: var(--canon-foreground);
+}
+
+/* suggestions */
+.contrast-suggestion {
+	display: flex;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-border);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	appearance: none;
+}
+
+.contrast-suggestion:disabled {
+	cursor: default;
+}
+
+.contrast-suggestion:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.contrast-suggestion-preview {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 56px;
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-bold);
+	transition:
+		background-color var(--contrast-fade),
+		color var(--contrast-fade);
+}
+
+.contrast-suggestion-cell {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 10px;
+	min-inline-size: 0;
+	padding: 8px var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.contrast-suggestion:disabled .contrast-suggestion-preview,
+.contrast-suggestion:disabled .contrast-suggestion-cell {
+	opacity: 0.45;
+}
+
+@media (hover: hover) {
+	.contrast-suggestion:hover:enabled .contrast-suggestion-cell {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.contrast-suggestion-text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	min-inline-size: 0;
+	line-height: 1.25;
+}
+
+.contrast-suggestion-title {
+	font-size: var(--canon-text-body);
+}
+
+.contrast-suggestion-detail {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-variant-numeric: tabular-nums;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.contrast-suggestion-ratio {
+	flex: none;
+	font-size: var(--canon-text-footnote);
+	font-variant-numeric: tabular-nums;
+}
+
+.contrast-suggestion-glyph {
+	display: flex;
+	flex: none;
+	inline-size: var(--canon-icon-inline);
+	block-size: var(--canon-icon-inline);
+	color: var(--canon-primary);
+}
+
+.contrast-suggestion-glyph svg {
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+/* the two colours as chips, side by side when there is room */
+.contrast-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: var(--canon-panel-spacing);
+}
+
+/* drags follow at once */
+.contrast-checker--follows .contrast-specimen,
+.contrast-checker--follows .contrast-suggestion-preview,
+.contrast-checker--follows .contrast-scale .canon-bar-fill {
+	transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.contrast-specimen,
+	.contrast-suggestion-preview,
+	.contrast-scale .canon-bar-fill,
+	.contrast-wells-indicator,
+	.contrast-flip svg,
+	.contrast-lamp-dot,
+	.contrast-lamp-threshold {
+		transition: none;
+	}
+}
+
+/* first and large: typing a colour is the main way in */
+.contrast-checker .contrast-input {
+	min-block-size: var(--canon-primary-height);
+}
+
+.contrast-checker .contrast-input .canon-text-cell {
+	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-big-number);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.contrast-checker .contrast-input > .canon-button {
+	inline-size: var(--canon-primary-height);
+}

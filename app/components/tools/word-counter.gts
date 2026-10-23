@@ -1,228 +1,218 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import Icon from 'delphitools-v2/components/icon';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonBar from 'delphicanon/components/canon-bar';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonFigure from 'delphicanon/components/canon-figure';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import {
+	averageWordLength,
+	countText,
+	statsReport,
+	topWords,
+} from 'delphitools-v2/components/tools/word-counter/count';
+import Picture from 'delphitools-v2/components/tools/word-counter/picture';
+import './word-counter/word-counter.css';
 
-export interface TextStats {
-	words: number;
-	characters: number;
-	charactersNoSpaces: number;
-	sentences: number;
-	paragraphs: number;
-	lines: number;
-	readingTime: string;
-	speakingTime: string;
-}
+export {
+	countText,
+	statsReport,
+	type TextStats,
+} from 'delphitools-v2/components/tools/word-counter/count';
 
-const READING_WPM = 200;
-const SPEAKING_WPM = 150;
-const COPIED_MS = 1500;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+const MoreIcon = <template><IconSvg @name="chevron-down" /></template>;
+const FewerIcon = <template><IconSvg @name="chevron-up" /></template>;
 
-// formatter wraps long attribute values
-const PLACEHOLDER = 'Start typing or paste your text here...';
+const listed = { folded: 5, unfolded: 25 };
 
-// < 1 min reads as seconds
-function pace(words: number, wordsPerMinute: number): string {
-	const minutes = words / wordsPerMinute;
-	return minutes < 1
-		? `${Math.ceil(minutes * 60)} sec`
-		: `${Math.ceil(minutes)} min`;
-}
+/** The port of WordCounterViewController. */
+export default class WordCounter extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
 
-export function countText(text: string): TextStats {
-	const trimmed = text.trim();
-
-	const words = trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0;
-	const sentences = trimmed
-		? trimmed.split(/[.!?]+/).filter((s) => s.trim().length > 0)
-				.length
-		: 0;
-	const paragraphs = trimmed
-		? trimmed.split(/\n\s*\n/).filter((p) => p.trim().length > 0)
-				.length
-		: 0;
-
-	return {
-		words,
-		characters: text.length,
-		charactersNoSpaces: text.replace(/\s/g, '').length,
-		sentences,
-		paragraphs,
-		// empty text = 0 lines
-		lines: text ? text.split(/\n/).length : 0,
-		readingTime: pace(words, READING_WPM),
-		speakingTime: pace(words, SPEAKING_WPM),
-	};
-}
-
-export function statsReport(stats: TextStats): string {
-	return `Words: ${stats.words}
-Characters: ${stats.characters}
-Characters (no spaces): ${stats.charactersNoSpaces}
-Sentences: ${stats.sentences}
-Paragraphs: ${stats.paragraphs}
-Lines: ${stats.lines}
-Reading time: ${stats.readingTime}
-Speaking time: ${stats.speakingTime}`;
-}
-
-export default class WordCounterTool extends Component {
 	@tracked text = '';
-	@tracked copied = false;
+	@tracked unfolded = false;
+	@tracked pictureHeight?: number;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?wcText= ?wcMore=1: the iOS launch arguments
+		const query = new URLSearchParams(window.location.search);
+		this.text = query.get('wcText') ?? '';
+		this.unfolded = query.get('wcMore') === '1';
 	}
 
 	get stats() {
 		return countText(this.text);
 	}
 
-	get isEmpty() {
-		return this.text.length === 0;
-	}
-
-	get placeholder() {
-		return PLACEHOLDER;
-	}
-
-	get primary() {
-		const stats = this.stats;
+	get figures() {
+		const { stats } = this;
 		return [
-			{ key: 'words', label: 'Words', value: stats.words },
+			{ label: 'Words', value: stats.words },
+			{ label: 'Characters', value: stats.characters },
+			{ label: 'Sentences', value: stats.sentences },
+			{ label: 'Paragraphs', value: stats.paragraphs },
+		].map((figure) => ({
+			...figure,
+			text: figure.value.toLocaleString(),
+		}));
+	}
+
+	get tiles() {
+		const { stats } = this;
+		return [
 			{
-				key: 'characters',
-				label: 'Characters',
-				value: stats.characters,
+				label: 'No Spaces',
+				value: stats.charactersNoSpaces.toLocaleString(),
 			},
+			{ label: 'Lines', value: stats.lines.toLocaleString() },
 			{
-				key: 'sentences',
-				label: 'Sentences',
-				value: stats.sentences,
+				label: 'Avg Word',
+				value: `${averageWordLength(stats)} chars`,
 			},
-			{
-				key: 'paragraphs',
-				label: 'Paragraphs',
-				value: stats.paragraphs,
-			},
+			{ label: 'Reading time', value: stats.readingTime },
+			{ label: 'Speaking time', value: stats.speakingTime },
 		];
 	}
 
-	get secondary() {
-		const stats = this.stats;
-		return [
-			{
-				key: 'no-spaces',
-				label: 'No spaces',
-				value: String(stats.charactersNoSpaces),
-			},
-			{
-				key: 'lines',
-				label: 'Lines',
-				value: String(stats.lines),
-			},
-			{
-				key: 'reading',
-				label: 'Reading time',
-				value: stats.readingTime,
-			},
-			{
-				key: 'speaking',
-				label: 'Speaking time',
-				value: stats.speakingTime,
-			},
-		];
-	}
-
-	setText = (event: Event) => {
-		this.text = (event.target as HTMLTextAreaElement).value;
-	};
-
-	clear = () => {
-		this.text = '';
-	};
-
-	copyStats = () => void this.copy();
-
-	async copy() {
-		await navigator.clipboard.writeText(statsReport(this.stats));
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
+	// one extra detects more
+	get top() {
+		return topWords(
+			this.text,
+			this.unfolded ? listed.unfolded : listed.folded + 1,
 		);
 	}
 
+	get frequent() {
+		const { top } = this;
+		const most = top[0]?.count ?? 1;
+		const shown = this.unfolded ? top : top.slice(0, listed.folded);
+		return shown.map((row) => ({
+			...row,
+			times: `×${row.count}`,
+			share: row.count / most,
+		}));
+	}
+
+	get hasMore() {
+		return this.top.length > listed.folded;
+	}
+
+	setText = (text: string) => (this.text = text);
+
+	toggleMore = () => (this.unfolded = !this.unfolded);
+
+	copyStats = () => void this.toast.copy(statsReport(this.stats));
+
+	measured = (height: number) => {
+		// 2 px rule under the picture
+		if (height + 2 !== this.pictureHeight)
+			this.pictureHeight = height + 2;
+	};
+
 	<template>
-		<div class="dt-wc">
-			<div class="segmented dt-wc-primary">
-				{{#each this.primary key="key" as |stat|}}
-					<div class="dt-wc-stat">
-						<span
-							class="dt-wc-stat-value"
-						>{{stat.value}}</span>
-						<span
-							class="dt-wc-stat-label"
-						>{{stat.label}}</span>
-					</div>
-				{{/each}}
-			</div>
-
-			<div class="dt-wc-text">
-				<textarea
-					class="dt-wc-input"
-					aria-label="Text"
-					placeholder={{this.placeholder}}
-					value={{this.text}}
-					{{on "input" this.setText}}
-				></textarea>
-			</div>
-
-			<div class="segmented dt-wc-secondary">
-				{{#each this.secondary key="key" as |stat|}}
-					<div class="dt-wc-cell">
-						<span
-							class="dt-wc-cell-label"
-						>{{stat.label}}</span>
-						<span
-							class="dt-wc-cell-value"
-						>{{stat.value}}</span>
-					</div>
-				{{/each}}
-			</div>
-
-			<div class="dt-wc-actions">
-				<button
-					type="button"
-					disabled={{this.isEmpty}}
-					{{on "click" this.clear}}
-				>
-					<Icon @name="trash-2" />
-					Clear
-				</button>
-				<button
-					type="button"
-					disabled={{this.isEmpty}}
-					{{on "click" this.copyStats}}
-				>
-					<Icon
-						@name={{if
-							this.copied
-							"check"
-							"copy"
-						}}
+		<CanonSplit
+			class="word-counter"
+			@halves={{true}}
+			@collapsesTo={{150}}
+		>
+			<:sidebar>
+				<CanonCanvas @height={{this.pictureHeight}}>
+					<Picture
+						@text={{this.text}}
+						@words={{this.stats.words}}
+						@onInput={{this.setText}}
+						@onHeight={{this.measured}}
 					/>
-					{{if
-						this.copied
-						"Copied!"
-						"Copy Stats"
-					}}
-				</button>
-			</div>
-		</div>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonGrid @columns={{2}}>
+						{{#each
+							this.figures
+							as |figure|
+						}}
+							<div
+								class="wc-figure"
+								role="group"
+								aria-label={{figure.label}}
+							>
+								<CanonFigure
+									@text={{figure.text}}
+									@size={{32}}
+								/>
+								<span
+									class="wc-figure-label"
+								>{{figure.label}}</span>
+							</div>
+						{{/each}}
+					</CanonGrid>
+					<CanonTiles @items={{this.tiles}} />
+					<CanonButton
+						@kind="primary"
+						@text="Copy Stats"
+						@icon={{CopyIcon}}
+						@iconStyle="oversized"
+						@disabled={{if
+							this.text
+							false
+							true
+						}}
+						@onClick={{this.copyStats}}
+					/>
+				</CanonRows>
+				{{#if this.frequent.length}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading
+							@text="Most Frequent"
+						/>
+						{{#each this.frequent as |row|}}
+							<div
+								class="wc-frequent"
+								role="group"
+								aria-label="{{row.word}} {{row.times}}"
+							>
+								<span
+									class="wc-frequent-word"
+								>{{row.word}}</span>
+								<span
+									class="wc-frequent-times"
+								>{{row.times}}</span>
+								<CanonBar
+									class="wc-frequent-bar"
+									@share={{row.share}}
+								/>
+							</div>
+						{{/each}}
+						{{#if this.hasMore}}
+							<CanonButton
+								@kind="cell"
+								@text={{if
+									this.unfolded
+									"Show fewer"
+									"Show more"
+								}}
+								@icon={{if
+									this.unfolded
+									FewerIcon
+									MoreIcon
+								}}
+								@onClick={{this.toggleMore}}
+							/>
+						{{/if}}
+					</CanonRows>
+				{{/if}}
+			</:main>
+		</CanonSplit>
 	</template>
 }

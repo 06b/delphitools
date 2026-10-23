@@ -1,0 +1,96 @@
+.cutout-picture {
+	position: absolute;
+	inset: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.cutout-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+	display: grid;
+	place-items: center;
+	container-type: size;
+}
+
+.cutout-box {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: min(100cqi, 100cqb * (var(--cutout-aspect)));
+	aspect-ratio: var(--cutout-aspect);
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0% 25%,
+			var(--canon-card) 0% 50%
+		)
+		0 0 / 16px 16px;
+}
+
+.cutout-box--filled {
+	background: var(--cutout-fill);
+}
+
+.cutout-box img,
+.cutout-box canvas,
+.cutout-name {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	max-inline-size: none;
+}
+
+.cutout-ghost {
+	transition: opacity 700ms ease-in-out;
+}
+
+.cutout-box--done .cutout-ghost {
+	opacity: 0.3;
+}
+
+.cutout-cut {
+	cursor: crosshair;
+	animation: cutout-in 700ms ease-in-out;
+	touch-action: none;
+}
+
+.cutout-ring {
+	position: absolute;
+	box-sizing: border-box;
+	inline-size: var(--cutout-brush);
+	block-size: var(--cutout-brush);
+	border: var(--canon-hairline) solid var(--canon-card);
+	border-radius: 50%;
+	box-shadow: 0 0 0 var(--canon-hairline) var(--canon-foreground);
+	pointer-events: none;
+	translate: -50% -50%;
+}
+
+@keyframes cutout-in {
+	from {
+		opacity: 0;
+	}
+}
+
+.cutout-box--empty {
+	outline: none;
+	background: none;
+}
+
+.cutout-loader {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	color: var(--canon-primary);
+	translate: -50% -50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cutout-ghost {
+		transition: none;
+	}
+
+	.cutout-cut {
+		animation: none;
+	}
+}

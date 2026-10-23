@@ -3,7 +3,10 @@ import {
 	oklabDistance,
 	clusterPixels,
 	rankClusters,
-} from 'delphitools-v2/components/tools/palette-extractor';
+	coverage,
+	paintPixels,
+	type Cluster,
+} from 'delphitools-v2/components/tools/palette-extractor/engine';
 import type { Triple } from 'delphitools-v2/lib/colour-maths';
 
 function fixedRandom(seed = 1) {
@@ -159,6 +162,43 @@ module('Unit | Tool | palette-extractor', function () {
 			);
 			const ranked = rankClusters(clusters, 'dominant', 3);
 			assert.true(ranked.every((c) => clusters.includes(c)));
+		});
+	});
+
+	module('coverage', function () {
+		const cluster = (centroid: Triple, count: number): Cluster => ({
+			centroid,
+			hex: '#000000',
+			count,
+		});
+		const red = cluster([0.63, 0.22, 0.13], 30);
+		const pink = cluster([0.62, 0.18, 0.04], 10);
+		const blue = cluster([0.45, -0.03, -0.31], 60);
+
+		test('folds each cluster into its nearest palette colour', function (assert) {
+			const shares = coverage([red, pink, blue], [blue, red]);
+			assert.deepEqual(
+				shares.map((s) => s.toFixed(2)),
+				['0.60', '0.40'],
+			);
+		});
+
+		test('is all zero with no pixels', function (assert) {
+			assert.deepEqual(coverage([], [red]), [0]);
+		});
+	});
+
+	module('paintPixels', function () {
+		test('maps each pixel to its nearest palette colour', function (assert) {
+			const data = new Uint8ClampedArray([
+				224, 64, 90, 255, 0, 0, 255, 255, 9, 9, 9, 0,
+			]);
+			paintPixels(data, ['#0000ff', '#ff0000']);
+			assert.deepEqual(
+				[...data],
+				[255, 0, 0, 255, 0, 0, 255, 255, 9, 9, 9, 0],
+				'pink to red, blue stays, transparent untouched',
+			);
 		});
 	});
 });

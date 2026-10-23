@@ -1,17 +1,59 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
+import type Owner from '@ember/owner';
+import { eq, or } from 'ember-truth-helpers';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import type { CanonLamp } from 'delphicanon/components/canon-lamps';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { hex, parseHex, type Rgb } from 'delphicanon/lib/colour';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import CueRow from 'delphitools-v2/components/tools/media/cue-row';
+import CueTimeline, {
+	type CueLane,
+} from 'delphitools-v2/components/tools/media/cue-timeline';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Playback from 'delphitools-v2/components/tools/media/playback';
+import Sections from 'delphitools-v2/components/tools/media/sections';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
+import {
+	release,
+	thumbnails,
+} from 'delphitools-v2/components/tools/media/frames';
+import {
+	clampPosition,
+	jumpTarget,
+	placement,
+	shown,
+} from 'delphitools-v2/components/tools/subtitle-studio/board';
+import Picture from 'delphitools-v2/components/tools/subtitle-studio/picture';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { downloadUrl } from 'delphitools-v2/lib/download';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
 import {
+	analyzeMedia,
+	sections,
+	type Section,
+} from 'delphitools-v2/lib/mediainfo';
+import {
+	detectFormat,
 	formatTimestamp,
 	parseSubtitles,
 	type Cue,
@@ -30,68 +72,97 @@ import {
 } from 'delphitools-v2/lib/media-convert';
 import {
 	DEFAULT_STYLE,
+	SIZE_RANGE,
+	WIDTH_RANGE,
 	activeCue,
 	bitrateFor,
 	drawSubtitle,
+	stripTags,
 	supportedFormats,
 	type BurnStyle,
 	type FontChoice,
+	type TextBox,
 	type TextStyle,
 } from 'delphitools-v2/lib/subtitle-burn';
+import './media/media.css';
+import './subtitle-studio/subtitle-studio.css';
 
 const VIDEO = acceptAttr(VIDEO_ACCEPT);
 const SUBS = acceptAttr(SUBTITLE_ACCEPT);
-const PASTE_ACCEPT = `${VIDEO},${SUBS}`;
+const ANY = `${VIDEO},${SUBS}`;
 const SUBS_RE = /\.(srt|vtt)$/i;
 
 const CAPTURE_FPS = 30;
+// iOS: height over width at most 1.25, at most 420 pt tall
+const tallest = 1.25;
+const tallestPreview = 420;
+const BLANK_BOARD = htmlSafe(`--ss-aspect: ${16 / 9}`);
+/** Opacity of the next cue between cues (iOS ghost). */
+const GHOST = 0.45;
+const LAMPS: CanonLamp[] = ['play', 'pause'];
+const [SIZE_MIN, SIZE_MAX] = SIZE_RANGE;
+const [WIDTH_MIN, WIDTH_MAX] = WIDTH_RANGE;
 
-const tc = (ms: number) => formatTimestamp(ms, '.');
-const nth = (index: number) => index + 1;
+const FONTS: FontChoice[] = ['sans', 'serif', 'mono', 'quattro'];
+const FONT_LABELS = ['Sans', 'Serif', 'Mono', 'Quattro'];
+const WEIGHTS = ['Regular', 'Bold'];
+const TEXT_STYLES: TextStyle[] = ['outline', 'box', 'shadow', 'plain'];
+const TEXT_LABELS = ['Outline', 'Box', 'Shadow', 'Plain'];
 
-const FONTS: { id: FontChoice; label: string }[] = [
-	{ id: 'sans', label: 'Sans' },
-	{ id: 'serif', label: 'Serif' },
-	{ id: 'mono', label: 'Mono' },
-	{ id: 'quattro', label: 'Quattro' },
-];
-
-const TEXT_STYLES: { id: TextStyle; label: string }[] = [
-	{ id: 'outline', label: 'Outline' },
-	{ id: 'box', label: 'Box' },
-	{ id: 'plain', label: 'Plain' },
-];
+const SUBS_ERROR = 'Not a valid subtitle file.';
+const BURN_ERROR = 'Writing failed, please try again';
+const HIDDEN_ERROR =
+	'Burn failed because the tab was backgrounded. Please try again and keep it in focus.';
 
 // probed once; static per browser
 const FORMATS = supportedFormats();
 
-const VIDEO_DROP_TITLE = 'Drop a video file';
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Flame = <template><IconSvg @name="flame" /></template>;
+const PlayIcon = <template><IconSvg @name="play" /></template>;
+const PauseIcon = <template><IconSvg @name="pause" /></template>;
+const BackFrame = <template><IconSvg @name="chevron-left" /></template>;
+const ForwardFrame = <template><IconSvg @name="chevron-right" /></template>;
+const PreviousCue = <template><IconSvg @name="skip-back" /></template>;
+const NextCue = <template><IconSvg @name="skip-forward" /></template>;
+const PLACES = [
+	{
+		text: 'Top',
+		icon: <template><IconSvg @name="arrow-up-to-line" /></template>,
+	},
+	{
+		text: 'Middle',
+		icon: <template><IconSvg @name="arrow-up-down" /></template>,
+	},
+	{
+		text: 'Bottom',
+		icon: <template>
+			<IconSvg @name="arrow-down-to-line" />
+		</template>,
+	},
+];
 
-const SUBS_DROP_TITLE = 'Drop an SRT or VTT file';
+const tc = (ms: number) => formatTimestamp(ms, '.');
+const rgb = (colour: string): Rgb => parseHex(colour) ?? [1, 1, 1];
+const off = (on: boolean) => !on;
 
-const SUBS_ERROR = 'Not a valid subtitle file.';
+const sameBox = (a: TextBox | null, b: TextBox | null) =>
+	a === b ||
+	(!!a &&
+		!!b &&
+		a.x === b.x &&
+		a.y === b.y &&
+		a.width === b.width &&
+		a.height === b.height);
 
-const BURN_ERROR = 'Writing failed, please try again';
-
-const HIDDEN_ERROR =
-	'Burn failed because the tab was backgrounded. Please try again and keep it in focus.';
-
-interface Drag {
-	pointerId: number;
-	startX: number;
-	startY: number;
-	x0: number;
-	y0: number;
-	width: number;
-	height: number;
-}
-
+/**
+ * The port of SubtitleStudioViewController, on the web tool's burners: the
+ * preview and the cue list are the main pane, the look and the export the
+ * sidebar.
+ */
 export default class SubtitleStudioTool extends Component {
 	intake = new VideoIntake({
-		onLoad: () => {
-			this.#stopBurn();
-			this.#resetResult();
-		},
+		onLoad: (file) => this.#load(file),
 		onReady: (video) => {
 			this.#fitCanvas(video);
 			void this.#probeEncoders(video);
@@ -99,49 +170,100 @@ export default class SubtitleStudioTool extends Component {
 		probe: true,
 		canLoad: () => !this.burning,
 	});
+	playback = new Playback();
 
 	@tracked cues: Cue[] = [];
 	@tracked subsName = '';
+	@tracked subsFailed = false;
 	@tracked style: BurnStyle = DEFAULT_STYLE;
 	@tracked currentMs = 0;
+	/** The drawn text in frame fractions. */
+	@tracked box: TextBox | null = null;
+	@tracked frames: string[] = [];
 	@tracked burning = false;
 	@tracked burnPct = 0;
+	@tracked resultBlob: Blob | null = null;
 	@tracked resultUrl = '';
-	@tracked resultSize = 0;
 	@tracked resultExt = 'webm';
 	/** sec of video / wall clock sec; 0 unknown */
 	@tracked resultSpeed = 0;
+	@tracked info: Section[] = [];
 	@tracked encoders: Set<BurnCodec> | null = null;
-	@tracked errorCode = '';
+	@tracked errorCode: '' | 'burn' | 'hidden' = '';
 	@tracked formatId = '';
 
 	canvas: HTMLCanvasElement | null = null;
 
+	#token = 0;
 	#burnId = 0;
 	#burnWatcher: AbortController | null = null;
 	#subsToken = 0;
 	#audio: {
+		video: HTMLVideoElement;
 		ctx: AudioContext;
 		dest: MediaStreamAudioDestinationNode;
 		gain: GainNode;
 	} | null = null;
-	#drag: Drag | null = null;
 	#frame = 0;
 	#frameKind: 'video' | 'raf' = 'raf';
+	#launch: { at?: number; run?: boolean } = {};
+
+	// ?ssFont= ?ssWeight= ?ssText= ?ssPlace= (indices) ?ssSubs=<srt or vtt text>
+	// ?ssSample=<same-origin video path> ?ssAt=<seconds> ?ssRun=1: the iOS launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const index = (key: string) =>
+			query.has(key) ? Number(query.get(key)) : undefined;
+		// set once: a tracked value read and then written in one render throws
+		const style = { ...DEFAULT_STYLE };
+		style.font = FONTS[index('ssFont') ?? -1] ?? style.font;
+		if (query.has('ssWeight')) style.bold = index('ssWeight') === 1;
+		style.text = TEXT_STYLES[index('ssText') ?? -1] ?? style.text;
+		const place = index('ssPlace');
+		if (place !== undefined) style.y = placement(place, style.size);
+		this.style = style;
+		const subs = query.get('ssSubs');
+		if (subs) {
+			this.cues = parseSubtitles(subs).sort(
+				(a, b) => a.start - b.start,
+			);
+			this.subsName = `subtitles.${detectFormat(subs) ?? 'srt'}`;
+		}
+		const at = index('ssAt');
+		if (at !== undefined && Number.isFinite(at))
+			this.#launch.at = at;
+		this.#launch.run = query.get('ssRun') === '1';
+		const sample = query.get('ssSample');
+		if (sample?.startsWith('/') && !sample.startsWith('//'))
+			void this.#fetchSample(sample);
+	}
+
+	async #fetchSample(url: string) {
+		const response = await fetch(url).catch(() => null);
+		if (!response?.ok || this.isDestroying) return;
+		const blob = await response.blob();
+		const name = url.split('/').pop() || 'video';
+		this.intake.load(new File([blob], name, { type: blob.type }));
+	}
 
 	registerCanvas = modifier((element: HTMLCanvasElement) => {
 		this.canvas = element;
+		const video = this.intake.video;
+		if (video?.videoWidth) this.#fitCanvas(video);
 		return () => {
-			this.canvas = null;
+			if (this.canvas === element) this.canvas = null;
 		};
 	});
 
 	willDestroy() {
 		super.willDestroy();
+		this.#token++;
 		this.#stopBurn();
 		this.#cancelFrame();
 		this.intake.release();
 		this.#resetResult();
+		release(this.frames);
 		void this.#audio?.ctx.close();
 	}
 
@@ -162,31 +284,65 @@ export default class SubtitleStudioTool extends Component {
 		);
 	}
 
-	get activeIndex() {
-		const ms = this.currentMs;
-		return this.cues.findIndex((c) => ms >= c.start && ms < c.end);
+	get formatLabels() {
+		return this.formats.map((f) => f.label);
 	}
 
-	get hasVideo() {
-		return this.intake.url !== null;
+	get formatIndex() {
+		return Math.max(0, this.formats.indexOf(this.format!));
 	}
 
-	get ready() {
-		return (
-			this.intake.duration > 0 &&
-			this.cues.length > 0 &&
-			!!this.format &&
-			!this.burning
+	get unsupported() {
+		return this.formats.flatMap((f, index) =>
+			f.supported ? [] : [index],
 		);
 	}
 
-	setFormat = (event: Event) => {
-		this.formatId = (event.target as HTMLSelectElement).value;
-		this.#resetResult();
-	};
+	get loaded() {
+		return this.intake.url !== null;
+	}
 
-	get baseName() {
-		return this.intake.baseName || 'video';
+	/** The video plays and steps. */
+	get playable() {
+		return this.intake.duration > 0 && !this.burning;
+	}
+
+	get ready() {
+		return this.playable && this.cues.length > 0 && !!this.format;
+	}
+
+	get shown() {
+		return shown(this.cues, this.currentMs);
+	}
+
+	/** The row of the cue on screen; none between cues. */
+	get markedIndex() {
+		const shown = this.shown;
+		return shown && !shown.ghost ? shown.index : null;
+	}
+
+	get lanes(): CueLane[] {
+		return [{ cues: this.cues, active: this.markedIndex }];
+	}
+
+	get span() {
+		return this.intake.duration * 1000 || undefined;
+	}
+
+	get aspect() {
+		const { width, height } = this.intake;
+		return width && height ? width / height : 16 / 9;
+	}
+
+	get previewAspect() {
+		return Math.max(this.aspect, 1 / tallest);
+	}
+
+	get pictureName() {
+		const shown = this.shown;
+		return shown
+			? stripTags(this.cues[shown.index]!.text)
+			: this.intake.fileName;
 	}
 
 	get meta() {
@@ -195,61 +351,110 @@ export default class SubtitleStudioTool extends Component {
 		return `${width} × ${height} · ${formatFps(this.intake.fps)} · ${tc(duration * 1000)}`;
 	}
 
-	get stats() {
-		if (this.cues.length === 0) return '';
-		return `${this.cues.length} cues · ${tc(this.currentMs)}`;
+	get videoDetail() {
+		return this.intake.error || this.meta;
 	}
 
-	get sizePercent() {
-		return Math.round(this.style.size * 100);
+	get cueCount() {
+		return `${this.cues.length} cues`;
 	}
 
-	get positionLabel() {
-		const { x, y } = this.style;
-		return `${Math.round(x * 100)} · ${Math.round(y * 100)}`;
+	get isPlain() {
+		return this.style.text === 'plain';
 	}
 
-	get progressStyle() {
-		return htmlSafe(`width: ${this.burnPct}%`);
+	get fontIndex() {
+		return FONTS.indexOf(this.style.font);
 	}
 
-	get resultLabel() {
+	get textIndex() {
+		return TEXT_STYLES.indexOf(this.style.text);
+	}
+
+	get weightIndex() {
+		return this.style.bold ? 1 : 0;
+	}
+
+	get colour() {
+		return rgb(this.style.colour);
+	}
+
+	get backing() {
+		return rgb(this.style.backing);
+	}
+
+	get baseName() {
+		return this.intake.baseName || 'video';
+	}
+
+	get fileName() {
+		return `${this.baseName}-subtitled.${this.resultExt}`;
+	}
+
+	get resultRow() {
+		if (!this.resultBlob) return null;
 		const speed =
 			this.resultSpeed > 0
 				? ` · ${this.resultSpeed.toFixed(1)}×`
 				: '';
-		return `${this.resultExt} · ${formatBytes(this.resultSize)}${speed}`;
+		return {
+			name: this.fileName,
+			detail: `${this.resultExt} · ${formatBytes(this.resultBlob.size)}${speed}`,
+		};
 	}
 
-	get errorMessage() {
-		if (this.intake.error) return this.intake.error;
-		if (this.errorCode === 'subs') return SUBS_ERROR;
-		if (this.errorCode === 'burn') return BURN_ERROR;
-		if (this.errorCode === 'hidden') return HIDDEN_ERROR;
-		return '';
+	get failed() {
+		return this.errorCode !== '';
 	}
 
-	chooseSubs = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) void this.readSubs(file);
-		input.value = '';
-	};
+	get jumps() {
+		return this.playable && this.cues.length > 0;
+	}
+
+	get failure() {
+		return this.errorCode === 'hidden' ? HIDDEN_ERROR : BURN_ERROR;
+	}
+
+	get progress() {
+		return this.burnPct / 100;
+	}
+
+	#load(file: File) {
+		this.#stopBurn();
+		this.#resetResult();
+		this.#token++;
+		release(this.frames);
+		this.frames = [];
+		this.encoders = null;
+		this.box = null;
+		this.currentMs = 0;
+		const token = this.#token;
+		const live = () => token === this.#token;
+		void thumbnails(file, live).then((urls) => {
+			if (!live()) return release(urls);
+			this.frames = urls;
+		});
+	}
 
 	readSubs = async (file: File) => {
+		if (this.burning) return;
 		const token = ++this.#subsToken;
 		const cues = parseSubtitles(await file.text());
-		if (this.isDestroyed || token !== this.#subsToken) return;
+		if (this.isDestroying || token !== this.#subsToken) return;
 		if (cues.length === 0) {
-			this.errorCode = 'subs';
+			this.subsFailed = true;
 			return;
 		}
+		this.#setCues(cues, file.name);
+	};
+
+	#setCues(cues: Cue[], name: string) {
 		this.cues = cues.slice().sort((a, b) => a.start - b.start);
-		this.subsName = file.name;
-		this.errorCode = '';
+		this.subsName = name;
+		this.subsFailed = false;
 		this.#resetResult();
 		this.draw();
-	};
+	}
 
 	// routed by extension: srt/vtt → subs, else video
 	readAny = (file: File) => {
@@ -257,105 +462,113 @@ export default class SubtitleStudioTool extends Component {
 		else this.intake.load(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
+	readFiles = (files: File[]) => files.forEach(this.readAny);
+
+	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
+
+	// a drop anywhere loads the files; the drop zones handle their own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const files = [...(event.dataTransfer?.files ?? [])].filter(
+			(f) => matchesAccept(f, ANY),
+		);
+		if (files.length === 0) return;
 		event.preventDefault();
-		if (this.burning) return;
-		for (const file of event.dataTransfer?.files ?? [])
-			this.readAny(file);
+		this.readFiles(files);
 	};
 
 	#patch(patch: Partial<BurnStyle>) {
+		if (this.burning) return;
 		this.style = { ...this.style, ...patch };
+		this.#resetResult();
 		this.draw();
 	}
 
-	setFont = (font: FontChoice) => this.#patch({ font });
+	pickFont = (index: number) => this.#patch({ font: FONTS[index] });
 
-	setSize = (event: Event) =>
-		this.#patch({
-			size:
-				Number(
-					(event.target as HTMLInputElement)
-						.value,
-				) / 100,
-		});
+	pickWeight = (index: number) => this.#patch({ bold: index === 1 });
 
-	setColour = (event: Event) =>
-		this.#patch({
-			colour: (event.target as HTMLInputElement).value,
-		});
+	setSize = (size: number) => this.#patch({ size });
 
-	setTextStyle = (text: TextStyle) => this.#patch({ text });
+	setWidth = (width: number) => this.#patch({ width });
 
-	resetPosition = () =>
-		this.#patch({ x: DEFAULT_STYLE.x, y: DEFAULT_STYLE.y });
+	pickText = (index: number) => this.#patch({ text: TEXT_STYLES[index] });
 
-	// css-box scale → frame fractions; 1:1 at any size
-	pointerDown = (event: PointerEvent) => {
-		const canvas = this.canvas;
-		if (!canvas || this.burning || !this.cues.length) return;
-		// object-fit: contain letterboxes; deltas scale against frame
-		const rect = canvas.getBoundingClientRect();
-		const scale = Math.min(
-			rect.width / canvas.width,
-			rect.height / canvas.height,
-		);
-		this.#drag = {
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			startY: event.clientY,
-			x0: this.style.x,
-			y0: this.style.y,
-			width: canvas.width * scale,
-			height: canvas.height * scale,
-		};
-		canvas.setPointerCapture(event.pointerId);
+	setColour = (colour: Rgb) => this.#patch({ colour: hex(colour) });
+
+	setBacking = (colour: Rgb) => this.#patch({ backing: hex(colour) });
+
+	move = (x: number, y: number) => this.#patch(clampPosition(x, y));
+
+	place = (index: number) =>
+		this.#patch({ x: 0, y: placement(index, this.style.size) });
+
+	pickFormat = (index: number) => {
+		const format = this.formats[index];
+		if (!format) return;
+		this.formatId = format.id;
+		this.#resetResult();
 	};
 
-	pointerMove = (event: PointerEvent) => {
-		const drag = this.#drag;
-		if (!drag || event.pointerId !== drag.pointerId) return;
-		const x = drag.x0 + (event.clientX - drag.startX) / drag.width;
-		const y = drag.y0 + (event.clientY - drag.startY) / drag.height;
-		this.#patch({
-			x: Math.max(-0.45, Math.min(0.45, x)),
-			y: Math.max(-0.9, Math.min(0.05, y)),
-		});
+	editCue = (index: number, cue: Cue) => {
+		if (this.burning) return;
+		const next = this.cues.slice();
+		next[index] = cue;
+		this.cues = next;
+		this.#resetResult();
+		this.draw();
 	};
 
-	pointerUp = (event: PointerEvent) => {
-		if (this.#drag?.pointerId === event.pointerId)
-			this.#drag = null;
-	};
-
-	togglePlayback = () => {
+	toggle = () => {
 		if (this.burning) return;
 		void this.#audio?.ctx.resume();
-		this.intake.togglePlayback();
+		this.playback.toggle();
+	};
+
+	scrub = (seconds: number) => {
+		if (!this.burning) this.playback.scrub(seconds);
+	};
+
+	// exact seek lands early
+	seekCue = (index: number) => {
+		const cue = this.cues[index];
+		if (!cue || !this.playable) return;
+		this.playback.pause();
+		this.scrub(
+			Math.min(
+				cue.start / 1000 + 1 / this.intake.fps,
+				cue.end / 1000,
+			),
+		);
+	};
+
+	step = (frames: number) => {
+		const video = this.intake.video;
+		if (!video || !this.playable) return;
+		this.playback.pause();
+		this.scrub(
+			Math.min(
+				Math.max(
+					video.currentTime +
+						frames / this.intake.fps,
+					0,
+				),
+				this.intake.duration,
+			),
+		);
+	};
+
+	jump = (offset: -1 | 1) => {
+		const target = jumpTarget(this.cues, this.currentMs, offset);
+		if (target !== null) this.seekCue(target);
 	};
 
 	syncPlaying = (event: Event) => {
 		this.intake.syncPlaying(event);
 		if (this.intake.playing) this.#loop();
-	};
-
-	seekRow = (index: number) => {
-		const video = this.intake.video;
-		const cue = this.cues[index];
-		if (!video || !cue || this.burning) return;
-		video.pause();
-		void seekTo(video, cue.start / 1000).then(() => this.draw());
-	};
-
-	setText = (index: number, event: Event) => {
-		const next = this.cues.slice();
-		next[index] = {
-			...next[index]!,
-			text: (event.target as HTMLInputElement).value,
-		};
-		this.cues = next;
-		this.#resetResult();
-		this.draw();
 	};
 
 	draw = () => {
@@ -367,9 +580,22 @@ export default class SubtitleStudioTool extends Component {
 		const { width, height } = canvas;
 		ctx.drawImage(video, 0, 0, width, height);
 		const ms = video.currentTime * 1000;
-		const cue = activeCue(this.cues, ms);
-		if (cue) drawSubtitle(ctx, cue.text, width, height, this.style);
 		this.currentMs = ms;
+		// the live burn records this canvas: no ghost then
+		const on = this.burning ? null : shown(this.cues, ms);
+		const cue = on ? this.cues[on.index] : activeCue(this.cues, ms);
+		ctx.globalAlpha = on?.ghost ? GHOST : 1;
+		const drawn = cue
+			? drawSubtitle(ctx, cue.text, width, height, this.style)
+			: null;
+		ctx.globalAlpha = 1;
+		const box = drawn && {
+			x: drawn.x / width,
+			y: drawn.y / height,
+			width: drawn.width / width,
+			height: drawn.height / height,
+		};
+		if (!sameBox(box, this.box)) this.box = box;
 		if (this.burning && this.intake.duration) {
 			const pct = Math.round(
 				(100 * ms) / (this.intake.duration * 1000),
@@ -410,8 +636,12 @@ export default class SubtitleStudioTool extends Component {
 			video.videoHeight,
 		);
 		// webcodecs present; no encoder valid → mediarecorder
-		if (!this.isDestroyed && this.intake.file === file)
-			this.encoders = encoders?.size ? encoders : null;
+		if (this.isDestroying || this.intake.file !== file) return;
+		this.encoders = encoders?.size ? encoders : null;
+		const { at, run } = this.#launch;
+		this.#launch = {};
+		if (at !== undefined) this.scrub(at);
+		if (run) this.burn();
 	}
 
 	#fitCanvas(video: HTMLVideoElement) {
@@ -422,9 +652,10 @@ export default class SubtitleStudioTool extends Component {
 		this.draw();
 	}
 
-	// createMediaElementSource binds permanently; build once, gain 1 = playback
+	// source binds element permanently
 	#audioGraph(video: HTMLVideoElement) {
-		if (this.#audio) return this.#audio;
+		if (this.#audio?.video === video) return this.#audio;
+		void this.#audio?.ctx.close();
 		const ctx = new AudioContext();
 		const source = ctx.createMediaElementSource(video);
 		const dest = ctx.createMediaStreamDestination();
@@ -432,11 +663,13 @@ export default class SubtitleStudioTool extends Component {
 		source.connect(dest);
 		source.connect(gain);
 		gain.connect(ctx.destination);
-		this.#audio = { ctx, dest, gain };
+		this.#audio = { video, ctx, dest, gain };
 		return this.#audio;
 	}
 
 	burn = () => {
+		if (!this.ready) return;
+		this.playback.pause();
 		if (this.encoders) void this.#burnFast();
 		else void this.#burnLive();
 	};
@@ -451,7 +684,6 @@ export default class SubtitleStudioTool extends Component {
 		this.burnPct = 0;
 		this.errorCode = '';
 		this.#resetResult();
-		this.intake.video?.pause();
 		const watcher = new AbortController();
 		this.#burnWatcher = watcher;
 		const cues = this.cues;
@@ -473,7 +705,7 @@ export default class SubtitleStudioTool extends Component {
 					);
 					return cue
 						? (ctx, width, height) =>
-								drawSubtitle(
+								void drawSubtitle(
 									ctx,
 									cue.text,
 									width,
@@ -491,13 +723,10 @@ export default class SubtitleStudioTool extends Component {
 				signal: watcher.signal,
 			});
 			if (id !== this.#burnId) return;
-			this.resultUrl = URL.createObjectURL(result.blob);
-			this.resultSize = result.blob.size;
-			this.resultExt = result.ext;
 			this.resultSpeed =
 				this.intake.duration /
 				((performance.now() - started) / 1000);
-			this.burnPct = 100;
+			this.#finish(result.blob, result.ext, id);
 		} catch (error) {
 			if (id !== this.#burnId) return;
 			if ((error as Error).name === 'AbortError') return;
@@ -596,10 +825,7 @@ export default class SubtitleStudioTool extends Component {
 			const blob = new Blob(chunks, {
 				type: recorder.mimeType || 'video/webm',
 			});
-			this.resultUrl = URL.createObjectURL(blob);
-			this.resultSize = blob.size;
-			this.resultExt = format.ext;
-			this.burnPct = 100;
+			this.#finish(blob, format.ext, id);
 		} catch (error) {
 			const message = (error as Error).message;
 			if (message !== 'hidden' && message !== 'stopped')
@@ -626,6 +852,28 @@ export default class SubtitleStudioTool extends Component {
 		}
 	}
 
+	#finish(blob: Blob, ext: string, id: number) {
+		this.resultBlob = blob;
+		this.resultUrl = URL.createObjectURL(blob);
+		this.resultExt = ext;
+		this.burnPct = 100;
+		void this.#describe(blob, id);
+	}
+
+	async #describe(blob: Blob, id: number) {
+		try {
+			const tracks = await analyzeMedia(
+				new File([blob], this.fileName, {
+					type: blob.type,
+				}),
+			);
+			if (id === this.#burnId && this.resultBlob === blob)
+				this.info = sections(tracks);
+		} catch {
+			// no report: the sidebar stays empty
+		}
+	}
+
 	#stopBurn() {
 		this.#burnId++;
 		this.#burnWatcher?.abort();
@@ -638,657 +886,450 @@ export default class SubtitleStudioTool extends Component {
 	#resetResult() {
 		if (this.resultUrl) URL.revokeObjectURL(this.resultUrl);
 		this.resultUrl = '';
-		this.resultSize = 0;
+		this.resultBlob = null;
 		this.resultSpeed = 0;
 		this.burnPct = 0;
+		this.info = [];
 	}
 
-	downloadResult = () => {
-		if (!this.resultUrl) return;
-		downloadUrl(
-			this.resultUrl,
-			`${this.baseName}-subtitled.${this.resultExt}`,
-		);
+	cancel = () => {
+		this.#stopBurn();
+		this.#resetResult();
+	};
+
+	save = () => {
+		if (this.resultUrl) downloadUrl(this.resultUrl, this.fileName);
 	};
 
 	clear = () => {
 		this.#stopBurn();
 		this.#resetResult();
+		this.#token++;
+		this.playback.unload();
 		this.intake.clear();
-		this.cues = [];
-		this.subsName = '';
+		release(this.frames);
+		this.frames = [];
+		this.encoders = null;
 		this.errorCode = '';
 		this.currentMs = 0;
-		if (this.canvas) this.canvas.width = 0;
+		this.box = null;
+	};
+
+	clearSubs = () => {
+		if (this.burning) return;
+		this.#subsToken++;
+		this.cues = [];
+		this.subsName = '';
+		this.subsFailed = false;
+		this.#resetResult();
+		this.draw();
 	};
 
 	<template>
-		<div
-			class="dt-ss"
-			{{filePaste this.readAny accept=PASTE_ACCEPT}}
+		<CanonSplit
+			class="subtitle-studio"
+			@bannerSticks={{true}}
+			@mainLeadsStacked={{true}}
+			{{filePaste this.readAny accept=ANY}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
 		>
-			<div
-				class="dt-ss-frame"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				<div class="dt-ss-bar">
-					<label
-						class="dt-ss-file"
-						aria-label="Open video file"
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<CanonReadoutBand
+						@transport={{this.playback.transport}}
+						@idle={{if
+							this.intake.duration
+							this.intake.duration
+							null
+						}}
+						@readout="below"
+						@lamps={{LAMPS}}
 					>
-						<input
-							type="file"
-							class="dt-sr-only"
-							accept={{VIDEO}}
-							{{on
-								"change"
-								this.intake.chooseFile
-							}}
+						<div class="ss-strips">
+							<Strips
+								@thumbnails={{this.frames}}
+								@aspect={{this.aspect}}
+								@duration={{this.intake.duration}}
+								@playhead={{this.playback.playhead}}
+								@onScrub={{this.scrub}}
+								@blank={{off
+									this.loaded
+								}}
+							/>
+							<CueTimeline
+								class="ss-lane"
+								@lanes={{this.lanes}}
+								@span={{this.span}}
+								@playhead={{this.playback.playhead}}
+								@onScrub={{if
+									this.playable
+									this.scrub
+								}}
+								@onCue={{if
+									this.playable
+									this.seekCue
+								}}
+							/>
+						</div>
+					</CanonReadoutBand>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows class="ss-look" @framed={{true}}>
+					<CanonHeading @text="Font" />
+					<CanonSegmented
+						class="ss-font"
+						aria-label="Font"
+						@items={{FONT_LABELS}}
+						@columns={{4}}
+						@selected={{this.fontIndex}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickFont}}
+					/>
+					<CanonSegmented
+						class="ss-weight"
+						aria-label="Weight"
+						@items={{WEIGHTS}}
+						@selected={{this.weightIndex}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickWeight}}
+					/>
+					<CanonRow
+						class="ss-size"
+						@title="Size"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.style.size}}
+							@min={{SIZE_MIN}}
+							@max={{SIZE_MAX}}
+							@step={{0.01}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setSize}}
 						/>
-						<Icon @name="film" />
-						<span
-							class="dt-ss-filename"
-						>{{if
-								this.intake.fileName
-								this.intake.fileName
-								"Choose video"
-							}}</span>
-					</label>
-					<label
-						class="dt-ss-file"
-						aria-label="Open subtitle file"
+					</CanonRow>
+					<CanonRow
+						class="ss-width"
+						@title="Width"
+						@form="flush"
+						as |titleId|
 					>
-						<input
-							type="file"
-							class="dt-sr-only"
-							accept={{SUBS}}
-							{{on
-								"change"
-								this.chooseSubs
-							}}
+						<CanonSlider
+							@value={{this.style.width}}
+							@min={{WIDTH_MIN}}
+							@max={{WIDTH_MAX}}
+							@step={{0.05}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setWidth}}
 						/>
-						<Icon @name="captions" />
-						<span
-							class="dt-ss-filename"
-						>{{if
-								this.subsName
-								this.subsName
-								"Choose subtitles"
-							}}</span>
-					</label>
-					<select
-						class="dt-ss-format"
-						aria-label="Export format"
-						{{on "change" this.setFormat}}
-					>
-						{{#each
-							this.formats key="id"
-							as |f|
-						}}
-							<option
-								value={{f.id}}
-								disabled={{unless
-									f.supported
-									true
-								}}
-								selected={{eq
-									f.id
-									this.format.id
-								}}
-							>{{f.label}}</option>
-						{{/each}}
-					</select>
-					<button
-						type="button"
-						class="dt-ss-go"
-						disabled={{unless
-							this.ready
-							true
-						}}
-						aria-busy={{if
-							this.burning
-							"true"
-							"false"
-						}}
-						{{on "click" this.burn}}
-					>
-						{{#if this.burning}}
-							<NdsLoader />
-						{{else}}
-							<Icon @name="flame" />
-						{{/if}}
-						<span>Burn</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-clear"
-						disabled={{unless
-							this.hasVideo
-							(unless
-								this.subsName
-								true
-							)
-						}}
-						aria-label="Clear"
-						{{on "click" this.clear}}
-					>
-						<Icon @name="x" />
-					</button>
-				</div>
-
-				<div class="dt-ss-settings">
-					<div class="dt-ss-set">
-						<span
-							class="dt-ss-label"
-						>Font</span>
-						<div
-							class="segmented dt-ss-fonts"
-						>
-							{{#each
-								FONTS key="id"
-								as |f|
-							}}
-								<button
-									type="button"
-									class="dt-ss-seg
-										{{if
-											(eq
-												this.style.font
-												f.id
-											)
-											'is-active'
-										}}"
-									aria-pressed={{if
-										(eq
-											this.style.font
-											f.id
-										)
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										(fn
-											this.setFont
-											f.id
-										)
-									}}
-								>{{f.label}}</button>
-							{{/each}}
-						</div>
-					</div>
-
-					<div class="dt-ss-set">
-						<span
-							class="dt-ss-label"
-						>Size</span>
-						<div class="dt-ss-range">
-							<input
-								type="range"
-								min="2"
-								max="14"
-								step="1"
-								value={{this.sizePercent}}
-								aria-label="Text size"
-								{{on
-									"input"
-									this.setSize
-								}}
-							/>
-							<span
-								class="dt-ss-readout"
-							>{{this.sizePercent}}%</span>
-						</div>
-					</div>
-
-					<div class="dt-ss-set">
-						<span
-							class="dt-ss-label"
-						>Colour</span>
-						<div class="dt-ss-colour">
-							<input
-								type="color"
-								value={{this.style.colour}}
-								aria-label="Text colour"
-								{{on
-									"input"
-									this.setColour
-								}}
-							/>
-							<span
-								class="dt-ss-readout"
-							>{{this.style.colour}}</span>
-						</div>
-					</div>
-
-					<div class="dt-ss-set">
-						<span
-							class="dt-ss-label"
-						>Style</span>
-						<div
-							class="segmented dt-ss-styles"
-						>
-							{{#each
-								TEXT_STYLES
-								key="id"
-								as |s|
-							}}
-								<button
-									type="button"
-									class="dt-ss-seg
-										{{if
-											(eq
-												this.style.text
-												s.id
-											)
-											'is-active'
-										}}"
-									aria-pressed={{if
-										(eq
-											this.style.text
-											s.id
-										)
-										"true"
-										"false"
-									}}
-									{{on
-										"click"
-										(fn
-											this.setTextStyle
-											s.id
-										)
-									}}
-								>{{s.label}}</button>
-							{{/each}}
-						</div>
-					</div>
-
-				</div>
-
-				<div class="dt-ss-stage">
-					{{! no caption track in uploaded file }}
-					{{! template-lint-disable require-media-caption }}
-					<video
-						src={{this.intake.url}}
-						playsinline
-						preload="auto"
-						hidden
-						{{this.intake.register}}
-						{{on
-							"loadedmetadata"
-							this.intake.ready
-						}}
-						{{on
-							"error"
-							this.intake.failed
-						}}
-						{{on "play" this.syncPlaying}}
-						{{on "pause" this.syncPlaying}}
-						{{on "seeked" this.draw}}
-					></video>
-					{{! canvas = subtitle drag surface }}
-					{{! template-lint-disable no-invalid-interactive no-pointer-down-event-binding }}
-					<canvas
-						class="dt-ss-canvas
-							{{unless
-								this.hasVideo
-								'is-hidden'
-							}}"
-						{{this.registerCanvas}}
-						{{on
-							"pointerdown"
-							this.pointerDown
-						}}
-						{{on
-							"pointermove"
-							this.pointerMove
-						}}
-						{{on
-							"pointerup"
-							this.pointerUp
-						}}
-						{{on
-							"pointercancel"
-							this.pointerUp
-						}}
-					></canvas>
-					{{#if this.meta}}
-						<span
-							class="dt-ss-meta"
-						>{{this.meta}}</span>
-					{{/if}}
-					{{#if this.hasVideo}}
-						<div class="dt-ss-pos">
-							<Icon @name="move" />
-							<span
-								class="dt-ss-readout"
-							>{{this.positionLabel}}</span>
-							<button
-								type="button"
-								class="dt-ss-reset"
-								{{on
-									"click"
-									this.resetPosition
-								}}
-							>Reset</button>
-						</div>
-					{{/if}}
-					{{#unless this.hasVideo}}
-						<label class="dt-ss-drop">
-							<input
-								type="file"
-								class="dt-sr-only"
-								accept={{VIDEO}}
-								{{on
-									"change"
-									this.intake.chooseFile
-								}}
-							/>
-							<Icon @name="film" />
-							<span
-								class="dt-ss-drop-title"
-							>{{VIDEO_DROP_TITLE}}</span>
-							{{! hint shared with background remover }}
-							<span
-								class="dt-ss-drop-hint"
-							>or click to select a
-								file, or paste</span>
-						</label>
+					</CanonRow>
+					<CanonHeading @text="Style" />
+					<CanonSegmented
+						class="ss-text"
+						aria-label="Style"
+						@items={{TEXT_LABELS}}
+						@columns={{4}}
+						@selected={{this.textIndex}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickText}}
+					/>
+					<CanonColourWell
+						class="ss-colour"
+						@label="Text"
+						@colour={{this.colour}}
+						@onChange={{this.setColour}}
+					/>
+					{{#unless this.isPlain}}
+						<CanonColourWell
+							class="ss-backing"
+							@label="Backing"
+							@colour={{this.backing}}
+							@onChange={{this.setBacking}}
+						/>
 					{{/unless}}
-				</div>
-
-				<div class="dt-ss-transport">
-					<button
-						type="button"
-						class="dt-ss-tbtn"
-						disabled={{if
-							this.burning
-							true
-						}}
-						aria-label="Back 5 seconds"
-						{{on
-							"click"
-							(fn
-								this.intake.jumpBy
-								-5
-							)
-						}}
-					>
-						<Icon @name="rewind" />
-						<span>5 s</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-tbtn"
-						disabled={{if
-							this.burning
-							true
-						}}
-						aria-label="Back 1 second"
-						{{on
-							"click"
-							(fn
-								this.intake.jumpBy
-								-1
-							)
-						}}
-					>
-						<Icon @name="chevrons-left" />
-						<span>1 s</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-tbtn"
-						disabled={{if
-							this.burning
-							true
-						}}
-						aria-label="Back one frame"
-						{{on
-							"click"
-							(fn
-								this.intake.jumpFrame
-								-1
-							)
-						}}
-					>
-						<Icon @name="chevron-left" />
-						<span>Frame</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-tbtn is-play"
-						disabled={{if
-							this.burning
-							true
-						}}
-						{{on
-							"click"
-							this.togglePlayback
-						}}
-					>
-						<Icon
-							@name={{if
-								this.intake.playing
-								"pause"
-								"play"
-							}}
-						/>
-						<span>{{if
-								this.intake.playing
-								"Pause"
-								"Play"
-							}}</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-tbtn"
-						disabled={{if
-							this.burning
-							true
-						}}
-						aria-label="Forward one frame"
-						{{on
-							"click"
-							(fn
-								this.intake.jumpFrame
-								1
-							)
-						}}
-					>
-						<Icon @name="chevron-right" />
-						<span>Frame</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-tbtn"
-						disabled={{if
-							this.burning
-							true
-						}}
-						aria-label="Forward 1 second"
-						{{on
-							"click"
-							(fn
-								this.intake.jumpBy
-								1
-							)
-						}}
-					>
-						<Icon @name="chevrons-right" />
-						<span>1 s</span>
-					</button>
-					<button
-						type="button"
-						class="dt-ss-tbtn"
-						disabled={{if
-							this.burning
-							true
-						}}
-						aria-label="Forward 5 seconds"
-						{{on
-							"click"
-							(fn
-								this.intake.jumpBy
-								5
-							)
-						}}
-					>
-						<Icon @name="fast-forward" />
-						<span>5 s</span>
-					</button>
-				</div>
-
-				<div class="dt-ss-out">
-					<div class="dt-ss-out-head">
-						<span
-							class="dt-ss-out-label"
-						>Subtitles</span>
-						{{#if this.stats}}
-							<span
-								class="dt-ss-stats"
-							>{{this.stats}}</span>
-						{{/if}}
-						<div class="dt-ss-out-tools">
-							{{#if this.resultUrl}}
-								<span
-									class="dt-ss-result"
-								>{{this.resultLabel}}</span>
-								<button
-									type="button"
-									class="dt-ss-btn is-wide is-primary"
-									{{on
-										"click"
-										this.downloadResult
-									}}
-								>
-									<DownloadLabel
-									/>
-								</button>
-							{{/if}}
-						</div>
-					</div>
-
-					{{#if this.cues.length}}
-						<div class="dt-ss-grid">
-							<div
-								class="dt-ss-row dt-ss-grid-head"
-							>
-								<span
-									class="dt-ss-n"
-								>#</span>
-								<span
-								>Start</span>
-								<span>End</span>
-								<span
-								>Text</span>
-							</div>
-							{{#each
-								this.cues
-								key="@index"
-								as |cue index|
-							}}
-								<div
-									class="dt-ss-row
-										{{if
-											(eq
-												index
-												this.activeIndex
-											)
-											'is-active'
-										}}"
-								>
-									<button
-										type="button"
-										class="dt-ss-n"
-										aria-label="Seek to cue"
-										{{on
-											"click"
-											(fn
-												this.seekRow
-												index
-											)
-										}}
-									>{{nth
-											index
-										}}</button>
-									<span
-										class="dt-ss-tc"
-									>{{tc
-											cue.start
-										}}</span>
-									<span
-										class="dt-ss-tc"
-									>{{tc
-											cue.end
-										}}</span>
-									<input
-										type="text"
-										class="dt-ss-text"
-										aria-label="Text"
-										value={{cue.text}}
-										{{on
-											"input"
-											(fn
-												this.setText
-												index
-											)
-										}}
-									/>
-								</div>
-							{{/each}}
-						</div>
-					{{else}}
-						<label
-							class="dt-ss-drop is-subs"
-						>
-							<input
-								type="file"
-								class="dt-sr-only"
-								accept={{SUBS}}
-								{{on
-									"change"
-									this.chooseSubs
+					<CanonHeading @text="Position" />
+					<CanonGrid class="ss-place">
+						{{#each PLACES as |item index|}}
+							<CanonButton
+								@kind="cell"
+								@text={{item.text}}
+								@icon={{item.icon}}
+								@disabled={{or
+									this.burning
+									(eq
+										this.cues.length
+										0
+									)
+								}}
+								@onClick={{fn
+									this.place
+									index
 								}}
 							/>
-							<Icon
-								@name="captions"
-							/>
+						{{/each}}
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows class="ss-export" @framed={{true}}>
+					<CanonHeading @text="Format" />
+					<CanonSegmented
+						class="ss-format"
+						aria-label="Format"
+						@items={{this.formatLabels}}
+						@columns={{2}}
+						@selected={{this.formatIndex}}
+						@disabledIndices={{this.unsupported}}
+						@disabled={{this.burning}}
+						@onChange={{this.pickFormat}}
+					/>
+					<Job
+						@title="Burn"
+						@icon={{Flame}}
+						@failure={{this.failure}}
+						@disabled={{off this.ready}}
+						@busy={{this.burning}}
+						@progress={{this.progress}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.burn}}
+						@onCancel={{this.cancel}}
+						@onSave={{this.save}}
+					/>
+				</CanonRows>
+				<Sections @sections={{this.info}} />
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					class="ss-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if this.loaded "#000"}}
+				>
+					{{#if this.loaded}}
+						<Picture
+							@aspect={{this.aspect}}
+							@box={{this.box}}
+							@style={{this.style}}
+							@disabled={{this.burning}}
+							@onMove={{this.move}}
+						>
+							{{! the canvas shows it; user media lacks captions }}
+							{{! template-lint-disable require-media-caption }}
+							<video
+								src={{this.intake.url}}
+								playsinline
+								preload="auto"
+								hidden
+								{{this.intake.register}}
+								{{this.playback.register}}
+								{{on
+									"loadedmetadata"
+									this.intake.ready
+								}}
+								{{on
+									"error"
+									this.intake.failed
+								}}
+								{{on
+									"play"
+									this.syncPlaying
+								}}
+								{{on
+									"pause"
+									this.syncPlaying
+								}}
+								{{on
+									"seeked"
+									this.draw
+								}}
+							></video>
+							<canvas
+								class="ss-canvas"
+								role="img"
+								aria-label={{this.pictureName}}
+								{{this.registerCanvas}}
+							></canvas>
+						</Picture>
+					{{else}}
+						<div
+							class="ss-board"
+							style={{BLANK_BOARD}}
+						>
 							<span
-								class="dt-ss-drop-title"
-							>{{SUBS_DROP_TITLE}}</span>
-							{{! hint shared with background remover }}
-							<span
-								class="dt-ss-drop-hint"
-							>or click to select a
-								file, or paste</span>
-						</label>
+								class="ss-picture ss-blank"
+							></span>
+						</div>
 					{{/if}}
-				</div>
-
-				{{#if this.errorMessage}}
-					<p
-						class="dt-ss-error"
-						role="alert"
-					>{{this.errorMessage}}</p>
-				{{/if}}
-
-				{{#if this.burning}}
-					<span
-						class="dt-ss-progress"
-						role="progressbar"
-						aria-label="Burn progress"
-						aria-valuemin="0"
-						aria-valuemax="100"
-						aria-valuenow={{this.burnPct}}
+				</CanonCanvas>
+				<CanonRows class="ss-source" @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
+						<CanonRow
+							class="ss-video"
+							@title={{this.intake.fileName}}
+							@detail={{this.videoDetail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{this.burning}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					{{else}}
+						<Slot
+							class="ss-video-slot"
+							@prompt="Choose video file"
+							@icon="film"
+							@row={{true}}
+							@multiple={{true}}
+							@accept={{ANY}}
+							@onFiles={{this.readFiles}}
+						/>
+						{{#if this.intake.error}}
+							<CanonStatus
+								@text={{this.intake.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/if}}
+					<CanonHeading @text="Subtitles" />
+					{{#if this.cues.length}}
+						<CanonRow
+							class="ss-subs"
+							@title={{this.subsName}}
+							@detail={{this.cueCount}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{this.burning}}
+								@onClick={{this.clearSubs}}
+							/>
+						</CanonRow>
+					{{else}}
+						<Slot
+							class="ss-subs-drop"
+							@prompt="SRT or VTT"
+							@icon="captions"
+							@row={{true}}
+							@multiple={{true}}
+							@accept={{SUBS}}
+							@onFiles={{this.readFiles}}
+						/>
+					{{/if}}
+					{{#if this.subsFailed}}
+						<CanonStatus
+							class="ss-subs-error"
+							@text={{SUBS_ERROR}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+				{{#if this.cues.length}}
+					<CanonRows
+						class="ss-cues"
+						@framed={{true}}
 					>
-						<span
-							style={{this.progressStyle}}
-						></span>
-					</span>
+						<CanonHeading
+							@text="Subtitles"
+						/>
+						{{#each
+							this.cues key="@index"
+							as |cue index|
+						}}
+							<CueRow
+								@index={{index}}
+								@cue={{cue}}
+								@editable={{true}}
+								@marked={{eq
+									index
+									this.markedIndex
+								}}
+								@onChange={{fn
+									this.editCue
+									index
+								}}
+								@onSelect={{fn
+									this.seekCue
+									index
+								}}
+							/>
+						{{/each}}
+					</CanonRows>
+				{{else}}
+					<CanonRows
+						class="ss-cues"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Subtitles"
+						/>
+						<CanonEmptyRow
+							class="ss-cues-blank"
+							@text=""
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-		</div>
+			</:main>
+			<:footer>
+				<CanonGrid class="ss-transport">
+					<CanonButton
+						class="ss-previous"
+						@label="Previous cue"
+						@icon={{PreviousCue}}
+						@disabled={{off this.jumps}}
+						@onClick={{fn this.jump -1}}
+					/>
+					<CanonButton
+						class="ss-back"
+						@label="Back one frame"
+						@icon={{BackFrame}}
+						@repeats={{true}}
+						@disabled={{off this.playable}}
+						@onClick={{fn this.step -1}}
+					/>
+					<CanonButton
+						class="ss-play"
+						@kind="primary"
+						@text={{if
+							this.playback.playing
+							"Pause"
+							"Play"
+						}}
+						@icon={{if
+							this.playback.playing
+							PauseIcon
+							PlayIcon
+						}}
+						@disabled={{off this.playable}}
+						@onClick={{this.toggle}}
+					/>
+					<CanonButton
+						class="ss-forward"
+						@label="Forward one frame"
+						@icon={{ForwardFrame}}
+						@repeats={{true}}
+						@disabled={{off this.playable}}
+						@onClick={{fn this.step 1}}
+					/>
+					<CanonButton
+						class="ss-next"
+						@label="Next cue"
+						@icon={{NextCue}}
+						@disabled={{off this.jumps}}
+						@onClick={{fn this.jump 1}}
+					/>
+				</CanonGrid>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

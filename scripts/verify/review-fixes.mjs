@@ -52,51 +52,8 @@ prevented = await page.evaluate(() => {
 });
 check("unload-guard: ARMED with edits + storage off", String(prevented), prevented === true);
 
-// 3. edit menu: honest and wired
-const clickMenubar = async (label) => {
-  await page.evaluate((l) => {
-    const btn = [...document.querySelectorAll("nav button")].find((b) => b.textContent?.trim() === l);
-    btn?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    btn?.click();
-  }, label);
-  await sleep(250);
-};
-await clickMenubar("Edit");
-const fakeHistory = await page.evaluate(() =>
-  [...document.querySelectorAll("[data-menu-root] *")].some((n) => n.textContent === "Bokeh"),
-);
-check("edit-menu: fake history list removed", String(fakeHistory), fakeHistory === false);
-
-// prefix match: items carry shortcut hint ("Duplicate ⌘D"), exact text miss
-const menuBtn = async (label) => {
-  const clicked = await page.evaluate((l) => {
-    const btn = [...document.querySelectorAll("[data-menu-root] button")].find(
-      (b) => (b.textContent ?? "").replace(/\s+/g, " ").trim().startsWith(l) && !b.disabled,
-    );
-    if (!btn) return false;
-    btn.click();
-    return true;
-  }, label);
-  await sleep(300);
-  return clicked;
-};
-check("edit-menu: Select all enabled + clicked", "Select all", await menuBtn("Select all"));
-await clickMenubar("Edit");
-check("edit-menu: Duplicate enabled + clicked", "Duplicate", await menuBtn("Duplicate"));
-let ls = await layers();
-check("edit-menu: Duplicate actually duplicated", `layers=${ls.length}`, ls.length === 2);
-
-await clickMenubar("Edit");
-const cutDisabled = await page.evaluate(() => {
-  const btn = [...document.querySelectorAll("[data-menu-root] button")].find((b) => b.textContent?.trim() === "Cut");
-  return btn ? btn.disabled : null;
-});
-check("edit-menu: Cut visibly disabled (not fake-live)", String(cutDisabled), cutDisabled === true);
-// menu still open from cut check — click delete directly
-check("edit-menu: Delete enabled + clicked", "Delete", await menuBtn("Delete"));
-ls = await layers();
-check("edit-menu: Delete removed the selection", `layers=${ls.length}`, ls.length < 2);
-await page.keyboard.press("Escape");
+// 3. the old Edit menu is gone; its actions are covered by
+// substrata-layers.mjs (layer menu) and substrata-pages.mjs (settings page)
 
 // 4. undo/redo visible mid-toast
 // addraster fires image-added toast; undo must stay in dom mid-toast
@@ -109,27 +66,7 @@ const undoPresent = await page.evaluate(
 );
 check("toast-slot: undo button present mid-toast", String(undoPresent), undoPresent === true);
 
-// 5. flat tools: subtool visible + clickable without hover
-const flat = await page.evaluate(() => {
-  const w = (t) => {
-    const el = [...document.querySelectorAll("button[title]")].find((b) => b.title === t);
-    return el ? Math.round(el.getBoundingClientRect().width) : -1;
-  };
-  return { primitives: w("Primitives"), lasso: w("Lasso"), crop: w("Crop") };
-});
-check(
-  "tools: subtools flat-visible (no fan)",
-  JSON.stringify(flat),
-  flat.primitives > 20 && flat.lasso > 20 && flat.crop > 20,
-);
-await page.evaluate(() => {
-  [...document.querySelectorAll("button[title]")].find((b) => b.title === "Lasso")?.click();
-});
-await sleep(200);
-const lassoActive = await page.evaluate(
-  () => [...document.querySelectorAll("button[title]")].find((b) => b.title === "Lasso")?.getAttribute("aria-pressed"),
-);
-check("tools: flat subtool click activates", String(lassoActive), lassoActive === "true");
+// 5. the omnibar tools are covered by substrata-frame.mjs
 
 // 6. tooltips: title mirrors landed
 const titledCount = await page.evaluate((m) => {

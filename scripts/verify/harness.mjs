@@ -1,5 +1,8 @@
 // needs npm start first
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import puppeteer from 'puppeteer-core';
 
 export const CHROME =
@@ -38,6 +41,12 @@ export async function launch({
 		...(userDataDir ? { userDataDir } : {}),
 		args,
 	});
+	// temp download dir
+	const cdp = await browser.target().createCDPSession();
+	await cdp.send('Browser.setDownloadBehavior', {
+		behavior: 'allow',
+		downloadPath: mkdtempSync(join(tmpdir(), 'dt-verify-')),
+	});
 	const page = await browser.newPage();
 	await page.setViewport(viewport);
 
@@ -70,6 +79,40 @@ export async function openModule(page, title) {
 	}, title.toLowerCase());
 	await sleep(600);
 	return found;
+}
+
+/**
+ * Opens the paper popover on `trigger` and picks the size named `name`,
+ * the caller's extra choice when `name` is null, or, for
+ * `{ custom: '85x100', enter }`, types the size into the find field and
+ * picks the Custom option (by Enter when `enter`). True when it closed.
+ */
+export async function pickPaper(page, trigger, name) {
+	await page.click(trigger);
+	await page.waitForSelector('.paper-popover:popover-open', { timeout: 3000 });
+	if (name?.custom) {
+		await sleep(100);
+		await page.$eval('.paper-popover:popover-open .paper-find', (el) => (el.focus(), el.select()));
+		await page.keyboard.type(name.custom);
+		const shown = await page.$('.paper-popover:popover-open .paper-popover-custom:not(:disabled)');
+		if (name.enter) await page.keyboard.press('Enter');
+		else await shown?.click();
+		await sleep(250);
+		return !!shown && !(await page.$('.paper-popover:popover-open'));
+	}
+	const picked = await page.evaluate((n) => {
+		const panel = document.querySelector('.paper-popover:popover-open');
+		const target =
+			n === null
+				? panel.querySelector('.paper-popover-extra')
+				: [...panel.querySelectorAll('.paper-popover-list .paper-cell')].find(
+						(cell) => cell.querySelector('.paper-cell-name').textContent.trim() === n,
+					);
+		target?.click();
+		return !!target;
+	}, name);
+	await sleep(250);
+	return picked && !(await page.$('.paper-popover:popover-open'));
 }
 
 export async function finish(browser) {

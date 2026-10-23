@@ -1,284 +1,174 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
-import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import { downloadText } from 'delphitools-v2/lib/download';
-import { MORSE } from 'delphitools-v2/lib/morse';
-import { flagSvg, semaphoreSvg } from 'delphitools-v2/lib/signal-flags';
+import type Owner from '@ember/owner';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import Chart from 'delphitools-v2/components/tools/nato-phonetic/chart';
+import Hoist, {
+	bandHeight,
+	collapsedHeight,
+} from 'delphitools-v2/components/tools/nato-phonetic/hoist';
+import Result from 'delphitools-v2/components/tools/text-tool/result';
+import Source from 'delphitools-v2/components/tools/text-tool/source';
 import {
 	ALPHABETS,
 	looksSpelled,
 	spell,
 	spellText,
 	unspell,
-	type SpellingAlphabet,
 } from 'delphitools-v2/lib/spelling-alphabets';
+import './nato-phonetic/nato-phonetic.css';
 
-const COPIED_MS = 2000;
-const DIRECTIONS = ['Auto', 'Spell', 'Read'] as const;
-type Direction = (typeof DIRECTIONS)[number];
+const directions = ['Auto', 'Spell', 'Read'];
+const alphabetLabels = ALPHABETS.map((a) => a.label);
 
-const isSpace = (char: string) => /\s/.test(char);
-
-const LETTERS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
-const flag = (letter: string) => htmlSafe(flagSvg(letter));
-const semaphore = (letter: string) => htmlSafe(semaphoreSvg(letter));
-const symbols = (letter: string) => [...(MORSE[letter] ?? '')];
-
-export default class NatoPhoneticTool extends Component {
+/** The port of NATOPhoneticViewController, with SignalHoist and NATOChart. */
+export default class NatoPhonetic extends Component {
 	@tracked input = '';
-	@tracked alphabet: SpellingAlphabet = ALPHABETS[0]!;
-	@tracked direction: Direction = 'Auto';
-	@tracked copied = false;
+	@tracked alphabetIndex = 0;
+	@tracked direction = 0;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?natoText= ?natoAlphabet=<0-2> ?natoMode=<0-2>: the iOS launch arguments
+		const query = new URLSearchParams(window.location.search);
+		const alphabet = Number(query.get('natoAlphabet'));
+		if (alphabet >= 0 && alphabet < ALPHABETS.length)
+			this.alphabetIndex = Math.floor(alphabet);
+		const mode = Number(query.get('natoMode'));
+		if (mode >= 0 && mode < directions.length)
+			this.direction = Math.floor(mode);
+		this.input = query.get('natoText') ?? '';
+	}
 
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	get alphabetLabels() {
+		return alphabetLabels;
+	}
+
+	get directions() {
+		return directions;
+	}
+
+	get alphabet() {
+		return ALPHABETS[this.alphabetIndex] ?? ALPHABETS[0]!;
 	}
 
 	get reading() {
-		return this.direction === 'Read'
-			? true
-			: this.direction === 'Auto' &&
-					looksSpelled(this.input, this.alphabet);
+		return (
+			this.direction === 2 ||
+			(this.direction === 0 &&
+				looksSpelled(this.input, this.alphabet))
+		);
 	}
 
-	get pairs() {
-		return spell(this.input, this.alphabet);
-	}
-
-	get output() {
+	get converted() {
 		return this.reading
 			? unspell(this.input, this.alphabet)
 			: spellText(this.input, this.alphabet);
 	}
 
-	get tiles() {
-		const typed = this.reading ? '' : this.input.toUpperCase();
-		return LETTERS.map((letter) => ({
-			letter,
-			word: this.alphabet.words[letter],
-			used: typed.includes(letter),
-		}));
+	get plain() {
+		return this.reading ? this.converted : this.input;
 	}
 
-	setInput = (event: Event) => {
-		this.input = (event.target as HTMLTextAreaElement).value;
+	get spelled() {
+		return spell(this.plain, this.alphabet);
+	}
+
+	get used() {
+		return this.reading ? '' : this.input.toUpperCase();
+	}
+
+	get sourceHeading() {
+		return this.reading ? 'Spelled' : 'Text';
+	}
+
+	get resultHeading() {
+		return this.reading ? 'Text' : 'Spelled';
+	}
+
+	setInput = (text: string) => {
+		this.input = text;
 	};
 
-	selectAlphabet = (alphabet: SpellingAlphabet) => {
-		this.alphabet = alphabet;
+	setAlphabet = (index: number) => {
+		this.alphabetIndex = index;
 	};
 
-	selectDirection = (direction: Direction) => {
+	setDirection = (direction: number) => {
 		this.direction = direction;
 	};
 
 	addLetter = (letter: string) => {
-		if (this.reading) this.direction = 'Spell';
+		if (this.reading) this.direction = 1;
 		this.input += letter;
 	};
 
-	copy = () => {
-		void navigator.clipboard.writeText(this.output);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
-	};
-
-	download = () => downloadText(this.output, 'spelled.txt');
-
 	<template>
-		<div class="dt-nato-frame">
-			<div class="dt-nato-head">
-				<div class="segmented dt-nato-alphabets">
-					{{#each
-						ALPHABETS key="id"
-						as |alphabet|
-					}}
-						<button
-							type="button"
-							class="dt-nato-seg
-								{{if
-									(eq
-										alphabet
-										this.alphabet
-									)
-									'is-active'
-								}}"
-							{{on
-								"click"
-								(fn
-									this.selectAlphabet
-									alphabet
-								)
-							}}
-						>{{alphabet.label}}</button>
-					{{/each}}
-				</div>
-				<div class="segmented dt-nato-directions">
-					{{#each DIRECTIONS as |direction|}}
-						<button
-							type="button"
-							class="dt-nato-seg
-								{{if
-									(eq
-										direction
-										this.direction
-									)
-									'is-active'
-								}}"
-							{{on
-								"click"
-								(fn
-									this.selectDirection
-									direction
-								)
-							}}
-						>{{direction}}</button>
-					{{/each}}
-				</div>
-			</div>
-
-			<textarea
-				class="dt-nato-input"
-				aria-label="Input"
-				placeholder="Type or paste"
-				value={{this.input}}
-				{{on "input" this.setInput}}
-			></textarea>
-
-			<div class="dt-nato-output">
-				{{#if this.reading}}
-					<p
-						class="dt-nato-read"
-					>{{this.output}}</p>
-				{{else}}
-					<div class="dt-nato-pairs">
-						{{#each this.pairs as |pair|}}
-							{{#if
-								(isSpace
-									pair.char
-								)
-							}}
-								<span
-									class="dt-nato-break"
-								>/</span>
-							{{else}}
-								<span
-									class="dt-nato-pair"
-								>
-									<span
-										class="dt-nato-char"
-									>{{pair.char}}</span>
-									{{#if
-										pair.word
-									}}
-										<span
-											class="dt-nato-word"
-										>{{pair.word}}</span>
-									{{/if}}
-								</span>
-							{{/if}}
-						{{/each}}
-					</div>
-				{{/if}}
-			</div>
-
-			{{#if this.input}}
-				<div class="dt-nato-actions">
-					<button
-						type="button"
-						class="dt-nato-copy"
-						{{on "click" this.copy}}
-					>
-						<Icon
-							@name={{if
-								this.copied
-								"check"
-								"copy"
-							}}
-						/>
-						{{if
-							this.copied
-							"Copied"
-							"Copy"
+		<CanonSplit
+			class="nato-phonetic"
+			@halves={{true}}
+			@collapsesTo={{collapsedHeight}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<Hoist
+						@spelled={{this.spelled}}
+						@label={{spellText
+							this.plain
+							this.alphabet
 						}}
-					</button>
-					<button
-						type="button"
-						class="dt-nato-download"
-						{{on "click" this.download}}
-					>
-						<DownloadLabel />
-					</button>
-				</div>
-			{{/if}}
-
-			<div class="dt-nato-chart-head">
-				<span class="dt-nato-chart-label">Chart</span>
-				<span class="dt-nato-chart-hint">Tap to spell</span>
-			</div>
-			<div class="dt-nato-chart">
-				{{#each this.tiles key="letter" as |tile|}}
-					<button
-						type="button"
-						class="dt-nato-tile
-							{{if
-								tile.used
-								'is-used'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.addLetter
-								tile.letter
-							)
-						}}
-					>
-						<span
-							class="dt-nato-tile-letter"
-						>{{tile.letter}}</span>
-						<span
-							class="dt-nato-tile-morse"
-							aria-hidden="true"
-						>
-							{{#each
-								(symbols
-									tile.letter
-								)
-								key="@index"
-								as |mark|
-							}}
-								<span
-									class={{if
-										(eq
-											mark
-											"-"
-										)
-										"dt-nato-dah"
-										"dt-nato-dit"
-									}}
-								></span>
-							{{/each}}
-						</span>
-						{{semaphore tile.letter}}
-						{{flag tile.letter}}
-						<span
-							class="dt-nato-tile-word"
-						>{{tile.word}}</span>
-					</button>
-				{{/each}}
-			</div>
-		</div>
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<Source
+						@heading={{this.sourceHeading}}
+						@text={{this.input}}
+						@onChange={{this.setInput}}
+					/>
+					<CanonHeading @text="Alphabet" />
+					<CanonSegmented
+						aria-label="Alphabet"
+						@items={{this.alphabetLabels}}
+						@columns={{2}}
+						@selected={{this.alphabetIndex}}
+						@onChange={{this.setAlphabet}}
+					/>
+					<CanonHeading @text="Direction" />
+					<CanonSegmented
+						aria-label="Direction"
+						@items={{this.directions}}
+						@selected={{this.direction}}
+						@onChange={{this.setDirection}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<Result
+					class="np-result"
+					@heading={{this.resultHeading}}
+					@text={{this.converted}}
+					@fileName="spelled.txt"
+				/>
+				<CanonRows
+					class="np-chart-rows"
+					@framed={{true}}
+				>
+					<CanonHeading
+						@text="Chart · Tap to spell"
+					/>
+					<Chart
+						@alphabet={{this.alphabet}}
+						@used={{this.used}}
+						@onLetter={{this.addLetter}}
+					/>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

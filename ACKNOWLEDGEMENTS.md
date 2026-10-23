@@ -7,7 +7,6 @@ delphitools uses the following open-source libraries, licensed under their respe
 @bjorn3/browser_wasi_shim@0.4.2: MIT 
 @dnd-kit/abstract@0.5.0: MIT
 @dnd-kit/dom@0.5.0: MIT
-@floating-ui/dom@1.8.0: MIT
 @huggingface/transformers@3.8.1: Apache-2.0
 @resvg/resvg-js@2.6.2: MPL-2.0
 browser-fs-access@0.38.0: Apache-2.0
@@ -17,7 +16,6 @@ color-name-list@14.47.0: MIT
 crayon-css@0.9.1: MIT
 dexie@4.4.4: Apache-2.0
 ember-click-outside@6.1.1: MIT
-ember-provide-consume-context@0.10.0: MIT
 ember-route-template@1.0.3: MIT
 ember-truth-helpers@5.0.0: MIT
 exifr@7.1.3: MIT
@@ -29,6 +27,7 @@ lucide-static@1.30.0: ISC
 mathjs@15.2.0: Apache-2.0
 mediabunny@1.55.2: MPL-2.0
 mediainfo.js@0.3.7: BSD-2-Clause
+modern-screenshot@4.7.0: MIT
 mupdf@1.28.0: AGPL-3.0-or-later
 pdf-lib@1.17.1: MIT
 pdfjs-dist@5.7.284: Apache-2.0
@@ -51,6 +50,7 @@ qr-code-styling@1.9.2: MIT
 sass-embedded@1.100.0: MIT
 satori@0.29.0: MPL-2.0
 svgo@4.0.2: MIT
+three@0.186.1: MIT
 tracked-built-ins@4.1.2: MIT
 
 # Build and Test
@@ -84,6 +84,7 @@ tracked-built-ins@4.1.2: MIT
 @rollup/plugin-babel@7.1.0: MIT
 @types/qunit@2.19.14: MIT
 @types/rsvp@4.0.9: MIT
+@types/three@0.186.0: MIT
 babel-plugin-ember-template-compilation@4.0.0: MIT
 concurrently@9.2.4: MIT
 decorator-transforms@2.4.0: MIT

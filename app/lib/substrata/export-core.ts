@@ -1,5 +1,6 @@
 export type ExportFormat = 'png' | 'jpeg' | 'webp' | 'jxl';
-export type ExportScale = 1 | 2 | 3;
+// iOS ExportSheet: presets plus a custom scale from 0.1 to 8
+export type ExportScale = number;
 export type ExportScope = 'artboard' | 'layer';
 
 export const EXPORT_SCALES: ExportScale[] = [1, 2, 3];

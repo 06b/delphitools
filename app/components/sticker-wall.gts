@@ -3,8 +3,9 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { concat, hash } from '@ember/helper';
-import { and, or } from 'ember-truth-helpers';
+import { and } from 'ember-truth-helpers';
 import type { TOC } from '@ember/component/template-only';
+import './sticker-wall.css';
 
 interface Sticker {
 	file: string;
@@ -52,13 +53,12 @@ const WALL_STICKERS: Sticker[] = [
 	},
 ];
 
-const LOUSY_STICKER: Sticker = {
-	file: '',
-	label: '',
+// ios ToolStickerView values
+const LOUSY_STICKER = {
 	rot: -2.5,
-	width: 'clamp(220px, 60vw, 360px)',
+	width: 'min(100%, 360px)',
 	align: 'center',
-};
+} as const;
 
 function downloadSticker(file: string) {
 	const base = file.split('/').pop() ?? file;
@@ -127,6 +127,7 @@ class StickerButton extends Component<StickerButtonSignature> {
 				style={{this.style}}
 				aria-label="Peel off and download the {{@sticker.label}} sticker"
 				title="Peel me off!"
+				...attributes
 				{{on "click" this.handleClick}}
 			>
 				<span
@@ -162,22 +163,26 @@ class StickerButton extends Component<StickerButtonSignature> {
 interface PeelStickerSignature {
 	Args: {
 		tool: string;
-		label?: string;
+		label: string;
 	};
 }
 
 const TOOL_STICKER_CAPTION = 'Have a sticker! Peel it off to download.';
 
+// ios accessibility name/value
 const PeelSticker: TOC<PeelStickerSignature> = <template>
 	<StickerButton
 		@sticker={{hash
 			file=(concat "lousy/" @tool)
-			label=(or @label @tool)
+			label=@label
 			rot=LOUSY_STICKER.rot
 			width=LOUSY_STICKER.width
 			align=LOUSY_STICKER.align
 		}}
 		@caption={{TOOL_STICKER_CAPTION}}
+		aria-label="Sticker"
+		{{! @glint-expect-error: ARIA 1.3, not in glint's attribute list }}
+		aria-description={{@label}}
 	/>
 </template>;
 

@@ -1,5 +1,4 @@
 // crop tolerance ±2pt
-// npm start, node scripts/verify/pdf-rotate-crop.mjs
 
 import {
 	mkdtempSync,
@@ -12,10 +11,11 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { launch, visit, check, finish, sleep, pickPaper } from './harness.mjs';
 
 const A4 = [595.28, 841.89];
-const near = (a, b) => Math.abs(a - b) < 2;
+const MM = 72 / 25.4;
+const near = (a, b, tolerance = 2) => Math.abs(a - b) < tolerance;
 
 const fixture = join(mkdtempSync(join(tmpdir(), 'dt-prc-')), 'three.pdf');
 {
@@ -27,6 +27,7 @@ const fixture = join(mkdtempSync(join(tmpdir(), 'dt-prc-')), 'three.pdf');
 	}
 	writeFileSync(fixture, await doc.save());
 }
+const fixtureBase64 = readFileSync(fixture).toString('base64');
 
 const downloads = mkdtempSync(join(tmpdir(), 'dt-prc-dl-'));
 
@@ -38,43 +39,18 @@ async function waitForDownload(match, timeout = 30000) {
 			(n) => match.test(n) && !n.endsWith('.crdownload'),
 		);
 		if (name) {
-			const path = join(downloads, name);
-			if (statSync(path).size > 0)
-				return { name, bytes: readFileSync(path) };
+			const file = join(downloads, name);
+			if (statSync(file).size > 0)
+				return { name, bytes: readFileSync(file) };
 		}
 		await sleep(250);
 	}
 	return null;
 }
 
-// avoid matching previous download
 function clearDownloads() {
-	for (const name of readdirSync(downloads)) {
-		rmSync(join(downloads, name));
-	}
+	for (const name of readdirSync(downloads)) rmSync(join(downloads, name));
 }
-
-// fractions of box
-async function dragCrop(fx1, fy1, fx2, fy2) {
-	const box = await (await page.$('.dt-prc-crop-layer')).boundingBox();
-	await page.mouse.move(
-		box.x + box.width * fx1,
-		box.y + box.height * fy1,
-	);
-	await page.mouse.down();
-	await page.mouse.move(box.x + box.width * fx2, box.y + box.height * fy2, {
-		steps: 8,
-	});
-	await page.mouse.up();
-}
-
-const clickOpt = (text) =>
-	page.$$eval(
-		'.dt-prc-cropmode .dt-prc-opt',
-		(els, wanted) =>
-			els.find((b) => b.textContent.trim() === wanted).click(),
-		text,
-	);
 
 const { browser, page } = await launch();
 const client = await page.createCDPSession();
@@ -84,188 +60,443 @@ await client.send('Browser.setDownloadBehavior', {
 });
 
 await visit(page, '/tools/pdf-rotate-crop');
-await (await page.$('.dt-prc-drop input[type="file"]')).uploadFile(fixture);
+check(
+	'the split fills the sheet',
+	await page.evaluate(
+		() =>
+			document.querySelector('.dt-canon-tool').getBoundingClientRect()
+				.height ===
+			document.querySelector('.pdf-rotate-crop').getBoundingClientRect()
+				.height,
+	),
+);
 
+const state = () =>
+	page.evaluate(() => {
+		const q = (s) => document.querySelector(s);
+		const crop = q('.media-crop-rect');
+		return {
+			strip: document.querySelectorAll('.canon-page-strip:not(.prc-blank-strip) .canon-page-strip-cell').length,
+			blankStrip: !!q('.prc-blank-strip .canon-page-strip-cell'),
+			blank: !!q('.prc-blank'),
+			slot: q('.prc-slot')?.innerText.trim(),
+			files: !!q('.media-slot-files'),
+			title: q('.prc-source .canon-row-title')?.textContent.trim(),
+			detail: q('.prc-source .canon-row-detail')?.textContent.trim(),
+			rotateOff: [...document.querySelectorAll('.prc-rotate button')].every(
+				(b) => b.disabled,
+			),
+			marginsOff: [...document.querySelectorAll('.prc-margin input')].every(
+				(i) => i.disabled,
+			),
+			margins: [...document.querySelectorAll('.prc-margin input')].map(
+				(i) => i.value,
+			),
+			paperOff: q('.prc-paper-menu')?.disabled,
+			paper: q('.prc-paper-menu .canon-menu-cell-title')?.textContent.trim(),
+			allOff: q('.prc-crop-all').disabled,
+			clearOff: q('.prc-crop-clear').disabled,
+			exportOff: q('.media-job-run').disabled,
+			pager: q('.media-pager-text').textContent.trim(),
+			backOff: q('.media-pager-back').disabled,
+			forwardOff: q('.media-pager-forward').disabled,
+			names: [...document.querySelectorAll('.canon-page-strip-page')].map(
+				(b) => b.getAttribute('aria-label'),
+			),
+			value: crop?.getAttribute('aria-valuetext'),
+			role: crop?.getAttribute('role'),
+			cropName: crop?.getAttribute('aria-label'),
+		};
+	});
+
+const layout = () =>
+	page.evaluate(() => {
+		const box = (s) => {
+			const b = document.querySelector(s).getBoundingClientRect();
+			return [Math.round(b.top), Math.round(b.height)];
+		};
+		return {
+			band: box('.canon-split-banner .canon-canvas'),
+			canvas: box('.prc-canvas'),
+			rotate: box('.prc-rotate'),
+		};
+	});
+
+let s = await state();
+check(
+	'empty: blank strip page and blank A4 picture, no text in them',
+	s.blankStrip && s.blank && s.strip === 0,
+	JSON.stringify({ blankStrip: s.blankStrip, blank: s.blank }),
+);
+check(
+	'empty: Source holds the drop slot row with Files',
+	s.slot === 'Drop PDF here' && s.files && !s.title,
+	s.slot,
+);
+check(
+	'empty: rotate, margins, paper, crop actions, Export and pager are off',
+	s.rotateOff &&
+		s.marginsOff &&
+		s.paperOff &&
+		s.allOff &&
+		s.clearOff &&
+		s.exportOff &&
+		s.backOff &&
+		s.forwardOff,
+	JSON.stringify(s),
+);
+check(
+	'empty: the pager reads a dash, margins 0, paper None',
+	s.pager === '—' && s.margins.join() === '0,0,0,0' && s.paper === 'None',
+	`${s.pager} ${s.margins} ${s.paper}`,
+);
+const before = await layout();
+
+await page.evaluate(
+	(b64, name) => {
+		const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+		const data = new DataTransfer();
+		data.items.add(new File([bytes], name, { type: 'application/pdf' }));
+		document.querySelector('.prc-margins').dispatchEvent(
+			new ClipboardEvent('paste', {
+				clipboardData: data,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	},
+	fixtureBase64,
+	'pasted.pdf',
+);
 const loaded = await page
 	.waitForFunction(
 		() =>
-			document.querySelectorAll('.dt-prc-cell').length === 3 &&
-			document.querySelector('.dt-prc-preview img'),
+			document.querySelectorAll('.canon-page-strip-cell').length === 3 &&
+			document.querySelector('.media-crop-image'),
 		{ timeout: 30000 },
 	)
 	.then(() => true)
 	.catch(() => false);
-check('three pages load with a preview', loaded);
-
-const bar = await page.$eval('.dt-prc-info', (el) => el.textContent);
+check('a paste anywhere loads three pages and the picture', loaded);
+s = await state();
 check(
-	'the bar names the file and counts pages',
-	/three\.pdf/.test(bar) && /3 pages/.test(bar),
-	bar.trim().replace(/\s+/g, ' '),
+	'the Source row names the file, counts pages and bytes',
+	s.title === 'pasted.pdf' && /^3 pages · /.test(s.detail),
+	`${s.title} ${s.detail}`,
 );
+const after = await layout();
+check(
+	'nothing moves when the file loads',
+	JSON.stringify(before) === JSON.stringify(after),
+	`${JSON.stringify(before)} → ${JSON.stringify(after)}`,
+);
+check(
+	'loaded: pager 1 / 3, back off, forward on, Export on',
+	s.pager === '1 / 3' && s.backOff && !s.forwardOff && !s.exportOff,
+	s.pager,
+);
+check(
+	'the crop is a named, focusable slider',
+	s.role === 'slider' && s.cropName === 'Crop' && s.value === '210 × 297 mm, 0, 0',
+	`${s.role} ${s.cropName} ${s.value}`,
+);
+check('whole page: Clear is off', s.clearOff);
 
-const applyDisabled = await page.$$eval(
-	'.dt-prc-cropmode .dt-prc-opt',
-	(els) => els.slice(0, 2).every((b) => b.disabled),
-);
-check('apply stays disabled without a drag', applyDisabled);
-await page.$$eval('.dt-prc-rotate button[title="Rotate right"]', (els) =>
-	els[0].click(),
-);
-const marked = await page
+await page.evaluate((b64) => {
+	const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+	const data = new DataTransfer();
+	data.items.add(new File([bytes], 'three.pdf', { type: 'application/pdf' }));
+	document.querySelector('.prc-picture').dispatchEvent(
+		new DragEvent('drop', { dataTransfer: data, bubbles: true, cancelable: true }),
+	);
+}, fixtureBase64);
+const dropped = await page
 	.waitForFunction(
 		() =>
 			document
-				.querySelector('.dt-prc-cell .dt-prc-thumb')
-				.className.includes('is-rot-90'),
-		{ timeout: 5000 },
+				.querySelector('.prc-source .canon-row-title')
+				?.textContent.trim() === 'three.pdf' &&
+			document.querySelector('.media-crop-image'),
+		{ timeout: 30000 },
 	)
 	.then(() => true)
 	.catch(() => false);
-check('rotate marks the page thumbnail', marked);
+check('a drop on the tool loads a file', dropped);
+await sleep(300);
 
-await page.$$eval('.dt-prc-rotate button[title="Rotate left"]', (els) =>
-	els[1].click(),
+const rotateButton = (row, index) =>
+	page.$$eval(
+		`${row} button`,
+		(els, i) => els[i].click(),
+		index,
+	);
+const turns = () =>
+	page.$$eval('.canon-page-strip-picture', (els) =>
+		els.map((e) => /rotate\((\d+)deg\)/.exec(e.style.transform)?.[1]),
+	);
+await page.waitForFunction(
+	() => document.querySelectorAll('.canon-page-strip-picture').length === 3,
+	{ timeout: 15000 },
 );
-const rotClasses = await page
-	.waitForFunction(
-		() => {
-			const cls = [...document.querySelectorAll('.dt-prc-thumb')].map(
-				(el) => el.className,
-			);
-			return /is-rot-270/.test(cls[1]) && /is-rot-270/.test(cls[2])
-				? cls.join('|')
-				: false;
-		},
-		{ timeout: 5000 },
-	)
-	.then((handle) => handle.jsonValue())
-	.catch(() => '');
+await rotateButton('.prc-rotate-page', 1);
+await rotateButton('.prc-rotate-all', 0);
+await sleep(300);
+let t = await turns();
 check(
-	'rotate-all turns every page but the reset one',
-	/is-rot-270/.test(rotClasses) &&
-		!/is-rot/.test(rotClasses.split('|')[0]),
-	rotClasses.replace(/\s+/g, ' '),
+	'This page turns page 1, All pages turns every page',
+	t.join() === '0,270,270',
+	t.join(),
 );
-// late render clears drag
-await sleep(600);
-await dragCrop(0.25, 0.25, 0.75, 0.75);
-const pendingShown = await page
-	.waitForSelector('.dt-prc-pending', { timeout: 5000 })
-	.then(() => true)
-	.catch(() => false);
-check('a drag draws the pending box', pendingShown);
+const rotatedName = await page.$eval('.prc-rotate-page button', (b) =>
+	b.getAttribute('aria-label'),
+);
+check('icon cells are named', rotatedName === 'Rotate left', rotatedName);
 
-await clickOpt('This page');
-const cropMarked = await page
-	.waitForSelector('.dt-prc-cropdot', { timeout: 5000 })
-	.then(() => true)
-	.catch(() => false);
-check('applying a crop marks the page', cropMarked);
+await page.waitForSelector('.media-crop-image', { timeout: 10000 });
+await sleep(400);
+const frame = await page.$eval('.media-crop-image', (e) => {
+	const b = e.getBoundingClientRect();
+	return { x: b.left, y: b.top, w: b.width, h: b.height };
+});
+const dragFrom = async (fx, fy, tx, ty) => {
+	await page.mouse.move(frame.x + frame.w * fx, frame.y + frame.h * fy);
+	await page.mouse.down();
+	await page.mouse.move(frame.x + frame.w * tx, frame.y + frame.h * ty, {
+		steps: 8,
+	});
+	await page.mouse.up();
+	await sleep(250);
+};
+await dragFrom(0, 0, 0.25, 0.25);
+await dragFrom(1, 1, 0.75, 0.75);
+s = await state();
 check(
-	'the crop shows on the preview',
-	!!(await page.$('.dt-prc-cropbox')),
+	'corner drags crop the page to the middle half',
+	/^105 × 149 mm, 5[23], 74$/.test(s.value),
+	s.value,
+);
+check(
+	'the margins read the dragged crop',
+	near(Number(s.margins[0]), 52.5, 0.3) && near(Number(s.margins[1]), 74.2, 0.3),
+	s.margins.join(),
+);
+check(
+	'the strip names page 1 Cropped, Clear turns on',
+	s.names[0] === 'Page 1, Cropped' && s.names[1] === 'Page 2' && !s.clearOff,
+	s.names.join('|'),
 );
 
-await page.click('.dt-prc-btn.is-primary');
+await dragFrom(0.5, 0.5, 0.55, 0.5);
+s = await state();
+const moved = /, (\d+), 74$/.exec(s.value)?.[1];
+check('a drag inside moves the crop', Number(moved) > 60, s.value);
+
+await page.focus('.media-crop-rect');
+const keyed = s.value;
+await page.keyboard.press('ArrowLeft');
+await sleep(150);
+const left = (await state()).value;
+await page.keyboard.down('Alt');
+await page.keyboard.press('ArrowDown');
+await page.keyboard.up('Alt');
+await sleep(150);
+const taller = (await state()).value;
+check(
+	'ArrowLeft moves and Alt+ArrowDown grows the crop',
+	left !== keyed &&
+		/^105 × 149/.test(left) &&
+		/^105 × 15[12]/.test(taller),
+	`${keyed} → ${left} → ${taller}`,
+);
+
+const setMargin = async (edge, text) => {
+	const input = await page.$(`.prc-margin--${edge} input`);
+	await input.evaluate((e) => {
+		e.focus();
+		e.select();
+	});
+	await input.type(text);
+	await page.keyboard.press('Enter');
+	await sleep(250);
+};
+await setMargin('left', '20');
+s = await state();
+check(
+	'a typed Left margin moves the left edge',
+	s.margins[0] === '20' && /, 20, /.test(s.value),
+	`${s.margins} ${s.value}`,
+);
+await setMargin('left', '300');
+s = await state();
+check(
+	'an impossible margin is refused, the field shows the crop',
+	s.margins[0] === '20',
+	s.margins.join(),
+);
+
+await page.click('.media-pager-forward');
+await sleep(400);
+s = await state();
+check(
+	'Next page moves the pager and the lit page',
+	s.pager === '2 / 3' &&
+		!s.backOff &&
+		(await page.$eval('.canon-page-strip-cell--lit', (e) => e.dataset.pageIndex)) === '1',
+	s.pager,
+);
+check('Crop to size opens the paper popover and A5 closes it', await pickPaper(page, '.prc-paper-menu', 'A5'));
+await sleep(300);
+s = await state();
+check(
+	'A5 crops the landscape page to A5 turned, centred',
+	s.paper.startsWith('A5') && s.value === '210 × 148 mm, 44, 31',
+	`${s.paper} ${s.value}`,
+);
+await page.click('.prc-crop-all');
+await sleep(300);
+s = await state();
+check(
+	'All pages carries the paper to every page',
+	s.names.every((n) => /Cropped$/.test(n)),
+	s.names.join('|'),
+);
+await setMargin('top', '40');
+s = await state();
+check('a margin edit drops the paper', s.paper === 'None', s.paper);
+
+await page.click('.media-pager-back');
+await sleep(300);
+await page.click('.prc-crop-clear');
+await sleep(300);
+s = await state();
+check(
+	'Clear drops the crop from the current page only',
+	s.names[0] === 'Page 1' && /Cropped$/.test(s.names[1]),
+	s.names.join('|'),
+);
+
+clearDownloads();
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+const resultName = await page.$eval('.media-job-result .canon-row-title', (e) =>
+	e.textContent.trim(),
+);
+check('Export shows the result row', resultName === 'three-rotate-crop.pdf', resultName);
+await page.click('.media-job-save');
 const out = await waitForDownload(/-rotate-crop\.pdf$/);
-check('edited PDF downloads', !!out, out?.name ?? 'nothing landed');
-
+check('Download saves the PDF', !!out, out?.name ?? 'nothing landed');
 if (out) {
 	const doc = await PDFDocument.load(out.bytes);
 	const pages = doc.getPages();
-	const crop = pages[0].getCropBox();
+	const angles = pages.map((p) => p.getRotation().angle);
+	check('rotations land', angles.join() === '0,270,270', angles.join());
+	const box1 = pages[0].getCropBox();
 	check(
-		'page 1 keeps the dragged half',
-		near(crop.x, A4[0] * 0.25) &&
-			near(crop.y, A4[1] * 0.25) &&
-			near(crop.width, A4[0] * 0.5) &&
-			near(crop.height, A4[1] * 0.5),
-		`${crop.x.toFixed(1)},${crop.y.toFixed(1)} ${crop.width.toFixed(1)}×${crop.height.toFixed(1)}`,
+		'page 1 stays whole',
+		near(box1.width, A4[0]) && near(box1.height, A4[1]),
+		`${box1.width}×${box1.height}`,
 	);
+	// 270°: top is page-right
+	const box2 = pages[1].getCropBox();
 	check(
-		'page 1 rotation is back to 0',
-		pages[0].getRotation().angle === 0,
-		`${pages[0].getRotation().angle}°`,
+		'page 2 keeps the paper crop with a 40 mm top in page space',
+		near(box2.height, 210 * MM) &&
+			near(A4[0] - box2.x - box2.width, 40 * MM),
+		`${box2.x.toFixed(1)},${box2.y.toFixed(1)} ${box2.width.toFixed(1)}×${box2.height.toFixed(1)}`,
 	);
+	const box3 = pages[2].getCropBox();
 	check(
-		'rotate-all reached the other pages',
-		pages[1].getRotation().angle === 270 &&
-			pages[2].getRotation().angle === 270,
-		`${pages[1].getRotation().angle}°/${pages[2].getRotation().angle}°`,
-	);
-	check(
-		'uncropped pages stay whole',
-		near(pages[1].getCropBox().width, A4[0]) &&
-			near(pages[1].getCropBox().height, A4[1]),
-		`${pages[1].getCropBox().width.toFixed(1)}×${pages[1].getCropBox().height.toFixed(1)}`,
+		'page 3 is cropped to A5 turned',
+		near(box3.width, 148 * MM) && near(box3.height, 210 * MM),
+		`${box3.width.toFixed(1)}×${box3.height.toFixed(1)}`,
 	);
 }
-clearDownloads();
-await page.$$eval('.dt-prc-cell', (els) => els[1].click());
-await sleep(600);
-await dragCrop(0.1, 0.1, 0.6, 0.6);
-await page.waitForSelector('.dt-prc-pending', { timeout: 5000 });
-await clickOpt('All pages');
-const allMarked = await page
-	.waitForFunction(
-		() => document.querySelectorAll('.dt-prc-cropdot').length === 3,
-		{ timeout: 5000 },
-	)
-	.then(() => true)
-	.catch(() => false);
-check('apply-to-all marks every page', allMarked);
 
-await page.click('.dt-prc-btn.is-primary');
-const all = await waitForDownload(/-rotate-crop\.pdf$/);
-check('second build downloads', !!all, all?.name ?? 'nothing landed');
+await rotateButton('.prc-rotate-page', 1);
+await sleep(200);
+check('an edit drops the export result', !(await page.$('.media-job-save')));
 
-if (all) {
-	const doc = await PDFDocument.load(all.bytes);
-	const pages = doc.getPages();
-	const boxes = pages.map((p) => p.getCropBox());
-	check(
-		'every page lands inside its media box',
-		boxes.every(
-			(c) =>
-				c.x > -1 &&
-				c.y > -1 &&
-				c.x + c.width < A4[0] + 1 &&
-				c.y + c.height < A4[1] + 1 &&
-				c.width < A4[0] - 1,
-		),
-		boxes
-			.map(
-				(c) =>
-					`${c.x.toFixed(0)},${c.y.toFixed(0)} ${c.width.toFixed(0)}×${c.height.toFixed(0)}`,
-			)
-			.join(' | '),
-	);
-	// rotation shifts box corner
-	check(
-		'the crop keeps the dragged half everywhere',
-		boxes.every(
-			(c) => near(c.width, A4[0] * 0.5) && near(c.height, A4[1] * 0.5),
-		),
-		boxes
-			.map((c) => `${c.width.toFixed(1)}×${c.height.toFixed(1)}`)
-			.join(' | '),
-	);
-	check(
-		'rotation shifts where the box lands',
-		!near(boxes[0].x, boxes[1].x) || !near(boxes[0].y, boxes[1].y),
-		`p1 ${boxes[0].x.toFixed(1)},${boxes[0].y.toFixed(1)} vs p2 ${boxes[1].x.toFixed(1)},${boxes[1].y.toFixed(1)}`,
-	);
-}
-await page.$$eval('.dt-prc-cell', (els) => els[0].click());
+await page.click('.prc-source button');
 await sleep(300);
-await clickOpt('Clear');
-await sleep(300);
-const remaining = await page.$$eval('.dt-prc-cropdot', (els) => els.length);
+s = await state();
 check(
-	'clear drops the crop from the current page',
-	remaining === 2,
-	`${remaining} crop marks left`,
+	'Clear returns to the blank layout',
+	s.blankStrip && s.blank && s.slot === 'Drop PDF here' && s.exportOff,
 );
+
+await visit(page, '/tools/pdf-rotate-crop?rcSample&rcPaper=a5&rcNudge=yes');
+await page.waitForSelector('.media-crop-image', { timeout: 15000 });
+await sleep(300);
+s = await state();
+check(
+	'?rcSample loads, ?rcNudge adds a mm to Left and drops the paper',
+	s.title === 'sample.pdf' && s.paper === 'None' && s.names[0] === 'Page 1, Cropped',
+	`${s.title} ${s.paper} ${s.margins}`,
+);
+
+check(
+	'typing 85x100 in Crop to size picks Custom',
+	await pickPaper(page, '.prc-paper-menu', { custom: '85x100', enter: true }),
+);
+await sleep(300);
+s = await state();
+const customValue = /^(85 × 100|100 × 85) mm,/;
+check(
+	'Custom crops to 85 × 100 mm and the cell reads it',
+	s.paper === 'Custom · 85 × 100 mm' && customValue.test(s.value),
+	`${s.paper} ${s.value}`,
+);
+await page.click('.prc-paper-menu');
+await page.waitForSelector('.paper-popover:popover-open', { timeout: 3000 });
+await sleep(150);
+check(
+	'reopened, Custom shows selected',
+	(await page.$eval('.paper-popover:popover-open .paper-popover-custom', (el) =>
+		el.getAttribute('aria-current'),
+	)) === 'true',
+);
+await page.keyboard.press('Escape');
+clearDownloads();
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 15000 });
+await page.click('.media-job-save');
+const customOut = await waitForDownload(/-rotate-crop\.pdf$/);
+check('a custom crop exports', !!customOut);
+if (customOut) {
+	const box = (await PDFDocument.load(customOut.bytes)).getPage(0).getCropBox();
+	const sides = [box.width, box.height].sort((a, b) => a - b);
+	check(
+		'the crop box is 85 × 100 mm',
+		near(sides[0], 85 * MM) && near(sides[1], 100 * MM),
+		`${box.width.toFixed(1)}×${box.height.toFixed(1)}`,
+	);
+}
+await visit(page, '/tools/pdf-rotate-crop?rcSample&rcPaper=85x100');
+await page.waitForSelector('.media-crop-image', { timeout: 15000 });
+await sleep(300);
+s = await state();
+check('?rcPaper=85x100 crops to the custom size', s.paper === 'Custom · 85 × 100 mm', s.paper);
+
+const order = () =>
+	page.evaluate(() => {
+		const top = (s) => document.querySelector(s)?.getBoundingClientRect().top ?? NaN;
+		return {
+			source: top('.prc-slot, .prc-source'),
+			preview: top('.prc-canvas'),
+			fold: window.innerHeight,
+		};
+	});
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/pdf-rotate-crop');
+let o = await order();
+check(
+	'phone, no file: the Source slot comes before the preview, on screen',
+	o.source < o.preview && o.source >= 0 && o.source < o.fold,
+	JSON.stringify(o),
+);
+await visit(page, '/tools/pdf-rotate-crop?rcSample');
+await page.waitForSelector('.prc-source', { timeout: 15000 });
+o = await order();
+check('phone, loaded: the preview leads again', o.preview < o.source, JSON.stringify(o));
 
 await finish(browser);

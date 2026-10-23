@@ -1,303 +1,511 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq, not, or } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { modifier } from 'ember-modifier';
+import type { PDFDocument } from 'pdf-lib';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+	type CanonPageMenuItem,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
+import { formatBytes } from 'delphitools-v2/lib/pdf-compress';
 import {
 	everyPageAlone,
 	normaliseRotation,
 	parsePageRanges,
 } from 'delphitools-v2/lib/pdf-pages';
-import { loadPdfDocument } from 'delphitools-v2/lib/pdfjs';
-import type { PDFDocument } from 'pdf-lib';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import { open, thumbnails } from 'delphitools-v2/lib/pdfjs';
+import {
+	moved,
+	partLabel,
+	partNames,
+	turned,
+	type Size,
+} from 'delphitools-v2/components/tools/pdf-organiser/plan';
+import './media/media.css';
+import './pdf-organiser/pdf-organiser.css';
 
 const ACCEPT = '.pdf,application/pdf';
+const modes = ['By ranges', 'Every page'];
+const dropTypes = ['application/pdf'];
 
-// css px render width
-const THUMB_WIDTH = 220;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Merge = <template><IconSvg @name="file-stack" /></template>;
+const Cut = <template><IconSvg @name="scissors-line-dashed" /></template>;
+const Left = <template><IconSvg @name="rotate-ccw" /></template>;
+const Right = <template><IconSvg @name="rotate-cw" /></template>;
+const ROTATE_ROWS = [
+	{ class: 'porg-rotate-picked', title: 'Selected', all: false },
+	{ class: 'porg-rotate-all', title: 'All pages', all: true },
+];
 
-type SplitMode = 'ranges' | 'pages';
-
-interface SourceDoc {
+interface Source {
+	id: number;
 	name: string;
+	stem: string;
+	bytes: number;
 	// pdf.js detaches its input
 	lib: PDFDocument;
-	pageCount: number;
+	/** pdf points, displayed */
+	sizes: Size[];
+	/** object urls, lazily drawn */
+	pictures: string[];
 }
 
-interface PageEntry {
+interface Entry {
 	id: number;
 	source: number;
 	page: number;
-	// 90° steps on page rotation
+	/** degrees, atop page rotation */
 	rotation: number;
-	// empty when pdf.js fails
-	thumb: string;
 }
 
-interface SplitOutput {
+interface Merged {
+	blob: Blob;
 	name: string;
-	bytes: Uint8Array;
+	pages: number;
 }
 
 let nextId = 1;
 
-export default class PdfOrganiserTool extends Component {
-	@tracked sources: SourceDoc[] = [];
-	@tracked pages: PageEntry[] = [];
-	@tracked error: string | null = null;
-	@tracked busy = false;
-	@tracked loading: string[] = [];
+const query = (name: string) =>
+	new URLSearchParams(window.location.search).get(name);
 
-	@tracked splitMode: SplitMode = 'ranges';
-	@tracked rangeSpec = '';
+const pagesLabel = (n: number) => (n === 1 ? '1 page' : `${n} pages`);
 
-	@tracked draggedId: number | null = null;
-	@tracked dragOverId: number | null = null;
+/** The port of PDFOrganiserViewController, on the web tool's pdf-lib build. */
+export default class PdfOrganiser extends Component {
+	drop = new Drop(ACCEPT, (files) => this.add(files), true);
 
-	get loaded() {
-		return this.sources.length > 0;
+	@tracked sources: Source[] = [];
+	@tracked entries: Entry[] = [];
+	@tracked reading = 0;
+	@tracked readFailure = '';
+	// orgMode 1: every page
+	@tracked every = query('orgMode') === '1';
+	@tracked rangeSpec = query('orgRanges') ?? '';
+	@tracked merging = false;
+	@tracked mergeFailed = false;
+	@tracked merged: Merged | null = null;
+	@tracked splitting = false;
+	@tracked splitFailed = false;
+	/** entry ids, not indices */
+	@tracked picked: number[] = [];
+
+	#strip?: HTMLElement;
+	#job = 0;
+	#extend = false;
+
+	willDestroy() {
+		super.willDestroy();
+		for (const source of this.sources) release(source);
 	}
 
-	get countLabel() {
-		const files = this.sources.length;
-		const pages = this.pages.length;
-		return `${files} file${files === 1 ? '' : 's'} · ${pages} page${pages === 1 ? '' : 's'}`;
+	get busy() {
+		return this.merging || this.splitting;
+	}
+
+	get modeIndex() {
+		return this.every ? 1 : 0;
 	}
 
 	get baseName() {
-		return this.sources[0]?.name.replace(/\.pdf$/i, '') || 'merged';
+		return this.sources[0]?.stem || 'merged';
 	}
 
-	get parsedRanges(): {
-		groups: number[][] | null;
-		error: string | null;
-	} {
-		if (this.splitMode === 'pages') {
-			return {
-				groups: everyPageAlone(this.pages.length),
-				error: null,
-			};
-		}
+	#source(id: number) {
+		return this.sources.find((source) => source.id === id);
+	}
+
+	#page(entry: Entry, depth = 0, name?: string): CanonPage | null {
+		const source = this.#source(entry.source);
+		const size = source?.sizes[entry.page];
+		if (!source || !size) return null;
+		return {
+			size: turned(size, entry.rotation),
+			picture: source.pictures[entry.page] || undefined,
+			turn: entry.rotation,
+			depth,
+			name,
+		};
+	}
+
+	get pages(): CanonPage[] {
+		return this.entries.flatMap((entry) => {
+			const stem = this.#source(entry.source)?.stem;
+			return (
+				this.#page(
+					entry,
+					0,
+					`${stem} p. ${entry.page + 1}`,
+				) ?? []
+			);
+		});
+	}
+
+	get fileRows() {
+		return this.sources.map((source) => ({
+			source,
+			detail: `${pagesLabel(source.sizes.length)} · ${formatBytes(source.bytes)}`,
+		}));
+	}
+
+	get parsed(): { groups: number[][]; error: string } {
+		const count = this.entries.length;
+		if (this.every)
+			return { groups: everyPageAlone(count), error: '' };
 		if (this.rangeSpec.trim() === '')
-			return { groups: null, error: null };
+			return { groups: [], error: '' };
 		try {
 			return {
-				groups: parsePageRanges(
-					this.rangeSpec,
-					this.pages.length,
-				),
-				error: null,
+				groups: parsePageRanges(this.rangeSpec, count),
+				error: '',
 			};
 		} catch (error) {
-			return {
-				groups: null,
-				error: (error as Error).message,
-			};
+			return { groups: [], error: (error as Error).message };
 		}
+	}
+
+	get parts(): CanonPage[] {
+		return this.parsed.groups.flatMap((group) => {
+			const entry = this.entries[group[0]!];
+			return (
+				(entry &&
+					this.#page(
+						entry,
+						group.length - 1,
+						partLabel(group),
+					)) ??
+				[]
+			);
+		});
 	}
 
 	get splitLabel() {
-		const count = this.parsedRanges.groups?.length ?? 0;
-		return count === 1
-			? 'Download part'
-			: `Download ${count} parts`;
+		const count = this.parsed.groups.length;
+		return count < 2 ? 'Download part' : `Download ${count} parts`;
 	}
 
-	get canSplit() {
-		const groups = this.parsedRanges.groups;
-		return (
-			!this.busy &&
-			this.pages.length > 0 &&
-			groups !== null &&
-			groups.length > 0
+	get cannotSplit() {
+		return this.busy || this.parsed.groups.length === 0;
+	}
+
+	get mergedRow() {
+		const merged = this.merged;
+		if (!merged) return null;
+		return {
+			name: merged.name,
+			detail: `${pagesLabel(merged.pages)} · ${formatBytes(merged.blob.size)}`,
+		};
+	}
+
+	#queue: Promise<void> = Promise.resolve();
+
+	add = (files: File[], at = Infinity) => {
+		const pdfs = files.filter((file) =>
+			matchesAccept(file, ACCEPT),
 		);
-	}
-
-	pageLabel = (entry: PageEntry) => `p. ${entry.page + 1}`;
-
-	rotationClass = (entry: PageEntry) =>
-		entry.rotation ? `is-rot-${entry.rotation}` : '';
-
-	sourceName = (entry: PageEntry) =>
-		this.sources[entry.source]?.name ?? '';
-
-	readFile = (file: File) => this.#addFiles([file]);
-
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		this.#addFiles([...(input.files ?? [])]);
-		// re-pick same file
-		input.value = '';
+		if (!pdfs.length || this.busy) return;
+		this.readFailure = '';
+		this.reading += pdfs.length;
+		// serial: pages stay grouped
+		this.#queue = this.#queue.then(() => this.#read(pdfs, at));
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		this.#addFiles([...(event.dataTransfer?.files ?? [])]);
-	};
+	paste = (file: File) => this.add([file]);
 
-	// preventDefault enables drop
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	#addFiles(files: File[]) {
-		const pdfs = files.filter(
-			(file) =>
-				file.type === 'application/pdf' ||
-				/\.pdf$/i.test(file.name),
-		);
-		if (pdfs.length === 0) return;
-		this.error = null;
-		for (const file of pdfs) void this.#loadSource(file);
-	}
-
-	async #loadSource(file: File) {
-		this.loading = [...this.loading, file.name];
-		try {
-			const bytes = await file.arrayBuffer();
-			const { PDFDocument } = await import('pdf-lib');
-			const lib = await PDFDocument.load(bytes, {
-				ignoreEncryption: true,
-			});
-
-			const js: PDFDocumentProxy = await loadPdfDocument(
-				bytes.slice(0),
-			);
-
-			const thumbs = await this.#renderThumbs(js);
+	async #read(files: File[], at: number) {
+		let insertAt = at;
+		// sequential keeps picked order
+		for (const file of files) {
+			const source = await load(file).catch(() => null);
 			if (this.isDestroyed) return;
-
-			// reads length before append
-			const sourceIndex = this.sources.length;
-			this.sources = [
-				...this.sources,
-				{
-					name: file.name,
-					lib,
-					pageCount: lib.getPageCount(),
-				},
-			];
-			this.pages = [
-				...this.pages,
-				...thumbs.map((thumb, index) => ({
-					id: nextId++,
-					source: sourceIndex,
-					page: index,
-					rotation: 0,
-					thumb,
-				})),
-			];
-		} catch {
-			this.error = `Could not read ${file.name}`;
-		} finally {
-			if (!this.isDestroyed) {
-				this.loading = this.loading.filter(
-					(n) => n !== file.name,
-				);
+			this.reading--;
+			if (!source) {
+				this.readFailure = `Could not read ${file.name}`;
+				continue;
 			}
+			this.sources = [...this.sources, source];
+			const added = source.sizes.map((_, page) => ({
+				id: nextId++,
+				source: source.id,
+				page,
+				rotation: 0,
+			}));
+			const next = [...this.entries];
+			next.splice(
+				Math.min(insertAt, next.length),
+				0,
+				...added,
+			);
+			insertAt += added.length;
+			this.#change(next);
+			void this.#draw(file, source.id);
 		}
 	}
 
-	async #renderThumbs(js: PDFDocumentProxy): Promise<string[]> {
-		try {
-			const thumbs: string[] = [];
-			for (let n = 1; n <= js.numPages; n++) {
-				const page = await js.getPage(n);
-				const base = page.getViewport({ scale: 1 });
-				const viewport = page.getViewport({
-					scale: THUMB_WIDTH / base.width,
-				});
-				const canvas = document.createElement('canvas');
-				canvas.width = Math.ceil(viewport.width);
-				canvas.height = Math.ceil(viewport.height);
-				await page.render({ canvas, viewport }).promise;
-				thumbs.push(canvas.toDataURL('image/png'));
-			}
-			return thumbs;
-		} catch {
-			// empty thumb shows icon
-			return Array.from({ length: js.numPages }, () => '');
-		}
-	}
-
-	rotatePage = (entry: PageEntry) => {
-		this.#replacePage(entry, {
-			rotation: normaliseRotation(entry.rotation + 90),
+	async #draw(file: File, id: number) {
+		const live = () => !this.isDestroyed && !!this.#source(id);
+		const pdf = await open(await file.arrayBuffer()).catch(
+			() => null,
+		);
+		if (!pdf) return;
+		await thumbnails(pdf, live, (page, url) => {
+			this.sources = this.sources.map((source) => {
+				if (source.id !== id) return source;
+				const pictures = [...source.pictures];
+				pictures[page] = url;
+				return { ...source, pictures };
+			});
 		});
+		void pdf.destroy();
+	}
+
+	remove = (id: number) => {
+		const source = this.#source(id);
+		if (!source || this.busy) return;
+		release(source);
+		this.sources = this.sources.filter((s) => s.id !== id);
+		this.#change(
+			this.entries.filter((entry) => entry.source !== id),
+		);
 	};
 
-	deletePage = (entry: PageEntry) => {
-		this.pages = this.pages.filter((page) => page.id !== entry.id);
+	// stale merge, ios job.reset
+	#change(entries: Entry[]) {
+		this.entries = entries;
+		this.picked = this.picked.filter((id) =>
+			entries.some((entry) => entry.id === id),
+		);
+		this.#job++;
+		this.merged = null;
+		this.merging = false;
+		this.mergeFailed = false;
+	}
+
+	move = (from: number, to: number) => {
+		if (this.busy) return;
+		this.#change(moved(this.entries, from, to));
 	};
 
-	#replacePage(entry: PageEntry, patch: Partial<PageEntry>) {
-		this.pages = this.pages.map((page) =>
-			page.id === entry.id ? { ...page, ...patch } : page,
+	insert = (index: number, files: File[]) => this.add(files, index);
+
+	#act(id: number, body: (entries: Entry[], at: number) => void) {
+		const at = this.entries.findIndex((entry) => entry.id === id);
+		if (at < 0 || this.busy) return;
+		const next = [...this.entries];
+		body(next, at);
+		this.#change(next);
+	}
+
+	menu = (index: number): CanonPageMenuItem[] | undefined => {
+		const id = this.entries[index]?.id;
+		if (id === undefined || this.busy) return undefined;
+		const act =
+			(body: (entries: Entry[], at: number) => void) => () =>
+				this.#act(id, body);
+		const toEdge = (start: boolean) =>
+			act((entries, at) => {
+				const [entry] = entries.splice(at, 1);
+				if (start) entries.unshift(entry!);
+				else entries.push(entry!);
+			});
+		return [
+			{
+				title: 'Rotate',
+				action: act((entries, at) => {
+					const entry = entries[at]!;
+					entries[at] = {
+						...entry,
+						rotation: normaliseRotation(
+							entry.rotation + 90,
+						),
+					};
+				}),
+			},
+			{
+				title: 'Duplicate',
+				action: act((entries, at) => {
+					entries.splice(at + 1, 0, {
+						...entries[at]!,
+						id: nextId++,
+					});
+				}),
+			},
+			{ title: 'Move to start', action: toEdge(true) },
+			{ title: 'Move to end', action: toEdge(false) },
+			{
+				title: 'Remove',
+				destructive: true,
+				action: act((entries, at) =>
+					entries.splice(at, 1),
+				),
+			},
+		];
+	};
+
+	#button(index: number) {
+		return this.#strip?.querySelector<HTMLElement>(
+			`[data-page-index="${index}"] .canon-page-strip-page`,
 		);
 	}
 
-	clearAll = () => {
-		this.sources = [];
-		this.pages = [];
-		this.error = null;
+	get pickedIndices() {
+		const picked = new Set(this.picked);
+		return this.entries.flatMap((entry, index) =>
+			picked.has(entry.id) ? [index] : [],
+		);
+	}
+
+	get lastPicked() {
+		const id = this.picked.at(-1);
+		const index = this.entries.findIndex(
+			(entry) => entry.id === id,
+		);
+		return index < 0 ? undefined : index;
+	}
+
+	get nothingPicked() {
+		return this.busy || this.pickedIndices.length === 0;
+	}
+
+	get noPages() {
+		return this.busy || this.entries.length === 0;
+	}
+
+	rotate = (delta: number, all: boolean) => {
+		if (this.busy) return;
+		const picked = new Set(this.picked);
+		this.#change(
+			this.entries.map((entry) =>
+				all || picked.has(entry.id)
+					? {
+							...entry,
+							rotation: normaliseRotation(
+								entry.rotation +
+									delta,
+							),
+						}
+					: entry,
+			),
+		);
 	};
 
-	dragStart = (id: number, event: DragEvent) => {
-		this.draggedId = id;
-		if (event.dataTransfer) {
-			event.dataTransfer.effectAllowed = 'move';
-			event.dataTransfer.setData('text/plain', String(id));
-		}
-	};
+	// reapply after kit rebuilds
+	markPicked = modifier((strip: HTMLElement, [indices]: [number[]]) => {
+		const picked = new Set(indices);
+		const mark = () => {
+			for (const cell of strip.querySelectorAll<HTMLElement>(
+				'[data-page-index]',
+			))
+				cell.toggleAttribute(
+					'data-picked',
+					picked.has(
+						Number(
+							cell.dataset[
+								'pageIndex'
+							],
+						),
+					),
+				);
+		};
+		mark();
+		if (!picked.size) return;
+		const observer = new MutationObserver(mark);
+		observer.observe(strip, { childList: true, subtree: true });
+		return () => observer.disconnect();
+	});
 
-	dragOver = (id: number, event: DragEvent) => {
-		event.preventDefault();
-		this.dragOverId = id === this.draggedId ? null : id;
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect =
-				this.draggedId === null ? 'copy' : 'move';
-		}
-	};
-
-	dragEnd = () => {
-		this.draggedId = null;
-		this.dragOverId = null;
-	};
-
-	dropOnCell = (id: number, event: DragEvent) => {
-		event.preventDefault();
-		this.dragOverId = null;
-
-		if (event.dataTransfer?.files.length) {
-			this.draggedId = null;
-			this.#addFiles([...event.dataTransfer.files]);
+	select = (index: number) => {
+		const id = this.entries[index]?.id;
+		if (id === undefined) return;
+		if (this.#extend) {
+			this.picked = this.picked.includes(id)
+				? this.picked.filter((picked) => picked !== id)
+				: [...this.picked, id];
 			return;
 		}
-
-		const from = this.pages.findIndex(
-			(page) => page.id === this.draggedId,
+		this.picked = [id];
+		this.#button(index)?.dispatchEvent(
+			new MouseEvent('contextmenu', {
+				bubbles: true,
+				cancelable: true,
+			}),
 		);
-		this.draggedId = null;
-		const to = this.pages.findIndex((page) => page.id === id);
-		if (from < 0 || to < 0 || from === to) return;
-
-		const next = [...this.pages];
-		const [moved] = next.splice(from, 1);
-		next.splice(to, 0, moved!);
-		this.pages = next;
 	};
 
-	async #buildDoc(entries: PageEntry[]): Promise<Uint8Array> {
+	stripKeys = modifier((strip: HTMLElement) => {
+		this.#strip = strip;
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key !== 'Delete' && event.key !== 'Backspace')
+				return;
+			const cell = (
+				event.target as HTMLElement
+			).closest<HTMLElement>('[data-page-index]');
+			const id =
+				this.entries[Number(cell?.dataset['pageIndex'])]
+					?.id;
+			if (!cell || id === undefined || this.busy) return;
+			event.preventDefault();
+			const index = Number(cell.dataset['pageIndex']);
+			this.#act(id, (entries, at) => entries.splice(at, 1));
+			requestAnimationFrame(() =>
+				this.#button(
+					Math.min(
+						index,
+						this.entries.length - 1,
+					),
+				)?.focus(),
+			);
+		};
+		// kit onSelect lacks event
+		const onClick = (event: MouseEvent) => {
+			this.#extend =
+				event.shiftKey ||
+				event.metaKey ||
+				event.ctrlKey;
+		};
+		strip.addEventListener('keydown', onKey);
+		strip.addEventListener('click', onClick, true);
+		return () => {
+			strip.removeEventListener('keydown', onKey);
+			strip.removeEventListener('click', onClick, true);
+		};
+	});
+
+	pickMode = (index: number) => {
+		this.every = index === 1;
+		this.splitFailed = false;
+	};
+
+	setRanges = (value: string) => {
+		this.rangeSpec = value;
+		this.splitFailed = false;
+	};
+
+	async #build(entries: Entry[]): Promise<Uint8Array> {
 		const { PDFDocument, degrees } = await import('pdf-lib');
 		const out = await PDFDocument.create();
 		for (const entry of entries) {
-			const source = this.sources[entry.source]!;
+			const source = this.#source(entry.source)!;
 			const [copied] = await out.copyPages(source.lib, [
 				entry.page,
 			]);
@@ -314,384 +522,343 @@ export default class PdfOrganiserTool extends Component {
 		return out.save();
 	}
 
-	#savePdf(bytes: Uint8Array, name: string) {
-		// pdf-lib ArrayBufferLike incompatible with BlobPart
-		downloadBlob(
-			new Blob([new Uint8Array(bytes)], {
-				type: 'application/pdf',
-			}),
-			name,
-		);
+	merge = () => void this.#merge();
+
+	async #merge() {
+		if (this.busy || !this.entries.length) return;
+		const job = ++this.#job;
+		const entries = this.entries;
+		this.merging = true;
+		this.mergeFailed = false;
+		try {
+			const bytes = await this.#build(entries);
+			if (job !== this.#job) return;
+			this.merged = {
+				blob: pdfBlob(bytes),
+				name: `${this.baseName}-merged.pdf`,
+				pages: entries.length,
+			};
+		} catch {
+			if (job === this.#job) this.mergeFailed = true;
+		} finally {
+			if (job === this.#job) this.merging = false;
+		}
 	}
 
-	downloadMerged = async () => {
-		if (this.busy || this.pages.length === 0) return;
-		this.busy = true;
-		try {
-			this.#savePdf(
-				await this.#buildDoc(this.pages),
-				`${this.baseName}-merged.pdf`,
-			);
-		} catch {
-			this.error = 'Merge failed';
-		} finally {
-			this.busy = false;
-		}
+	saveMerged = () => {
+		if (this.merged)
+			downloadBlob(this.merged.blob, this.merged.name);
 	};
 
-	downloadSplit = async () => {
-		const groups = this.parsedRanges.groups;
-		if (this.busy || !groups || groups.length === 0) return;
-		this.busy = true;
+	split = () => void this.#split();
+
+	async #split() {
+		const { groups } = this.parsed;
+		if (this.busy || !groups.length) return;
+		const base = this.baseName;
+		const names = partNames(groups, base, this.every);
+		this.splitting = true;
+		this.splitFailed = false;
 		try {
-			const outputs: SplitOutput[] = [];
+			const outputs = [];
 			for (const [index, group] of groups.entries()) {
-				const entries = group.map(
-					(page) => this.pages[page]!,
-				);
-				const suffix =
-					this.splitMode === 'pages'
-						? `page-${group[0]! + 1}`
-						: `part-${index + 1}`;
 				outputs.push({
-					name: `${this.baseName}-${suffix}.pdf`,
-					bytes: await this.#buildDoc(entries),
+					name: names[index]!,
+					bytes: await this.#build(
+						group.map(
+							(page) =>
+								this.entries[
+									page
+								]!,
+						),
+					),
 				});
 			}
-
 			if (outputs.length === 1) {
-				this.#savePdf(
-					outputs[0]!.bytes,
+				downloadBlob(
+					pdfBlob(outputs[0]!.bytes),
 					outputs[0]!.name,
 				);
-			} else {
-				const { default: JSZip } =
-					await import('jszip');
-				const zip = new JSZip();
-				for (const output of outputs) {
-					zip.file(output.name, output.bytes);
-				}
-				const blob = await zip.generateAsync({
-					type: 'blob',
-				});
-				if (this.isDestroyed) return;
-				downloadBlob(
-					blob,
-					`${this.baseName}-split.zip`,
-				);
+				return;
 			}
+			const { default: JSZip } = await import('jszip');
+			const zip = new JSZip();
+			for (const output of outputs)
+				zip.file(output.name, output.bytes);
+			const blob = await zip.generateAsync({ type: 'blob' });
+			if (!this.isDestroyed)
+				downloadBlob(blob, `${base}-split.zip`);
 		} catch {
-			this.error = 'Split failed';
+			this.splitFailed = true;
 		} finally {
-			this.busy = false;
+			if (!this.isDestroyed) this.splitting = false;
 		}
-	};
-
-	setSplitMode = (mode: SplitMode) => (this.splitMode = mode);
-	setRangeSpec = (event: Event) =>
-		(this.rangeSpec = (event.target as HTMLInputElement).value);
+	}
 
 	<template>
-		<div class="dt-porg" {{filePaste this.readFile accept=ACCEPT}}>
-			<div
-				class="dt-porg-frame"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.allowDrop}}
-			>
-				{{#unless this.loaded}}
-					<label class="dt-porg-drop">
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							multiple
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
+		<CanonSplit
+			class="pdf-organiser"
+			{{filePaste this.paste accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.entries.length}}
+						<CanonPageStrip
+							class="porg-strip"
+							@pages={{this.pages}}
+							@reorders={{if
+								this.busy
+								false
+								true
+							}}
+							@dropTypes={{dropTypes}}
+							@onMove={{this.move}}
+							@onDrop={{this.insert}}
+							@onSelect={{this.select}}
+							@selected={{this.lastPicked}}
+							@menu={{this.menu}}
+							{{this.stripKeys}}
+							{{this.markPicked
+								this.pickedIndices
 							}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-porg-drop-title"
-						>Drop PDFs here</span>
-						<span
-							class="dt-porg-drop-hint"
-						>click or paste</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.loaded}}
-					<div class="dt-porg-bar">
-						<div class="dt-porg-info">
-							<span
-								class="dt-porg-count"
-							>{{this.countLabel}}</span>
-							{{#if
-								this.loading.length
-							}}
-								<span
-									class="dt-porg-reading"
-								>Reading…</span>
-							{{/if}}
-						</div>
-						<label class="dt-porg-btn">
-							<input
-								type="file"
-								accept={{ACCEPT}}
-								multiple
-								class="dt-sr-only"
-								{{on
-									"change"
-									this.handleFileSelect
+					{{else}}
+						<CanonPageStrip
+							class="porg-blank"
+							@pages={{(array)}}
+							@blank={{true}}
+						/>
+					{{/if}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Files" />
+					{{#each
+						this.fileRows key="source.id"
+						as |row|
+					}}
+						<CanonRow
+							class="porg-file"
+							@title={{row.source.name}}
+							@detail={{row.detail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@disabled={{this.busy}}
+								@onClick={{fn
+									this.remove
+									row.source.id
 								}}
 							/>
-							<Icon
-								@name="file-plus"
-							/>
-							Add PDFs
-						</label>
-						<button
-							type="button"
-							class="dt-porg-btn"
-							{{on
-								"click"
-								this.clearAll
-							}}
+						</CanonRow>
+					{{/each}}
+					{{#if this.reading}}
+						<CanonRow
+							class="porg-reading"
+							@title="Processing…"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-porg-btn is-primary"
-							disabled={{or
-								this.busy
-								(not
-									this.pages.length
-								)
-							}}
-							{{on
-								"click"
-								this.downloadMerged
-							}}
-						>
-							<DownloadLabel
-								@label="Download merged PDF"
+							<CanonLoader
+								@cell={{5}}
+								@gap={{1}}
 							/>
-						</button>
-					</div>
-
-					<div class="dt-porg-settings">
-						<div class="dt-porg-field">
-							<span>Split</span>
-							<div
-								class="segmented dt-porg-splitmode"
-							>
-								<button
-									type="button"
-									class="dt-porg-opt
-										{{if
-											(eq
-												this.splitMode
-												'ranges'
-											)
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setSplitMode
-											"ranges"
-										)
+						</CanonRow>
+					{{/if}}
+					{{#if this.readFailure}}
+						<CanonStatus
+							class="porg-read-failure"
+							@text={{this.readFailure}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<Slot
+						class="porg-slot"
+						@prompt="Drop PDFs here"
+						@icon="file-stack"
+						@row={{true}}
+						@multiple={{true}}
+						@accept={{ACCEPT}}
+						@over={{this.drop.over}}
+						@onFiles={{this.add}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}} class="porg-rotate">
+					<CanonHeading @text="Rotate" />
+					{{#each ROTATE_ROWS as |row|}}
+						<CanonRow
+							class={{row.class}}
+							@title={{row.title}}
+							@form="flush"
+						>
+							<CanonGrid>
+								<CanonButton
+									@kind="cell"
+									@icon={{Left}}
+									@label="Rotate left"
+									@disabled={{if
+										row.all
+										this.noPages
+										this.nothingPicked
 									}}
-								>By ranges</button>
-								<button
-									type="button"
-									class="dt-porg-opt
-										{{if
-											(eq
-												this.splitMode
-												'pages'
-											)
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setSplitMode
-											"pages"
-										)
-									}}
-								>Every page</button>
-							</div>
-						</div>
-
-						{{#if
-							(eq
-								this.splitMode
-								"ranges"
-							)
-						}}
-							<label
-								class="dt-porg-field"
-							>
-								<span
-								>Ranges</span>
-								<input
-									type="text"
-									placeholder="1-3, 7-9"
-									value={{this.rangeSpec}}
-									{{on
-										"input"
-										this.setRangeSpec
+									@onClick={{fn
+										this.rotate
+										-90
+										row.all
 									}}
 								/>
-							</label>
-						{{/if}}
-
-						<button
-							type="button"
-							class="dt-porg-splitgo"
-							disabled={{not
-								this.canSplit
-							}}
-							{{on
-								"click"
-								this.downloadSplit
-							}}
-						>
-							<DownloadLabel
-								@label={{this.splitLabel}}
-							/>
-						</button>
-					</div>
-
-					{{#if this.parsedRanges.error}}
-						<p class="dt-porg-error">Ranges:
-							{{this.parsedRanges.error}}</p>
-					{{/if}}
-					{{#if this.error}}
-						<p
-							class="dt-porg-error"
-						>{{this.error}}</p>
-					{{/if}}
-
-					<ol class="dt-porg-grid">
-						{{#each
-							this.pages key="id"
-							as |entry|
+								<CanonButton
+									@kind="cell"
+									@icon={{Right}}
+									@label="Rotate right"
+									@disabled={{if
+										row.all
+										this.noPages
+										this.nothingPicked
+									}}
+									@onClick={{fn
+										this.rotate
+										90
+										row.all
+									}}
+								/>
+							</CanonGrid>
+						</CanonRow>
+					{{/each}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Merge" />
+					<Job
+						@title="Export Merged"
+						@icon={{Merge}}
+						@failure="Merge failed"
+						@disabled={{if
+							this.entries.length
+							false
+							true
 						}}
-							<li
-								class="dt-porg-cell
-									{{if
-										(eq
-											this.dragOverId
-											entry.id
-										)
-										'is-drag-over'
-									}}"
-								draggable="true"
-								{{on
-									"dragstart"
-									(fn
-										this.dragStart
-										entry.id
-									)
-								}}
-								{{on
-									"dragover"
-									(fn
-										this.dragOver
-										entry.id
-									)
-								}}
-								{{on
-									"drop"
-									(fn
-										this.dropOnCell
-										entry.id
-									)
-								}}
-								{{on
-									"dragend"
-									this.dragEnd
-								}}
-							>
-								{{#if
-									entry.thumb
-								}}
-									<img
-										class="dt-porg-thumb
-											{{this.rotationClass
-												entry
-											}}"
-										src={{entry.thumb}}
-										alt={{this.pageLabel
-											entry
-										}}
-									/>
-								{{else}}
-									<div
-										class="dt-porg-thumb-fallback"
-									>
-										<Icon
-											@name="file-stack"
-										/>
-									</div>
-								{{/if}}
-								<div
-									class="dt-porg-cell-foot"
-								>
-									<span
-										class="dt-porg-badge"
-										title={{this.sourceName
-											entry
-										}}
-									>{{this.pageLabel
-											entry
-										}}</span>
-									<span
-										class="dt-porg-cell-tools"
-									>
-										<button
-											type="button"
-											class="dt-porg-tool"
-											title="Rotate"
-											{{on
-												"click"
-												(fn
-													this.rotatePage
-													entry
-												)
-											}}
-										>
-											<Icon
-												@name="rotate-cw"
-											/>
-										</button>
-										<button
-											type="button"
-											class="dt-porg-tool"
-											title="Delete"
-											{{on
-												"click"
-												(fn
-													this.deletePage
-													entry
-												)
-											}}
-										>
-											<Icon
-												@name="x"
-											/>
-										</button>
-									</span>
-								</div>
-							</li>
-						{{/each}}
-					</ol>
-				{{/if}}
-			</div>
-		</div>
+						@busy={{this.merging}}
+						@failed={{this.mergeFailed}}
+						@result={{this.mergedRow}}
+						@onRun={{this.merge}}
+						@onSave={{this.saveMerged}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Split" />
+					<CanonSegmented
+						class="porg-modes"
+						@items={{modes}}
+						@selected={{this.modeIndex}}
+						@onChange={{this.pickMode}}
+					/>
+					{{#unless this.every}}
+						<CanonRow
+							class="porg-ranges"
+							@title="Ranges"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonTextCell
+								@value={{this.rangeSpec}}
+								@placeholder="1-3, 7-9"
+								@onChange={{this.setRanges}}
+								aria-labelledby={{titleId}}
+								inputmode="text"
+								autocomplete="off"
+								spellcheck="false"
+							/>
+						</CanonRow>
+						{{#if this.parsed.error}}
+							<CanonStatus
+								class="porg-range-error"
+								@text={{this.parsed.error}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
+					{{/unless}}
+				</CanonRows>
+				<CanonCanvas
+					class="porg-parts"
+					@height={{pageStripHeight}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					<CanonPageStrip
+						@pages={{this.parts}}
+						@empty="Parts"
+					/>
+				</CanonCanvas>
+				<CanonRows @framed={{true}}>
+					<CanonButton
+						class="porg-split"
+						@text={{this.splitLabel}}
+						@icon={{Cut}}
+						@disabled={{this.cannotSplit}}
+						@onClick={{this.split}}
+					/>
+					{{#if this.splitting}}
+						<CanonRow
+							class="porg-splitting"
+							@title="Processing…"
+						>
+							<CanonLoader
+								@cell={{5}}
+								@gap={{1}}
+							/>
+						</CanonRow>
+					{{/if}}
+					{{#if this.splitFailed}}
+						<CanonStatus
+							class="porg-split-failed"
+							@text="Split failed"
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+async function load(file: File): Promise<Source> {
+	const { PDFDocument } = await import('pdf-lib');
+	const bytes = await file.arrayBuffer();
+	const lib = await PDFDocument.load(bytes, { ignoreEncryption: true });
+	const sizes = lib.getPages().map((page) => {
+		const { width, height } = page.getCropBox();
+		return turned({ width, height }, page.getRotation().angle);
+	});
+	if (!sizes.length) throw new Error('no pages');
+	return {
+		id: nextId++,
+		name: file.name,
+		stem: file.name.replace(/\.pdf$/i, ''),
+		bytes: file.size,
+		lib,
+		sizes,
+		pictures: [],
+	};
+}
+
+function release(source: Source) {
+	for (const url of source.pictures) if (url) URL.revokeObjectURL(url);
+}
+
+// ArrayBufferLike not BlobPart
+function pdfBlob(bytes: Uint8Array) {
+	return new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
 }

@@ -1,0 +1,150 @@
+/* tool settings bar: along a side every group and cell takes the width
+   of the widest, as iOS FloatingCells in a column */
+.sub-ed-bar.is-leading > .sub-cells,
+.sub-ed-bar.is-trailing > .sub-cells {
+	inline-size: auto;
+}
+
+.sub-ed-bar.is-leading > .sub-cells > .sub-cell.sub-cell,
+.sub-ed-bar.is-trailing > .sub-cells > .sub-cell.sub-cell {
+	inline-size: auto;
+}
+
+/* menus and panels opened from its cells */
+.sub-bar-pop .sub-bar-pop-body {
+	inline-size: 280px;
+	max-inline-size: calc(100vw - 2 * var(--sub-pad, 16px));
+}
+
+.sub-bar-pop .canon-rows {
+	margin: 0;
+}
+
+/* the symbol gallery, cells under hairlines */
+.sub-bar-gallery {
+	display: grid;
+	grid-template-columns: repeat(6, 1fr);
+	gap: var(--canon-hairline);
+	max-block-size: 320px;
+	overflow: auto;
+	background: var(--canon-card);
+}
+
+.sub-bar-glyph {
+	display: grid;
+	place-items: center;
+	aspect-ratio: 1;
+	margin: 0;
+	padding: 8px;
+	border: 0;
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	cursor: pointer;
+}
+
+.sub-bar-glyph:hover {
+	background: var(--canon-accent-bg);
+}
+
+.sub-bar-glyph[aria-pressed="true"] {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.sub-bar-glyph svg {
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.sub-bar-swatch {
+	display: grid;
+	place-items: center;
+	inline-size: 44px;
+	block-size: 32px;
+	margin: 0;
+	padding: 4px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 8px
+		8px;
+	cursor: pointer;
+}
+
+.sub-bar-swatch > span {
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+/* empty scene: what to start with, floating over the artboard */
+.sub-empty {
+	position: absolute;
+	inset: 0;
+	z-index: 12;
+	display: grid;
+	place-items: center;
+	pointer-events: none;
+}
+
+.sub-empty-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-hairline);
+	padding: var(--sub-frame);
+	background: var(--canon-border);
+	box-shadow: var(--sub-shadow);
+	pointer-events: auto;
+}
+
+.sub-empty-actions {
+	display: flex;
+	gap: var(--canon-hairline);
+}
+
+.sub-empty-actions > .sub-cell {
+	flex: 1;
+	min-block-size: var(--sub-cell);
+	padding-inline: var(--sub-pad);
+}
+
+.sub-empty-note {
+	margin: 0;
+	padding: 10px var(--sub-pad);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	text-align: center;
+}
+
+/* insecure context: a hairline card under the title */
+.sub-secure {
+	position: absolute;
+	inset-block-start: calc(
+		var(--sub-gap) + var(--sub-small-box) + var(--sub-gap)
+	);
+	inset-inline-start: 50%;
+	z-index: 21;
+	max-inline-size: min(420px, calc(100% - 2 * var(--sub-pad)));
+	box-sizing: border-box;
+	padding: 10px var(--sub-pad);
+	translate: -50% 0;
+	border: var(--sub-frame) solid var(--canon-border);
+	background: var(--canon-card);
+	box-shadow: var(--sub-shadow);
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.sub-secure:dir(rtl) {
+	translate: 50% 0;
+}
+
+/* a file over the canvas */
+.sub-ed .sub-canvas-drop-hint {
+	inset: var(--sub-pad);
+	border: var(--sub-frame) dashed var(--canon-primary);
+	background-color: color-mix(
+		in oklab,
+		var(--canon-primary) 6%,
+		transparent
+	);
+}

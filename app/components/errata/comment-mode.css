@@ -1,0 +1,17 @@
+/* Comment: the List menu, sized like the panel's text inputs */
+.err-comment-menu {
+	box-sizing: border-box;
+	flex: 1;
+	justify-content: space-between;
+	max-inline-size: 240px;
+	min-block-size: 32px;
+	padding-block: 0;
+	padding-inline: 8px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-background);
+	font-size: var(--canon-text-subheadline);
+}
+
+.err-comment-menu:focus-within {
+	border-color: var(--canon-primary);
+}

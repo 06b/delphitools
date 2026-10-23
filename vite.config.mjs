@@ -112,6 +112,12 @@ export default defineConfig({
 		__DT_PRIDE__: JSON.stringify(prideEnabled()),
 	},
 	optimizeDeps: {
+		// the html crawl misses worker entries; a dep found late re-bundles and 504s in-flight imports
+		entries: [
+			'index.html',
+			'tests/index.html',
+			'app/**/*.{js,ts,gts}',
+		],
 		// pdf-lib fonts are non-json
 		exclude: ['pdf-lib'],
 		// nested pako requires bundling

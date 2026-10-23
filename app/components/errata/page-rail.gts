@@ -6,6 +6,7 @@ import type { TOC } from '@ember/component/template-only';
 import { modifier } from 'ember-modifier';
 import { eq } from 'ember-truth-helpers';
 import Icon from 'delphitools-v2/components/icon';
+import { PanelHeader } from 'delphitools-v2/components/substrata/editor/cells';
 import {
 	blankPage,
 	insertSize,
@@ -85,7 +86,10 @@ const Gap: TOC<{
 	</div>
 </template>;
 
-export default class PageRail extends Component {
+export default class PageRail extends Component<{
+	Args: { onClose: () => void };
+	Element: HTMLElement;
+}> {
 	doc = new TrackedExternal(store.subscribe, store.getSnapshot);
 	pageIndex = new TrackedExternal(subscribePage, getPageIndex);
 	@tracked dragOverId: string | null = null;
@@ -171,7 +175,8 @@ export default class PageRail extends Component {
 	};
 
 	<template>
-		<div class="err-pages">
+		<section class="err-pages" aria-label="Pages" ...attributes>
+			<PanelHeader @title="Pages" @onClose={{@onClose}} />
 			<input
 				type="file"
 				accept="image/*"
@@ -313,6 +318,6 @@ export default class PageRail extends Component {
 					@onImage={{this.insertImage}}
 				/>
 			</div>
-		</div>
+		</section>
 	</template>
 }

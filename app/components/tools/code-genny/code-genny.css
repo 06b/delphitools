@@ -1,0 +1,81 @@
+/* the content field: first, primary height, the big-number size */
+.code-genny .canon-text-cell.cg-content {
+	inline-size: 100%;
+	min-block-size: var(--canon-primary-height);
+	padding-inline: var(--canon-panel-padding);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-big-number);
+}
+
+.code-genny .canon-text-cell.cg-content::placeholder {
+	font-size: var(--canon-text-title3);
+}
+
+.cg-background--off {
+	opacity: 0.4;
+}
+
+/* batch: number, content, state, remove */
+.cg-batch-row {
+	display: flex;
+	gap: var(--canon-hairline);
+	align-items: stretch;
+	min-block-size: var(--canon-row-height);
+	background: var(--canon-border);
+}
+
+.cg-batch-row > * {
+	background: var(--canon-card);
+}
+
+.cg-batch-index {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: flex-end;
+	inline-size: 36px;
+	padding-inline-end: 8px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.cg-batch-row .canon-text-cell {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.cg-batch-state {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 44px;
+	color: var(--canon-primary);
+}
+
+.cg-batch-state:empty {
+	display: none;
+}
+
+.cg-batch-thumb {
+	max-inline-size: 36px;
+	max-block-size: 32px;
+}
+
+.cg-batch-error {
+	color: var(--canon-destructive);
+}
+
+.cg-hidden-input {
+	display: none;
+}
+
+.cg-about-note {
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}

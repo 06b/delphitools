@@ -1,0 +1,448 @@
+/* the reels: tall columns meeting at hairlines */
+.pg-reels {
+	display: flex;
+	gap: var(--canon-hairline);
+	block-size: 100%;
+	overflow: hidden;
+	background: var(--canon-border);
+	font-family: var(--canon-font);
+}
+
+.pg-col {
+	position: relative;
+	flex: 1 1 0;
+	min-inline-size: 0;
+	overflow: hidden;
+	container-type: inline-size;
+	transition:
+		flex-grow 500ms cubic-bezier(0.34, 1.2, 0.64, 1),
+		flex-basis 500ms cubic-bezier(0.34, 1.2, 0.64, 1),
+		background-color 300ms;
+}
+
+/* narrowing back plays the widening curve in reverse */
+.pg-reels:not(.pg-reels--widened) .pg-col {
+	transition-timing-function:
+		cubic-bezier(0.36, 0, 0.66, -0.2),
+		cubic-bezier(0.36, 0, 0.66, -0.2), ease;
+}
+
+/* PaletteReels.sliver: the others shrink to 18 px slivers */
+.pg-reels--widened .pg-col {
+	flex: 0 1 18px;
+}
+
+.pg-reels--widened .pg-col--wide {
+	flex: 1 1 0;
+}
+
+.pg-col-widen {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	appearance: none;
+}
+
+.pg-col-widen:focus-visible,
+.pg-col-lamp:focus-visible,
+.pg-info-line:focus-visible,
+.pg-col-readout:focus-within {
+	outline: 2px solid currentcolor;
+	outline-offset: -4px;
+}
+
+.pg-col-number {
+	position: absolute;
+	inset-block-start: 10px;
+	inset-inline: 0;
+	opacity: 0.5;
+	font-family: var(--canon-mono-font);
+	font-size: clamp(11px, 7cqi, 15px);
+	font-weight: var(--canon-weight-bold);
+	text-align: center;
+	pointer-events: none;
+}
+
+.pg-col-readout {
+	position: absolute;
+	inset-block-end: 56px;
+	inset-inline: 8px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	line-height: 1.25;
+	cursor: pointer;
+}
+
+.pg-col-value,
+.pg-col-name {
+	max-inline-size: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pg-col-value {
+	font-family: var(--canon-mono-font);
+	font-size: clamp(13px, 10cqi, 22px);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.pg-col-name {
+	font-size: clamp(12px, 8.5cqi, 18px);
+	font-weight: var(--canon-weight-medium);
+}
+
+.pg-col-picker {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.pg-col-lamp {
+	position: absolute;
+	inset-block-end: 8px;
+	inset-inline-start: calc(50% - 22px);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 44px;
+	block-size: 44px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	opacity: 0.4;
+	background: none;
+	color: inherit;
+	cursor: pointer;
+	appearance: none;
+}
+
+.pg-col-lamp--on {
+	opacity: 1;
+}
+
+.pg-col-lamp svg {
+	inline-size: 20px;
+	block-size: 20px;
+}
+
+/* ReelColumn.narrow: the value turns on its side and the name goes */
+@container (max-width: 75.99px) {
+	.pg-col-name {
+		display: none;
+	}
+
+	.pg-col-readout {
+		inset-inline: 0;
+	}
+
+	.pg-col-value {
+		max-block-size: 40cqb;
+		font-size: 13px;
+		writing-mode: vertical-rl;
+		rotate: 180deg;
+	}
+}
+
+/* ReelColumn.bare: colour alone */
+@container (max-width: 35.99px) {
+	.pg-col-number,
+	.pg-col-readout,
+	.pg-col-lamp {
+		display: none;
+	}
+}
+
+/* the widened column's values and contrast */
+.pg-col-info {
+	position: absolute;
+	inset-block: 44px 140px;
+	inset-inline: 16px;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+
+	/* a press between the lines narrows the column */
+	pointer-events: none;
+}
+
+.pg-info-line {
+	pointer-events: auto;
+}
+
+@container (max-width: 149.99px) {
+	.pg-col-info {
+		display: none;
+	}
+}
+
+.pg-info-line {
+	display: grid;
+	flex: none;
+	grid-template-columns: 52px 1fr;
+	align-items: center;
+	min-block-size: 32px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+	appearance: none;
+}
+
+.pg-info-label {
+	opacity: 0.6;
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.pg-info-value {
+	overflow: hidden;
+	font-family: var(--canon-mono-font);
+	font-size: 14px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pg-info-contrast {
+	display: flex;
+	flex: none;
+	gap: 10px;
+	align-items: center;
+	min-block-size: 44px;
+}
+
+.pg-info-contrast:first-of-type {
+	margin-block-start: 14px;
+}
+
+.pg-info-chip {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 36px;
+	block-size: 36px;
+	box-sizing: border-box;
+	border: var(--canon-hairline) solid
+		color-mix(in srgb, currentcolor 30%, transparent);
+	background: black;
+	color: var(--pg-colour);
+	font-size: 17px;
+	font-weight: var(--canon-weight-bold);
+}
+
+.pg-info-chip--white {
+	background: white;
+}
+
+.pg-info-ratio {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-inline-size: 0;
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.2;
+}
+
+.pg-info-against {
+	opacity: 0.6;
+	font-family: var(--canon-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-regular);
+}
+
+.pg-info-lamp {
+	opacity: 0.3;
+	font-size: 12px;
+	font-weight: var(--canon-weight-bold);
+}
+
+.pg-info-lamp--on {
+	opacity: 1;
+}
+
+/* the reel: colours run down past the column and land with an overshoot */
+.pg-reel {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline: 0;
+	display: flex;
+	flex-direction: column;
+	block-size: calc(100% * var(--pg-panels));
+	animation: pg-spin var(--pg-spin) var(--pg-delay) backwards;
+	pointer-events: none;
+}
+
+.pg-reel > span {
+	flex: 1;
+}
+
+@keyframes pg-spin {
+	0% {
+		translate: 0 calc(-100% + 100% / var(--pg-panels));
+		animation-timing-function: cubic-bezier(0.45, 0, 0.3, 1);
+	}
+
+	84% {
+		translate: 0 12px;
+		animation-timing-function: ease-in-out;
+	}
+
+	100% {
+		translate: 0 0;
+	}
+}
+
+.pg-col--spun .pg-col-text {
+	animation: pg-land var(--pg-spin) var(--pg-delay) backwards;
+}
+
+@keyframes pg-land {
+	0%,
+	84% {
+		opacity: 0;
+	}
+}
+
+/* the settings */
+.pg-description {
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.3;
+}
+
+.pg-row-swatch {
+	position: relative;
+	cursor: pointer;
+	transition: background-color 300ms;
+}
+
+.pg-row-swatch input {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.pg-row-swatch:focus-within {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.pg-row-actions {
+	display: flex;
+	flex: none;
+	gap: var(--canon-hairline);
+}
+
+.pg-row-actions > * {
+	inline-size: 48px;
+}
+
+.pg-row-shades {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--canon-card);
+	color: var(--canon-primary);
+}
+
+.pg-row-shades svg {
+	inline-size: var(--canon-icon-inline);
+	block-size: var(--canon-icon-inline);
+}
+
+.pg-row-shades:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+@media (hover: hover) {
+	.pg-row-shades:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+/* the hidden collection export (P) */
+.pg-dev-close,
+.pg-dev-note,
+.pg-dev-field {
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.pg-dev-close {
+	border: 0;
+	color: var(--canon-muted-foreground);
+	text-align: start;
+	cursor: pointer;
+}
+
+.pg-dev-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.pg-dev-field input,
+.pg-dev-field select,
+.pg-dev-field textarea {
+	box-sizing: border-box;
+	inline-size: 100%;
+	padding: 6px 8px;
+	border: var(--canon-hairline) solid var(--canon-border);
+	border-radius: 0;
+	background: var(--canon-background);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.pg-dev-note code {
+	font-family: var(--canon-mono-font);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pg-col,
+	.pg-row-swatch {
+		transition: none;
+	}
+
+	.pg-reel {
+		display: none;
+	}
+
+	.pg-col--spun .pg-col-text {
+		animation: none;
+	}
+}

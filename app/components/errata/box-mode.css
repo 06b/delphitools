@@ -1,0 +1,21 @@
+.err-grid-number {
+	flex: none;
+	inline-size: 168px;
+}
+
+/* the Custom stepper takes a line under the presets */
+.err-size-number {
+	flex: 1 1 100%;
+}
+
+.err-mode-control > .err-swatches {
+	flex: none;
+	inline-size: 176px;
+}
+
+.err-swatch {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	outline: var(--canon-hairline) solid var(--canon-border);
+}

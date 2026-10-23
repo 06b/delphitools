@@ -1,20 +1,48 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { formatBytes } from 'delphitools-v2/lib/image-compress';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import {
 	parseMetadata,
 	stripMetadata,
 	type ImageContainer,
+	type MetadataEntry,
 	type MetadataReport,
 } from 'delphitools-v2/lib/metadata';
+import {
+	parsePdfMetadata,
+	stripPdfMetadata,
+	type PdfMetadataReport,
+} from 'delphitools-v2/lib/pdf-metadata';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Dossier from 'delphitools-v2/components/tools/metadata-stripper/dossier';
+import {
+	blocksOf,
+	type Block,
+} from 'delphitools-v2/components/tools/metadata-stripper/blocks';
+import './media/media.css';
+import './metadata-stripper/metadata-stripper.css';
 
-const FILE_ACCEPT = 'image/*';
+const FILE_ACCEPT = 'image/*,application/pdf';
+const SLOT_PROMPT = 'Drop an image or PDF';
+const EMPTY_PROMPT = 'Add an image or PDF to see its metadata';
+const UNREADABLE = 'Format not readable';
+const READ_ERROR = 'This file could not be read as an image.';
 
 const MIME: Record<ImageContainer, string> = {
 	jpeg: 'image/jpeg',
@@ -26,21 +54,49 @@ const MIME: Record<ImageContainer, string> = {
 // canvas round-trips these
 const REENCODABLE = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
+const isPdf = (file: File, bytes: Uint8Array) =>
+	file.type === 'application/pdf' ||
+	String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-';
+
+// a pdf has no exif blocks; only its xmp packet has a lamp
+const pdfBlocks = (report: PdfMetadataReport | null) =>
+	new Set<Block>(report?.xmp ? ['XMP'] : []);
+
+// the image report shape, for the shared panes
+const asReport = (report: PdfMetadataReport): MetadataReport => ({
+	format: null,
+	entries: report.entries,
+	gps: null,
+	c2pa: false,
+});
+
+const tilesOf = (entries: MetadataEntry[]) =>
+	entries.map((entry) => ({ label: entry.label, value: entry.detail }));
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
 interface StripState {
 	blob: Blob;
 	removed: string[];
 }
 
-export default class MetadataStripperTool extends Component {
+/** The port of MetadataStripperViewController, on the web tool's structural strip. */
+export default class MetadataStripper extends Component {
+	drop = new Drop(FILE_ACCEPT, (file) => this.readFile(file));
+
 	@tracked fileName = '';
 	@tracked fileSize = 0;
 	@tracked report: MetadataReport | null = null;
 	@tracked afterReport: MetadataReport | null = null;
+	@tracked pdf: PdfMetadataReport | null = null;
+	@tracked afterPdf: PdfMetadataReport | null = null;
 	@tracked result: StripState | null = null;
 	@tracked keepColourProfile = true;
 	@tracked error = '';
 
 	#bytes: Uint8Array | null = null;
+	#token = 0;
 
 	get loaded() {
 		return this.report !== null;
@@ -64,11 +120,8 @@ export default class MetadataStripperTool extends Component {
 		return removed.length ? removed.join(' · ') : 'Nothing';
 	}
 
-	get c2pa() {
-		return this.report?.c2pa ?? false;
-	}
-
 	get unreadable() {
+		if (this.pdf) return !this.pdf.readable;
 		return this.report !== null && this.report.format === null;
 	}
 
@@ -78,6 +131,23 @@ export default class MetadataStripperTool extends Component {
 			this.entries.length === 0 &&
 			(this.result?.removed.length ?? 0) === 0
 		);
+	}
+
+	get afterStatus() {
+		if (!this.result) return UNREADABLE;
+		return this.clean ? 'Already clean' : 'Nothing left';
+	}
+
+	get found() {
+		if (!this.loaded) return null;
+		return this.pdf ? pdfBlocks(this.pdf) : blocksOf(this.report);
+	}
+
+	get left() {
+		if (!this.result) return null;
+		return this.pdf
+			? pdfBlocks(this.afterPdf)
+			: blocksOf(this.afterReport);
 	}
 
 	get downloadName() {
@@ -99,12 +169,44 @@ export default class MetadataStripperTool extends Component {
 	readFile = (file: File) => void this.#load(file);
 
 	async #load(file: File) {
+		const token = ++this.#token;
+		const bytes = new Uint8Array(await file.arrayBuffer());
+		if (token !== this.#token) return;
 		this.error = '';
 		this.fileName = file.name;
 		this.fileSize = file.size;
-		this.#bytes = new Uint8Array(await file.arrayBuffer());
-		this.report = parseMetadata(this.#bytes);
-		await this.#restrip();
+		this.#bytes = bytes;
+		this.result = null;
+		this.afterReport = null;
+		this.afterPdf = null;
+		if (isPdf(file, bytes)) await this.#loadPdf(bytes, token);
+		else {
+			this.pdf = null;
+			this.report = parseMetadata(bytes);
+			await this.#restrip();
+		}
+	}
+
+	async #loadPdf(bytes: Uint8Array, token: number) {
+		const pdf = await parsePdfMetadata(bytes);
+		const stripped = pdf.readable
+			? await stripPdfMetadata(bytes)
+			: null;
+		const after = stripped
+			? await parsePdfMetadata(stripped.data)
+			: null;
+		if (token !== this.#token) return;
+		this.pdf = pdf;
+		this.report = asReport(pdf);
+		if (!stripped || !after) return;
+		this.result = {
+			blob: new Blob([stripped.data as BlobPart], {
+				type: 'application/pdf',
+			}),
+			removed: stripped.removed,
+		};
+		this.afterPdf = after;
+		this.afterReport = asReport(after);
 	}
 
 	async #restrip() {
@@ -127,13 +229,15 @@ export default class MetadataStripperTool extends Component {
 
 	// lossy canvas fallback
 	async #canvasStrip() {
-		if (!this.#bytes) return;
+		const bytes = this.#bytes;
+		if (!bytes) return;
+		const token = this.#token;
 		const type = REENCODABLE.has(this.report?.format ?? '')
 			? MIME[this.report!.format!]
 			: 'image/png';
 		try {
 			const bitmap = await createImageBitmap(
-				new Blob([this.#bytes as BlobPart]),
+				new Blob([bytes as BlobPart]),
 			);
 			const canvas = document.createElement('canvas');
 			canvas.width = bitmap.width;
@@ -144,315 +248,217 @@ export default class MetadataStripperTool extends Component {
 				canvas.toBlob(resolve, type, 0.92),
 			);
 			if (!blob) throw new Error('encode failed');
+			const after = parseMetadata(
+				new Uint8Array(await blob.arrayBuffer()),
+			);
+			if (token !== this.#token) return;
 			this.result = {
 				blob,
 				removed: ['All metadata (re-encoded)'],
 			};
-			this.afterReport = parseMetadata(
-				new Uint8Array(await blob.arrayBuffer()),
-			);
+			this.afterReport = after;
 		} catch {
+			if (token !== this.#token) return;
 			this.result = null;
 			this.afterReport = null;
-			this.error = 'This file could not be read as an image.';
+			this.error = READ_ERROR;
 		}
 	}
 
-	chooseFile = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// lets same file re-fire
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file) this.readFile(file);
-	};
-
-	// prevents browser file navigation
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	toggleColourProfile = (event: Event) => {
-		this.keepColourProfile = (
-			event.target as HTMLInputElement
-		).checked;
+	toggleColourProfile = (keep: boolean) => {
+		this.keepColourProfile = keep;
 		void this.#restrip();
 	};
 
 	clear = () => {
+		this.#token++;
 		this.#bytes = null;
 		this.fileName = '';
 		this.fileSize = 0;
 		this.report = null;
 		this.afterReport = null;
+		this.pdf = null;
+		this.afterPdf = null;
 		this.result = null;
 		this.error = '';
 	};
 
 	download = () => {
-		if (!this.result) return;
-		downloadBlob(this.result.blob, this.downloadName);
+		if (this.result)
+			downloadBlob(this.result.blob, this.downloadName);
 	};
 
 	<template>
-		<div
-			class="dt-strip"
+		<CanonSplit
+			class="metadata-stripper"
 			{{filePaste this.readFile accept=FILE_ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div
-				class="dt-strip-frame"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.allowDrop}}
-			>
-				{{#if this.loaded}}
-					<div class="dt-strip-bar">
-						<Icon @name="file-image" />
-						<span
-							class="dt-strip-name"
-						>{{this.fileName}}</span>
-						<span
-							class="dt-strip-size"
-						>{{this.sizeLabel}}</span>
-						<div class="dt-strip-bar-tools">
-							<label
-								class="dt-strip-btn"
-								aria-label="Open file"
-							>
-								<input
-									type="file"
-									class="dt-sr-only"
-									accept={{FILE_ACCEPT}}
-									{{on
-										"change"
-										this.chooseFile
-									}}
-								/>
-								<Icon
-									@name="upload"
-								/>
-							</label>
-							<button
-								type="button"
-								class="dt-strip-btn"
-								aria-label="Clear"
-								{{on
-									"click"
-									this.clear
-								}}
-							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-							<button
-								type="button"
-								class="dt-strip-btn is-primary"
-								disabled={{unless
-									this.result
-									true
-								}}
-								{{on
-									"click"
-									this.download
-								}}
-							>
-								<DownloadLabel
-								/>
-							</button>
+			<:banner>
+				<CanonCanvas
+					@fitting={{true}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.loaded}}
+						<Dossier
+							@found={{this.found}}
+							@left={{this.left}}
+							@location={{if
+								this.report.gps
+								this.report.gps
+								null
+							}}
+						/>
+					{{else}}
+						<div class="ms-slot-box">
+							<Slot
+								class="ms-slot"
+								@prompt={{SLOT_PROMPT}}
+								@icon="upload"
+								@accept={{FILE_ACCEPT}}
+								@over={{this.drop.over}}
+								@onFile={{this.readFile}}
+							/>
 						</div>
-					</div>
-
-					<div class="dt-strip-settings">
-						<label class="dt-strip-cell">
-							<span>Colour profile</span>
-							<span
-								class="dt-strip-cell-row"
-							>
-								<input
-									type="checkbox"
-									class="dt-strip-switch"
-									checked={{this.keepColourProfile}}
-									{{on
-										"change"
-										this.toggleColourProfile
-									}}
-								/>
-								<span>Keep ICC</span>
-							</span>
-						</label>
-						<div class="dt-strip-cell">
-							<span>Content
-								Credentials</span>
-							<span
-								class="dt-strip-cell-value"
-							>
-								{{if
-									this.c2pa
+					{{/if}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
+						<CanonRow
+							class="ms-source"
+							@title={{this.fileName}}
+							@detail={{this.sizeLabel}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					{{/if}}
+					{{#if this.error}}
+						<CanonStatus
+							@text={{this.error}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					{{#unless this.pdf}}
+						<CanonRow
+							class="ms-icc"
+							@title="Colour profile"
+							@detail="Keep ICC"
+							as |titleId|
+						>
+							<CanonSwitch
+								@on={{this.keepColourProfile}}
+								@onChange={{this.toggleColourProfile}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					{{/unless}}
+					{{#if this.loaded}}
+						{{#unless this.pdf}}
+							<CanonRow
+								class="ms-c2pa"
+								@title="Content Credentials"
+								@detail={{if
+									this.report.c2pa
 									"C2PA found"
 									"None"
 								}}
-							</span>
-						</div>
-						<div class="dt-strip-cell">
-							<span>Removed</span>
-							<span
-								class="dt-strip-cell-value"
-							>
-								{{this.removedLabel}}
-							</span>
-						</div>
-					</div>
-
-					<div class="dt-strip-panes">
-						<div class="dt-strip-pane">
-							<div
-								class="dt-strip-pane-head"
-							>
-								<span
-									class="dt-strip-pane-label"
-								>Found in
-									original</span>
-							</div>
-							{{#if this.unreadable}}
-								<p
-									class="dt-strip-note"
-								>Format not
-									readable</p>
-							{{else if
-								this.entries.length
-							}}
-								<ul
-									class="dt-strip-list"
-								>
-									{{#each
-										this.entries
-										key="@index"
-										as |entry|
-									}}
-										<li
-											class="dt-strip-row
-												{{if
-													(eq
-														entry.label
-														'GPS coordinates'
-													)
-													'is-gps'
-												}}"
-										>
-											{{#if
-												(eq
-													entry.label
-													"GPS coordinates"
-												)
-											}}
-												<Icon
-													@name="map-pin"
-												/>
-											{{/if}}
-											<span
-												class="dt-strip-row-label"
-											>{{entry.label}}</span>
-											<span
-												class="dt-strip-row-detail"
-											>{{entry.detail}}</span>
-										</li>
-									{{/each}}
-								</ul>
-							{{else}}
-								<p
-									class="dt-strip-note"
-								>No metadata
-									found</p>
-							{{/if}}
-						</div>
-
-						<div
-							class="dt-strip-pane is-right"
-						>
-							<div
-								class="dt-strip-pane-head"
-							>
-								<span
-									class="dt-strip-pane-label"
-								>After stripping</span>
-							</div>
-							{{#if
-								this.afterEntries.length
-							}}
-								<ul
-									class="dt-strip-list"
-								>
-									{{#each
-										this.afterEntries
-										key="@index"
-										as |entry|
-									}}
-										<li
-											class="dt-strip-row"
-										>
-											<span
-												class="dt-strip-row-label"
-											>{{entry.label}}</span>
-											<span
-												class="dt-strip-row-detail"
-											>{{entry.detail}}</span>
-										</li>
-									{{/each}}
-								</ul>
-							{{else}}
-								<p
-									class="dt-strip-clean"
-								>
-									<Icon
-										@name="shield-check"
-									/>
-									{{#if
-										this.clean
-									}}
-										Already
-										clean
-									{{else}}
-										Nothing
-										left
-									{{/if}}
-								</p>
-							{{/if}}
-						</div>
-					</div>
-				{{else}}
-					<label class="dt-strip-drop">
-						<input
-							type="file"
-							accept={{FILE_ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.chooseFile
-							}}
+							/>
+						{{/unless}}
+						<CanonRow
+							class="ms-removed"
+							@title="Removed"
+							@detail={{this.removedLabel}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-strip-drop-title"
-						>Drop an image here</span>
-						<span
-							class="dt-strip-drop-hint"
-						>or click to select a file, or
-							paste</span>
-					</label>
+					{{/if}}
+					<CanonButton
+						class="ms-download"
+						@kind="primary"
+						@text={{passAlong "Download"}}
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{if
+							this.result
+							false
+							true
+						}}
+						@onClick={{this.download}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				{{#if this.loaded}}
+					<CanonRows
+						class="ms-found"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Found in original"
+						/>
+						{{#if this.unreadable}}
+							<CanonStatus
+								@text={{UNREADABLE}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{else if this.entries.length}}
+							<CanonTiles
+								@items={{tilesOf
+									this.entries
+								}}
+							/>
+						{{else}}
+							<CanonStatus
+								@text="No metadata found"
+								@tone="muted"
+								@row={{true}}
+							/>
+						{{/if}}
+					</CanonRows>
+					<CanonRows
+						class="ms-after"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="After stripping"
+						/>
+						{{#if this.afterEntries.length}}
+							<CanonTiles
+								@items={{tilesOf
+									this.afterEntries
+								}}
+							/>
+						{{else}}
+							<CanonStatus
+								@text={{this.afterStatus}}
+								@tone={{if
+									this.result
+									"ok"
+									"warn"
+								}}
+								@row={{true}}
+							/>
+						{{/if}}
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonEmptyRow
+							@text={{EMPTY_PROMPT}}
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-
-			{{#if this.error}}
-				<p
-					class="dt-strip-error"
-					role="alert"
-				>{{this.error}}</p>
-			{{/if}}
-		</div>
+			</:main>
+		</CanonSplit>
 	</template>
 }

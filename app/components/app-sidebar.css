@@ -1,0 +1,10 @@
+.dt-about {
+	--canon-dialog-width: 512px;
+}
+
+.dt-about .dt-about-body {
+	flex: none;
+	padding: var(--canon-panel-padding);
+	background: var(--canon-card);
+	line-height: 1.45;
+}

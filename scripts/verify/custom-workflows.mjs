@@ -7,20 +7,20 @@ const { browser, page } = await launch();
 page.on('dialog', (dialog) => void dialog.accept());
 
 const triggerText = () =>
-	page.$$eval('.dt-wf-custom .dt-select-trigger', (els) =>
+	page.$$eval('.dt-wf-custom .dt-wf-pick-trigger', (els) =>
 		els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
 	);
 const open = async (index) => {
-	const triggers = await page.$$('.dt-wf-custom .dt-select-trigger');
+	const triggers = await page.$$('.dt-wf-custom .dt-wf-pick-trigger');
 	await triggers[index].click();
-	await page.waitForSelector('.dt-select-content[data-state="open"]', { timeout: 5000 });
-	return page.$$eval('.dt-select-content[data-state="open"] .dt-select-item', (els) =>
+	await page.waitForSelector('.dt-wf-pick-list:popover-open', { timeout: 5000 });
+	return page.$$eval('.dt-wf-pick-list:popover-open .canon-menu-item', (els) =>
 		els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
 	);
 };
 const choose = async (name) => {
 	await page.evaluate((name) => {
-		[...document.querySelectorAll('.dt-select-content[data-state="open"] .dt-select-item')]
+		[...document.querySelectorAll('.dt-wf-pick-list:popover-open .canon-menu-item')]
 			.find((el) => el.textContent.trim() === name)
 			?.click();
 	}, name);
@@ -38,7 +38,7 @@ check(
 	),
 );
 check('Start is disabled before any pick', await startState());
-const enabled = await page.$$eval('.dt-wf-custom .dt-select-trigger', (els) =>
+const enabled = await page.$$eval('.dt-wf-custom .dt-wf-pick-trigger', (els) =>
 	els.map((el) => !el.disabled),
 );
 check('only the first picker is enabled', enabled.join() === 'true,false,false', enabled.join());
@@ -127,7 +127,7 @@ const pass = await page.evaluate(() => {
 			el.textContent.replace(/\s+/g, ' ').trim(),
 		),
 		go: document.querySelector('.dt-pass-go')?.textContent?.replace(/\s+/g, ' ').trim(),
-		bare: !document.querySelector('.dt-shell') && !document.querySelector('.dt-header'),
+		bare: !document.querySelector('.dt-frame'),
 		offCentre: Math.abs(box.left + box.width / 2 - innerWidth / 2),
 	};
 });

@@ -1,14 +1,8 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import {
-	autoUpdate,
-	computePosition,
-	flip,
-	offset,
-	shift,
-} from '@floating-ui/dom';
+import { attach } from 'delphicanon/lib/popover';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
+import { Cell } from 'delphitools-v2/components/substrata/editor/cells';
 import type { CommentObject } from 'delphitools-v2/lib/errata/doc-model';
 import {
 	findObject,
@@ -22,6 +16,7 @@ import {
 	pushDismiss,
 } from 'delphitools-v2/lib/errata/ui';
 import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './comment-popover.css';
 
 interface Open {
 	pageId: string;
@@ -88,41 +83,34 @@ export default class CommentPopover extends Component {
 	};
 
 	place = modifier((el: HTMLElement, [id]: [string]) => {
-		const anchor = {
-			getBoundingClientRect: () => {
-				const r = objectRect(id);
-				return r
-					? new DOMRect(r.x, r.y, r.w, r.h)
-					: new DOMRect();
-			},
+		const anchor = el.previousElementSibling as HTMLElement;
+		let frame = 0;
+		// tracks canvas pan, zoom
+		const follow = () => {
+			const r = objectRect(id);
+			if (r) {
+				anchor.style.left = `${r.x}px`;
+				anchor.style.top = `${r.y}px`;
+				anchor.style.width = `${r.w}px`;
+				anchor.style.height = `${r.h}px`;
+			}
+			frame = requestAnimationFrame(follow);
 		};
-		const stop = autoUpdate(
-			anchor,
-			el,
-			() =>
-				void computePosition(anchor, el, {
-					placement: 'right-start',
-					strategy: 'fixed',
-					middleware: [
-						offset(6),
-						flip(),
-						shift({ padding: 8 }),
-					],
-				}).then(({ x, y }) => {
-					el.style.left = `${x}px`;
-					el.style.top = `${y}px`;
-					el.style.visibility = 'visible';
-				}),
-			// tracks canvas pan, zoom
-			{ animationFrame: true },
-		);
+		follow();
+		const detach = attach(el, anchor, {
+			placement: 'right-start',
+			gap: '6px',
+		});
+		el.showPopover();
 		const onDown = (e: PointerEvent) => {
 			if (!el.contains(e.target as Node)) this.close();
 		};
 		window.addEventListener('pointerdown', onDown, true);
 		const undismiss = pushDismiss(this.close);
 		return () => {
-			stop();
+			cancelAnimationFrame(frame);
+			detach();
+			if (el.isConnected) el.hidePopover();
 			window.removeEventListener('pointerdown', onDown, true);
 			undismiss();
 		};
@@ -142,8 +130,10 @@ export default class CommentPopover extends Component {
 
 	<template>
 		{{#if this.open}}
+			<div class="err-note-anchor"></div>
 			<div
-				class="dt-popover err-note"
+				class="err-note"
+				popover="manual"
 				role="dialog"
 				aria-label="Comment"
 				{{this.place this.open.note.id}}
@@ -165,15 +155,12 @@ export default class CommentPopover extends Component {
 					<time
 						datetime={{this.open.note.date}}
 					>{{this.date}}</time>
-					<button
-						type="button"
+					<Cell
 						class="err-note-delete"
-						aria-label="Delete"
-						title="Delete"
-						{{on "click" this.remove}}
-					>
-						<Icon @name="trash-2" />
-					</button>
+						@label="Delete"
+						@icon="trash-2"
+						@onClick={{this.remove}}
+					/>
 				</div>
 			</div>
 		{{/if}}

@@ -1,0 +1,46 @@
+.wm-picture {
+	position: absolute;
+	inset: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.wm-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+	display: grid;
+	place-items: center;
+	container-type: size;
+}
+
+.wm-box {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: min(100cqi, 100cqb * (var(--wm-aspect)));
+	aspect-ratio: var(--wm-aspect);
+	outline: var(--canon-hairline) solid var(--canon-border);
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0% 25%,
+			var(--canon-card) 0% 50%
+		)
+		0 0 / 16px 16px;
+}
+
+.wm-canvas {
+	position: absolute;
+	inset: 0;
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.wm-box--empty {
+	outline: none;
+	background: none;
+}
+
+/* the text field spans its row, as on iOS */
+.watermarker .wm-text {
+	inline-size: 100%;
+	padding-inline: var(--canon-panel-padding);
+}

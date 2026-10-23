@@ -65,40 +65,114 @@ await client.send('Browser.setDownloadBehavior', {
 	downloadPath: downloads,
 });
 
-const clickText = (label) =>
-	page.$$eval(
-		'.dt-pcmp-btn',
-		(btns, text) =>
-			btns.find((b) => b.textContent.includes(text))?.click(),
-		label,
-	);
-
+// the Original label's offset in its bar, every frame from the first paint
+await page.evaluateOnNewDocument(() => {
+	window.__originalLabel = [];
+	const t0 = performance.now();
+	const tick = () => {
+		const bar = document.querySelector('.canon-compression-scale-bar');
+		const label = bar?.querySelector('.canon-compression-scale-label');
+		if (label)
+			window.__originalLabel.push(
+				Math.round(label.getBoundingClientRect().left - bar.getBoundingClientRect().left),
+			);
+		if (performance.now() - t0 < 3000) requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+});
 await visit(page, '/tools/pdf-compressor');
-await (await page.$('.dt-pcmp-drop input[type="file"]')).uploadFile(src.path);
-await page.waitForFunction(
-	() => document.querySelector('.dt-pcmp-name') !== null,
-	{ timeout: 30000 },
+await sleep(800);
+const original = await page.evaluate(() => [...new Set(window.__originalLabel)]);
+check(
+	'the Original bar sits full from the start, its label still',
+	original.length === 1 && original[0] === 10,
+	original.join(','),
 );
-check('image PDF loads', true, `${src.size} bytes in`);
+check(
+	'the split fills the sheet',
+	await page.evaluate(
+		() =>
+			document.querySelector('.dt-canon-tool').getBoundingClientRect().height ===
+			document.querySelector('.pdf-compressor').getBoundingClientRect().height,
+	),
+);
+check(
+	'empty: the page strip is the drop slot with the web wording, Compress off',
+	await page.evaluate(
+		() =>
+			document.querySelector('.pc-slot .media-slot-prompt')?.textContent.trim() === 'Drop PDF here' &&
+			document.querySelector('.media-job-run')?.disabled === true,
+	),
+);
+
+const [chooser] = await Promise.all([
+	page.waitForFileChooser({ timeout: 5000 }),
+	page.click('.pc-slot'),
+]);
+await chooser.accept([src.path]);
+await page.waitForFunction(
+	() =>
+		document.querySelectorAll('.pdf-compressor .canon-page-strip-picture[src^="blob:"]').length === 3,
+	{ timeout: 30000 },
+).catch(() => {});
+const loaded = await page.evaluate(() => ({
+	name: document.querySelector('.pc-source .canon-row-title')?.textContent.trim(),
+	detail: document.querySelector('.pc-source .canon-row-detail')?.textContent.trim(),
+	compare: document.querySelectorAll('.pc-compare img').length,
+}));
+check(
+	'the slot opens the picker; the row names the file with size and pages',
+	loaded.name === 'src.pdf' && / · 3 pages$/.test(loaded.detail ?? ''),
+	JSON.stringify(loaded),
+);
+check(
+	'the strip shows the three pages, the first lit',
+	(await page.$$('.pdf-compressor .canon-page-strip-picture[src^="blob:"]')).length === 3 &&
+		(await page.$eval('.pdf-compressor .canon-page-strip-page', (el) => el.getAttribute('aria-current'))) === 'true',
+);
+await page.waitForFunction(() => !!document.querySelector('.pc-compare img[src^="blob:"]'), {
+	timeout: 15000,
+}).catch(() => {});
+check('the comparison shows the page', !!(await page.$('.pc-compare img[src^="blob:"]')));
 
 await sleep(500);
-const autoStarted = await page.evaluate(
-	() =>
-		document.querySelector('.dt-pcmp-substat') !== null ||
-		document.querySelector('.dt-pcmp-status') !== null,
+check('does not auto-compress on load', !(await page.$('.media-job-result')) && !(await page.$('.media-job-progress')));
+
+const pick = (group, text) =>
+	page.evaluate(
+		(group, text) =>
+			[...document.querySelectorAll(`.${group} [role="radio"]`)]
+				.find((b) => b.textContent.trim() === text)
+				.click(),
+		group,
+		text,
+	);
+await pick('pc-modes', 'Keep');
+check(
+	'Keep hides quality and size and reads Lossless',
+	!(await page.$('.pc-quality')) &&
+		!(await page.$('.pc-sizes')) &&
+		(await page.$eval('.pc-loss', (el) => el.textContent.trim())) === 'Lossless',
 );
-check('does not auto-compress on load', !autoStarted);
+await pick('pc-modes', 'Recompress');
+await page.focus('.pc-quality .canon-slider');
+await page.keyboard.press('ArrowRight');
+check(
+	'the quality slider takes the arrow keys',
+	(await page.$eval('.pc-quality .canon-slider', (el) => el.getAttribute('aria-valuenow'))) === '66',
+);
 
 // first compress fetches wasm
-await clickText('Compress');
-await page.waitForFunction(
-	() => document.querySelector('.dt-pcmp-substat') !== null,
-	{ timeout: 90000 },
-);
-const images = await page.$eval('.dt-pcmp-substat', (el) => el.textContent.trim());
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-result', { timeout: 90000 });
+const images = await page.$eval('.media-job-result .canon-row-detail', (el) => el.textContent.trim());
 check('images were recompressed', /image/.test(images), images);
+await page.waitForFunction(() => document.querySelectorAll('.pc-compare img[src^="blob:"]').length === 2, {
+	timeout: 15000,
+}).catch(() => {});
+check('the comparison shows the result beside the original', (await page.$$('.pc-compare img[src^="blob:"]')).length === 2);
 
-await clickText('Download');
+await page.click('.media-job-save');
 const out = await waitForDownload(/-small\.pdf$/);
 check('compressed PDF downloads', !!out, out?.name ?? 'no download');
 
@@ -111,5 +185,39 @@ if (out) {
 	const doc = new mupdf.PDFDocument(new Uint8Array(out.bytes));
 	check('output keeps all 3 pages', doc.countPages() === 3, `${doc.countPages()} pages`);
 }
+
+await pick('pc-sizes', '1000');
+check('a new setting drops the result', !(await page.$('.media-job-result')));
+
+// paste anywhere replaces the file
+await page.evaluate((base64) => {
+	const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+	const data = new DataTransfer();
+	data.items.add(new File([bytes], 'pasted.pdf', { type: 'application/pdf' }));
+	document
+		.querySelector('.pdf-compressor .canon-split-main')
+		.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+}, readFileSync(src.path).toString('base64'));
+await page.waitForFunction(
+	() => document.querySelector('.pc-source .canon-row-title')?.textContent.trim() === 'pasted.pdf',
+	{ timeout: 10000 },
+).catch(() => {});
+check(
+	'a paste anywhere loads the PDF',
+	(await page.$eval('.pc-source .canon-row-title', (el) => el.textContent.trim())) === 'pasted.pdf',
+);
+
+await page.evaluate(() =>
+	[...document.querySelectorAll('.pc-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
+);
+await sleep(200);
+check('Clear returns to the slot', !!(await page.$('.pc-slot')) && !(await page.$('.pc-compare')));
+
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/pdf-compressor');
+check(
+	'phone: nothing scrolls sideways',
+	await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+);
 
 await finish(browser);

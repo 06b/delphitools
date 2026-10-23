@@ -1,4 +1,4 @@
-// placeholder passes build, lint, prerender unseen
+// catches missing tool components
 
 import { readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -26,10 +26,9 @@ for (const id of toolIds) {
 	await sleep(150);
 
 	const seen = await page.evaluate(() => {
-		const body = document.querySelector('.dt-tool-body');
+		const body = document.querySelector('.dt-canon-tool');
 		return {
-			placeholder: !!document.querySelector('.dt-tool-soon'),
-			rendered: (body?.children.length ?? 0) > 1,
+			rendered: (body?.children.length ?? 0) > 0,
 			markup: (body?.lastElementChild?.className ?? '').slice(
 				0,
 				40,
@@ -38,9 +37,9 @@ for (const id of toolIds) {
 	});
 
 	check(
-		`${id} renders its tool, not the placeholder`,
-		!seen.placeholder && seen.rendered,
-		seen.placeholder ? 'Coming Soon' : seen.markup,
+		`${id} renders its tool`,
+		seen.rendered,
+		seen.markup,
 	);
 }
 

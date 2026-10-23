@@ -1,0 +1,321 @@
+/* printed paper: the same ink in both themes */
+.dt-mag-page {
+	--dt-mag-ink: var(--canon-colour-solid-ink-dark);
+	--dt-mag-soft-ink: color-mix(
+		in srgb,
+		var(--dt-mag-ink) 60%,
+		transparent
+	);
+
+	position: relative;
+	display: flex;
+	overflow: hidden;
+	box-sizing: border-box;
+	flex-direction: column;
+	width: 600px;
+	height: 800px;
+	padding: 48px;
+	background: var(--canon-paper);
+	color: var(--dt-mag-ink);
+	font-family: var(--canon-font);
+	font-size: 18px;
+	line-height: 1.35;
+	white-space: normal;
+}
+
+.dt-mag-page h2,
+.dt-mag-page p,
+.dt-mag-page ol,
+.dt-mag-page pre {
+	margin: 0;
+}
+
+.dt-mag-masthead {
+	font-size: 76px;
+	font-weight: var(--canon-weight-bold);
+	letter-spacing: -0.02em;
+	line-height: 0.9;
+}
+
+.dt-mag-product,
+.dt-mag-contents {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 20px;
+}
+
+.dt-mag-page:has(> .dt-mag-plate) {
+	padding: 0;
+}
+
+.dt-mag-plate {
+	flex: 1;
+	min-height: 0;
+}
+
+.dt-mag-plate-art {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.dt-mag-title {
+	font-size: 44px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+}
+
+.dt-mag-kicker {
+	color: var(--dt-mag-soft-ink);
+	font-size: 16px;
+	font-weight: var(--canon-weight-semibold);
+	text-transform: uppercase;
+}
+
+.dt-mag-description {
+	color: var(--dt-mag-soft-ink);
+	font-size: 20px;
+}
+
+.dt-mag-links {
+	display: flex;
+	gap: 12px;
+}
+
+.dt-mag-link {
+	padding: 10px 20px;
+	border: var(--canon-frame) solid var(--dt-mag-ink);
+	color: var(--dt-mag-ink);
+	font-weight: var(--canon-weight-semibold);
+	text-decoration: none;
+}
+
+.dt-mag-toc {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	gap: 4px;
+	list-style: none;
+}
+
+.dt-mag-toc li {
+	display: flex;
+	align-items: baseline;
+	padding-block: 8px;
+	border-bottom: var(--canon-hairline) solid var(--dt-mag-soft-ink);
+	gap: 16px;
+}
+
+.dt-mag-toc-num {
+	min-width: 2ch;
+	font-weight: var(--canon-weight-bold);
+}
+
+.dt-mag-toc .dt-mag-link {
+	padding: 0;
+	border: 0;
+}
+
+.dt-mag-editorial {
+	display: flow-root;
+	margin-top: auto;
+	padding-top: 16px;
+	border-top: var(--canon-frame) solid var(--dt-mag-ink);
+}
+
+.dt-mag-editor {
+	float: left;
+	width: 128px;
+	height: 128px;
+	margin: 4px 20px 8px 0;
+}
+
+.dt-mag-editorial .dt-mag-kicker {
+	margin: 0 0 8px;
+}
+
+.dt-mag-letter {
+	font-size: 16px;
+	line-height: 1.45;
+}
+
+/* two overlapping window shots; the transparent window shadows may cross the margin */
+.dt-mag-shots {
+	position: relative;
+	flex: 1;
+	margin-inline: -28px;
+}
+
+.dt-mag-shots img {
+	position: absolute;
+	width: 84%;
+}
+
+.dt-mag-shots img:first-child {
+	inset-block-start: 0;
+	inset-inline-start: 0;
+}
+
+.dt-mag-shots img:last-child {
+	inset-block-end: 0;
+	inset-inline-end: 0;
+}
+
+.dt-mag-back {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	justify-content: flex-end;
+	gap: 24px;
+}
+
+.dt-mag-barcode {
+	align-self: flex-end;
+	width: 200px;
+}
+
+/* the free band under the columns in the iOS feature art */
+.dt-mag-store {
+	position: absolute;
+	inset-block-end: 28px;
+	inset-inline: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	font-size: 15px;
+}
+
+.dt-mag-store-badge img {
+	display: block;
+	height: 44px;
+}
+
+/* the delphitools 2.3 feature: a two-column interview with live kit parts */
+.dt-mag-feature {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	gap: 14px;
+}
+
+.dt-mag-feature-head {
+	font-size: 46px;
+	font-weight: var(--canon-weight-bold);
+	letter-spacing: -0.02em;
+	line-height: 0.95;
+}
+
+.dt-mag-standfirst {
+	font-size: 19px;
+	line-height: 1.3;
+}
+
+.dt-mag-byline {
+	padding-bottom: 10px;
+	border-bottom: var(--canon-frame) solid var(--dt-mag-ink);
+	font-size: 13px;
+	font-weight: var(--canon-weight-semibold);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.dt-mag-columns {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	column-count: 2;
+	column-fill: balance;
+	column-gap: 22px;
+	font-size: 16px;
+	line-height: 1.45;
+	hyphens: auto;
+	text-align: justify;
+}
+
+.dt-mag-columns p {
+	margin: 0 0 9px;
+}
+
+.dt-mag-q {
+	font-weight: var(--canon-weight-bold);
+	break-after: avoid;
+	break-inside: avoid;
+	text-align: start;
+}
+
+.dt-mag-pull {
+	margin: 0;
+	padding-block: 6px 14px;
+	border-bottom: var(--canon-frame) solid var(--dt-mag-ink);
+	font-size: 30px;
+	font-style: italic;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.1;
+}
+
+/* live kit parts; they follow the app theme, like a screenshot */
+.dt-mag-specimen {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 14px;
+	gap: 10px;
+	background: var(--canon-background);
+}
+
+.dt-mag-specimen-parts {
+	display: grid;
+	align-items: center;
+	gap: 10px;
+	grid-template-columns: 1fr 1fr;
+}
+
+.dt-mag-specimen figcaption {
+	color: var(--canon-muted-foreground);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.dt-mag-specimen-value {
+	padding-inline: 12px;
+	font-family: var(--canon-mono-font);
+}
+
+.dt-mag-ads {
+	flex: 1;
+	min-height: 0;
+	column-count: 2;
+	column-gap: 16px;
+}
+
+.dt-mag-ads .dt-mag-ad {
+	margin: 0 0 16px;
+	padding: 12px 14px;
+	border: var(--canon-frame) solid var(--dt-mag-ink);
+	break-inside: avoid;
+	font-size: 15px;
+	line-height: 1.35;
+}
+
+.dt-mag-ad::first-line {
+	font-weight: var(--canon-weight-bold);
+}
+
+.dt-mag-ads .dt-mag-ad-art {
+	display: block;
+	padding: 0;
+}
+
+.dt-mag-ad-art img {
+	display: block;
+	width: 100%;
+}
+
+.dt-mag-ads .dt-mag-ad-alien {
+	border-color: #1f8a3a;
+	color: #1f8a3a;
+}

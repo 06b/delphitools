@@ -1,0 +1,114 @@
+/* the source editor: the tool's main field */
+.dc-editor {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 240px;
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	caret-color: var(--canon-primary);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.5;
+	resize: vertical;
+	appearance: none;
+}
+
+.dc-editor::placeholder {
+	color: var(--canon-muted-foreground);
+	opacity: 1;
+}
+
+.dc-editor:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* empty: the dashed box, the place to paste or drop */
+.dc-editor:placeholder-shown {
+	border: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	background: var(--canon-muted);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+}
+
+.dc-editor:focus-visible:placeholder-shown,
+.dc-editor--over,
+.dc-editor--over:placeholder-shown {
+	border: var(--canon-hairline) solid var(--canon-primary);
+}
+
+/* the from and to cells with the swap between, as CanonFromTo */
+.dc-formats {
+	display: flex;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.dc-formats > .dc-format-pick {
+	flex: 1 1 0;
+	min-inline-size: 0;
+}
+
+.dc-formats > .dc-format-pick .canon-button-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dc-formats > .dc-swap {
+	flex: none;
+	inline-size: var(--canon-control-height);
+}
+
+.dc-error {
+	box-sizing: border-box;
+	max-block-size: 200px;
+	margin: 0;
+	padding: 10px var(--canon-panel-padding);
+	overflow: auto;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.dc-about-text {
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.45;
+}
+
+.dc-about-text a {
+	color: var(--canon-primary);
+}
+
+/* a page, as the print or the word processor shows it */
+.dc-preview {
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 420px;
+	border: 0;
+	background: #fff;
+}
+
+.dc-warnings {
+	margin: 0;
+	padding: 8px var(--canon-panel-padding) 10px 32px;
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}

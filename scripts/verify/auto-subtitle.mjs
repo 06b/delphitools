@@ -1,205 +1,353 @@
-// auto-subtitle shell, no model download
+// the canon auto-subtitle: source, model, language, format, cue editor, export; no model download
 //
-// Usage: npm start, then node scripts/verify/auto-subtitle.mjs
+// Usage: bun run start, then node scripts/verify/auto-subtitle.mjs
 
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { BASE, launch, visit, check, finish, sleep, makeWav } from './harness.mjs';
 
-const { browser, page } = await launch();
+const { browser, page } = await launch({ ignore: [/Transcription failed/] });
+await page
+	.browserContext()
+	.overridePermissions(BASE, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
+// model files never answer: a run stays busy and nothing downloads
+await page.setRequestInterception(true);
+page.on('request', (request) => {
+	if (/huggingface\.co|hf\.co/.test(request.url())) return;
+	request.continue();
+});
+// downloads land in window.__saved
+await page.evaluateOnNewDocument(() => {
+	window.__saved = [];
+	HTMLAnchorElement.prototype.click = function () {
+		window.__saved.push({ name: this.download, href: this.href });
+	};
+});
+
+const text = (selector) =>
+	page.evaluate((s) => document.querySelector(s)?.textContent.trim() ?? null, selector);
+const exists = (selector) => page.evaluate((s) => !!document.querySelector(s), selector);
+const segment = (cls, label) =>
+	page.evaluate(
+		({ cls, label }) =>
+			[...document.querySelectorAll(`.${cls} [role="radio"]`)]
+				.find((b) => b.textContent.trim() === label)
+				?.click(),
+		{ cls, label },
+	);
+const checked = (cls) =>
+	text(`.${cls} [role="radio"][aria-checked="true"]`);
+const dropFile = () =>
+	page.evaluate(() => {
+		const transfer = new DataTransfer();
+		transfer.items.add(window.__clip);
+		document.querySelector('.auto-subtitle .canon-split-sidebar').dispatchEvent(
+			new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }),
+		);
+	});
+const pasteFile = () =>
+	page.evaluate(() => {
+		document.activeElement?.blur();
+		const data = new DataTransfer();
+		data.items.add(window.__clip);
+		document.body.dispatchEvent(
+			new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+		);
+	});
+// at max scroll the floating footer leaves the last row clear
+const footerClear = () =>
+	page.evaluate(async () => {
+		const footer = document.querySelector('.canon-split-footer');
+		const pane = footer.parentElement;
+		const stacked = getComputedStyle(pane).display === 'contents';
+		const scroller = stacked ? pane.closest('.canon-split-body') : pane;
+		scroller.scrollTop = scroller.scrollHeight;
+		await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+		const rows = [
+			...(stacked ? document.querySelectorAll('.canon-split-pane > *') : pane.children),
+		].filter((c) => c !== footer && c.getBoundingClientRect().height > 0);
+		const last = Math.max(...rows.map((c) => c.getBoundingClientRect().bottom));
+		const top = footer.getBoundingClientRect().top;
+		scroller.scrollTop = 0;
+		return { ok: last < top, last: Math.round(last), top: Math.round(top) };
+	});
+
 await visit(page, '/tools/auto-subtitle');
 
-const initial = await page.evaluate(() => ({
-	accept: document.querySelector('.dt-asub-file input')?.accept ?? '',
-	transcribeDisabled: document.querySelector('.dt-asub-go')?.disabled,
-	copyDisabled: document.querySelector('[aria-label="Copy subtitles"]')
-		?.disabled,
-	downloadDisabled: document.querySelector('.dt-asub-btn.is-wide')?.disabled,
-}));
 check(
-	'accepts both audio and video',
-	initial.accept.includes('audio/') && initial.accept.includes('video/'),
-	initial.accept,
-);
-check(
-	'transcription is disabled before a file is selected',
-	initial.transcribeDisabled,
-);
-check('copy is disabled before transcription', initial.copyDisabled);
-check(
-	'warning dialog is hidden until opened',
-	await page.$eval(
-		'dialog.dt-asub-warn',
-		(dialog) => !dialog.open && getComputedStyle(dialog).display === 'none',
-	),
-);
-check(
-	'empty state shows the drop zone, no grid, no progress bar',
+	'the split fills the sheet',
 	await page.evaluate(
 		() =>
-			!!document.querySelector('.dt-asub-drop input[type=file]') &&
-			!document.querySelector('.dt-asub-grid') &&
-			!document.querySelector('.dt-asub-progress'),
+			document.querySelector('.dt-canon-tool').getBoundingClientRect().height ===
+			document.querySelector('.auto-subtitle').getBoundingClientRect().height,
 	),
 );
-check('download is disabled before transcription', initial.downloadDisabled);
-
-await page.evaluate(() => {
-	const transfer = new DataTransfer();
-	transfer.items.add(
-		new File(['not actually decoded'], 'recording.wav', {
-			type: 'audio/wav',
-		}),
-	);
-	document.querySelector('.dt-asub-frame')?.dispatchEvent(
-		new DragEvent('drop', {
-			dataTransfer: transfer,
-			bubbles: true,
-		}),
-	);
-});
-await page.waitForFunction(
-	() =>
-		document.querySelector('.dt-asub-filename')?.textContent ===
-		'recording.wav',
-);
-check(
-	'dropped file enables transcription',
-	await page.$eval('.dt-asub-go', (button) => !button.disabled),
-);
-
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-asub-mode')]
-		.find((button) => button.textContent?.includes('Rough'))
-		?.click();
-});
-check(
-	'Rough mode selects',
-	await page.$eval(
-		'.dt-asub-mode.is-active',
-		(button) => button.textContent?.trim() === 'Rough',
-	),
-);
-
-await page.click('.dt-lang-combo-trigger');
-await page.waitForSelector('.dt-lang-combo-panel .dt-command-input', {
-	timeout: 3000,
-});
-await page.type('.dt-lang-combo-panel .dt-command-input', 'germ');
-await sleep(100);
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-lang-combo-panel .dt-command-item')]
-		.find((item) => item.dataset.value === 'German')
-		?.click();
-});
-await sleep(150);
-check(
-	'language combobox searches and picks German with its flag',
-	await page.$eval(
-		'.dt-lang-combo-trigger',
-		(trigger) =>
-			trigger.textContent?.trim() === 'German' &&
-			trigger.querySelector('img')?.getAttribute('src') === '/flags/de.svg' &&
-			trigger.querySelector('img')?.naturalWidth > 0,
-	),
-);
-
-await page.evaluate(() => {
-	[...document.querySelectorAll('.dt-asub-format')]
-		.find((button) => button.textContent?.includes('VTT'))
-		?.click();
-});
-check(
-	'VTT format selects',
-	await page.$eval(
-		'.dt-asub-format.is-active',
-		(button) => button.textContent?.trim() === 'VTT',
-	),
-);
-
-const clickExperimental = () =>
-	page.evaluate(() => {
-		[...document.querySelectorAll('.dt-asub-mode')]
-			.find((button) => button.textContent?.includes('Experimental'))
-			?.click();
-	});
-const activeMode = () =>
-	page.$eval('.dt-asub-mode.is-active', (button) =>
-		button.textContent?.trim(),
-	);
-
-await clickExperimental();
-await page.waitForSelector('dialog[open].dt-asub-warn', { timeout: 3000 });
-check(
-	'Experimental opens the download warning with its art',
-	await page.$eval(
-		'dialog[open].dt-asub-warn img',
-		(img) => img.complete && img.naturalWidth > 0,
-	),
-);
-await page.click('.dt-asub-warn-btn:not(.is-primary)');
-await sleep(100);
-check(
-	'cancelling the warning keeps the previous mode',
-	!(await page.$('dialog[open].dt-asub-warn')) &&
-		(await activeMode()) === 'Rough',
-);
-
-await clickExperimental();
-await page.waitForSelector('dialog[open].dt-asub-warn', { timeout: 3000 });
-await page.click('.dt-asub-warn-btn.is-primary');
-await sleep(100);
-const confirmed = await page.evaluate(() => ({
-	open: document.querySelector('dialog.dt-asub-warn')?.open,
-	returnValue: document.querySelector('dialog.dt-asub-warn')?.returnValue,
-	active: document.querySelector('.dt-asub-mode.is-active')?.textContent?.trim(),
+const initial = await page.evaluate(() => ({
+	accept: document.querySelector('.as-drop input[type=file]')?.accept ?? '',
+	prompt: document.querySelector('.as-drop')?.textContent ?? '',
+	run: document.querySelector('.as-run')?.disabled,
+	result: !!document.querySelector('.as-result'),
+	footer: !!document.querySelector('.canon-split-footer'),
+	dialog: !!document.querySelector('dialog[open]'),
 }));
 check(
-	'confirming the warning selects Experimental',
-	!confirmed.open && confirmed.active === 'Experimental',
-	JSON.stringify(confirmed),
+	'empty: the source is the drop zone for audio and video, with the web wording',
+	initial.accept.includes('audio/') &&
+		initial.accept.includes('video/') &&
+		initial.prompt.includes('Drop an audio or video file'),
+	JSON.stringify(initial),
+);
+check(
+	'empty: Transcribe is disabled, no result, no footer, no dialog',
+	initial.run && !initial.result && !initial.footer && !initial.dialog,
+	JSON.stringify(initial),
 );
 
-await page.click('.dt-asub-info');
-await page.waitForSelector('.dt-asub-infopanel', { timeout: 3000 });
+await makeWav(page, { seconds: 4, amplitude: 0.5, frequency: 440, name: 'recording.wav' });
+await dropFile();
+await page.waitForFunction(
+	() => document.querySelector('.as-file .canon-row-title')?.textContent.trim() === 'recording.wav',
+	{ timeout: 3000 },
+);
+await page.waitForFunction(
+	() => /^4\.00 s · \d+ Hz · 2 ch$/.test(document.querySelector('.as-file .canon-row-detail')?.textContent.trim() ?? ''),
+	{ timeout: 3000 },
+);
+check('a drop anywhere loads the file and decodes it for the row', true);
 check(
-	'info popover lists the three models',
+	'the band waveform is painted',
 	await page.evaluate(() => {
-		const ids = [...document.querySelectorAll('.dt-asub-model-id')].map(
-			(a) => a.textContent?.trim(),
-		);
-		const sizes = [...document.querySelectorAll('.dt-asub-model-size')].map(
-			(s) => s.textContent?.trim(),
-		);
+		const canvas = document.querySelector('.as-picture .media-wave-canvas');
+		if (!canvas?.width) return false;
+		const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+		for (let i = 3; i < data.length; i += 4) if (data[i] > 0) return true;
+		return false;
+	}),
+);
+check('the file enables Transcribe', await page.$eval('.as-run', (b) => !b.disabled));
+
+await makeWav(page, { seconds: 2, name: 'pasted.wav' });
+await pasteFile();
+await sleep(200);
+check('a paste anywhere loads the file', (await text('.as-file .canon-row-title')) === 'pasted.wav');
+
+await segment('as-mode', 'Rough');
+await sleep(50);
+check(
+	'Rough selects and names its model',
+	(await checked('as-mode')) === 'Rough' &&
+		(await text('.as-model .canon-row-title')) === 'Whisper 2 (Base)' &&
+		/^\d+ MB$/.test(await text('.as-model .canon-row-detail')),
+);
+
+await page.click('.as-models-open');
+await page.waitForSelector('.as-models:popover-open', { timeout: 3000 });
+check(
+	'the info popover lists the three models, sizes and links',
+	await page.evaluate(() => {
+		const rows = [...document.querySelectorAll('.as-models-row')];
 		return (
-			sizes.length === 3 &&
-			sizes.every((size) => /^\d+ MB$/.test(size ?? '')) &&
-			ids.length === 3 &&
-			ids.every((id) => /^Whisper \d \(/.test(id ?? '')) &&
-			[...document.querySelectorAll('.dt-asub-model-id')].every((a) =>
-				/^https:\/\/huggingface\.co\/[\w-]+\/whisper-/.test(a.href),
+			rows.length === 3 &&
+			rows.every((row) => /^\d+ MB$/.test(row.querySelector('.canon-row-detail').textContent.trim())) &&
+			rows.every((row) => /^Whisper \d \(/.test(row.querySelector('a').textContent.trim())) &&
+			rows.every((row) =>
+				/^https:\/\/huggingface\.co\/[\w-]+\/whisper-/.test(row.querySelector('a').href),
 			)
 		);
 	}),
 );
-await page.click('.dt-asub-out-label');
-await sleep(200);
+await page.keyboard.press('Escape');
+await sleep(150);
+check('Escape closes the info popover', !(await exists('.as-models:popover-open')));
+
+await segment('as-mode', 'Experimental');
+await page.waitForSelector('dialog[open].as-warning', { timeout: 3000 });
 check(
-	'click outside closes the info popover',
-	!(await page.$('.dt-asub-infopanel')),
+	'Experimental opens the download warning with its art and the web wording',
+	await page.$eval(
+		'dialog[open].as-warning',
+		(dialog) =>
+			dialog.querySelector('img').complete &&
+			dialog.querySelector('img').naturalWidth > 0 &&
+			dialog.textContent.includes('760 MB of engine files'),
+	),
+);
+await page.click('.as-warning-cancel');
+await page.waitForFunction(() => !document.querySelector('dialog[open]'), { timeout: 3000 });
+await sleep(50);
+check('Cancel keeps the previous mode', (await checked('as-mode')) === 'Rough');
+await segment('as-mode', 'Experimental');
+await page.waitForSelector('dialog[open].as-warning', { timeout: 3000 });
+await page.click('.as-warning-proceed');
+await page.waitForFunction(() => !document.querySelector('dialog[open]'), { timeout: 3000 });
+await sleep(50);
+check('Proceed selects Experimental', (await checked('as-mode')) === 'Experimental');
+await segment('as-mode', 'Rough');
+await sleep(50);
+await segment('as-mode', 'Experimental');
+await sleep(150);
+check(
+	'a second Experimental pick does not ask again',
+	!(await exists('dialog[open]')) && (await checked('as-mode')) === 'Experimental',
+);
+await segment('as-mode', 'Decent');
+
+await page.click('.as-language-pick');
+await page.waitForSelector('dialog[open].as-language-dialog .canon-command-input', { timeout: 3000 });
+check(
+	'the language dialog lists Auto-detect, the common and all languages',
+	await page.evaluate(() => {
+		const headings = [...document.querySelectorAll('.as-language-dialog .canon-heading')].map((h) =>
+			h.textContent.trim(),
+		);
+		return (
+			headings.includes('Common') &&
+			headings.includes('All languages') &&
+			document.activeElement?.classList.contains('canon-command-input')
+		);
+	}),
+);
+await page.keyboard.type('germ');
+await sleep(100);
+check(
+	'a search lists each language once',
+	await page.evaluate(
+		() =>
+			[...document.querySelectorAll('.as-language-dialog .canon-command-title')].filter(
+				(t) => t.textContent.trim() === 'German',
+			).length === 1,
+	),
+);
+await page.keyboard.press('Enter');
+await page.waitForFunction(() => !document.querySelector('dialog[open]'), { timeout: 3000 });
+await sleep(100);
+check(
+	'Enter picks German, shown with its flag',
+	await page.$eval(
+		'.as-language-pick',
+		(button) =>
+			button.textContent.trim() === 'German' &&
+			button.querySelector('img')?.getAttribute('src') === '/flags/de.svg' &&
+			button.querySelector('img').naturalWidth > 0,
+	),
 );
 
-await page.click('.dt-asub-clear');
+await segment('as-format', 'VTT');
 await sleep(50);
-const cleared = await page.evaluate(() => ({
-	name: document.querySelector('.dt-asub-filename')?.textContent?.trim(),
-	transcribeDisabled: document.querySelector('.dt-asub-go')?.disabled,
-	error: !!document.querySelector('.dt-asub-error'),
-}));
+check('VTT selects', (await checked('as-format')) === 'VTT');
+
+// a run: the model never answers, so it stays busy
+await page.click('.as-run');
+await page.waitForSelector('.as-busy', { timeout: 3000 });
 check(
-	'Clear resets the selected file',
-	cleared.name === 'Choose file' &&
-		cleared.transcribeDisabled &&
-		!cleared.error,
-	JSON.stringify(cleared),
+	'a run shows the busy row with the loader and Cancel, the controls lock',
+	(await text('.as-busy .canon-row-title')) === 'Transcribing…' &&
+		(await exists('.as-busy .canon-loader')) &&
+		(await exists('.as-cancel')) &&
+		(await page.$eval('.as-run', (b) => b.disabled)) &&
+		(await page.$eval('.as-language-pick', (b) => b.disabled)),
+);
+await page.click('.as-cancel');
+await sleep(100);
+check(
+	'Cancel drops the run',
+	!(await exists('.as-result')) && (await page.$eval('.as-run', (b) => !b.disabled)),
+);
+
+await page.evaluate(() => {
+	window.__clip = new File(['not actually decoded'], 'broken.wav', { type: 'audio/wav' });
+});
+await dropFile();
+await sleep(100);
+await page.click('.as-run');
+await page.waitForSelector('.as-problem', { timeout: 5000 });
+check(
+	'an unreadable file fails with the web wording',
+	(await text('.as-problem')) === "Couldn't read that file, try WAV or MP4",
+	await text('.as-problem'),
+);
+
+await page.click('.as-clear');
+await sleep(50);
+check(
+	'Clear resets the source',
+	(await exists('.as-drop')) &&
+		!(await exists('.as-problem')) &&
+		(await page.$eval('.as-run', (b) => b.disabled)),
+);
+
+// a finished run, from the launch flags
+const stamp = (ms) => `00:00:${String(Math.floor(ms / 1000)).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
+const srt = Array.from(
+	{ length: 14 },
+	(_, i) => `${i + 1}\n${stamp(i * 2000 + 100)} --> ${stamp(i * 2000 + 1800)}\nCue ${i + 1}\n`,
+).join('\n');
+await visit(page, `/tools/auto-subtitle?asFormat=1&asMode=0&asCues=${encodeURIComponent(srt)}`);
+check(
+	'?asCues shows the cues, the stats and the band figure; ?asMode ?asFormat pick',
+	(await page.$$eval('.as-result .cue-row', (rows) => rows.length)) === 14 &&
+		(await text('.as-stats')) === '14 cues · 00:00:27.800' &&
+		(await text('.as-picture .canon-figure'))?.replace(/\s/g, '').startsWith('14cues') &&
+		(await checked('as-mode')) === 'Rough' &&
+		(await checked('as-format')) === 'VTT',
+);
+check(
+	'the band lane draws every cue',
+	(await page.$$eval('.as-lane .cue-timeline-cue', (c) => c.length)) === 14,
+);
+check('no cue is marked before an edit', !(await exists('.cue-row--marked')));
+
+await page.$eval('.as-result .cue-row:nth-of-type(3) .cue-row-text', (field) => field.focus());
+await page.keyboard.press('End');
+await page.keyboard.type(' edited');
+await page.$eval('.as-result .cue-row:nth-of-type(3) .cue-row-time', (field) => {
+	field.focus();
+	field.select();
+});
+await page.keyboard.type('00:00:00.500');
+await page.keyboard.press('Enter');
+await sleep(100);
+check(
+	'an edited cue is marked',
+	(await page.$$eval('.cue-row--marked', (rows) => rows.length)) === 1,
+);
+
+const copied = await page.evaluate(async () => {
+	document.querySelector('.as-copy').click();
+	await new Promise((r) => setTimeout(r, 300));
+	return navigator.clipboard.readText();
+});
+check(
+	'Copy copies the VTT with the edits and the toast shows',
+	copied.startsWith('WEBVTT') &&
+		copied.includes('Cue 2 edited') &&
+		copied.includes('00:00:00.500 --> 00:00:03.800') &&
+		(await page.$eval('.canon-toast', (el) => el.style.opacity === '1')),
+	copied.slice(0, 120),
+);
+await page.click('.as-download');
+const saved = await page.evaluate(() => window.__saved.at(-1)?.name);
+check('Download saves subtitles.vtt', saved === 'subtitles.vtt', saved);
+check(
+	'every control is named',
+	await page.$$eval('.auto-subtitle button', (els) =>
+		els.every((el) => el.textContent.trim() || el.getAttribute('aria-label')),
+	),
+);
+
+let clear = await footerClear();
+check('wide: at the end of the scroll the footer clears the last row', clear.ok, JSON.stringify(clear));
+
+await page.setViewport({ width: 390, height: 844 });
+await sleep(400);
+clear = await footerClear();
+check('390: at the end of the scroll the footer clears the last row', clear.ok, JSON.stringify(clear));
+check(
+	'390: no horizontal scroll, the source leads the stack',
+	await page.evaluate(() => {
+		const main = document.querySelector('.dt-main');
+		const source = document.querySelector('.as-source').getBoundingClientRect().top;
+		const controls = document.querySelector('.as-controls').getBoundingClientRect().top;
+		return main.scrollWidth <= main.clientWidth && source < controls;
+	}),
 );
 
 await finish(browser);

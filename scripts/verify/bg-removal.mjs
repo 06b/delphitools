@@ -4,7 +4,14 @@
 
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launch, visit, check, sleep, finish } from './harness.mjs';
+import {
+	launch,
+	visit,
+	check,
+	sleep,
+	finish,
+	captureObjectUrl,
+} from './harness.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SOURCE = join(root, 'public/delphi.png');
@@ -25,32 +32,36 @@ page.on('request', (req) => requests.push(req.url()));
 
 await visit(page, '/tools/background-remover');
 
-check('the drop zone renders', await page.$('.dt-bg-drop'));
-check('and no run button yet', !(await page.$('.dt-bg-run')));
+check('the picture is the drop target', await page.$('.cutout-slot'));
+check('and no run button yet', !(await page.$('.bg-run')));
 
-const input = await page.$('.dt-bg-drop input[type="file"]');
+const input = await page.$('.background-remover input[type="file"]');
 await input.uploadFile(SOURCE);
-await page.waitForSelector('.dt-bg-run', { timeout: 10000 });
+await page.waitForSelector('.bg-run', { timeout: 10000 });
 check(
 	'an upload shows the source and the run button',
-	await page.$('.dt-bg-source'),
+	await page.$('.bg-source'),
 );
-check('with no result pane yet', !(await page.$('.dt-bg-compare')));
+check('with no result yet', !(await page.$('.cutout-cut')));
 
 console.log(
 	'  ..    downloading and running the model, minutes on a cold cache',
 );
-await page.click('.dt-bg-run');
+await page.click('.bg-run');
 
 await sleep(1500);
-const busy = await page.evaluate(() => {
-	const button = document.querySelector('.dt-bg-run');
-	return {
-		disabled: button?.disabled,
-		label: button?.textContent.trim().replace(/\s+/g, ' '),
-	};
-});
-check('the run button disables while it works', busy.disabled === true);
+const busy = await page.evaluate(() => ({
+	run: !!document.querySelector('.bg-run'),
+	loader: !!document.querySelector('.bg-busy .canon-loader'),
+	label: document
+		.querySelector('.bg-busy .canon-row-title')
+		?.textContent.trim()
+		.replace(/\s+/g, ' '),
+}));
+check(
+	'a busy row with the Canon loader replaces the run button',
+	!busy.run && busy.loader,
+);
 check(
 	'and says what it is doing',
 	/Downloading|Removing background/.test(busy.label ?? ''),
@@ -62,10 +73,10 @@ try {
 	outcome = await page
 		.waitForFunction(
 			() => {
-				if (document.querySelector('.dt-bg-compare'))
+				if (document.querySelector('.bg-download'))
 					return 'done';
 				const error = document.querySelector(
-					'.dt-bg-error-detail',
+					'.bg-error',
 				);
 				return error
 					? `error: ${error.textContent.trim()}`
@@ -81,80 +92,46 @@ try {
 check('the run finishes', outcome === 'done', String(outcome));
 
 if (outcome === 'done') {
-	check('a comparison pane appears', await page.$('.dt-bg-compare'));
+	check('the cut-out lies on the source trace', await page.$('.cutout-box--done .cutout-cut'));
 	check(
-		'with the original and the cut-out side by side',
-		(await page.$$eval(
-			'.dt-bg-canvas img',
-			(els) => els.length,
-		)) === 2,
+		'with the original and the cut-out in the picture',
+		(await page.$$eval('.cutout-box img', (els) => els.length)) ===
+			1 && !!(await page.$('.cutout-box canvas.cutout-cut')),
 	);
 	check(
 		'and a download button',
-		await page.$('.dt-bg-bar-btn.is-primary'),
+		await page.$('.bg-download'),
 	);
 
-	const alpha = await page.evaluate(
-		() =>
-			new Promise((resolve) => {
-				const images = [
-					...document.querySelectorAll(
-						'.dt-bg-canvas img',
-					),
-				];
-				const [source, result] = images;
-				const probe = new Image();
-				probe.onload = () => {
-					const canvas =
-						document.createElement(
-							'canvas',
-						);
-					canvas.width = probe.naturalWidth;
-					canvas.height = probe.naturalHeight;
-					const ctx = canvas.getContext('2d');
-					ctx.drawImage(probe, 0, 0);
-					const { data } = ctx.getImageData(
-						0,
-						0,
-						canvas.width,
-						canvas.height,
-					);
-					// rmbg sigmoid saturates at 254
-					let clear = 0;
-					let opaque = 0;
-					let min = 255;
-					let max = 0;
-					for (
-						let i = 3;
-						i < data.length;
-						i += 4
-					) {
-						const a = data[i];
-						if (a < 8) clear++;
-						else if (a > 247) opaque++;
-						if (a < min) min = a;
-						if (a > max) max = a;
-					}
-					const pixels = data.length / 4;
-					resolve({
-						isPng: result.src.startsWith(
-							'data:image/png',
-						),
-						width: probe.naturalWidth,
-						sourceWidth:
-							source.naturalWidth,
-						clear: clear / pixels,
-						opaque: opaque / pixels,
-						min,
-						max,
-					});
-				};
-				probe.onerror = () => resolve(null);
-				probe.src = result.src;
-			}),
-	);
+	const alpha = await page.evaluate(() => {
+		const source = document.querySelector('.cutout-ghost');
+		const canvas = document.querySelector('.cutout-cut');
+		const { data } = canvas
+			.getContext('2d')
+			.getImageData(0, 0, canvas.width, canvas.height);
+		// rmbg sigmoid saturates at 254
+		let clear = 0;
+		let opaque = 0;
+		let min = 255;
+		let max = 0;
+		for (let i = 3; i < data.length; i += 4) {
+			const a = data[i];
+			if (a < 8) clear++;
+			else if (a > 247) opaque++;
+			if (a < min) min = a;
+			if (a > max) max = a;
+		}
+		const pixels = data.length / 4;
+		return {
+			width: canvas.width,
+			sourceWidth: source.naturalWidth,
+			clear: clear / pixels,
+			opaque: opaque / pixels,
+			min,
+			max,
+		};
+	});
 
-	check('the result is a PNG', alpha?.isPng, `${alpha?.width}px wide`);
 	check(
 		'at the source resolution',
 		alpha && alpha.width === alpha.sourceWidth,
@@ -176,6 +153,43 @@ if (outcome === 'done') {
 		alpha && alpha.min < 8 && alpha.max > 200,
 		`alpha ${alpha?.min} to ${alpha?.max}`,
 	);
+}
+
+if (outcome === 'done') {
+	await sleep(500);
+	const kept = await page.$eval('.background-remover .canon-tiles-value', (el) => el.textContent.trim());
+	check('the Kept tile reads a share', /^\d+ %$/.test(kept), kept);
+
+	// Colour: the fill shows behind the cut-out and goes into the export
+	await page.evaluate(() =>
+		[...document.querySelectorAll('.bg-modes [role="radio"], .bg-modes button')]
+			.find((el) => el.textContent.trim() === 'Colour')
+			.click(),
+	);
+	await sleep(200);
+	check(
+		'Colour shows the well and fills the picture',
+		!!(await page.$('.background-remover .canon-colour-well')) &&
+			!!(await page.$('.cutout-box--filled')),
+	);
+	const cdp = await page.createCDPSession();
+	await cdp.send('Browser.setDownloadBehavior', { behavior: 'deny' });
+	await captureObjectUrl(page);
+	await page.click('.bg-download');
+	await page.waitForFunction(() => window.__result, { timeout: 10000 });
+	const opaque = await page.evaluate(async () => {
+		const bitmap = await createImageBitmap(window.__result);
+		const canvas = document.createElement('canvas');
+		canvas.width = bitmap.width;
+		canvas.height = bitmap.height;
+		const context = canvas.getContext('2d');
+		context.drawImage(bitmap, 0, 0);
+		const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+		let min = 255;
+		for (let i = 3; i < data.length; i += 4) min = Math.min(min, data[i]);
+		return { type: window.__result.type, min };
+	});
+	check('a Colour export is an opaque PNG', opaque.type === 'image/png' && opaque.min === 255, JSON.stringify(opaque));
 }
 
 // dev uses jsdelivr ort runtime; prod self-hosts (see lib/jxl.ts)

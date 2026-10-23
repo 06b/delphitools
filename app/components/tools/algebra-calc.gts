@@ -1,388 +1,493 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonMathField, {
+	CanonMathFieldHandle,
+} from 'delphicanon/components/canon-math-field';
+import CanonMathKey from 'delphicanon/components/canon-math-key';
+import CanonMathView from 'delphicanon/components/canon-math-view';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type { Key } from 'delphicanon/lib/math/expression';
+import { keyForKeyboard } from 'delphicanon/lib/math/keypad';
+import { N, parse, present, same, type Node } from 'delphicanon/lib/math/node';
+import press from 'delphicanon/modifiers/canon-press';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import {
+	EXAMPLES,
+	OPERATIONS,
+	SYNTAX,
+	compute,
+	needsVariable,
+	solutionName,
+	solveRoots,
+	type Operation,
+} from 'delphitools-v2/components/tools/algebra-calc/algebra';
+import Picture, {
+	pictureHeight,
+	type PictureLine,
+} from 'delphitools-v2/components/tools/algebra-calc/picture';
+import './algebra-calc/algebra-calc.css';
 
 type MathModule = typeof import('mathjs');
 
-export type Operation =
-	'simplify' | 'expand' | 'factor' | 'solve' | 'derivative' | 'integral';
-
-const COPIED_MS = 1500;
-const ROOT_PRECISION = 10;
-
-const UNSUPPORTED_OP = 'This operation is not supported at this time';
-
-export const OPERATIONS: { id: Operation; label: string }[] = [
-	{ id: 'simplify', label: 'Simplify' },
-	{ id: 'expand', label: 'Expand' },
-	{ id: 'factor', label: 'Factor' },
-	{ id: 'solve', label: 'Solve' },
-	{ id: 'derivative', label: 'd/dx' },
-	{ id: 'integral', label: '∫' },
-];
-
-export const EXAMPLES: Record<Operation, string[]> = {
-	simplify: ['(x+1)^2 - x^2', 'sin(x)^2 + cos(x)^2', '(a*b)/(a*c)'],
-	expand: ['(x+1)^3', '(a+b)*(a-b)', '(x+y+z)^2'],
-	factor: ['x^2 - 4', 'x^3 - 1', 'x^2 + 5*x + 6'],
-	solve: ['x^2 - 4 = 0', '2*x + 3 = 7', 'x^2 + x - 6 = 0'],
-	derivative: ['x^3', 'sin(x)*cos(x)', 'e^x * x^2'],
-	integral: ['x^2', 'sin(x)', '1/x'],
-};
-
-export const SYNTAX: [label: string, syntax: string][] = [
-	['Power', 'x^2'],
-	['Multiply', 'a*b'],
-	['Divide', 'a/b'],
-	['Square root', 'sqrt(x)'],
-	['Trig', 'sin(x)'],
-	['Natural log', 'log(x)'],
-	["Euler's number", 'e'],
-	['Pi', 'pi'],
-	['Absolute', 'abs(x)'],
-];
-
-const OPERATIONS_WITH_VARIABLE: Operation[] = [
-	'solve',
-	'derivative',
-	'integral',
-];
-
-export function equationToPolynomial(expression: string): string {
-	const split = expression.indexOf('=');
-	if (split === -1) return expression;
-	return `(${expression.slice(0, split)}) - (${expression.slice(split + 1)})`;
-}
-
-function solveEquation(math: MathModule, expression: string): string {
-	const { coefficients } = math.rationalize(
-		equationToPolynomial(expression),
-		{},
-		true,
-	);
-	const roots = (
-		math.polynomialRoot as (...args: unknown[]) => unknown[]
-	)(...coefficients);
-	return `[${roots
-		.map((root) => math.format(root, { precision: ROOT_PRECISION }))
-		.join(',')}]`;
-}
-
-export function compute(
-	math: MathModule,
-	operation: Operation,
-	expression: string,
-	variable: string,
-): string {
-	switch (operation) {
-		case 'simplify':
-			// rationalize expands polynomials.
-			try {
-				return math
-					.simplify(math.rationalize(expression))
-					.toString();
-			} catch {
-				return math.simplify(expression).toString();
-			}
-
-		case 'expand':
-			return math.rationalize(expression).toString();
-
-		case 'solve':
-			return solveEquation(math, expression);
-
-		case 'derivative':
-			return math.derivative(expression, variable).toString();
-
-		case 'factor':
-		case 'integral':
-			throw new Error(UNSUPPORTED_OP);
-	}
-}
-
-interface Result {
-	input: string;
-	output: string;
-}
-
 let mathModule: Promise<MathModule> | null = null;
-
 function loadMath(): Promise<MathModule> {
 	mathModule ??= import('mathjs');
 	return mathModule;
 }
 
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+const ReuseIcon = <template><IconSvg @name="corner-left-up" /></template>;
+
+const operationLabels = OPERATIONS.map((op) => op.label);
+const operationIds = OPERATIONS.map((op) => op.id);
+/** Keys under the field: each opens the keypad and types itself. */
+const keys: Key[] = [
+	{ kind: 'fraction' },
+	{ kind: 'power' },
+	{ kind: 'square' },
+	{ kind: 'root' },
+	{ kind: 'open' },
+	{ kind: 'symbol', symbol: '×' },
+	{ kind: 'symbol', symbol: '=' },
+	{ kind: 'symbol', symbol: 'π' },
+];
+const syntaxTiles = SYNTAX.map(([label, value]) => ({ label, value }));
+const canvasHeight = pictureHeight + 4;
+
+interface Outcome {
+	output?: string;
+	roots?: string[];
+	error?: string;
+}
+
+function withoutConstant(text: string) {
+	return text.endsWith(' + C') ? text.slice(0, -4) : text;
+}
+
+/** The port of AlgebraCalcViewController, on the web tool's engine. */
 export default class AlgebraCalcTool extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
 	@tracked expression = '';
-	@tracked variable = 'x';
+	@tracked variableText = 'x';
 	@tracked operation: Operation = 'simplify';
-	@tracked result: Result | null = null;
-	@tracked error: string | null = null;
-	@tracked loading = false;
-	@tracked copied = false;
+	@tracked math?: MathModule;
+	@tracked promoted = 0;
+	handle = new CanonMathFieldHandle();
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	// ?algExpr= ?algOp=<simplify|expand|factor|solve|derivative|integral> ?algVar=: the iOS launch flags
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		this.expression = query.get('algExpr') ?? '';
+		const op = query.get('algOp')?.toLowerCase();
+		if (operationIds.includes(op as Operation))
+			this.operation = op as Operation;
+		this.variableText = query.get('algVar')?.slice(0, 2) ?? 'x';
+		void loadMath().then((math) => {
+			if (!this.isDestroying) this.math = math;
+		});
 	}
 
-	get operations() {
-		return OPERATIONS;
+	get variable() {
+		return this.variableText.trim() || 'x';
 	}
 
-	get syntax() {
-		return SYNTAX.map(([label, syntax]) => ({ label, syntax }));
+	get trimmed() {
+		return this.expression.trim();
+	}
+
+	evaluate(expression: string): Outcome | undefined {
+		const { math } = this;
+		if (!math || !expression) return undefined;
+		try {
+			if (this.operation === 'solve')
+				return { roots: solveRoots(math, expression) };
+			return {
+				output: compute(
+					math,
+					this.operation,
+					expression,
+					this.variable,
+				),
+			};
+		} catch (error) {
+			return {
+				error:
+					error instanceof Error
+						? error.message
+						: 'Invalid expression',
+			};
+		}
+	}
+
+	// the web answered on Calculate; iOS answers as you type, and so does this
+	get outcome() {
+		return this.evaluate(this.trimmed);
+	}
+
+	get failure() {
+		return this.outcome?.error;
+	}
+
+	get hasResult() {
+		const outcome = this.outcome;
+		return !!outcome && !outcome.error;
+	}
+
+	get operationIndex() {
+		return operationIds.indexOf(this.operation);
+	}
+
+	get resultTitle() {
+		return OPERATIONS[this.operationIndex]!.result;
+	}
+
+	get showsVariable() {
+		return needsVariable(this.operation);
+	}
+
+	get resultLines() {
+		const outcome = this.outcome;
+		if (!outcome || outcome.error)
+			return [{ label: '=', value: undefined }];
+		if (outcome.roots)
+			return outcome.roots.map((value, index, all) => ({
+				label: `${solutionName(this.variable, index, all.length)} =`,
+				value,
+			}));
+		return [{ label: '=', value: outcome.output }];
+	}
+
+	get noSolution() {
+		return this.outcome?.roots?.length === 0;
+	}
+
+	get canReuse() {
+		return this.hasResult && this.operation !== 'solve';
 	}
 
 	get examples() {
-		return EXAMPLES[this.operation];
+		const typed = parse(this.trimmed);
+		return EXAMPLES[this.operation].map((expression) => {
+			const node = parse(expression);
+			return {
+				expression,
+				current: !!typed && !!node && same(node, typed),
+			};
+		});
 	}
 
-	get showVariable() {
-		return OPERATIONS_WITH_VARIABLE.includes(this.operation);
-	}
-
-	get placeholder() {
-		return this.operation === 'solve'
-			? 'e.g., x^2 - 4 = 0'
-			: 'e.g., (x+1)^2 - x^2';
-	}
-
-	get canCalculate() {
-		return Boolean(this.expression.trim()) && !this.loading;
-	}
-
-	get isDisabled() {
-		return !this.canCalculate;
-	}
-
-	chooseOperation = (operation: Operation) => {
-		this.operation = operation;
-	};
-
-	setExpression = (event: Event) => {
-		this.expression = (event.target as HTMLInputElement).value;
-	};
-
-	setVariable = (event: Event) => {
-		this.variable = (event.target as HTMLInputElement).value || 'x';
-	};
-
-	useExample = (example: string) => {
-		this.expression = example;
-	};
-
-	onKeyDown = (event: KeyboardEvent) => {
-		if (event.key === 'Enter') void this.calculate();
-	};
-
-	calculate = async () => {
-		if (!this.canCalculate) return;
-
-		this.loading = true;
-		this.error = null;
-		this.result = null;
-
-		try {
-			const math = await loadMath();
-			const output = compute(
-				math,
-				this.operation,
-				this.expression,
-				this.variable,
-			);
-			this.result = { input: this.expression, output };
-		} catch (error) {
-			this.error =
-				error instanceof Error
-					? error.message
-					: 'Invalid expression';
-		} finally {
-			this.loading = false;
+	// the picture: the input with its operation's notation, the result under it
+	inputNode(input: string): Node | undefined {
+		const node = parse(input);
+		if (!node) return undefined;
+		switch (this.operation) {
+			case 'derivative':
+				return N.derivative(node, this.variable);
+			case 'integral':
+				return N.integral(node, this.variable);
+			case 'solve':
+				return node.k === 'relation'
+					? node
+					: N.relation('=', node, N.number('0'));
+			default:
+				return node;
 		}
+	}
+
+	resultNode(outcome: Outcome): Node | undefined {
+		if (outcome.roots) {
+			const variable = N.symbol(this.variable);
+			if (!outcome.roots.length)
+				return N.relation('∈', variable, N.symbol('∅'));
+			const relations = outcome.roots.map(
+				(value, index, all) => {
+					const parsed = parse(value);
+					return N.relation(
+						'=',
+						all.length > 1
+							? N.sub(
+									variable,
+									String(
+										index +
+											1,
+									),
+								)
+							: variable,
+						parsed
+							? present(parsed)
+							: N.word(value),
+					);
+				},
+			);
+			return relations.length === 1
+				? relations[0]
+				: N.list(relations);
+		}
+		const parsed = parse(outcome.output ?? '');
+		return parsed && N.relation('=', N.word(''), present(parsed));
+	}
+
+	lines(input: string, outcome: Outcome | undefined): PictureLine[] {
+		const lines: PictureLine[] = [
+			{
+				node: this.inputNode(input),
+				fallback: input,
+				size: 24,
+				ink: 'input',
+			},
+		];
+		if (outcome && !outcome.error)
+			lines.push({
+				node: this.resultNode(outcome),
+				fallback: `= ${outcome.output ?? outcome.roots?.join(', ')}`,
+				size: 32,
+				ink: 'result',
+			});
+		return lines;
+	}
+
+	get ghost() {
+		return EXAMPLES[this.operation][0]!;
+	}
+
+	get faint() {
+		return !this.trimmed;
+	}
+
+	get pictureLines() {
+		return this.faint
+			? this.lines(this.ghost, this.evaluate(this.ghost))
+			: this.lines(this.trimmed, this.outcome);
+	}
+
+	get pictureLabel() {
+		return this.pictureLines
+			.map((line) => line.fallback)
+			.join(', ');
+	}
+
+	get copyText() {
+		const outcome = this.outcome;
+		if (!outcome || outcome.error) return undefined;
+		if (outcome.roots)
+			return outcome.roots
+				.map((value) => `${this.variable} = ${value}`)
+				.join(', ');
+		return outcome.output;
+	}
+
+	setVariable = (text: string) => (this.variableText = text.slice(0, 2));
+
+	choose = (index: number) => (this.operation = operationIds[index]!);
+
+	useExample = (expression: string) => (this.expression = expression);
+
+	openKeypad = (key: Key) => this.handle.edit([key]);
+
+	keypadChanged = (text: string) => (this.expression = text);
+
+	typeInField = (event: KeyboardEvent) => {
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
+		const key = keyForKeyboard(event.key);
+		if (!key || ['left', 'right', 'up', 'down'].includes(key.kind))
+			return;
+		event.preventDefault();
+		if (key.kind !== 'delete') this.expression = '';
+		this.handle.edit([key]);
 	};
 
-	runCalculate = () => void this.calculate();
+	useAsInput = () => {
+		const output = this.outcome?.output;
+		if (!output || !this.canReuse) return;
+		this.expression = withoutConstant(output);
+		this.promoted += 1;
+	};
 
-	copyResult = () => {
-		const result = this.result;
-		if (!result) return;
-		void navigator.clipboard.writeText(result.output);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
+	copy = () => {
+		const text = this.copyText;
+		if (text) void this.toast.copy(text);
 	};
 
 	<template>
-		<div class="dt-alg">
-			<div class="segmented dt-alg-ops">
-				{{#each this.operations key="id" as |item|}}
-					<button
-						type="button"
-						class="dt-alg-op
-							{{if
-								(eq
-									this.operation
-									item.id
-								)
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.chooseOperation
-								item.id
-							)
-						}}
-					>{{item.label}}</button>
-				{{/each}}
-			</div>
-
-			<div class="dt-alg-section">
-				<span class="dt-alg-label">Expression</span>
-				<div class="dt-alg-field">
-					<input
-						type="text"
-						class="dt-alg-input"
-						value={{this.expression}}
-						placeholder={{this.placeholder}}
-						aria-label="Expression"
-						{{on
-							"input"
-							this.setExpression
-						}}
-						{{on "keydown" this.onKeyDown}}
+		<CanonSplit class="algebra-calc" @halves={{true}}>
+			<:banner>
+				<CanonCanvas @height={{canvasHeight}}>
+					<Picture
+						@lines={{this.pictureLines}}
+						@faint={{this.faint}}
+						@promoted={{this.promoted}}
+						@label={{this.pictureLabel}}
 					/>
-					{{#if this.showVariable}}
-						<div class="dt-alg-var">
-							<span
-								class="dt-alg-var-label"
-							>var</span>
-							<input
-								type="text"
-								class="dt-alg-var-input"
-								value={{this.variable}}
-								maxlength="2"
-								aria-label="Variable"
-								{{on
-									"input"
-									this.setVariable
-								}}
-							/>
-						</div>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonMathField
+						class="alg-field"
+						@text={{this.expression}}
+						@variable={{this.variable}}
+						@placeholder={{this.ghost}}
+						@size={{30}}
+						@handle={{this.handle}}
+						@onChange={{this.keypadChanged}}
+						@onCompletion={{this.keypadChanged}}
+						{{on
+							"keydown"
+							this.typeInField
+						}}
+					/>
+					{{#if this.failure}}
+						<CanonStatus
+							@text={{this.failure}}
+							@tone="warn"
+							@row={{true}}
+						/>
 					{{/if}}
-				</div>
-			</div>
-
-			<button
-				type="button"
-				class="dt-alg-run"
-				disabled={{this.isDisabled}}
-				{{on "click" this.runCalculate}}
-			>
-				{{#if this.loading}}
-					<NdsLoader />
-					Calculating…
-				{{else}}
-					Calculate
-				{{/if}}
-			</button>
-
-			{{#if this.error}}
-				<div class="dt-alg-result">
-					<div
-						class="dt-alg-error"
-					>{{this.error}}</div>
-				</div>
-			{{else if this.result}}
-				<div class="dt-alg-result">
-					<div class="dt-alg-echo">
-						<span>Input:</span>
-						<span
-							class="dt-alg-echo-value"
-						>{{this.result.input}}</span>
-					</div>
-					<div class="dt-alg-output-row">
-						<div
-							class="dt-alg-output"
-						>{{this.result.output}}</div>
-						<button
-							type="button"
-							class="dt-alg-copy"
-							aria-label="Copy"
-							{{on
-								"click"
-								this.copyResult
-							}}
-						>
-							<Icon
-								@name={{if
-									this.copied
-									"check"
-									"copy"
+					<CanonGrid @columns={{4}}>
+						{{#each keys as |key|}}
+							<CanonMathKey
+								@key={{key}}
+								@variable={{this.variable}}
+								@onClick={{fn
+									this.openKeypad
+									key
 								}}
 							/>
-						</button>
-					</div>
-				</div>
-			{{/if}}
-
-			<div class="dt-alg-block">
-				<div class="dt-alg-block-head">
-					<span
-						class="dt-alg-label"
-					>Examples</span>
-				</div>
-				<div class="dt-alg-examples">
+						{{/each}}
+					</CanonGrid>
+					{{#if this.showsVariable}}
+						<CanonRow
+							@title="Variable"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonTextCell
+								class="alg-variable"
+								@value={{this.variableText}}
+								@onChange={{this.setVariable}}
+								maxlength="2"
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonHeading @text="Operation" />
+					<CanonSegmented
+						aria-label="Operation"
+						@items={{operationLabels}}
+						@columns={{3}}
+						@selected={{this.operationIndex}}
+						@onChange={{this.choose}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text={{this.resultTitle}}
+					/>
+					{{#if this.noSolution}}
+						<CanonStatus
+							@text="No solution"
+							@tone="muted"
+							@row={{true}}
+						/>
+					{{else}}
+						{{#each
+							this.resultLines
+							as |line|
+						}}
+							<CanonValueLine
+								@label={{line.label}}
+								@value={{line.value}}
+								@layout="wrapping"
+							/>
+						{{/each}}
+					{{/if}}
+					<CanonGrid @columns={{2}}>
+						<CanonButton
+							@kind="secondary"
+							@text="Use as input"
+							@icon={{ReuseIcon}}
+							@disabled={{if
+								this.canReuse
+								false
+								true
+							}}
+							@onClick={{this.useAsInput}}
+						/>
+						<CanonButton
+							@kind="primary"
+							@text="Copy"
+							@icon={{CopyIcon}}
+							@disabled={{if
+								this.hasResult
+								false
+								true
+							}}
+							@onClick={{this.copy}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Examples" />
 					{{#each
-						this.examples key="@identity"
+						this.examples key="expression"
 						as |example|
 					}}
 						<button
 							type="button"
-							class="dt-alg-example"
+							class="alg-example"
+							aria-label={{example.expression}}
+							aria-current={{if
+								example.current
+								"true"
+							}}
+							{{press}}
 							{{on
 								"click"
 								(fn
 									this.useExample
-									example
+									example.expression
 								)
 							}}
-						>{{example}}</button>
-					{{/each}}
-				</div>
-			</div>
-
-			<div class="dt-alg-block is-last">
-				<div class="dt-alg-block-head">
-					<span class="dt-alg-label">Syntax
-						Reference</span>
-				</div>
-				<div class="dt-alg-syntax">
-					{{#each
-						this.syntax key="label"
-						as |row|
-					}}
-						<div class="dt-alg-syntax-row">
+						>
+							<CanonMathView
+								class="alg-example-math"
+								@text={{example.expression}}
+								@size={{19}}
+								@label=""
+							/>
 							<span
-								class="dt-alg-syntax-label"
-							>{{row.label}}</span>
-							<span
-								class="dt-alg-syntax-code"
-							>{{row.syntax}}</span>
-						</div>
+								class="alg-example-code"
+							>{{example.expression}}</span>
+						</button>
 					{{/each}}
-				</div>
-			</div>
-		</div>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text="Syntax Reference"
+					/>
+					<CanonTiles @items={{syntaxTiles}} />
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

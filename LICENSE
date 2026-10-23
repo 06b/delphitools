@@ -22,10 +22,6 @@ The 0BSD grant above covers the code and data written for delphitools. The
 files below are the work of others, carried in this repository under their
 own licences, which continue to apply to them:
 
-  app/components/ui/select.gts, tabs.gts, command.gts, tooltip.gts,
-  popover.gts
-      Vendored from shadcn-ember v0.2.1 (Ignace Maes), MIT.
-
   app/lib/editor/footnote-md.ts
       Vendored from markdown-it-footnote 4.0.0, MIT.
 
@@ -56,11 +52,27 @@ own licences, which continue to apply to them:
       MediaInfoLib, BSD-2-Clause; see LICENSE.mediainfo.txt in that
       directory.
 
+  public/fonts/OpenSansCondensedV.woff2, OpenSansCondensedV-Italic.woff2
+      Open Sans (The Open Sans Project Authors), SIL Open Font License
+      1.1; instanced at width 75, weight 400 to 700.
+
   public/fonts/iAWriterQuattroV.woff2, iAWriterQuattroV-Italic.woff2
       iA Writer Quattro (Information Architects), SIL Open Font License 1.1.
 
+  public/fonts/Iosevka-400.woff2, Iosevka-700.woff2
+      Iosevka (Renzhi Li), SIL Open Font License 1.1; subset to Latin-1,
+      punctuation, arrows and box drawing, ligature features removed.
+
+  public/fonts/fluoWrite-Regular.otf
+      FluoWrite (Speak the Sky, https://speakthesky.com), proprietary;
+      free for print and digital use, not for redistribution as a font.
+
   public/fonts/NotoSansShavian-Regular.woff2
       Noto Sans Shavian (Google), SIL Open Font License 1.1.
+
+  app/components/canon-docs/brands/
+      Simple Icons 16.35.0 (simpleicons.org), CC0 1.0; the marks
+      belong to their owners.
 
   public/flags/
       circle-flags (HatScripts), MIT.

@@ -1,0 +1,40 @@
+.ipa-transcriber {
+	/* ios uses system serif */
+	--ipa-serif: ui-serif, "Iowan Old Style", "Charter", georgia, serif;
+	--gl-font: var(--ipa-serif);
+}
+
+.ipa-word--guess {
+	color: var(--canon-muted-foreground);
+	text-decoration: underline dashed;
+	text-underline-offset: 3px;
+}
+
+.ipa-stress {
+	color: var(--canon-primary);
+}
+
+.ipa-result .tt-result-text {
+	font-family: var(--ipa-serif);
+	font-size: 20px;
+}
+
+.ipa-slash {
+	color: var(--canon-muted-foreground);
+}
+
+.ipa-legend {
+	display: flex;
+	gap: 24px;
+	align-items: baseline;
+	padding: 10px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.ipa-legend-mark {
+	margin-inline-end: 4px;
+	font-family: var(--ipa-serif);
+	font-size: 17px;
+}

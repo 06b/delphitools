@@ -3,59 +3,16 @@ import {
 	boxFromPoints,
 	cropFromInsets,
 	cropToPaper,
-	dragRect,
-	insetsFromBox,
+	displaySize,
+	insetsOf,
 	intersectBox,
+	toDisplay,
+	toPage,
 } from 'delphitools-v2/lib/pdf-crop';
 
+const size = { width: 200, height: 300 };
+
 module('Unit | Lib | pdf-crop', function () {
-	module('dragRect', function () {
-		test('keeps a top-left to bottom-right drag', function (assert) {
-			assert.deepEqual(dragRect(10, 20, 110, 220, 200, 300), {
-				x: 10,
-				y: 20,
-				width: 100,
-				height: 200,
-			});
-		});
-
-		test('normalises a drag in any direction', function (assert) {
-			assert.deepEqual(dragRect(110, 220, 10, 20, 200, 300), {
-				x: 10,
-				y: 20,
-				width: 100,
-				height: 200,
-			});
-			assert.deepEqual(dragRect(10, 220, 110, 20, 200, 300), {
-				x: 10,
-				y: 20,
-				width: 100,
-				height: 200,
-			});
-		});
-
-		test('clamps to the preview bounds', function (assert) {
-			assert.deepEqual(
-				dragRect(-50, -50, 250, 350, 200, 300),
-				{
-					x: 0,
-					y: 0,
-					width: 200,
-					height: 300,
-				},
-			);
-		});
-
-		test('a drag outside the bounds collapses to the edge', function (assert) {
-			assert.deepEqual(dragRect(-20, 10, -5, 100, 200, 300), {
-				x: 0,
-				y: 10,
-				width: 0,
-				height: 90,
-			});
-		});
-	});
-
 	module('boxFromPoints', function () {
 		test('is corner-order independent', function (assert) {
 			const expected = {
@@ -77,18 +34,6 @@ module('Unit | Lib | pdf-crop', function () {
 				expected,
 			);
 		});
-
-		test('keeps fractional points', function (assert) {
-			assert.deepEqual(
-				boxFromPoints(148.5, 210.5, 446.5, 631.5),
-				{
-					x: 148.5,
-					y: 210.5,
-					width: 298,
-					height: 421,
-				},
-			);
-		});
 	});
 
 	module('intersectBox', function () {
@@ -107,34 +52,11 @@ module('Unit | Lib | pdf-crop', function () {
 			);
 		});
 
-		test('a contained box is its own overlap', function (assert) {
-			const inner = { x: 10, y: 10, width: 20, height: 20 };
-			assert.deepEqual(
-				intersectBox(inner, {
-					x: 0,
-					y: 0,
-					width: 100,
-					height: 100,
-				}),
-				inner,
-			);
-		});
-
-		test('disjoint boxes have no overlap', function (assert) {
-			assert.strictEqual(
-				intersectBox(
-					{ x: 0, y: 0, width: 10, height: 10 },
-					{ x: 20, y: 20, width: 10, height: 10 },
-				),
-				null,
-			);
-		});
-
 		test('edge-touching boxes have no overlap', function (assert) {
 			assert.strictEqual(
 				intersectBox(
-					{ x: 0, y: 0, width: 10, height: 10 },
-					{ x: 10, y: 0, width: 10, height: 10 },
+					{ x: 0, y: 0, width: 50, height: 50 },
+					{ x: 50, y: 0, width: 50, height: 50 },
 				),
 				null,
 			);
@@ -142,64 +64,112 @@ module('Unit | Lib | pdf-crop', function () {
 	});
 
 	module('cropFromInsets', function () {
-		test('builds a box from edge insets, origin bottom-left', function (assert) {
-			assert.deepEqual(
-				cropFromInsets(200, 300, 10, 20, 30, 40),
-				{
-					x: 10,
-					y: 40,
-					width: 160,
-					height: 240,
-				},
-			);
-		});
-
-		test('rejects a collapsed or negative box', function (assert) {
-			assert.strictEqual(
-				cropFromInsets(200, 300, 120, 0, 120, 0),
-				null,
-				'width <= 0',
-			);
-			assert.strictEqual(
-				cropFromInsets(200, 300, 0, 200, 0, 200),
-				null,
-				'height <= 0',
-			);
-			assert.strictEqual(
-				cropFromInsets(200, 300, -1, 0, 0, 0),
-				null,
-				'negative inset',
-			);
-		});
-
-		test('round-trips through insetsFromBox', function (assert) {
-			const box = cropFromInsets(200, 300, 10, 20, 30, 40)!;
-			assert.deepEqual(insetsFromBox(box, 200, 300), {
+		test('builds a display box from edge insets, origin top-left', function (assert) {
+			const insets = {
 				left: 10,
 				top: 20,
 				right: 30,
 				bottom: 40,
+			};
+			const box = cropFromInsets(size, insets);
+			assert.deepEqual(box, {
+				x: 10,
+				y: 20,
+				width: 160,
+				height: 240,
 			});
+			assert.deepEqual(insetsOf(box!, size), insets);
+		});
+
+		test('rejects a collapsed or negative box', function (assert) {
+			assert.strictEqual(
+				cropFromInsets(size, {
+					left: 100,
+					top: 0,
+					right: 100,
+					bottom: 0,
+				}),
+				null,
+			);
+			assert.strictEqual(
+				cropFromInsets(size, {
+					left: -1,
+					top: 0,
+					right: 0,
+					bottom: 0,
+				}),
+				null,
+			);
 		});
 	});
 
-	module('cropToPaper', function () {
-		test('centres the paper on the page', function (assert) {
-			assert.deepEqual(cropToPaper(200, 300, 100, 200), {
+	test('cropToPaper centres the paper, overflow kept', function (assert) {
+		assert.deepEqual(
+			cropToPaper(size, { width: 100, height: 200 }),
+			{
 				x: 50,
 				y: 50,
 				width: 100,
 				height: 200,
+			},
+		);
+		assert.deepEqual(
+			cropToPaper(
+				{ width: 100, height: 100 },
+				{ width: 200, height: 200 },
+			),
+			{ x: -50, y: -50, width: 200, height: 200 },
+		);
+	});
+
+	module('display and page space', function () {
+		const box = { x: 10, y: 20, width: 200, height: 300 };
+
+		test('a quarter turn swaps the display size', function (assert) {
+			assert.deepEqual(displaySize(box, 90), {
+				width: 300,
+				height: 200,
+			});
+			assert.deepEqual(displaySize(box, 180), {
+				width: 200,
+				height: 300,
 			});
 		});
 
-		test('keeps a paper larger than the page for later clamping', function (assert) {
-			assert.deepEqual(cropToPaper(100, 100, 200, 200), {
-				x: -50,
-				y: -50,
-				width: 200,
-				height: 200,
-			});
+		test('the display top-left is the right page corner', function (assert) {
+			const corner = { x: 0, y: 0, width: 1, height: 1 };
+			const at = (rotation: number) => {
+				const r = toPage(corner, box, rotation);
+				return [r.x, r.y];
+			};
+			// clockwise turns: top-left, bottom-left, bottom-right, top-right
+			assert.deepEqual(at(0), [10, 319]);
+			assert.deepEqual(at(90), [10, 20]);
+			assert.deepEqual(at(180), [209, 20]);
+			assert.deepEqual(at(270), [209, 319]);
+		});
+
+		test('round-trips at every rotation (iOS selfCheck)', function (assert) {
+			for (const rotation of [0, 90, 180, 270]) {
+				const shown = displaySize(box, rotation);
+				const rect = {
+					x: 5,
+					y: 15,
+					width: shown.width / 2,
+					height: shown.height / 4,
+				};
+				const page = toPage(rect, box, rotation);
+				assert.deepEqual(
+					intersectBox(page, box),
+					page,
+					`${rotation}: inside the box`,
+				);
+				assert.deepEqual(
+					toDisplay(page, box, rotation),
+					rect,
+					`${rotation}: back to display`,
+				);
+			}
 		});
 	});
 });

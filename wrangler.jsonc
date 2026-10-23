@@ -7,4 +7,16 @@
 		"directory": "./dist",
 		"not_found_handling": "single-page-application",
 	},
+	// `wrangler deploy --env canon`: the canon branch on its own worker
+	"env": {
+		"canon": {
+			"name": "delphitools-canon",
+			"routes": [
+				{
+					"pattern": "canon.delphi.tools",
+					"custom_domain": true,
+				},
+			],
+		},
+	},
 }

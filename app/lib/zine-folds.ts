@@ -164,7 +164,7 @@ function buildAccordion(
 
 	const foldStep =
 		`Fold ${split ? 'each strip' : 'the sheet'} into ${n} equal vertical panels ` +
-		'with an alternating zig-zag (concertina) fold — first crease toward you, ' +
+		'with an alternating zig-zag (concertina) fold — first crease towards you, ' +
 		'next away, and so on.';
 	const cutStep =
 		'Cut the sheet in half along the horizontal red line — two identical strips.';

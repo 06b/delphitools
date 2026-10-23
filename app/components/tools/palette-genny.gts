@@ -1,58 +1,76 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
-import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import { fn, hash } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import { LinkTo } from '@ember/routing';
+import type Owner from '@ember/owner';
 import { modifier } from 'ember-modifier';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import { eq } from 'ember-truth-helpers';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import { parseHex, takesBlackInk } from 'delphicanon/lib/colour';
+import type { CanonMenuItem } from 'delphicanon/components/canon-menu';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import { downloadUrl } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import { getColourName } from 'delphitools-v2/lib/colour-names';
 import {
-	Popover,
-	PopoverTrigger,
-	PopoverContent,
-} from 'delphitools-v2/components/ui/popover';
-import {
-	Command,
-	CommandInput,
-	CommandList,
-	CommandEmpty,
-	CommandGroup,
-	CommandItem,
-} from 'delphitools-v2/components/ui/command';
+	COLOUR_NOTATIONS,
+	formatColour,
+	type ColourNotation,
+} from 'delphitools-v2/lib/colour-notation';
 import {
 	generatePalette,
-	getStrategiesByCategory,
-	STRATEGY_CATEGORIES,
 	STRATEGY_INFO,
 	type PaletteStrategy,
 } from 'delphitools-v2/lib/palette-strategies';
-import { getColourName } from 'delphitools-v2/lib/colour-names';
-import {
-	hexToRgb,
-	rgbToOklch,
-	contrastText,
-} from 'delphitools-v2/lib/colour-maths';
 import {
 	COLLECTION_CATEGORIES,
 	type PaletteCollectionCategory,
 } from 'delphitools-v2/lib/palette-collection';
-import type BreakpointService from 'delphitools-v2/services/breakpoint';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
-
-const MIN_COLOURS = 2;
-const MAX_COLOURS = 11;
-const GRID_THRESHOLD_MOBILE = 4;
-const GRID_THRESHOLD_TABLET = 5;
+import { contrastRows } from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import {
+	CATEGORIES,
+	cssBlock,
+	hexesFromLines,
+	launchFlags,
+	MAX_COLOURS,
+	MIN_COLOURS,
+	slug,
+	strategiesIn,
+} from 'delphitools-v2/components/tools/palette-genny/palette';
+import Reels, {
+	type ReelColumn,
+} from 'delphitools-v2/components/tools/palette-genny/reels';
+// the card markup without the component, which formats rows as hex
+import 'delphicanon/components/canon-colour-card.css';
+import './palette-genny/palette-genny.css';
 
 interface PaletteColour {
 	id: string;
 	hex: string;
 	locked: boolean;
+}
+
+interface Spin {
+	token: number;
+	panels: string[];
+	delay: number;
+	duration: number;
 }
 
 const newId = () => Math.random().toString(36).substring(2, 9);
@@ -62,36 +80,36 @@ const swatch = (hex: string): PaletteColour => ({
 	locked: false,
 });
 
-// share-link format
-export function coloursFromQuery(search: string): string[] | null {
-	const param = new URLSearchParams(search).get('colors');
-	if (!param) return null;
-	const hexes = param
-		.split(',')
-		.map((c) => c.trim())
-		.map((c) => (c.startsWith('#') ? c : `#${c}`))
-		.filter((c) => /^#[a-f\d]{6}$/i.test(c));
-	return hexes.length >= MIN_COLOURS ? hexes : null;
-}
+const categoryTitles = CATEGORIES.map((c) => c.title);
+const infoFormats: ColourNotation[] = ['hex', 'rgb', 'hsl', 'oklch', 'lab'];
 
-function coloursFromUrl(): string[] | null {
-	if (typeof window === 'undefined') return null;
-	return coloursFromQuery(window.location.search);
-}
+/** iOS PaletteReels.timing and .passes. */
+const timing = { spin: 500, extra: 80, stagger: 60 };
+const passes = { first: 3, extra: 1 };
 
-export default class PaletteGennyTool extends Component {
-	@service declare breakpoint: BreakpointService;
+const Refresh = <template><IconSvg @name="refresh-cw" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Braces = <template><IconSvg @name="braces" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Lock = <template><IconSvg @name="lock" /></template>;
+const Unlock = <template><IconSvg @name="lock-open" /></template>;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Pipette = <template><IconSvg @name="pipette" /></template>;
+
+/** The port of PaletteGeneratorViewController, on the web tool's strategies. */
+export default class PaletteGenny extends Component {
 	@service declare colourNotation: ColourNotationService;
+	@service('canon-toast') declare toast: CanonToastService;
 
-	colours: TrackedArray<PaletteColour> = new TrackedArray(
-		(coloursFromUrl() ?? generatePalette(5, 'random-cohesive')).map(
-			swatch,
-		),
-	);
-
+	colours: TrackedArray<PaletteColour>;
 	@tracked strategy: PaletteStrategy = 'random-cohesive';
-	@tracked strategyOpen = false;
-	@tracked copied: string | null = null;
+	@tracked widened?: number;
+	/** A column narrowing back keeps its values until the container query hides them. */
+	@tracked closing?: number;
+	#closingTimer?: number;
+	/** The latest spin of each slot; a slot spun again renders afresh. */
+	spins = new TrackedArray<Spin | undefined>();
+	#token = 0;
 
 	// hidden collection-export panel (p)
 	@tracked exportMode = false;
@@ -99,94 +117,190 @@ export default class PaletteGennyTool extends Component {
 	@tracked exportCategory: PaletteCollectionCategory = 'classic';
 	@tracked importText = '';
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-	}
-
-	get strategyInfo() {
-		return STRATEGY_INFO[this.strategy];
-	}
-
-	get groupedStrategies() {
-		return getStrategiesByCategory();
-	}
-
-	get categories() {
-		return Object.entries(STRATEGY_CATEGORIES).map(
-			([key, label]) => ({
-				key,
-				label,
-				strategies:
-					this.groupedStrategies[
-						key as keyof typeof STRATEGY_CATEGORIES
-					] ?? [],
-			}),
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		if (flags.strategy) this.strategy = flags.strategy;
+		this.colours = new TrackedArray(
+			(
+				flags.colours ??
+				generatePalette(5, this.strategy)
+			).map(swatch),
 		);
+		for (const index of flags.locked)
+			if (this.colours[index])
+				this.colours[index].locked = true;
+		if (flags.focus !== undefined && this.colours[flags.focus])
+			this.widened = flags.focus;
 	}
 
-	get isGrid() {
-		const b = this.breakpoint.current;
-		return (
-			(b === 'mobile' &&
-				this.colours.length > GRID_THRESHOLD_MOBILE) ||
-			(b === 'tablet' &&
-				this.colours.length > GRID_THRESHOLD_TABLET)
-		);
+	get category() {
+		return STRATEGY_INFO[this.strategy].category;
 	}
 
-	get gridColumns() {
-		return this.breakpoint.current === 'mobile' ? 2 : 3;
+	get categoryIndex() {
+		return CATEGORIES.findIndex((c) => c.key === this.category);
+	}
+
+	get strategies() {
+		return strategiesIn(this.category);
+	}
+
+	get strategyTitles() {
+		return this.strategies.map((key) => STRATEGY_INFO[key].name);
+	}
+
+	get strategyIndex() {
+		return this.strategies.indexOf(this.strategy);
+	}
+
+	get description() {
+		return STRATEGY_INFO[this.strategy].description;
+	}
+
+	get isWidened() {
+		return this.widened !== undefined;
 	}
 
 	get atMin() {
 		return this.colours.length <= MIN_COLOURS;
 	}
 
-	get atMax() {
-		return this.colours.length >= MAX_COLOURS;
+	get notationLabel() {
+		const { notation } = this.colourNotation;
+		return (
+			COLOUR_NOTATIONS.find((n) => n.id === notation)
+				?.label ?? ''
+		);
+	}
+
+	format = (hex: string) => this.colourNotation.format(hex);
+
+	@cached
+	get columns(): ReelColumn[] {
+		const count = this.colours.length;
+		return this.colours.map((colour, index) => {
+			const ink = takesBlackInk(parseHex(colour.hex)!)
+				? 'black'
+				: 'white';
+			const spin = this.spins[index];
+			const wide = this.widened === index;
+			return {
+				key: `${index}:${spin?.token ?? 0}`,
+				index,
+				number: String(index + 1).padStart(2, '0'),
+				hex: colour.hex,
+				value: this.format(colour.hex),
+				name: getColourName(colour.hex),
+				locked: colour.locked,
+				wide,
+				style: htmlSafe(
+					`background-color: ${colour.hex}; color: ${ink}; --pg-colour: ${colour.hex}` +
+						(spin?.panels.length
+							? `; --pg-panels: ${spin.panels.length}; --pg-delay: ${spin.delay}ms; --pg-spin: ${spin.duration}ms`
+							: ''),
+				),
+				reel: spin?.panels.length
+					? {
+							panels: spin.panels.map(
+								(hex) =>
+									htmlSafe(
+										`background: ${hex}`,
+									),
+							),
+						}
+					: undefined,
+				info:
+					wide || this.closing === index
+						? {
+								lines: infoFormats.map(
+									(
+										id,
+									) => ({
+										label:
+											COLOUR_NOTATIONS.find(
+												(
+													n,
+												) =>
+													n.id ===
+													id,
+											)
+												?.label ??
+											id,
+										value: formatColour(
+											colour.hex,
+											id,
+										),
+									}),
+								),
+								contrasts: contrastRows(
+									parseHex(
+										colour.hex,
+									)!,
+								),
+							}
+						: undefined,
+				menu: [
+					{ title: 'Copy', icon: Copy },
+					{ title: 'Edit colour', icon: Pipette },
+					colour.locked
+						? {
+								title: 'Unlock',
+								icon: Unlock,
+							}
+						: { title: 'Lock', icon: Lock },
+					{
+						title: 'Remove',
+						icon: Trash,
+						destructive: true,
+						disabled: count <= MIN_COLOURS,
+					},
+				],
+			};
+		});
 	}
 
 	get rows() {
 		return this.colours.map((colour, index) => ({
 			colour,
 			index,
-			number: String(index + 1).padStart(2, '0'),
-			value: this.colourNotation.format(colour.hex),
+			value: this.format(colour.hex),
 			name: getColourName(colour.hex),
-			// style-concatenation: picker hex trusted
-			fillStyle: htmlSafe(`background-color: ${colour.hex}`),
-			contrastStyle: htmlSafe(
-				`color: ${contrastText(colour.hex)}`,
-			),
-			rgbLabel: (() => {
-				const rgb = hexToRgb(colour.hex);
-				return rgb ? `RGB ${rgb.join(' ')}` : null;
-			})(),
-			oklchLabel: (() => {
-				const rgb = hexToRgb(colour.hex);
-				if (!rgb) return null;
-				const [L, c, h] = rgbToOklch(...rgb);
-				return `L${(L * 100).toFixed(0)} C${c.toFixed(2)} H${h.toFixed(0)}`;
-			})(),
-			copyKey: `list-${colour.id}`,
+			fill: htmlSafe(`background-color: ${colour.hex}`),
 		}));
+	}
+
+	get values() {
+		return this.colours.map((c) => this.format(c.hex));
+	}
+
+	get css() {
+		return cssBlock(this.values);
 	}
 
 	// listener dies with tool
 	shortcuts = modifier((element: HTMLElement) => {
-		const onKeyDown = (e: KeyboardEvent) => {
-			const tag = (e.target as HTMLElement)?.tagName;
-			if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag))
+		const onKeyDown = (event: KeyboardEvent) => {
+			const target = event.target as HTMLElement | null;
+			if (
+				target &&
+				([
+					'INPUT',
+					'TEXTAREA',
+					'SELECT',
+					'BUTTON',
+					'A',
+				].includes(target.tagName) ||
+					target.isContentEditable ||
+					target.closest('[role="menu"]'))
+			)
 				return;
-			if (e.code === 'Space') {
-				e.preventDefault();
+			if (event.code === 'Space') {
+				event.preventDefault();
 				this.regenerate();
 			}
-			if (e.code === 'KeyP') {
-				e.preventDefault();
+			if (event.code === 'KeyP') {
+				event.preventDefault();
 				this.exportMode = !this.exportMode;
 			}
 		};
@@ -198,6 +312,7 @@ export default class PaletteGennyTool extends Component {
 			);
 	});
 
+	/** New colours for the unlocked slots; each spins past fillers from the strategy. */
 	regenerate = () => {
 		const lockedHexes = this.colours
 			.filter((colour) => colour.locked)
@@ -207,174 +322,125 @@ export default class PaletteGennyTool extends Component {
 			this.strategy,
 			lockedHexes,
 		);
+		let order = 0;
 		this.colours.forEach((colour, i) => {
 			if (colour.locked) return;
-			this.colours[i] = swatch(fresh[i]!);
+			const next = fresh[i]!;
+			const fillers = generatePalette(
+				passes.first + order * passes.extra,
+				this.strategy,
+			);
+			this.spins[i] = {
+				token: ++this.#token,
+				panels: [
+					next,
+					...fillers.reverse(),
+					colour.hex,
+				],
+				delay: order * timing.stagger,
+				duration: timing.spin + order * timing.extra,
+			};
+			this.colours[i] = { ...swatch(next) };
+			order += 1;
 		});
 	};
 
-	setStrategyOpen = (open: boolean) => {
-		this.strategyOpen = open;
+	landed = (index: number) => {
+		const spin = this.spins[index];
+		if (spin) this.spins[index] = { ...spin, panels: [] };
 	};
 
-	chooseStrategy = (strategy: PaletteStrategy) => {
-		this.strategy = strategy;
-		this.strategyOpen = false;
+	pickCategory = (index: number) => {
+		this.pickStrategy(0, CATEGORIES[index]!.key);
+	};
+
+	pickStrategy = (index: number, category = this.category) => {
+		this.strategy = strategiesIn(category)[index]!;
+		this.regenerate();
 	};
 
 	addColour = () => {
-		if (this.atMax) return;
+		if (this.colours.length >= MAX_COLOURS) return;
 		const seeds = this.colours.map((colour) => colour.hex);
 		this.colours.push(
 			swatch(generatePalette(1, this.strategy, seeds)[0]!),
 		);
 	};
 
-	removeColour = (id: string) => {
+	removeAt = (index: number) => {
 		if (this.atMin) return;
-		const i = this.colours.findIndex((c) => c.id === id);
-		if (i !== -1) this.colours.splice(i, 1);
+		this.colours.splice(index, 1);
+		this.spins.splice(index, 1);
+		if (this.widened === index) this.widened = undefined;
+		else if (this.widened !== undefined && this.widened > index)
+			this.widened -= 1;
 	};
 
-	removeLast = () => {
-		if (!this.atMin) this.colours.pop();
+	setCount = (count: number) => {
+		while (
+			this.colours.length < count &&
+			this.colours.length < MAX_COLOURS
+		)
+			this.addColour();
+		while (this.colours.length > count && !this.atMin)
+			this.removeAt(this.colours.length - 1);
 	};
 
-	toggleLock = (id: string) => {
-		const i = this.colours.findIndex((c) => c.id === id);
-		if (i === -1) return;
-		this.colours[i] = {
-			...this.colours[i]!,
-			locked: !this.colours[i]!.locked,
-		};
+	toggleLock = (index: number) => {
+		const colour = this.colours[index];
+		if (colour)
+			this.colours[index] = {
+				...colour,
+				locked: !colour.locked,
+			};
 	};
 
-	// hex reaches inline style
-	updateColour = (id: string, event: Event) => {
+	// hex reaches inline style; picked colours lock
+	edit = (index: number, event: Event) => {
 		const hex = (event.target as HTMLInputElement).value;
-		if (!hexToRgb(hex)) return;
-		const i = this.colours.findIndex((c) => c.id === id);
-		if (i !== -1) this.colours[i] = { ...this.colours[i]!, hex };
+		const colour = this.colours[index];
+		if (!colour || !parseHex(hex)) return;
+		this.colours[index] = { ...colour, hex, locked: true };
 	};
 
-	get collectionCategories() {
-		return Object.entries(COLLECTION_CATEGORIES).map(
-			([key, meta]) => ({
-				key,
-				label: meta.label,
-			}),
-		);
+	widen = (index: number) => {
+		window.clearTimeout(this.#closingTimer);
+		if (this.widened === index) {
+			this.widened = undefined;
+			this.closing = index;
+			// the .pg-col flex transition
+			this.#closingTimer = window.setTimeout(
+				() => (this.closing = undefined),
+				500,
+			);
+		} else {
+			this.widened = index;
+			this.closing = undefined;
+		}
+	};
+
+	willDestroy() {
+		super.willDestroy();
+		window.clearTimeout(this.#closingTimer);
 	}
 
-	// slug mirrors collection file
-	get exportId() {
-		return this.exportName
-			.toLowerCase()
-			.replace(/[^a-z0-9\s-]/g, '')
-			.replace(/\s+/g, '-')
-			.replace(/-+/g, '-')
-			.trim();
-	}
-
-	// trailing comma for paste
-	get exportJson() {
-		if (!this.exportName.trim()) return '';
-		return (
-			JSON.stringify(
-				{
-					id: this.exportId,
-					name: this.exportName.trim(),
-					colors: this.colours.map((c) => c.hex),
-					category: this.exportCategory,
-				},
-				null,
-				2,
-			) + ','
-		);
-	}
-
-	closeExport = () => {
-		this.exportMode = false;
+	menu = (index: number, item: CanonMenuItem) => {
+		const colour = this.colours[index];
+		if (!colour) return;
+		if (item.title === 'Copy') this.copy(this.format(colour.hex));
+		else if (item.title === 'Remove') this.removeAt(index);
+		else if (item.title === 'Edit colour')
+			document.querySelectorAll<HTMLInputElement>(
+				'.palette-genny .pg-col-picker',
+			)[index]?.showPicker();
+		else this.toggleLock(index);
 	};
 
-	setExportName = (e: Event) => {
-		this.exportName = (e.target as HTMLInputElement).value;
-	};
+	copy = (value: string) => void this.toast.copy(value);
 
-	setExportCategory = (e: Event) => {
-		this.exportCategory = (e.target as HTMLSelectElement)
-			.value as PaletteCollectionCategory;
-	};
+	copyAll = () => this.copy(this.values.join(', '));
 
-	setImportText = (e: Event) => {
-		this.importText = (e.target as HTMLTextAreaElement).value;
-	};
-
-	copyExportJson = () => {
-		if (this.exportJson)
-			void this.copy(this.exportJson, 'export-json');
-	};
-
-	// one hex per line
-	loadFromText = () => {
-		const parsed = this.importText
-			.trim()
-			.split('\n')
-			.map((line) => line.trim().replace(/^#/, ''))
-			.filter((hex) => /^[a-f\d]{6}$/i.test(hex))
-			.map((hex) => `#${hex}`);
-		if (parsed.length < MIN_COLOURS) return;
-		this.colours.splice(
-			0,
-			this.colours.length,
-			...parsed.map(swatch),
-		);
-		this.importText = '';
-	};
-
-	copy = async (value: string, label: string) => {
-		await navigator.clipboard.writeText(value);
-		this.copied = label;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			1500,
-		);
-	};
-
-	copySwatch = (colour: PaletteColour, key: string) =>
-		this.copy(this.colourNotation.format(colour.hex), key);
-
-	copyAll = () =>
-		this.copy(
-			this.colours
-				.map((c) => this.colourNotation.format(c.hex))
-				.join(', '),
-			'all',
-		);
-
-	copyCss = () =>
-		this.copy(
-			`:root {\n${this.colours
-				.map(
-					(c, i) =>
-						`  --palette-${i + 1}: ${this.colourNotation.format(c.hex)};`,
-				)
-				.join('\n')}\n}`,
-			'css',
-		);
-
-	copyJson = () =>
-		this.copy(
-			JSON.stringify(
-				this.colours.map((c) =>
-					this.colourNotation.format(c.hex),
-				),
-				null,
-				2,
-			),
-			'json',
-		);
+	copyJson = () => this.copy(JSON.stringify(this.values, null, 2));
 
 	downloadImage = () => {
 		const width = 1200,
@@ -420,32 +486,248 @@ export default class PaletteGennyTool extends Component {
 		downloadUrl(canvas.toDataURL('image/png'), 'palette.png');
 	};
 
+	get collectionCategories() {
+		return Object.entries(COLLECTION_CATEGORIES).map(
+			([key, meta]) => ({
+				key,
+				label: meta.label,
+			}),
+		);
+	}
+
+	get exportId() {
+		return slug(this.exportName);
+	}
+
+	// trailing comma for paste
+	get exportJson() {
+		if (!this.exportName.trim()) return '';
+		return (
+			JSON.stringify(
+				{
+					id: this.exportId,
+					name: this.exportName.trim(),
+					colors: this.colours.map((c) => c.hex),
+					category: this.exportCategory,
+				},
+				null,
+				2,
+			) + ','
+		);
+	}
+
+	closeExport = () => (this.exportMode = false);
+
+	setExportName = (event: Event) =>
+		(this.exportName = (event.target as HTMLInputElement).value);
+
+	setExportCategory = (event: Event) =>
+		(this.exportCategory = (event.target as HTMLSelectElement)
+			.value as PaletteCollectionCategory);
+
+	setImportText = (event: Event) =>
+		(this.importText = (event.target as HTMLTextAreaElement).value);
+
+	copyExportJson = () => {
+		if (this.exportJson) this.copy(this.exportJson);
+	};
+
+	loadFromText = () => {
+		const parsed = hexesFromLines(this.importText);
+		if (!parsed) return;
+		this.colours.splice(
+			0,
+			this.colours.length,
+			...parsed.map(swatch),
+		);
+		this.spins.splice(0, this.spins.length);
+		this.widened = undefined;
+		this.importText = '';
+	};
+
 	<template>
-		<div class="dt-palette" {{this.shortcuts}}>
-			<div class="dt-palette-frame">
-				<div
-					class="dt-palette-swatches
-						{{if
-							this.isGrid
-							'is-grid'
-							'is-row'
-						}}
-						cols-{{this.gridColumns}}"
+		<CanonSplit
+			class="palette-genny"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			{{this.shortcuts}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{1}}
+					@maxHeight={{640}}
+					@background="var(--canon-muted)"
 				>
+					<Reels
+						@columns={{this.columns}}
+						@widened={{this.isWidened}}
+						@onWiden={{this.widen}}
+						@onLock={{this.toggleLock}}
+						@onEdit={{this.edit}}
+						@onLanded={{this.landed}}
+						@onMenu={{this.menu}}
+						@onCopy={{this.copy}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						@title="Category"
+						@form="stacked"
+					>
+						<CanonSegmented
+							class="pg-categories"
+							@items={{categoryTitles}}
+							@selected={{this.categoryIndex}}
+							@columns={{3}}
+							@onChange={{this.pickCategory}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Strategy"
+						@form="stacked"
+					>
+						<CanonSegmented
+							class="pg-strategies"
+							@items={{this.strategyTitles}}
+							@selected={{this.strategyIndex}}
+							@columns={{2}}
+							@onChange={{this.pickStrategy}}
+						/>
+					</CanonRow>
+					<p
+						class="pg-description"
+					>{{this.description}}</p>
+					<CanonRow
+						@title="Colours"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonNumberField
+							class="pg-count"
+							@value={{this.colours.length}}
+							@min={{MIN_COLOURS}}
+							@max={{MAX_COLOURS}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setCount}}
+						/>
+					</CanonRow>
+				</CanonRows>
+				{{#if this.exportMode}}
+					<CanonRows
+						class="pg-dev"
+						@framed={{true}}
+					>
+						<CanonHeading
+							@text="Export to Collection (Dev Mode)"
+						/>
+						<button
+							type="button"
+							class="pg-dev-close"
+							{{on
+								"click"
+								this.closeExport
+							}}
+						>Press P to close</button>
+						<label class="pg-dev-field">
+							<span>Palette Name</span>
+							<input
+								id="pg-dev-name"
+								type="text"
+								value={{this.exportName}}
+								placeholder="e.g. Ocean Sunset"
+								{{on
+									"input"
+									this.setExportName
+								}}
+							/>
+						</label>
+						{{#if this.exportId}}
+							<p
+								class="pg-dev-note"
+							>ID:
+								<code
+								>{{this.exportId}}</code></p>
+						{{/if}}
+						<label class="pg-dev-field">
+							<span>Category</span>
+							{{! dev-only: native select }}
+							<select
+								id="pg-dev-category"
+								{{on
+									"change"
+									this.setExportCategory
+								}}
+							>
+								{{#each
+									this.collectionCategories
+									as |cat|
+								}}
+									<option
+										value={{cat.key}}
+										selected={{eq
+											cat.key
+											this.exportCategory
+										}}
+									>{{cat.label}}</option>
+								{{/each}}
+							</select>
+						</label>
+						<label class="pg-dev-field">
+							<span>Import Colours
+								(one per line,
+								no #)</span>
+							<textarea
+								id="pg-dev-import"
+								rows="4"
+								value={{this.importText}}
+								{{on
+									"input"
+									this.setImportText
+								}}
+							></textarea>
+						</label>
+						<CanonButton
+							class="pg-dev-load"
+							@kind="cell"
+							@text="Load"
+							@disabled={{if
+								this.importText
+								false
+								true
+							}}
+							@onClick={{this.loadFromText}}
+						/>
+						{{#if this.exportJson}}
+							<CanonCodeBlock
+								class="pg-dev-json"
+								@code={{this.exportJson}}
+								@language="JSON Output"
+							/>
+							<CanonButton
+								class="pg-dev-copy"
+								@kind="cell"
+								@text="Copy"
+								@icon={{Copy}}
+								@onClick={{this.copyExportJson}}
+							/>
+						{{/if}}
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Colours" />
 					{{#each
 						this.rows key="colour.id"
 						as |row|
 					}}
-						<div class="dt-swatch">
+						<div
+							class="pg-row canon-colour-card canon-colour-card--row"
+						>
 							<span
-								class="dt-swatch-fill"
-								title="Click to edit colour"
+								class="pg-row-swatch canon-colour-card-swatch"
+								style={{row.fill}}
 							>
-								<span
-									class="dt-swatch-colour"
-									style={{row.fillStyle}}
-									aria-hidden="true"
-								></span>
 								<input
 									type="color"
 									value={{row.colour.hex}}
@@ -453,627 +735,121 @@ export default class PaletteGennyTool extends Component {
 									{{on
 										"input"
 										(fn
-											this.updateColour
-											row.colour.id
+											this.edit
+											row.index
 										)
 									}}
 								/>
-								<span
-									class="dt-swatch-index"
-									style={{row.contrastStyle}}
-								>{{row.number}}</span>
-								{{#if
-									row.colour.locked
-								}}
-									<Icon
-										@name="lock"
-										class="dt-swatch-lock"
-										style={{row.contrastStyle}}
-									/>
-								{{/if}}
 							</span>
-
 							<div
-								class="dt-swatch-caption"
+								class="canon-colour-card-info"
 							>
 								<div
-									class="dt-swatch-value"
-								>{{row.value}}</div>
-								<div
-									class="dt-swatch-name"
+									class="canon-colour-card-name"
 								>{{row.name}}</div>
+								<CanonValueLine
+									class="pg-row-value"
+									@label={{this.notationLabel}}
+									@value={{row.value}}
+								/>
 							</div>
-
 							<div
-								class="dt-swatch-bar"
+								class="pg-row-actions"
 							>
-								<button
-									type="button"
-									class="dt-swatch-btn
-										{{if
-											row.colour.locked
-											'is-locked'
-										}}"
-									aria-label={{if
+								<CanonButton
+									class="pg-row-lock"
+									@kind="cell"
+									@icon={{if
+										row.colour.locked
+										Lock
+										Unlock
+									}}
+									@selected={{row.colour.locked}}
+									@label={{if
 										row.colour.locked
 										"Unlock colour"
 										"Lock colour"
 									}}
-									{{on
-										"click"
-										(fn
-											this.toggleLock
-											row.colour.id
-										)
+									aria-pressed={{if
+										row.colour.locked
+										"true"
+										"false"
 									}}
-								>
-									<Icon
-										@name={{if
-											row.colour.locked
-											"lock"
-											"unlock"
-										}}
-									/>
-								</button>
-								<button
-									type="button"
-									class="dt-swatch-btn"
-									aria-label="Copy colour"
-									{{on
-										"click"
-										(fn
-											this.copySwatch
-											row.colour
-											row.colour.id
-										)
+									@onClick={{fn
+										this.toggleLock
+										row.index
 									}}
-								>
-									<Icon
-										@name={{if
-											(eq
-												this.copied
-												row.colour.id
-											)
-											"check"
-											"copy"
-										}}
-									/>
-								</button>
-								<button
-									type="button"
-									class="dt-swatch-btn is-danger"
-									aria-label="Remove colour"
-									disabled={{this.atMin}}
-									{{on
-										"click"
-										(fn
-											this.removeColour
-											row.colour.id
-										)
+								/>
+								<LinkTo
+									class="pg-row-shades"
+									@route="tools.tool"
+									@model="tailwind-shades"
+									@query={{hash
+										color=row.colour.hex
 									}}
-								>
-									<Icon
-										@name="trash-2"
-									/>
-								</button>
+									title="Generate Tailwind shades"
+									aria-label="Generate Tailwind shades"
+								><IconSvg
+										@name="wind"
+									/></LinkTo>
+								<CanonButton
+									class="pg-row-remove"
+									@kind="cell"
+									@icon={{Trash}}
+									@label="Remove colour"
+									@disabled={{this.atMin}}
+									@onClick={{fn
+										this.removeAt
+										row.index
+									}}
+								/>
 							</div>
 						</div>
 					{{/each}}
-				</div>
-
-				{{#if this.exportMode}}
-					<div class="dt-export-panel">
-						<div class="dt-export-head">
-							<h3>Export to Collection
-								(Dev Mode)</h3>
-							<button
-								type="button"
-								{{on
-									"click"
-									this.closeExport
-								}}
-							>
-								Press P to close
-							</button>
-						</div>
-
-						<div class="dt-export-fields">
-							<div>
-								<label
-									for="dt-export-name"
-								>Palette Name</label>
-								<input
-									id="dt-export-name"
-									type="text"
-									value={{this.exportName}}
-									placeholder="e.g. Ocean Sunset"
-									{{on
-										"input"
-										this.setExportName
-									}}
-								/>
-								{{#if
-									this.exportId
-								}}
-									<p
-										class="dt-export-note"
-									>ID:
-										<code
-										>{{this.exportId}}</code></p>
-								{{/if}}
-							</div>
-
-							<div>
-								<label
-									for="dt-export-cat"
-								>Category</label>
-								{{! dev-only: native select }}
-								<select
-									id="dt-export-cat"
-									{{on
-										"change"
-										this.setExportCategory
-									}}
-								>
-									{{#each
-										this.collectionCategories
-										as |cat|
-									}}
-										<option
-											value={{cat.key}}
-											selected={{eq
-												cat.key
-												this.exportCategory
-											}}
-										>{{cat.label}}</option>
-									{{/each}}
-								</select>
-							</div>
-						</div>
-
-						<div class="dt-export-import">
-							<label
-								for="dt-export-import"
-							>Import Colors (one per
-								line, no #)</label>
-							<div
-								class="dt-export-import-row"
-							>
-								<textarea
-									id="dt-export-import"
-									rows="4"
-									value={{this.importText}}
-									{{on
-										"input"
-										this.setImportText
-									}}
-								></textarea>
-								<button
-									type="button"
-									disabled={{unless
-										this.importText
-										true
-										false
-									}}
-									{{on
-										"click"
-										this.loadFromText
-									}}
-								>Load</button>
-							</div>
-						</div>
-
-						{{#if this.exportJson}}
-							<div
-								class="dt-export-json"
-							>
-								<div
-									class="dt-export-json-head"
-								>
-									<span
-									>JSON
-										Output</span>
-									<button
-										type="button"
-										{{on
-											"click"
-											this.copyExportJson
-										}}
-									>
-										<Icon
-											@name={{if
-												(eq
-													this.copied
-													"export-json"
-												)
-												"check"
-												"copy"
-											}}
-										/>
-										{{if
-											(eq
-												this.copied
-												"export-json"
-											)
-											"Copied!"
-											"Copy"
-										}}
-									</button>
-								</div>
-								<pre
-								>{{this.exportJson}}</pre>
-							</div>
-						{{/if}}
-					</div>
-				{{/if}}
-
-				<div class="dt-palette-controls">
-					<Popover
-						@open={{this.strategyOpen}}
-						@onOpenChange={{this.setStrategyOpen}}
-					>
-						<PopoverTrigger
-							@asChild={{true}}
-							as |trigger|
-						>
-							<button
-								type="button"
-								class="dt-strategy"
-								aria-label="Choose palette strategy"
-								{{trigger.modifiers}}
-							>
-								<span
-									class="dt-strategy-text"
-								>
-									<span
-										class="dt-strategy-name"
-									>{{this.strategyInfo.name}}</span>
-									<span
-										class="dt-strategy-desc"
-									>{{this.strategyInfo.description}}</span>
-								</span>
-								<Icon
-									@name="chevrons-up-down"
-									class="dt-strategy-chevron"
-								/>
-							</button>
-						</PopoverTrigger>
-						<PopoverContent
-							@align="start"
-							class="dt-strategy-popover"
-						>
-							<Command>
-								<CommandInput
-									@placeholder="Search strategies…"
-								/>
-								<CommandList>
-									<CommandEmpty
-									>No
-										strategy
-										found.</CommandEmpty>
-									{{#each
-										this.categories
-										as |category|
-									}}
-										<CommandGroup
-											@heading={{category.label}}
-										>
-											{{#each
-												category.strategies
-												as |entry|
-											}}
-												<CommandItem
-													@value="{{entry.info.name}} {{entry.info.description}}"
-													@onSelect={{fn
-														this.chooseStrategy
-														entry.key
-													}}
-												>
-													<Icon
-														@name="check"
-														class="dt-strategy-check
-															{{if
-																(eq
-																	this.strategy
-																	entry.key
-																)
-																'is-on'
-															}}"
-													/>
-													<span
-														class="dt-strategy-text"
-													>
-														<span
-															class="dt-strategy-name"
-														>{{entry.info.name}}</span>
-														<span
-															class="dt-strategy-desc"
-														>{{entry.info.description}}</span>
-													</span>
-												</CommandItem>
-											{{/each}}
-										</CommandGroup>
-									{{/each}}
-								</CommandList>
-							</Command>
-						</PopoverContent>
-					</Popover>
-
-					<button
-						type="button"
-						class="dt-generate"
-						{{on "click" this.regenerate}}
-					>
-						<Icon @name="shuffle" />
-						Generate
-					</button>
-
-					<div class="dt-count">
-						<button
-							type="button"
-							aria-label="Remove colour"
-							disabled={{this.atMin}}
-							{{on
-								"click"
-								this.removeLast
+					<CanonGrid @columns={{3}}>
+						<CanonButton
+							class="pg-copy-all"
+							@kind="cell"
+							@text="Copy Colours"
+							@icon={{Copy}}
+							@onClick={{this.copyAll}}
+						/>
+						<CanonButton
+							class="pg-json"
+							@kind="cell"
+							@text="JSON"
+							@icon={{Braces}}
+							@onClick={{this.copyJson}}
+						/>
+						<CanonButton
+							class="pg-image"
+							@kind="cell"
+							@text={{passAlong
+								"Download Image"
 							}}
-						>
-							<Icon @name="minus" />
-						</button>
-						<span
-						>{{this.colours.length}}</span>
-						<button
-							type="button"
-							aria-label="Add colour"
-							disabled={{this.atMax}}
-							{{on
-								"click"
-								this.addColour
-							}}
-						>
-							<Icon @name="plus" />
-						</button>
-					</div>
-				</div>
-
-				<div class="dt-palette-export">
-					<span
-						class="dt-palette-label"
-					>Export</span>
-					<div class="segmented dt-export-grid">
-						<button
-							type="button"
-							{{on
-								"click"
-								this.copyAll
-							}}
-						>
-							<Icon
-								@name={{if
-									(eq
-										this.copied
-										"all"
-									)
-									"check"
-									"copy"
-								}}
-							/>
-							Copy Colours
-						</button>
-						<button
-							type="button"
-							{{on
-								"click"
-								this.copyCss
-							}}
-						>
-							<Icon
-								@name={{if
-									(eq
-										this.copied
-										"css"
-									)
-									"check"
-									"copy"
-								}}
-							/>
-							CSS Variables
-						</button>
-						<button
-							type="button"
-							{{on
-								"click"
-								this.copyJson
-							}}
-						>
-							<Icon
-								@name={{if
-									(eq
-										this.copied
-										"json"
-									)
-									"check"
-									"copy"
-								}}
-							/>
-							JSON
-						</button>
-						<button
-							type="button"
-							{{on
-								"click"
-								this.downloadImage
-							}}
-						>
-							<DownloadLabel
-								@label="Download Image"
-							/>
-						</button>
-					</div>
-				</div>
-
-				<div class="dt-palette-list">
-					<span
-						class="dt-palette-label"
-					>Colours</span>
-					<div class="dt-colour-rows">
-						{{#each
-							this.rows
-							key="colour.id"
-							as |row|
-						}}
-							<div
-								class="dt-colour-row"
-							>
-								<span
-									class="dt-colour-row-swatch"
-								>
-									<input
-										type="color"
-										value={{row.colour.hex}}
-										aria-label="Edit colour {{row.value}}"
-										{{on
-											"input"
-											(fn
-												this.updateColour
-												row.colour.id
-											)
-										}}
-									/>
-									<span
-										style={{row.fillStyle}}
-										aria-hidden="true"
-									></span>
-								</span>
-
-								<div
-									class="dt-colour-row-info"
-								>
-									<div
-										class="dt-colour-row-head"
-									>
-										<span
-											class="dt-colour-row-value"
-										>{{row.value}}</span>
-										<span
-											class="dt-colour-row-name"
-										>{{row.name}}</span>
-									</div>
-									<div
-										class="dt-colour-row-meta"
-									>
-										{{row.rgbLabel}}
-										{{#if
-											row.oklchLabel
-										}}
-											<span
-												class="dt-sep"
-											>|</span>
-											{{row.oklchLabel}}
-										{{/if}}
-									</div>
-								</div>
-
-								<div
-									class="dt-colour-row-actions"
-								>
-									<button
-										type="button"
-										class="dt-icon-btn
-											{{if
-												row.colour.locked
-												'is-locked'
-											}}"
-										aria-label={{if
-											row.colour.locked
-											"Unlock colour"
-											"Lock colour"
-										}}
-										{{on
-											"click"
-											(fn
-												this.toggleLock
-												row.colour.id
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												row.colour.locked
-												"lock"
-												"unlock"
-											}}
-										/>
-									</button>
-									<button
-										type="button"
-										class="dt-icon-btn"
-										aria-label="Copy colour"
-										{{on
-											"click"
-											(fn
-												this.copySwatch
-												row.colour
-												row.copyKey
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												(eq
-													this.copied
-													row.copyKey
-												)
-												"check"
-												"copy"
-											}}
-										/>
-									</button>
-									<LinkTo
-										@route="tools.tool"
-										@model="tailwind-shades"
-										@query={{hash
-											color=row.colour.hex
-										}}
-										class="dt-icon-btn"
-										title="Generate Tailwind shades"
-									>
-										<Icon
-											@name="wind"
-										/>
-									</LinkTo>
-									{{#unless
-										this.atMin
-									}}
-										<button
-											type="button"
-											class="dt-icon-btn is-danger"
-											aria-label="Remove colour"
-											{{on
-												"click"
-												(fn
-													this.removeColour
-													row.colour.id
-												)
-											}}
-										>
-											<Icon
-												@name="trash-2"
-											/>
-										</button>
-									{{/unless}}
-								</div>
-							</div>
-						{{/each}}
-					</div>
-				</div>
-			</div>
-
-			<p class="dt-palette-hint">
-				Press
-				<kbd>Space</kbd>
-				to generate a new palette
-			</p>
-		</div>
+							@icon={{Save}}
+							@onClick={{this.downloadImage}}
+						/>
+					</CanonGrid>
+				</CanonRows>
+				<CanonCodeBlock
+					class="pg-css"
+					@code={{this.css}}
+					@language="CSS Variables"
+				/>
+			</:main>
+			<:footer>
+				<CanonButton
+					class="pg-regenerate"
+					@kind="primary"
+					@text="Regenerate"
+					@icon={{Refresh}}
+					@iconStyle="oversized"
+					@onClick={{this.regenerate}}
+					title="Space"
+					aria-keyshortcuts="Space"
+				/>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

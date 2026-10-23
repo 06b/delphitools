@@ -1,0 +1,42 @@
+.paper-popover-trigger {
+	inline-size: 100%;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	text-align: start;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	appearance: none;
+}
+
+.paper-popover-trigger:disabled {
+	cursor: default;
+}
+
+.paper-popover-trigger:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* position-area sets containing block */
+.paper-popover:popover-open {
+	position-try-order: most-block-size;
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-panel-padding);
+	inline-size: min(380px, calc(100vw - 32px));
+	max-block-size: min(640px, calc(100% - 16px));
+	padding-block: var(--canon-panel-padding);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	background: var(--canon-background);
+}
+
+.paper-popover .canon-text-cell.paper-find {
+	inline-size: 100%;
+	min-block-size: var(--canon-primary-height);
+	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+}

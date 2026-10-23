@@ -1,324 +1,384 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { formatBytes } from 'delphitools-v2/lib/image-compress';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import {
+	maxBytes,
+	rawBase64,
+	tuning,
+} from 'delphitools-v2/components/tools/base64-image-encoder/mosaic';
+import Mosaic, {
+	type MosaicImage,
+} from 'delphitools-v2/components/tools/base64-image-encoder/picture';
+import './base64-image-encoder/base64-image-encoder.css';
 
-interface EncodedImage {
-	id: string;
-	name: string;
-	base64: string;
-	size: number;
+interface Encoded extends MosaicImage {
+	dataUri: string;
+	bytes: number;
+	sizes: string;
 }
 
-// limits textarea cost
-const MAX_BYTES = 5 * 1024 * 1024;
+const thumbnailSide = 240;
 
-const COPIED_MS = 2000;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Remove = <template><IconSvg @name="x" /></template>;
 
-export function formatSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
 
-export function rawBase64(dataUrl: string): string {
-	return dataUrl.split(',')[1] ?? '';
-}
+const selectAll = (event: Event) =>
+	(event.target as HTMLTextAreaElement).select();
 
-export default class Base64ImageEncoderTool extends Component {
-	@tracked images: EncodedImage[] = [];
-	@tracked dragging = false;
-	@tracked copied: string | null = null;
-	@tracked error: string | null = null;
-
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
-	}
-
-	get countLabel() {
-		const n = this.images.length;
-		return `${n} image${n === 1 ? '' : 's'} encoded`;
-	}
-
-	get rows() {
-		return this.images.map((image) => ({
-			id: image.id,
-			name: image.name,
-			base64: image.base64,
-			raw: rawBase64(image.base64),
-			sizeLabel: formatSize(image.size),
-			rawCopied: this.copied === `raw-${image.id}`,
-			uriCopied: this.copied === `uri-${image.id}`,
-		}));
-	}
-
-	readFile = (file: File) => {
-		this.error = null;
-
-		if (!file.type.startsWith('image/')) {
-			this.error = `Invalid file type: ${file.name}. Please upload an image file.`;
-			return;
-		}
-
-		if (file.size > MAX_BYTES) {
-			this.error = `File ${file.name} is too large (${formatSize(file.size)}). Max allowed size is 5MB to prevent browser freeze.`;
-			return;
-		}
-
+function readDataUri(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
 		const reader = new FileReader();
-		reader.onload = () => {
-			this.images = [
-				{
-					id: crypto.randomUUID(),
-					name: file.name,
-					base64: reader.result as string,
-					size: file.size,
-				},
-				...this.images,
-			];
-		};
-		reader.onerror = () => {
-			this.error = `Failed to read file ${file.name}`;
-		};
+		reader.onload = () => resolve(reader.result as string);
+		reader.onerror = () =>
+			reject(reader.error ?? new Error('read'));
 		reader.readAsDataURL(file);
+	});
+}
+
+// an Image decodes SVG too, which createImageBitmap does not
+async function thumbnailOf(dataUri: string) {
+	const image = new Image();
+	image.src = dataUri;
+	try {
+		await image.decode();
+	} catch {
+		return undefined;
+	}
+	const { naturalWidth: width, naturalHeight: height } = image;
+	if (!width || !height) return undefined;
+	const scale = Math.min(1, thumbnailSide / Math.max(width, height));
+	const canvas = document.createElement('canvas');
+	canvas.width = Math.max(1, Math.round(width * scale));
+	canvas.height = Math.max(1, Math.round(height * scale));
+	canvas.getContext('2d')?.drawImage(
+		image,
+		0,
+		0,
+		canvas.width,
+		canvas.height,
+	);
+	return canvas;
+}
+
+/** The port of Base64ImageEncoderViewController. */
+export default class Base64ImageEncoder extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+	@tracked images: Encoded[] = [];
+	@tracked selected?: string;
+	@tracked skipped: string[] = [];
+
+	// ?b64Sample: the iOS -b64Samples launch argument, with a drawn image
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		if (
+			new URLSearchParams(window.location.search).has(
+				'b64Sample',
+			)
+		)
+			void drawnSample().then((file) => this.load(file));
+	}
+
+	get shown() {
+		return this.images.find((image) => image.id === this.selected);
+	}
+
+	get lit() {
+		return this.images.length > 1 ? this.selected : undefined;
+	}
+
+	// ponytail: four sizes by count; past about 24 the strip clips; the encoded list names them all
+	get thumbSize() {
+		const count = this.images.length;
+		if (count === 1) return 'one';
+		if (count <= 6) return 'few';
+		return count <= 12 ? 'many' : 'lots';
+	}
+
+	get hasList() {
+		return this.images.length > 0 || this.skipped.length > 0;
+	}
+
+	loadFiles = (files: File[]) => {
+		for (const file of files) void this.load(file);
 	};
 
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		for (const file of Array.from(input.files ?? []))
-			this.readFile(file);
-		// reset permits reselect
-		input.value = '';
+	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
 	};
 
-	handleDragOver = (event: DragEvent) => {
+	// a drop on the banner or the list adds too; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const files = [...(event.dataTransfer?.files ?? [])];
+		if (files.length === 0) return;
 		event.preventDefault();
-		this.dragging = true;
+		this.loadFiles(files);
 	};
 
-	handleDragLeave = (event: DragEvent) => {
-		event.preventDefault();
-		this.dragging = false;
+	load = async (file: File) => {
+		const name = file.name || 'image';
+		if (!matchesAccept(file, 'image/*')) {
+			this.skipped = [
+				...this.skipped,
+				`${name} is not an image`,
+			];
+			return;
+		}
+		if (file.size > maxBytes) {
+			this.skipped = [
+				...this.skipped,
+				`${name} is ${formatBytes(file.size)}, over the 5 MB limit`,
+			];
+			return;
+		}
+		let dataUri: string;
+		try {
+			dataUri = await readDataUri(file);
+		} catch {
+			this.skipped = [
+				...this.skipped,
+				`${name} is not an image`,
+			];
+			return;
+		}
+		const thumbnail = await thumbnailOf(dataUri);
+		if (this.isDestroying) return;
+		const raw = rawBase64(dataUri);
+		const image: Encoded = {
+			id: crypto.randomUUID(),
+			name,
+			raw,
+			dataUri,
+			bytes: file.size,
+			uriBytes: dataUri.length,
+			sizes: `${formatBytes(file.size)} → ${formatBytes(dataUri.length)}`,
+			thumbnail,
+		};
+		this.images = [image, ...this.images];
+		this.selected = image.id;
 	};
 
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		this.dragging = false;
-		for (const file of Array.from(event.dataTransfer?.files ?? []))
-			this.readFile(file);
-	};
+	select = (id: string) => (this.selected = id);
 
 	remove = (id: string) => {
 		this.images = this.images.filter((image) => image.id !== id);
+		if (this.selected === id) this.selected = this.images[0]?.id;
 	};
 
 	clearAll = () => {
 		this.images = [];
-		this.error = null;
+		this.skipped = [];
+		this.selected = undefined;
 	};
 
-	selectAll = (event: Event) => {
-		(event.target as HTMLTextAreaElement).select();
-	};
+	copyRaw = (image: Encoded) => void this.toast.copy(image.raw);
 
-	copy = async (text: string, key: string) => {
-		await navigator.clipboard.writeText(text);
-		this.copied = key;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	};
-
-	copyRaw = (row: { id: string; raw: string }) =>
-		void this.copy(row.raw, `raw-${row.id}`);
-
-	copyUri = (row: { id: string; base64: string }) =>
-		void this.copy(row.base64, `uri-${row.id}`);
+	copyUri = (image: Encoded) => void this.toast.copy(image.dataUri);
 
 	<template>
-		<div
-			class="dt-b64"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="b64-encoder"
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
 		>
-			{{#if this.error}}
-				<p class="dt-b64-error">{{this.error}}</p>
-			{{/if}}
-
-			<div class="dt-b64-frame">
-				<label
-					class="dt-b64-drop
-						{{if
-							this.dragging
-							'is-dragging'
-						}}"
-					{{on "dragover" this.handleDragOver}}
-					{{on "dragleave" this.handleDragLeave}}
-					{{on "drop" this.handleDrop}}
-				>
-					<input
-						type="file"
-						accept="image/*"
-						multiple
-						class="dt-sr-only"
-						{{on
-							"change"
-							this.handleFileSelect
-						}}
-					/>
-					<Icon @name="upload" />
-					<span class="dt-b64-drop-title">Drop
-						images here</span>
-					<span class="dt-b64-drop-hint">or click
-						to select files, or paste</span>
-				</label>
-			</div>
-
-			{{#if this.rows.length}}
-				<div class="dt-b64-frame">
-					<div class="dt-b64-bar">
-						<span
-							class="dt-b64-bar-title"
-						>{{this.countLabel}}</span>
-						<button
-							type="button"
-							class="dt-b64-bar-btn"
-							{{on
-								"click"
-								this.clearAll
-							}}
-						>Clear all</button>
-					</div>
-
-					{{#each this.rows key="id" as |row|}}
-						<div class="dt-b64-item">
+			<:banner>
+				<CanonCanvas @height={{tuning.height}}>
+					<Mosaic @image={{this.shown}} />
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Images" />
+					<div
+						class="b64-drop-wrap
+							{{if
+								this.images.length
+								'b64-drop-wrap--filled'
+							}}"
+					>
+						<CanonDropZone
+							class="b64-drop"
+							@prompt="Drop images here"
+							@accept=""
+							@multiple={{true}}
+							@paste={{false}}
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
+						/>
+						{{#if this.images.length}}
 							<div
-								class="dt-b64-head"
+								class="b64-drop-shown b64-drop-shown--{{this.thumbSize}}"
+								aria-hidden="true"
+							>
+								{{#each
+									this.images
+									key="id"
+									as |image|
+								}}
+									<img
+										src={{image.dataUri}}
+										alt=""
+									/>
+								{{/each}}
+							</div>
+						{{/if}}
+					</div>
+					{{#if this.skipped.length}}
+						<CanonHeading @text="Skipped" />
+						{{#each
+							this.skipped
+							as |reason|
+						}}
+							<CanonStatus
+								@text={{reason}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/each}}
+					{{/if}}
+					{{#if this.hasList}}
+						<CanonButton
+							class="b64-clear"
+							@text="Clear all"
+							@icon={{Trash}}
+							@onClick={{this.clearAll}}
+						/>
+					{{/if}}
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				{{#each this.images key="id" as |image|}}
+					<CanonRows
+						class="b64-block"
+						@framed={{true}}
+					>
+						<div class="b64-top">
+							<button
+								type="button"
+								class="b64-head
+									{{if
+										(isLit
+											this.lit
+											image.id
+										)
+										'b64-head--lit'
+									}}"
+								aria-pressed={{if
+									this.lit
+									(if
+										(isLit
+											this.lit
+											image.id
+										)
+										"true"
+										"false"
+									)
+								}}
+								{{on
+									"click"
+									(fn
+										this.select
+										image.id
+									)
+								}}
 							>
 								<span
-									class="dt-b64-thumb"
+									class="b64-thumb"
 								>
 									<img
-										src={{row.base64}}
-										alt={{row.name}}
+										src={{image.dataUri}}
+										alt=""
 									/>
 								</span>
 								<span
-									class="dt-b64-meta"
+									class="b64-meta"
 								>
 									<span
-										class="dt-b64-name"
-									>{{row.name}}</span>
+										class="b64-name"
+									>{{image.name}}</span>
 									<span
-										class="dt-b64-size"
-									>{{row.sizeLabel}}</span>
+										class="b64-size"
+									>{{image.sizes}}</span>
 								</span>
-								<button
-									type="button"
-									class="dt-b64-remove"
-									aria-label="Remove"
-									{{on
-										"click"
-										(fn
-											this.remove
-											row.id
-										)
-									}}
-								>
-									<Icon
-										@name="x"
-									/>
-								</button>
-							</div>
-
-							<div
-								class="dt-b64-body"
-							>
-								<textarea
-									readonly
-									rows="6"
-									class="dt-b64-text"
-									aria-label="Base64 data URI"
-									value={{row.base64}}
-									{{on
-										"click"
-										this.selectAll
-									}}
-								></textarea>
-
-								<div
-									class="segmented dt-b64-actions"
-								>
-									<button
-										type="button"
-										class="dt-b64-copy
-											{{if
-												row.rawCopied
-												'is-copied'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.copyRaw
-												row
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												row.rawCopied
-												"check"
-												"copy"
-											}}
-										/>
-										{{! wording carried over from the Next app }}
-										{{if
-											row.rawCopied
-											"Copied Raw Data"
-											"Copy Raw Base64"
-										}}
-									</button>
-									<button
-										type="button"
-										class="dt-b64-copy
-											{{if
-												row.uriCopied
-												'is-copied'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.copyUri
-												row
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												row.uriCopied
-												"check"
-												"copy"
-											}}
-										/>
-										{{! wording carried over from the Next app }}
-										{{if
-											row.uriCopied
-											"Copied Data URI"
-											"Copy Data URI"
-										}}
-									</button>
-								</div>
-							</div>
+							</button>
+							<CanonButton
+								class="b64-remove"
+								@kind="cell"
+								@icon={{Remove}}
+								@label="Remove"
+								@onClick={{fn
+									this.remove
+									image.id
+								}}
+							/>
 						</div>
-					{{/each}}
-				</div>
-			{{/if}}
-		</div>
+						<textarea
+							class="b64-text"
+							readonly
+							rows="4"
+							aria-label="Base64 data URI"
+							value={{image.dataUri}}
+							{{on "focus" selectAll}}
+							{{on "click" selectAll}}
+						></textarea>
+						<CanonGrid>
+							<CanonButton
+								class="b64-copy-raw"
+								@text="Copy Raw Base64"
+								@icon={{Copy}}
+								@onClick={{fn
+									this.copyRaw
+									image
+								}}
+							/>
+							<CanonButton
+								class="b64-copy-uri"
+								@kind="primary"
+								@text="Copy Data URI"
+								@icon={{Copy}}
+								@onClick={{fn
+									this.copyUri
+									image
+								}}
+							/>
+						</CanonGrid>
+					</CanonRows>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Encoded" />
+						<CanonEmptyRow
+							@text="Data URI"
+						/>
+					</CanonRows>
+				{{/each}}
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function isLit(lit: string | undefined, id: string) {
+	return lit === id;
 }

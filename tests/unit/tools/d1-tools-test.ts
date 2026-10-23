@@ -2,13 +2,10 @@
 
 import { module, test } from 'qunit';
 import { countText } from 'delphitools-v2/components/tools/word-counter';
-import { pxToRem, remToPx } from 'delphitools-v2/components/tools/px-to-rem';
-import { lineHeightPx } from 'delphitools-v2/components/tools/line-height-calc';
 import {
 	looksLikeSvg,
 	formatBytes,
 } from 'delphitools-v2/components/tools/svg-optimiser';
-import { previewHost } from 'delphitools-v2/components/tools/meta-tag-genny';
 
 module('Unit | Tools | D1', function () {
 	module('word-counter', function () {
@@ -54,39 +51,6 @@ module('Unit | Tools | D1', function () {
 		});
 	});
 
-	module('px-to-rem', function () {
-		test('converts against the base', function (assert) {
-			assert.strictEqual(pxToRem(16, 16), '1');
-			assert.strictEqual(pxToRem(24, 16), '1.5');
-			assert.strictEqual(pxToRem(8, 16), '0.5');
-		});
-
-		test('round-trips', function (assert) {
-			for (const px of [1, 12, 16, 37.5, 100]) {
-				const rem = Number(pxToRem(px, 16));
-				assert.strictEqual(
-					Number(remToPx(rem, 16)),
-					px,
-					`${px}px`,
-				);
-			}
-		});
-
-		test('honours a base other than 16', function (assert) {
-			assert.strictEqual(pxToRem(20, 10), '2');
-			assert.strictEqual(remToPx(2, 10), '20');
-		});
-	});
-
-	module('line-height-calc', function () {
-		// one decimal: ratios rarely land on a whole pixel
-		test('multiplies size by ratio, to one decimal place', function (assert) {
-			assert.strictEqual(lineHeightPx(16, 1.5), '24.0');
-			assert.strictEqual(lineHeightPx(20, 1.2), '24.0');
-			assert.strictEqual(lineHeightPx(16, 1.618), '25.9');
-		});
-	});
-
 	module('svg-optimiser', function () {
 		test('recognises an svg by its opening tag', function (assert) {
 			assert.true(
@@ -116,23 +80,6 @@ module('Unit | Tools | D1', function () {
 				/KB|kB/i.test(formatBytes(2048)),
 				formatBytes(2048),
 			);
-		});
-	});
-
-	module('meta-tag-genny', function () {
-		test('takes the hostname out of a url', function (assert) {
-			assert.strictEqual(
-				previewHost(
-					'https://delphi.tools/tools/qr-genny',
-				),
-				'delphi.tools',
-			);
-		});
-
-		// preview must not blank while a url is half-typed
-		test('falls back rather than throwing on a broken url', function (assert) {
-			assert.true(previewHost('not a url').length > 0);
-			assert.true(previewHost('').length > 0);
 		});
 	});
 });

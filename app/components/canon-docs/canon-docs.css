@@ -1,0 +1,566 @@
+/* the docs: one page, one sheet tall */
+.cd-docs {
+	display: flex;
+	block-size: 100%;
+	container: cd-docs / inline-size;
+	background: var(--canon-background);
+}
+
+.cd-head {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-block: 8px 4px;
+}
+
+.cd-title {
+	margin: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title2);
+	font-weight: var(--canon-weight-bold);
+	overflow-wrap: anywhere;
+}
+
+.cd-lede {
+	margin: 0;
+	color: var(--canon-secondary-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-body);
+	line-height: 1.45;
+}
+
+.cd-links {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: var(--canon-frame);
+	background: var(--canon-border);
+}
+
+/* platform marks (Simple Icons): lit where the component exists */
+.cd-ports {
+	display: inline-flex;
+	flex: none;
+	gap: 6px;
+	align-items: center;
+}
+
+.cd-ports--labels {
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.cd-ports-row {
+	padding: var(--canon-panel-padding);
+	background: var(--canon-card);
+}
+
+.cd-port {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	color: var(--canon-foreground);
+}
+
+.cd-port[data-has="false"] {
+	opacity: 0.25;
+}
+
+.cd-brands {
+	display: inline-flex;
+	gap: 8px;
+	margin-inline-end: 8px;
+}
+
+.cd-brand {
+	display: inline-flex;
+}
+
+.cd-brand svg,
+.cd-card-head .cd-brand svg {
+	inline-size: 14px;
+	block-size: 14px;
+	color: currentcolor;
+	fill: currentcolor;
+	translate: none;
+}
+
+.cd-ports--labels .cd-brand svg,
+.cd-brands .cd-brand svg {
+	inline-size: 18px;
+	block-size: 18px;
+}
+
+.cd-block {
+	block-size: 600px;
+	border: var(--canon-frame) solid var(--canon-border);
+	overflow: hidden;
+}
+
+.cd-pager {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--canon-frame);
+}
+
+/* the row's cell gap shows its own background, as between sidebar rows */
+.cd-pager > .canon-sidebar-row {
+	background: var(--canon-border);
+}
+
+.cd-next {
+	grid-column: 2;
+	flex-direction: row-reverse;
+}
+
+.cd-next > .canon-sidebar-row-title {
+	justify-content: flex-end;
+	padding-inline: 0 10px;
+}
+
+/* patterns */
+.cd-halves-picture {
+	display: grid;
+	place-items: center;
+	block-size: 100%;
+}
+
+.cd-halves-shape {
+	inline-size: 50%;
+	aspect-ratio: 1;
+}
+
+.cd-banner-figure {
+	display: grid;
+	place-items: center;
+	block-size: 100%;
+}
+
+.cd-drop-image {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: contain;
+}
+
+/* the component demos, from the kit showcase and gallery */
+.cd-stage {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	align-items: center;
+	justify-content: space-around;
+	padding: var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.cd-icons svg {
+	inline-size: 24px;
+	block-size: 24px;
+}
+
+.cd-rules {
+	align-items: stretch;
+	justify-content: center;
+}
+
+.cd-rule-across {
+	inline-size: 100%;
+}
+
+.cd-swatches {
+	display: flex;
+	block-size: 64px;
+}
+
+.cd-swatches > .canon-swatch {
+	flex: 1;
+}
+
+.cd-wheel-rows {
+	display: grid;
+	grid-auto-rows: 44px;
+	background: var(--canon-card);
+}
+
+.cd-editor {
+	display: flex;
+	block-size: 112px;
+	background: var(--canon-card);
+}
+
+.cd-sidebar-box {
+	display: flex;
+	block-size: 400px;
+	background: var(--canon-card);
+}
+
+.cd-sidebar-rows {
+	display: flex;
+	flex-direction: column;
+	gap: var(--canon-frame);
+	background: var(--canon-border);
+}
+
+.cd-box {
+	block-size: 220px;
+}
+
+.cd-box--split {
+	block-size: 320px;
+}
+
+.cd-bar {
+	inline-size: 100%;
+	max-inline-size: 120px;
+	block-size: 6px;
+}
+
+.cd-art {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	block-size: 100%;
+	background: linear-gradient(
+		to right,
+		var(--canon-primary),
+		var(--canon-destructive)
+	);
+	color: var(--canon-primary-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title2);
+	font-weight: var(--canon-weight-bold);
+}
+
+.cd-loupe {
+	position: absolute;
+}
+
+.cd-fit {
+	display: flex;
+	flex-direction: column;
+	inline-size: 100%;
+	margin: 0;
+	padding: 16px;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-semibold);
+	text-align: start;
+	cursor: pointer;
+}
+
+.cd-swatch {
+	aspect-ratio: 16 / 9;
+	background: var(--canon-primary);
+}
+
+.cd-glyph {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	block-size: 100%;
+	border: var(--canon-hairline) solid var(--canon-border);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-title3);
+	font-weight: var(--canon-weight-bold);
+}
+
+.cd-inline {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+}
+
+.cd-loaders {
+	gap: 16px;
+}
+
+.cd-popover {
+	inline-size: 280px;
+}
+
+.cd-context-area:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.cd-shell-window {
+	block-size: 480px;
+}
+
+.cd-shell--zoomed {
+	block-size: 600px;
+}
+
+.cd-shell--minimised {
+	block-size: auto;
+}
+
+.cd-shell--minimised > :not(.canon-window-bar) {
+	display: none;
+}
+
+.cd-shell-hero {
+	inline-size: 100%;
+	block-size: 56px;
+}
+
+.cd-dimension {
+	position: relative;
+	block-size: 100%;
+}
+
+.cd-dimension-box {
+	position: absolute;
+	background: var(--canon-card);
+	outline: var(--canon-hairline) solid var(--canon-border);
+}
+
+.cd-page .cd-import .canon-value-line-value {
+	font-family: var(--canon-mono-font);
+}
+
+.cd-docs > * {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+/* home: the kit's name over a masonry wall of live patterns */
+.cd-home-head {
+	gap: 10px;
+	padding-block: 24px 12px;
+}
+
+.cd-kit {
+	font-size: clamp(28px, 5cqi, 44px);
+	line-height: 1.05;
+	letter-spacing: -0.01em;
+}
+
+.cd-home-head .cd-lede {
+	max-inline-size: 52ch;
+	font-size: var(--canon-text-title3);
+}
+
+.cd-masonry {
+	columns: 4 300px;
+	column-gap: var(--canon-panel-spacing);
+}
+
+.cd-masonry > .cd-card {
+	margin-block-end: var(--canon-panel-spacing);
+	break-inside: avoid;
+}
+
+.cd-screens {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+	gap: var(--canon-panel-spacing);
+}
+
+.cd-card {
+	background: var(--canon-border);
+}
+
+.cd-card-head {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	min-block-size: 36px;
+	padding-inline: var(--canon-panel-padding) 12px;
+	background: var(--canon-heading-background);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+	text-decoration: none;
+}
+
+.cd-card-head svg {
+	flex: none;
+	inline-size: var(--canon-icon-row);
+	block-size: var(--canon-icon-row);
+	color: var(--canon-primary);
+}
+
+.cd-card-head svg:last-child {
+	color: var(--canon-muted-foreground);
+	transition: translate 160ms ease-out;
+}
+
+.cd-card-title {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+@media (hover: hover) {
+	.cd-card-head:hover {
+		background: var(--canon-accent-bg);
+	}
+
+	.cd-card-head:hover svg:last-child {
+		color: var(--canon-primary);
+		translate: 2px -2px;
+	}
+}
+
+.cd-card-head:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* a layout or screen laid out wide and scaled into the card */
+.cd-thumb {
+	position: relative;
+	aspect-ratio: 16 / 10;
+	overflow: hidden;
+	background: var(--canon-background);
+}
+
+.cd-thumb-inner {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: 0;
+	display: grid;
+	transform-origin: 0 0;
+	pointer-events: none;
+}
+
+.cd-thumb-inner > * {
+	min-block-size: 0;
+}
+
+/* a pattern's own page: the card alone on the muted stage */
+.cd-stage-card {
+	display: flex;
+	justify-content: center;
+	padding: 40px 16px;
+	background: var(--canon-muted);
+}
+
+.cd-stage-card > .cd-card {
+	inline-size: min(100%, 420px);
+}
+
+/* a screen fills the sheet; the bar switches it for its source */
+.cd-screen-page {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	block-size: 100%;
+}
+
+.cd-screen-bar {
+	display: flex;
+	gap: var(--canon-panel-spacing);
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px var(--canon-panel-padding);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.cd-screen-bar .cd-title {
+	font-size: var(--canon-text-title3);
+}
+
+.cd-views {
+	flex: none;
+	inline-size: 180px;
+}
+
+/* the tools' 1200 px column, hairlines once the sheet is wider */
+.cd-screen {
+	display: grid;
+	justify-items: center;
+	min-block-size: 0;
+	container-type: inline-size;
+}
+
+.cd-screen[hidden] {
+	display: none;
+}
+
+.cd-screen > * {
+	box-sizing: border-box;
+	inline-size: 100%;
+	max-inline-size: 1200px;
+	min-block-size: 0;
+}
+
+@container (width > 1200px) {
+	.cd-screen > * {
+		border-inline: var(--canon-hairline) solid var(--canon-border);
+	}
+}
+
+/* card parts */
+.cd-contrast-sample {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	block-size: 100%;
+	padding-inline: 24px;
+	transition:
+		color 200ms ease-out,
+		background-color 200ms ease-out;
+}
+
+.cd-contrast-glyphs {
+	font-family: var(--canon-font);
+	font-size: 56px;
+	font-weight: var(--canon-weight-bold);
+	line-height: 1;
+}
+
+.cd-lamps,
+.cd-loader,
+.cd-timecode {
+	display: flex;
+	gap: 20px;
+	align-items: center;
+	justify-content: center;
+	block-size: 100%;
+}
+
+.cd-lamps .canon-lamps {
+	scale: 2;
+}
+
+.cd-paper {
+	position: relative;
+	block-size: calc(100% - 24px);
+	margin: 12px;
+}
+
+.cd-paper-page {
+	position: absolute;
+	background: var(--canon-paper);
+	box-shadow: 0 1px 6px var(--canon-paper-shadow);
+}
+
+.cd-paper-page,
+.cd-paper .canon-dimension-line {
+	transition-duration: 320ms;
+	transition-property:
+		inset-inline-start, inset-block-start, inline-size, block-size;
+	transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cd-card-head svg:last-child,
+	.cd-contrast-sample,
+	.cd-paper-page,
+	.cd-paper .canon-dimension-line {
+		transition: none;
+	}
+}

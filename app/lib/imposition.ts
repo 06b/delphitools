@@ -1,11 +1,18 @@
 import {
 	PDFDocument,
+	clip,
 	degrees,
+	endPath,
+	popGraphicsState,
+	pushGraphicsState,
+	rectangle,
 	type PDFEmbeddedPage,
 	type PDFPage,
 } from 'pdf-lib';
 
 export const MM_TO_POINTS = 72 / 25.4;
+// 3mm uk/eu; us 1/8in
+export const BLEED_MM = 3;
 
 export interface PaperSize {
 	id: string;
@@ -34,6 +41,8 @@ export interface SheetDefinition {
 	sheetNumber: number;
 	front: PagePlacement[];
 	back: PagePlacement[];
+	/** 0-based; folded layouts. */
+	signature?: number;
 }
 
 export interface ImpositionConfig {
@@ -51,8 +60,10 @@ export interface ImpositionConfig {
 	cropMarks: boolean;
 	nUp?: number;
 	customGrid?: [number, number];
-	/** short-edge adds 180 degrees. */
+	/** top-over-bottom flips half-turn the backs. */
 	duplexFlip?: 'long-edge' | 'short-edge';
+	/** perfect bind; a multiple of 4. */
+	signaturePages?: number;
 }
 
 export interface ImpositionResult {
@@ -206,6 +217,26 @@ function calculateSaddleStitch(
 	config: ImpositionConfig,
 ): ImpositionResult {
 	const totalPages = padToMultiple(Math.max(totalSourcePages, 4), 4);
+	const sheets = nestedSheets(
+		totalPages,
+		0,
+		1,
+		0,
+		totalSourcePages,
+		config,
+	);
+	return makeResult(sheets, totalSourcePages, totalPages);
+}
+
+// one saddle-stitched signature
+function nestedSheets(
+	totalPages: number,
+	base: number,
+	firstSheet: number,
+	signature: number,
+	totalSourcePages: number,
+	config: ImpositionConfig,
+): SheetDefinition[] {
 	const numSheets = totalPages / 4;
 
 	const { sheetW, sheetH } = sheetDimensions(
@@ -222,10 +253,10 @@ function calculateSaddleStitch(
 		// clamp at margin
 		const creepOffset = Math.min(rawCreep, marginMm);
 
-		const frontLeft = totalPages - 2 * s;
-		const frontRight = 2 * s + 1;
-		const backLeft = 2 * s + 2;
-		const backRight = totalPages - 2 * s - 1;
+		const frontLeft = base + totalPages - 2 * s;
+		const frontRight = base + 2 * s + 1;
+		const backLeft = base + 2 * s + 2;
+		const backRight = base + totalPages - 2 * s - 1;
 
 		const pageOrBlank = (p: number) =>
 			p <= totalSourcePages ? p : 0;
@@ -277,68 +308,41 @@ function calculateSaddleStitch(
 		];
 
 		sheets.push({
-			sheetNumber: s + 1,
+			sheetNumber: firstSheet + s,
 			front: frontPlacements,
 			back: backPlacements,
+			signature,
 		});
 	}
 
-	return makeResult(sheets, totalSourcePages, totalPages);
+	return sheets;
 }
 
+/** ios ImpositionConfig.signaturePages */
+export const DEFAULT_SIGNATURE_PAGES = 16;
+
+// stacked nested signatures, padded
 function calculatePerfectBind(
 	totalSourcePages: number,
 	config: ImpositionConfig,
 ): ImpositionResult {
-	const totalPages = padToMultiple(Math.max(totalSourcePages, 4), 4);
-	const numSheets = totalPages / 4;
-
-	const { sheetW, sheetH } = sheetDimensions(
-		config.paperSize,
-		config.orientation,
+	const size = padToMultiple(
+		Math.max(4, config.signaturePages ?? DEFAULT_SIGNATURE_PAGES),
+		4,
 	);
-
+	const totalPages = padToMultiple(Math.max(totalSourcePages, 1), size);
 	const sheets: SheetDefinition[] = [];
-	const pageOrBlank = (p: number) => (p <= totalSourcePages ? p : 0);
-
-	for (let s = 0; s < numSheets; s++) {
-		const base = s * 4;
-		// odd front pages
-		const frontPages = [
-			pageOrBlank(base + 1),
-			pageOrBlank(base + 3),
-		];
-		// even back pages
-		const backPages = [
-			pageOrBlank(base + 2),
-			pageOrBlank(base + 4),
-		];
-
-		sheets.push({
-			sheetNumber: s + 1,
-			front: buildGrid(
-				frontPages,
-				1,
-				2,
-				sheetW,
-				sheetH,
-				config.marginMm,
-				config.gutterMm,
-				'front',
+	for (let base = 0; base < totalPages; base += size)
+		sheets.push(
+			...nestedSheets(
+				size,
+				base,
+				sheets.length + 1,
+				base / size,
+				totalSourcePages,
+				config,
 			),
-			back: buildGrid(
-				backPages,
-				1,
-				2,
-				sheetW,
-				sheetH,
-				config.marginMm,
-				config.gutterMm,
-				'back',
-			),
-		});
-	}
-
+		);
 	return makeResult(sheets, totalSourcePages, totalPages);
 }
 
@@ -406,21 +410,20 @@ function calculateFourUpBooklet(
 		const N = totalPages;
 		const base = s * 4;
 
+		// 8-page right-angle fold, head to head; nested sheets
 		const frontPages = [
+			pageOrBlank(N - base - 3),
+			pageOrBlank(base + 4),
 			pageOrBlank(N - base),
-			pageOrBlank(N - base - 1),
 			pageOrBlank(base + 1),
-			pageOrBlank(base + 2),
 		];
-		const frontRotations = [180, 180, 0, 0];
-
 		const backPages = [
 			pageOrBlank(base + 3),
-			pageOrBlank(base + 4),
 			pageOrBlank(N - base - 2),
-			pageOrBlank(N - base - 3),
+			pageOrBlank(base + 2),
+			pageOrBlank(N - base - 1),
 		];
-		const backRotations = [0, 0, 180, 180];
+		const rotations = [180, 180, 0, 0];
 
 		sheets.push({
 			sheetNumber: s + 1,
@@ -433,7 +436,7 @@ function calculateFourUpBooklet(
 				config.marginMm,
 				config.gutterMm,
 				'front',
-				frontRotations,
+				rotations,
 			),
 			back: buildGrid(
 				backPages,
@@ -444,7 +447,7 @@ function calculateFourUpBooklet(
 				config.marginMm,
 				config.gutterMm,
 				'back',
-				backRotations,
+				rotations,
 			),
 		});
 	}
@@ -579,37 +582,63 @@ function calculateCustomNUp(
 	return makeResult(sheets, totalSourcePages, totalPadded);
 }
 
-function applyTumbleRotation(result: ImpositionResult): ImpositionResult {
-	for (const sheet of result.sheets) {
-		for (const p of sheet.back) {
-			p.rotation = (p.rotation + 180) % 360;
-		}
-	}
-	return result;
-}
-
 export const DUPLEX_AWARE_LAYOUTS = new Set([
 	'saddle-stitch',
 	'perfect-bind',
 	'four-up-booklet',
 ]);
 
+/** Long edge on a landscape sheet, or short edge on a portrait one. */
+export function turnsTopOverBottom(
+	config: Pick<
+		ImpositionConfig,
+		'paperSize' | 'orientation' | 'duplexFlip'
+	>,
+): boolean {
+	const { sheetW, sheetH } = sheetDimensions(
+		config.paperSize,
+		config.orientation,
+	);
+	return config.duplexFlip === 'short-edge'
+		? sheetW <= sheetH
+		: sheetW > sheetH;
+}
+
+// registers back behind front
+function turnBacks(
+	result: ImpositionResult,
+	config: ImpositionConfig,
+): ImpositionResult {
+	const { sheetW, sheetH } = sheetDimensions(
+		config.paperSize,
+		config.orientation,
+	);
+	return {
+		...result,
+		sheets: result.sheets.map((sheet) => ({
+			...sheet,
+			back: sheet.back.map((p) => ({
+				...p,
+				x: sheetW - p.x - p.width,
+				y: sheetH - p.y - p.height,
+				rotation: (p.rotation + 180) % 360,
+			})),
+		})),
+	};
+}
+
+// layouts assume book turn
 function withDuplexPostProcess(
 	calculateFn: (
 		totalSourcePages: number,
 		config: ImpositionConfig,
 	) => ImpositionResult,
-	layoutId: string,
 ): (totalSourcePages: number, config: ImpositionConfig) => ImpositionResult {
 	return (totalSourcePages, config) => {
 		const result = calculateFn(totalSourcePages, config);
-		if (
-			config.duplexFlip === 'short-edge' &&
-			DUPLEX_AWARE_LAYOUTS.has(layoutId)
-		) {
-			return applyTumbleRotation(result);
-		}
-		return result;
+		return turnsTopOverBottom(config)
+			? turnBacks(result, config)
+			: result;
 	};
 }
 
@@ -622,23 +651,17 @@ export const IMPOSITION_LAYOUTS: ImpositionLayout[] = [
 			'The outermost sheet carries the cover (page 1) and back cover (page N).',
 		useCase: 'Booklets, magazines, zines, programmes',
 		pagesPerSheet: 4,
-		calculate: withDuplexPostProcess(
-			calculateSaddleStitch,
-			'saddle-stitch',
-		),
+		calculate: withDuplexPostProcess(calculateSaddleStitch),
 	},
 	{
 		id: 'perfect-bind',
 		name: '2-up Perfect Bind',
 		description:
-			'Pages in sequential pairs, front then back. Sheets are stacked, trimmed, ' +
-			'and glued at the spine. No page reordering is required.',
+			'Pages folded into signatures of config.signaturePages, each nested like a ' +
+			'saddle stitch. Signatures are stacked, trimmed, and glued at the spine.',
 		useCase: 'Paperback books, catalogues, perfect-bound booklets',
 		pagesPerSheet: 4,
-		calculate: withDuplexPostProcess(
-			calculatePerfectBind,
-			'perfect-bind',
-		),
+		calculate: withDuplexPostProcess(calculatePerfectBind),
 	},
 	{
 		id: 'step-and-repeat',
@@ -658,10 +681,7 @@ export const IMPOSITION_LAYOUTS: ImpositionLayout[] = [
 			'folded long-edge then short-edge to produce a small booklet.',
 		useCase: 'Pocket booklets, pamphlets, menus',
 		pagesPerSheet: 8,
-		calculate: withDuplexPostProcess(
-			calculateFourUpBooklet,
-			'four-up-booklet',
-		),
+		calculate: withDuplexPostProcess(calculateFourUpBooklet),
 	},
 	{
 		id: 'gang-run',
@@ -733,11 +753,42 @@ export function effectiveSheetH(
 		: Math.max(paperSize.widthMm, paperSize.heightMm);
 }
 
+/** pdf-lib draw box centring `size` in `cell` (points, y up). */
+export function placeInCell(
+	cell: { x: number; y: number; width: number; height: number },
+	size: { width: number; height: number },
+	rotation: number,
+	scaling: ImpositionConfig['scaling'],
+) {
+	const sideways = rotation === 90 || rotation === 270;
+	const [frameW, frameH] = sideways
+		? [cell.height, cell.width]
+		: [cell.width, cell.height];
+	const ratio =
+		scaling === 'actual'
+			? 1
+			: (scaling === 'fill' ? Math.max : Math.min)(
+					frameW / size.width,
+					frameH / size.height,
+				);
+	const [w, h] = [size.width * ratio, size.height * ratio];
+	// pdf-lib: ccw about (x, y)
+	const turn = (rotation * Math.PI) / 180;
+	const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
+	return {
+		x: cell.x + cell.width / 2 - ((w / 2) * cos - (h / 2) * sin),
+		y: cell.y + cell.height / 2 - ((w / 2) * sin + (h / 2) * cos),
+		width: w,
+		height: h,
+	};
+}
+
 export function drawPlacementsOnPage(
 	page: PDFPage,
 	placements: PagePlacement[],
 	embeddedPages: PDFEmbeddedPage[],
 	sheetHPt: number,
+	scaling: ImpositionConfig['scaling'],
 ) {
 	for (const p of placements) {
 		if (p.pageNumber === 0) continue;
@@ -748,69 +799,57 @@ export function drawPlacementsOnPage(
 		const wPt = p.width * MM_TO_POINTS;
 		const hPt = p.height * MM_TO_POINTS;
 		const yPt = sheetHPt - (p.y * MM_TO_POINTS + hPt);
-
-		if (p.rotation === 0) {
-			page.drawPage(embedded, {
-				x: xPt,
-				y: yPt,
-				width: wPt,
-				height: hPt,
-			});
-		} else if (p.rotation === 180) {
-			page.drawPage(embedded, {
-				x: xPt + wPt,
-				y: yPt + hPt,
-				width: wPt,
-				height: hPt,
-				rotate: degrees(180),
-			});
-		} else if (p.rotation === 90) {
-			page.drawPage(embedded, {
-				x: xPt + wPt,
-				y: yPt,
-				width: hPt,
-				height: wPt,
-				rotate: degrees(90),
-			});
-		} else if (p.rotation === 270) {
-			page.drawPage(embedded, {
-				x: xPt,
-				y: yPt + hPt,
-				width: hPt,
-				height: wPt,
-				rotate: degrees(270),
-			});
-		}
+		const cell = { x: xPt, y: yPt, width: wPt, height: hPt };
+		page.pushOperators(
+			pushGraphicsState(),
+			rectangle(xPt, yPt, wPt, hPt),
+			clip(),
+			endPath(),
+		);
+		page.drawPage(embedded, {
+			...placeInCell(cell, embedded, p.rotation, scaling),
+			rotate: degrees(p.rotation),
+		});
+		page.pushOperators(popGraphicsState());
 	}
 }
 
-function drawPdfMarkH(
-	page: PDFPage,
-	x: number,
-	y: number,
-	dir: number,
-	offset: number,
-	len: number,
-) {
-	page.drawLine({
-		start: { x: x + dir * offset, y },
-		end: { x: x + dir * (offset + len), y },
-		thickness: 0.25,
-	});
+/** Millimetres, top-left origin. */
+export interface MarkLine {
+	x1: number;
+	y1: number;
+	x2: number;
+	y2: number;
 }
 
-function drawPdfMarkV(
-	page: PDFPage,
-	x: number,
-	y: number,
-	dir: number,
-	offset: number,
-	len: number,
-) {
-	page.drawLine({
-		start: { x, y: y + dir * offset },
-		end: { x, y: y + dir * (offset + len) },
-		thickness: 0.25,
+/** Corner marks on the outer edges, 10 pt long from the trim corner, as iOS; the preview and the PDF both draw these. */
+export function cropMarks(placements: PagePlacement[]): MarkLine[] {
+	const length = 10 / MM_TO_POINTS;
+	const edges = getOuterEdges(placements);
+	return placements.flatMap((p, i) => {
+		const e = edges[i]!;
+		const [left, top] = [p.x, p.y];
+		const [right, bottom] = [p.x + p.width, p.y + p.height];
+		const lines: MarkLine[] = [];
+		const line = (x1: number, y1: number, x2: number, y2: number) =>
+			lines.push({ x1, y1, x2, y2 });
+		if (e.left) {
+			line(left - length, top, left, top);
+			line(left - length, bottom, left, bottom);
+		}
+		if (e.right) {
+			line(right, top, right + length, top);
+			line(right, bottom, right + length, bottom);
+		}
+		if (e.top) {
+			line(left, top - length, left, top);
+			line(right, top - length, right, top);
+		}
+		if (e.bottom) {
+			line(left, bottom, left, bottom + length);
+			line(right, bottom, right, bottom + length);
+		}
+		return lines;
 	});
 }
 
@@ -819,31 +858,18 @@ export function drawCropMarksOnPdfPage(
 	placements: PagePlacement[],
 	sheetHPt: number,
 ) {
-	const markLen = 18;
-	const offset = 3;
-
-	const edges = getOuterEdges(placements);
-
-	placements.forEach((p, i) => {
-		const e = edges[i];
-		if (!e) return;
-
-		const x1 = p.x * MM_TO_POINTS;
-		const x2 = (p.x + p.width) * MM_TO_POINTS;
-		const y1Pdf = sheetHPt - p.y * MM_TO_POINTS;
-		const y2Pdf = sheetHPt - (p.y + p.height) * MM_TO_POINTS;
-
-		if (e.left) drawPdfMarkH(page, x1, y1Pdf, -1, offset, markLen);
-		if (e.top) drawPdfMarkV(page, x1, y1Pdf, 1, offset, markLen);
-		if (e.right) drawPdfMarkH(page, x2, y1Pdf, 1, offset, markLen);
-		if (e.top) drawPdfMarkV(page, x2, y1Pdf, 1, offset, markLen);
-		if (e.left) drawPdfMarkH(page, x1, y2Pdf, -1, offset, markLen);
-		if (e.bottom)
-			drawPdfMarkV(page, x1, y2Pdf, -1, offset, markLen);
-		if (e.right) drawPdfMarkH(page, x2, y2Pdf, 1, offset, markLen);
-		if (e.bottom)
-			drawPdfMarkV(page, x2, y2Pdf, -1, offset, markLen);
-	});
+	for (const line of cropMarks(placements))
+		page.drawLine({
+			start: {
+				x: line.x1 * MM_TO_POINTS,
+				y: sheetHPt - line.y1 * MM_TO_POINTS,
+			},
+			end: {
+				x: line.x2 * MM_TO_POINTS,
+				y: sheetHPt - line.y2 * MM_TO_POINTS,
+			},
+			thickness: 0.25,
+		});
 }
 
 // embedpage ignores rotate, cropbox
@@ -935,7 +961,13 @@ export async function imposePdf(
 	for (const sheet of result.sheets) {
 		for (const side of [sheet.front, sheet.back]) {
 			const page = out.addPage([sheetW, sheetH]);
-			drawPlacementsOnPage(page, side, pages, sheetH);
+			drawPlacementsOnPage(
+				page,
+				side,
+				pages,
+				sheetH,
+				config.scaling,
+			);
 			if (config.cropMarks)
 				drawCropMarksOnPdfPage(page, side, sheetH);
 		}

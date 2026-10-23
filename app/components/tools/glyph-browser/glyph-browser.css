@@ -1,0 +1,201 @@
+.glyph-browser {
+	/* glyphs show in the face the system picks for each, never the UI or mono face */
+	--gb-face:
+		system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif,
+		"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+}
+
+/* the card: compact by default, the glyph large when the panes sit side by side */
+.gb-card {
+	min-block-size: 100%;
+	background: var(--canon-card);
+	container-type: inline-size;
+}
+
+.gb-card-body {
+	display: flex;
+	flex-direction: column;
+}
+
+.gb-card-top {
+	display: flex;
+	gap: var(--canon-panel-padding);
+	align-items: center;
+	padding: var(--canon-panel-padding);
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.gb-square {
+	display: grid;
+	flex: none;
+	place-items: center;
+	box-sizing: border-box;
+	inline-size: 140px;
+	aspect-ratio: 1;
+	overflow: hidden;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-background);
+	container-type: inline-size;
+}
+
+.gb-square-glyph {
+	color: var(--canon-foreground);
+	font-family: var(--gb-face);
+	font-size: 62cqi;
+	line-height: 1;
+	white-space: pre;
+}
+
+.gb-words {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	align-items: flex-start;
+	min-inline-size: 0;
+}
+
+.gb-figure {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	cursor: pointer;
+	appearance: none;
+}
+
+@media (hover: hover) {
+	.gb-figure:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.gb-figure:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+.gb-facts {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-caption);
+}
+
+.gb-values {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+@container (width >= 460px) {
+	.gb-values {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@container (width >= 900px) {
+	.gb-values {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+	}
+}
+
+@container canon-split ((min-width: 640px) and (orientation: landscape)) or (min-width: 900px) {
+	.gb-card-top {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.gb-square {
+		align-self: center;
+		inline-size: min(100%, 460px);
+	}
+}
+
+/* the chart: a row header, then 16 or 8 cells */
+.glyph-browser .gb-search {
+	inline-size: 100%;
+	font-family: var(--canon-mono-font);
+}
+
+.gb-chart {
+	background: var(--canon-card);
+}
+
+.gb-section {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 600px;
+}
+
+.gb-row {
+	display: grid;
+	grid-template-columns: 52px repeat(var(--gb-columns), minmax(0, 1fr));
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.gb-row-head {
+	align-self: center;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	text-align: center;
+}
+
+.gb-cell {
+	display: grid;
+	place-items: center;
+	box-sizing: border-box;
+	aspect-ratio: 1;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	border-inline-start: var(--canon-hairline) solid var(--canon-border);
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--gb-face);
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.gb-cell--blank {
+	background: var(--canon-muted);
+	cursor: default;
+}
+
+@media (hover: hover) {
+	button.gb-cell:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.gb-cell[aria-selected="true"] {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.gb-cell:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.gb-cell[aria-selected="true"]:focus-visible {
+	outline-color: var(--canon-primary-foreground);
+	outline-offset: -4px;
+}
+
+/* margin-inline auto keeps the kit page inset */
+.gb-tip {
+	margin-block: 0;
+	margin-inline: auto;
+	text-align: center;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}

@@ -1,746 +1,425 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import Icon from 'delphitools-v2/components/icon';
+import type Owner from '@ember/owner';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
 import {
-	Tabs,
-	TabsList,
-	TabsTrigger,
-	TabsContent,
-} from 'delphitools-v2/components/ui/tabs';
+	apply,
+	baseOf,
+	format,
+	highestDigit,
+	idealHeight,
+	maxValue,
+	operations,
+	radixes,
+	read,
+	valueOf,
+	wordFitting,
+	words,
+	type Reading,
+} from 'delphitools-v2/components/tools/base-converter/base-number';
+import Register, {
+	type Operand,
+} from 'delphitools-v2/components/tools/base-converter/register';
+import './base-converter/base-converter.css';
 
-export type Base = 'dec' | 'hex' | 'bin' | 'oct';
-export type BitwiseOp = 'AND' | 'OR' | 'XOR' | 'NOT' | 'LSH' | 'RSH';
+const radixNames = radixes.map((r) => r.name);
+const wordTitles = words.map(String);
+const operationTitles = operations.map((o) => o.title);
 
-export interface BaseValues {
-	dec: string;
-	hex: string;
-	bin: string;
-	oct: string;
-}
+/** The port of BaseConverterViewController, with the number typed in the picture. */
+export default class BaseConverter extends Component {
+	@tracked radixIndex = 0;
+	@tracked chosenWord = 16;
+	@tracked text = '';
+	@tracked operandText = '';
+	@tracked bitwise = false;
+	@tracked operationIndex = 0;
+	@tracked shift = 1;
+	@tracked width = 0;
+	@tracked entryHeight = 0;
 
-export const BASE_INFO: Record<
-	Base,
-	{ name: string; prefix: string; radix: number; placeholder: string }
-> = {
-	dec: { name: 'Decimal', prefix: '', radix: 10, placeholder: '255' },
-	hex: {
-		name: 'Hexadecimal',
-		prefix: '0x',
-		radix: 16,
-		placeholder: 'FF',
-	},
-	bin: {
-		name: 'Binary',
-		prefix: '0b',
-		radix: 2,
-		placeholder: '11111111',
-	},
-	oct: { name: 'Octal', prefix: '0o', radix: 8, placeholder: '377' },
-};
-
-export const BASES: Base[] = ['dec', 'hex', 'bin', 'oct'];
-
-export const BITWISE_OPS: BitwiseOp[] = [
-	'AND',
-	'OR',
-	'XOR',
-	'NOT',
-	'LSH',
-	'RSH',
-];
-
-const OP_BUTTON: Record<BitwiseOp, string> = {
-	AND: 'AND',
-	OR: 'OR',
-	XOR: 'XOR',
-	NOT: 'NOT',
-	LSH: '<<',
-	RSH: '>>',
-};
-
-const OP_SIGN: Record<BitwiseOp, string> = {
-	AND: 'AND',
-	OR: 'OR',
-	XOR: 'XOR',
-	NOT: '~',
-	LSH: '<<',
-	RSH: '>>',
-};
-
-export const BITWISE_REF: { op: string; desc: string }[] = [
-	{ op: 'AND (&)', desc: '1 if both bits are 1' },
-	{ op: 'OR (|)', desc: '1 if either bit is 1' },
-	{ op: 'XOR (^)', desc: '1 if bits differ' },
-	{ op: 'NOT (~)', desc: 'Flip all bits' },
-	{ op: '<< (LSH)', desc: 'Shift bits left' },
-	{ op: '>> (RSH)', desc: 'Shift bits right' },
-];
-
-const EMPTY: BaseValues = { dec: '', hex: '', bin: '', oct: '' };
-
-const BIT_COUNT = 16;
-const COPIED_MS = 1500;
-
-export function parseValue(value: string, base: Base): number | null {
-	const cleaned = value.trim().toLowerCase();
-	if (!cleaned) return null;
-
-	const prefix = BASE_INFO[base].prefix;
-	const toParse =
-		prefix && cleaned.startsWith(prefix)
-			? cleaned.slice(prefix.length)
-			: cleaned;
-
-	const result = Number.parseInt(toParse, BASE_INFO[base].radix);
-	return Number.isNaN(result) ? null : result;
-}
-
-export function convertAll(num: number): BaseValues {
-	return {
-		dec: num.toString(10),
-		hex: num.toString(16).toUpperCase(),
-		bin: num.toString(2),
-		oct: num.toString(8),
-	};
-}
-
-export function applyBitwise(
-	op: BitwiseOp,
-	a: number | null,
-	b: number | null,
-	shift: number,
-): number | null {
-	if (a === null) return null;
-
-	switch (op) {
-		case 'AND':
-			return b === null ? null : (a & b) >>> 0;
-		case 'OR':
-			return b === null ? null : (a | b) >>> 0;
-		case 'XOR':
-			return b === null ? null : (a ^ b) >>> 0;
-		case 'NOT':
-			return ~a >>> 0;
-		case 'LSH':
-			return (a << shift) >>> 0;
-		case 'RSH':
-			return a >>> shift;
-	}
-}
-
-export function getBits(value: string): boolean[] {
-	const num = Number.parseInt(value, 10);
-	if (Number.isNaN(num) || num < 0)
-		return Array<boolean>(BIT_COUNT).fill(false);
-
-	const bits: boolean[] = [];
-	for (let i = BIT_COUNT - 1; i >= 0; i--) {
-		bits.push(((num >> i) & 1) === 1);
-	}
-	return bits;
-}
-
-export default class BaseConverterTool extends Component {
-	@tracked values: BaseValues = EMPTY;
-	@tracked activeBase: Base | null = null;
-	@tracked error: string | null = null;
-	@tracked copied: Base | null = null;
-
-	@tracked bitwiseA: BaseValues = EMPTY;
-	@tracked bitwiseB: BaseValues = EMPTY;
-	@tracked bitwiseOp: BitwiseOp = 'AND';
-	@tracked bitwiseResult: BaseValues | null = null;
-	@tracked shiftAmount = '1';
-
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	// ?baseValue= ?baseRadix=0-3 ?baseWord=8|16|32|64 ?baseBitwise=1 ?baseOp=0-5 ?baseB= ?baseShift=: the iOS launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const index = (key: string, count: number) => {
+			const n = Number(query.get(key));
+			return Number.isInteger(n) && n >= 0 && n < count
+				? n
+				: 0;
+		};
+		this.radixIndex = index('baseRadix', radixes.length);
+		const word = Number(query.get('baseWord'));
+		if (words.includes(word)) this.chosenWord = word;
+		this.bitwise = query.get('baseBitwise') === '1';
+		this.operationIndex = index('baseOp', operations.length);
+		const shift = Number(query.get('baseShift'));
+		if (Number.isInteger(shift) && shift >= 0) this.shift = shift;
+		this.text = query.get('baseValue') ?? '';
+		this.operandText = query.get('baseB') ?? '';
 	}
 
-	get hasValue() {
-		return this.values.dec !== '';
+	get radix() {
+		return radixes[this.radixIndex]!;
 	}
 
-	get converterRows() {
-		return BASES.map((base) => {
-			const value = this.values[base];
-			return {
-				id: base,
-				name: BASE_INFO[base].name,
-				prefix: BASE_INFO[base].prefix,
-				placeholder: BASE_INFO[base].placeholder,
-				value,
-				isEmpty: value === '',
-				isActive:
-					this.activeBase === base &&
-					this.hasValue,
-				isCopied: this.copied === base,
-			};
+	get operation() {
+		return operations[this.operationIndex]!;
+	}
+
+	get reading() {
+		return read(this.text, this.radix);
+	}
+
+	get operandReading() {
+		return read(this.operandText, this.radix);
+	}
+
+	get a() {
+		return valueOf(this.reading);
+	}
+
+	get takesOperand() {
+		return this.bitwise && this.operation.takesOperand;
+	}
+
+	get takesShift() {
+		return this.bitwise && this.operation.takesShift;
+	}
+
+	get b() {
+		return this.takesOperand
+			? valueOf(this.operandReading)
+			: undefined;
+	}
+
+	get needed() {
+		const a = this.a ?? 0n;
+		const b = this.b ?? 0n;
+		return wordFitting(a > b ? a : b);
+	}
+
+	get word() {
+		return Math.max(this.chosenWord, this.needed);
+	}
+
+	get wordIndex() {
+		return words.indexOf(this.word);
+	}
+
+	get smallWords() {
+		return words.flatMap((w, i) => (w < this.needed ? [i] : []));
+	}
+
+	get shiftMax() {
+		return this.word - 1;
+	}
+
+	get shiftAmount() {
+		return Math.min(this.shift, this.shiftMax);
+	}
+
+	get result() {
+		const { a } = this;
+		return this.bitwise && a !== undefined
+			? apply(
+					this.operation,
+					a,
+					this.b,
+					this.shiftAmount,
+					this.word,
+				)
+			: undefined;
+	}
+
+	errorText(reading: Reading, text: string) {
+		if (reading.kind === 'invalid') {
+			const base = baseOf(text, this.radix);
+			return `${reading.character} is not a digit in ${base.name}, which takes 0 to ${highestDigit(base)}`;
+		}
+		return reading.kind === 'tooLarge'
+			? 'Larger than 64 bits'
+			: undefined;
+	}
+
+	get error() {
+		return this.errorText(this.reading, this.text);
+	}
+
+	get operandError() {
+		return this.takesOperand
+			? this.errorText(this.operandReading, this.operandText)
+			: undefined;
+	}
+
+	get unit() {
+		return baseOf(this.text, this.radix).short;
+	}
+
+	get inputMode() {
+		return this.radix.radix === 16 ? 'text' : 'numeric';
+	}
+
+	linesFor(value: bigint | undefined) {
+		return radixes.map((radix) => ({
+			name: radix.name,
+			value:
+				value === undefined
+					? undefined
+					: format(value, radix, true),
+		}));
+	}
+
+	get values() {
+		return this.linesFor(this.a);
+	}
+
+	get results() {
+		return this.linesFor(this.result);
+	}
+
+	get operands(): Operand[] {
+		const only: Operand = {
+			value: this.a ?? 0n,
+			role: this.bitwise ? 'operand' : 'only',
+			label: this.bitwise ? 'A' : 'Bits',
+		};
+		if (!this.bitwise) return [only];
+		const { operation } = this;
+		const list = [only];
+		if (operation.takesOperand)
+			list.push({
+				value: this.b ?? 0n,
+				sign: operation.title,
+				role: 'operand',
+				label: 'B',
+			});
+		list.push({
+			value: this.result ?? 0n,
+			sign: operation.takesOperand
+				? '='
+				: operation.title === 'NOT'
+					? operation.title
+					: `${operation.title} ${this.shiftAmount}`,
+			role: 'result',
+			label: 'Result',
 		});
+		return list;
 	}
 
-	get showBits() {
-		return (
-			!this.hasValue ||
-			Number.parseInt(this.values.dec, 10) <= 65535
+	get figure() {
+		const value = this.bitwise ? this.result : this.a;
+		return value === undefined ? undefined : value.toString();
+	}
+
+	/** In one column the picture is as tall as the register needs, under the entry. */
+	// iOS collapses the register alone to 200; the entry rides on top
+	get collapsedHeight() {
+		return Math.round(this.entryHeight + 200);
+	}
+
+	get pictureHeight() {
+		if (!this.width) return undefined;
+		const register = idealHeight(
+			this.word,
+			this.operands.length,
+			this.operands.length > 1,
+			this.width,
+			460,
+		);
+		// 4: the canvas rules
+		return Math.round(
+			this.entryHeight +
+				Math.min(Math.max(register, 200), 460) +
+				4,
 		);
 	}
 
-	get bitCells() {
-		return getBits(this.values.dec).map((on, position) => ({
-			on,
-			position,
-			label: BIT_COUNT - 1 - position,
-			digit: on ? '1' : '0',
-		}));
-	}
-
-	get ops() {
-		return BITWISE_OPS.map((op) => ({
-			op,
-			label: OP_BUTTON[op],
-			isActive: this.bitwiseOp === op,
-		}));
-	}
-
-	get showValueB() {
-		return (
-			this.bitwiseOp !== 'NOT' &&
-			this.bitwiseOp !== 'LSH' &&
-			this.bitwiseOp !== 'RSH'
-		);
-	}
-
-	get showShift() {
-		return this.bitwiseOp === 'LSH' || this.bitwiseOp === 'RSH';
-	}
-
-	get bitwiseARows() {
-		return this.#inputRows(this.bitwiseA);
-	}
-
-	get bitwiseBRows() {
-		return this.#inputRows(this.bitwiseB);
-	}
-
-	get resultRows() {
-		const result = this.bitwiseResult;
-		if (!result) return [];
-		return BASES.map((base) => ({
-			id: base,
-			name: BASE_INFO[base].name,
-			text: BASE_INFO[base].prefix + result[base],
-		}));
-	}
-
-	get resultSummary() {
-		const sign = OP_SIGN[this.bitwiseOp];
-		const operand = this.showShift
-			? this.shiftAmount
-			: this.bitwiseOp === 'NOT'
-				? ''
-				: this.bitwiseB.dec;
-		return `${this.bitwiseA.dec} ${sign} ${operand}`;
-	}
-
-	get reference() {
-		return BITWISE_REF;
-	}
-
-	#inputRows(values: BaseValues) {
-		return BASES.map((base) => ({
-			id: base,
-			name: BASE_INFO[base].name,
-			prefix: BASE_INFO[base].prefix,
-			placeholder: BASE_INFO[base].placeholder,
-			value: values[base],
-		}));
-	}
-
-	setBase = (base: Base, event: Event) => {
-		const value = (event.target as HTMLInputElement).value;
-		this.activeBase = base;
-		this.error = null;
-
-		if (!value.trim()) {
-			this.values = EMPTY;
-			return;
-		}
-
-		const num = parseValue(value, base);
-		if (num === null || num < 0) {
-			this.error = `Invalid ${BASE_INFO[base].name.toLowerCase()} number`;
-			this.values = { ...this.values, [base]: value };
-			return;
-		}
-
-		this.values = convertAll(num);
+	measured = (width: number, entry: number) => {
+		if (width !== this.width) this.width = width;
+		if (entry !== this.entryHeight) this.entryHeight = entry;
 	};
 
-	toggleBit = (position: number) => {
-		const num = Number.parseInt(this.values.dec, 10) || 0;
-		this.values = convertAll(
-			num ^ (1 << (BIT_COUNT - 1 - position)),
-		);
+	typed = (text: string) => (this.text = text);
+
+	typedOperand = (text: string) => (this.operandText = text);
+
+	step = (direction: -1 | 1) => {
+		const value = this.a ?? 0n;
+		const next =
+			direction > 0
+				? value === maxValue
+					? value
+					: value + 1n
+				: value === 0n
+					? 0n
+					: value - 1n;
+		this.text = format(next, this.radix);
 	};
 
-	setBitwise = (target: 'a' | 'b', base: Base, event: Event) => {
-		const value = (event.target as HTMLInputElement).value;
-		const previous = target === 'a' ? this.bitwiseA : this.bitwiseB;
-
-		let next: BaseValues;
-		if (!value.trim()) {
-			next = EMPTY;
-		} else {
-			const num = parseValue(value, base);
-			next =
-				num === null || num < 0
-					? { ...previous, [base]: value }
-					: convertAll(num);
-		}
-
-		if (target === 'a') this.bitwiseA = next;
-		else this.bitwiseB = next;
+	toggle = (operand: number, bit: number) => {
+		const flip = 1n << BigInt(bit);
+		if (operand === 0)
+			this.text = format((this.a ?? 0n) ^ flip, this.radix);
+		else
+			this.operandText = format(
+				(valueOf(this.operandReading) ?? 0n) ^ flip,
+				this.radix,
+			);
 	};
 
-	setShiftAmount = (event: Event) => {
-		this.shiftAmount = (event.target as HTMLInputElement).value;
+	pickRadix = (index: number) => {
+		const a = this.a;
+		const b = valueOf(this.operandReading);
+		this.radixIndex = index;
+		this.text = a === undefined ? '' : format(a, this.radix);
+		this.operandText = b === undefined ? '' : format(b, this.radix);
 	};
 
-	chooseOp = (op: BitwiseOp) => {
-		this.bitwiseOp = op;
-		this.bitwiseResult = null;
-	};
+	pickWord = (index: number) => (this.chosenWord = words[index]!);
 
-	calculate = () => {
-		const parsedShift = Number.parseInt(this.shiftAmount, 10);
-		const shift = Number.isNaN(parsedShift) ? 1 : parsedShift;
+	flipBitwise = (on: boolean) => (this.bitwise = on);
 
-		const result = applyBitwise(
-			this.bitwiseOp,
-			parseValue(this.bitwiseA.dec, 'dec'),
-			parseValue(this.bitwiseB.dec, 'dec'),
-			shift,
-		);
+	pickOperation = (index: number) => (this.operationIndex = index);
 
-		this.bitwiseResult =
-			result === null ? null : convertAll(result);
-	};
-
-	copy = async (base: Base) => {
-		const value = this.values[base];
-		if (!value) return;
-		await navigator.clipboard.writeText(
-			BASE_INFO[base].prefix + value,
-		);
-		this.copied = base;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = null),
-			COPIED_MS,
-		);
-	};
-
-	copyBase = (base: Base) => void this.copy(base);
+	pickShift = (shift: number) => (this.shift = shift);
 
 	<template>
-		<div class="dt-bc">
-			<Tabs @defaultValue="converter">
-				<TabsList class="dt-bc-tabs">
-					{{! wording carried over from the Next app }}
-					<TabsTrigger
-						class="dt-bc-tab"
-						@value="converter"
-					>Converter</TabsTrigger>
-					{{! wording carried over from the Next app }}
-					<TabsTrigger
-						class="dt-bc-tab"
-						@value="bitwise"
-					>Bitwise Ops</TabsTrigger>
-				</TabsList>
-
-				<div class="dt-bc-panel">
-					<TabsContent
-						class="dt-bc-content"
-						@value="converter"
-					>
-						<div class="dt-bc-rows">
-							{{#each
-								this.converterRows
-								key="id"
-								as |row|
-							}}
-								<div
-									class="dt-bc-row
-										{{if
-											row.isActive
-											'is-active'
-										}}"
-								>
-									<span
-										class="dt-bc-name"
-									>{{row.name}}</span>
-									<div
-										class="dt-bc-field"
-									>
-										{{#if
-											row.prefix
-										}}
-											<span
-												class="dt-bc-prefix"
-											>{{row.prefix}}</span>
-										{{/if}}
-										<input
-											type="text"
-											class="dt-bc-input"
-											value={{row.value}}
-											placeholder={{row.placeholder}}
-											aria-label={{row.name}}
-											{{on
-												"input"
-												(fn
-													this.setBase
-													row.id
-												)
-											}}
-										/>
-									</div>
-									<button
-										type="button"
-										class="dt-bc-copy
-											{{if
-												row.isCopied
-												'is-copied'
-											}}"
-										disabled={{row.isEmpty}}
-										aria-label="Copy
-											{{row.name}}"
-										{{on
-											"click"
-											(fn
-												this.copyBase
-												row.id
-											)
-										}}
-									>
-										<Icon
-											@name={{if
-												row.isCopied
-												"check"
-												"copy"
-											}}
-										/>
-									</button>
-								</div>
-							{{/each}}
-						</div>
-
-						{{#if this.error}}
-							<div
-								class="dt-bc-error"
-							>{{this.error}}</div>
-						{{/if}}
-
-						{{#if this.showBits}}
-							<div class="dt-bc-bits">
-								{{! wording carried over from the Next app }}
-								<span
-									class="dt-bc-label"
-								>Bit Toggle
-									(16-bit)</span>
-								<div
-									class="dt-bc-bit-grid segmented"
-								>
-									{{#each
-										this.bitCells
-										key="position"
-										as |cell|
-									}}
-										<button
-											type="button"
-											class="dt-bc-bit
-												{{if
-													cell.on
-													'is-on'
-												}}"
-											aria-label="Bit
-												{{cell.label}}"
-											aria-pressed={{if
-												cell.on
-												"true"
-												"false"
-											}}
-											{{on
-												"click"
-												(fn
-													this.toggleBit
-													cell.position
-												)
-											}}
-										>{{cell.digit}}</button>
-									{{/each}}
-								</div>
-								<div
-									class="dt-bc-bit-labels"
-								>
-									{{#each
-										this.bitCells
-										key="position"
-										as |cell|
-									}}
-										<span
-										>{{cell.label}}</span>
-									{{/each}}
-								</div>
-							</div>
-						{{/if}}
-					</TabsContent>
-
-					<TabsContent
-						class="dt-bc-content"
-						@value="bitwise"
-					>
-						<div class="dt-bc-block">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-bc-label"
-							>Operation</span>
-							<div
-								class="dt-bc-ops segmented"
+		<CanonSplit
+			class="base-converter"
+			@halves={{true}}
+			@collapsesTo={{this.collapsedHeight}}
+		>
+			<:sidebar>
+				<CanonCanvas
+					@height={{this.pictureHeight}}
+					@pattern={{true}}
+				>
+					<Register
+						@text={{this.text}}
+						@placeholder={{this.radix.placeholder}}
+						@unit={{this.unit}}
+						@inputMode={{this.inputMode}}
+						@error={{this.error}}
+						@operands={{this.operands}}
+						@word={{this.word}}
+						@figure={{this.figure}}
+						@onInput={{this.typed}}
+						@onStep={{this.step}}
+						@onToggle={{this.toggle}}
+						@onMeasure={{this.measured}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Number" />
+					<CanonSegmented
+						aria-label="Base"
+						@items={{radixNames}}
+						@columns={{2}}
+						@selected={{this.radixIndex}}
+						@onChange={{this.pickRadix}}
+					/>
+					<CanonHeading @text="Word size" />
+					<CanonSegmented
+						aria-label="Word size"
+						@items={{wordTitles}}
+						@selected={{this.wordIndex}}
+						@disabledIndices={{this.smallWords}}
+						@onChange={{this.pickWord}}
+					/>
+				</CanonRows>
+				<CanonRows class="bc-values" @framed={{true}}>
+					<CanonHeading @text="Values" />
+					{{#each this.values as |line|}}
+						<CanonValueLine
+							@label={{line.name}}
+							@value={{line.value}}
+							@layout="above"
+						/>
+					{{/each}}
+				</CanonRows>
+				<CanonRows class="bc-values" @framed={{true}}>
+					<CanonRow @title="Bitwise" as |titleId|>
+						<CanonSwitch
+							aria-labelledby={{titleId}}
+							@on={{this.bitwise}}
+							@onChange={{this.flipBitwise}}
+						/>
+					</CanonRow>
+					{{#if this.bitwise}}
+						<CanonSegmented
+							aria-label="Operation"
+							@items={{operationTitles}}
+							@columns={{6}}
+							@selected={{this.operationIndex}}
+							@onChange={{this.pickOperation}}
+						/>
+						{{#if this.takesOperand}}
+							<CanonRow
+								@title="B"
+								@form="flush"
+								as |titleId|
 							>
-								{{#each
-									this.ops
-									key="op"
-									as |option|
-								}}
-									<button
-										type="button"
-										class="dt-bc-op
-											{{if
-												option.isActive
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.chooseOp
-												option.op
-											)
-										}}
-									>{{option.label}}</button>
-								{{/each}}
-							</div>
-						</div>
-
-						<div class="dt-bc-block">
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-bc-label"
-							>Value A</span>
-							<div
-								class="dt-bc-operand"
-							>
-								{{#each
-									this.bitwiseARows
-									key="id"
-									as |row|
-								}}
-									<div
-										class="dt-bc-row"
-									>
-										<span
-											class="dt-bc-name is-muted"
-										>{{row.name}}</span>
-										<div
-											class="dt-bc-field"
-										>
-											{{#if
-												row.prefix
-											}}
-												<span
-													class="dt-bc-prefix"
-												>{{row.prefix}}</span>
-											{{/if}}
-											<input
-												type="text"
-												class="dt-bc-input"
-												value={{row.value}}
-												placeholder={{row.placeholder}}
-												aria-label="A
-													{{row.name}}"
-												{{on
-													"input"
-													(fn
-														this.setBitwise
-														"a"
-														row.id
-													)
-												}}
-											/>
-										</div>
-									</div>
-								{{/each}}
-							</div>
-						</div>
-
-						{{#if this.showValueB}}
-							<div
-								class="dt-bc-block"
-							>
-								{{! wording carried over from the Next app }}
-								<span
-									class="dt-bc-label"
-								>Value B</span>
-								<div
-									class="dt-bc-operand"
-								>
-									{{#each
-										this.bitwiseBRows
-										key="id"
-										as |row|
-									}}
-										<div
-											class="dt-bc-row"
-										>
-											<span
-												class="dt-bc-name is-muted"
-											>{{row.name}}</span>
-											<div
-												class="dt-bc-field"
-											>
-												{{#if
-													row.prefix
-												}}
-													<span
-														class="dt-bc-prefix"
-													>{{row.prefix}}</span>
-												{{/if}}
-												<input
-													type="text"
-													class="dt-bc-input"
-													value={{row.value}}
-													placeholder={{row.placeholder}}
-													aria-label="B
-														{{row.name}}"
-													{{on
-														"input"
-														(fn
-															this.setBitwise
-															"b"
-															row.id
-														)
-													}}
-												/>
-											</div>
-										</div>
-									{{/each}}
-								</div>
-							</div>
-						{{/if}}
-
-						{{#if this.showShift}}
-							<div
-								class="dt-bc-block"
-							>
-								{{! wording carried over from the Next app }}
-								<span
-									class="dt-bc-label"
-								>Shift Amount</span>
-								<input
-									type="number"
-									class="dt-bc-shift"
-									value={{this.shiftAmount}}
-									placeholder="1"
-									aria-label="Shift amount"
-									min="0"
-									max="31"
-									{{on
-										"input"
-										this.setShiftAmount
-									}}
+								<CanonTextCell
+									class="bc-operand-field"
+									aria-labelledby={{titleId}}
+									autocomplete="off"
+									spellcheck="false"
+									inputmode={{this.inputMode}}
+									autocapitalize="characters"
+									@value={{this.operandText}}
+									@placeholder={{this.radix.placeholder}}
+									@onChange={{this.typedOperand}}
 								/>
-							</div>
-						{{/if}}
-
-						{{! wording carried over from the Next app }}
-						<button
-							type="button"
-							class="dt-bc-calculate"
-							{{on
-								"click"
-								this.calculate
+							</CanonRow>
+							{{#if
+								this.operandError
 							}}
-						>Calculate</button>
-
-						{{#if this.resultRows}}
-							<div
-								class="dt-bc-block"
-							>
-								<span
-									class="dt-bc-label"
-								>
-									Result:
-									{{this.resultSummary}}
-								</span>
-								<div
-									class="dt-bc-operand"
-								>
-									{{#each
-										this.resultRows
-										key="id"
-										as |row|
-									}}
-										<div
-											class="dt-bc-row"
-										>
-											<span
-												class="dt-bc-name is-muted"
-											>{{row.name}}</span>
-											<code
-												class="dt-bc-result"
-											>{{row.text}}</code>
-										</div>
-									{{/each}}
-								</div>
-							</div>
+								<CanonStatus
+									@text={{this.operandError}}
+									@tone="warn"
+									@row={{true}}
+								/>
+							{{/if}}
 						{{/if}}
-
-						<div
-							class="dt-bc-block is-last"
-						>
-							{{! wording carried over from the Next app }}
-							<span
-								class="dt-bc-label"
-							>Reference</span>
-							<div
-								class="dt-bc-ref segmented"
+						{{#if this.takesShift}}
+							<CanonRow
+								@title="Shift"
+								@form="flush"
+								as |titleId|
 							>
-								{{#each
-									this.reference
-									key="op"
-									as |entry|
-								}}
-									<div
-										class="dt-bc-ref-item"
-									>
-										<div
-											class="dt-bc-ref-op"
-										>{{entry.op}}</div>
-										{{! wording carried over from the Next app }}
-										<p
-											class="dt-bc-ref-desc"
-										>{{entry.desc}}</p>
-									</div>
-								{{/each}}
-							</div>
-						</div>
-					</TabsContent>
-				</div>
-			</Tabs>
-		</div>
+								<CanonNumberField
+									@value={{this.shiftAmount}}
+									@min={{0}}
+									@max={{this.shiftMax}}
+									@labelledBy={{titleId}}
+									@onChange={{this.pickShift}}
+								/>
+							</CanonRow>
+						{{/if}}
+						<CanonHeading @text="Result" />
+						{{#each this.results as |line|}}
+							<CanonValueLine
+								@label={{line.name}}
+								@value={{line.value}}
+								@layout="above"
+							/>
+						{{/each}}
+					{{/if}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

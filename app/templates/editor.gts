@@ -1,11 +1,11 @@
 import { pageTitle } from 'ember-page-title';
-import SubstrataShell from 'delphitools-v2/components/substrata/substrata-shell';
+import SubstrataEditor from 'delphitools-v2/components/substrata/editor';
 
 // bypass application chrome
 <template>
 	{{pageTitle "Substrata"}}
 
 	<div class="sub-editor-viewport">
-		<SubstrataShell />
+		<SubstrataEditor />
 	</div>
 </template>

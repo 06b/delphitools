@@ -1,41 +1,46 @@
 import Component from '@glimmer/component';
-import type { TOC } from '@ember/component/template-only';
 import { cached, tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
+import { modifier } from 'ember-modifier';
 import { LinkTo } from '@ember/routing';
-import Dialog from 'delphitools-v2/components/ui/dialog';
-import {
-	Tooltip,
-	TooltipTrigger,
-	TooltipContent,
-} from 'delphitools-v2/components/ui/tooltip';
-import Icon from 'delphitools-v2/components/icon';
+import type RouterService from '@ember/routing/router-service';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonDialog from 'delphicanon/components/canon-dialog';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonSidebar from 'delphicanon/components/canon-sidebar';
+import CanonSidebarRow from 'delphicanon/components/canon-sidebar-row';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import './app-sidebar.css';
 import AboutDelphitoolsBody from 'delphitools-v2/components/about-delphitools';
 import { toolCategories, featuredTools } from 'delphitools-v2/lib/tools';
 import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
 import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
 import type SidebarService from 'delphitools-v2/services/sidebar';
+import type MagazineService from 'delphitools-v2/services/magazine';
+import { isPlainClick } from 'delphitools-v2/services/magazine';
+import {
+	navIdFor,
+	opensSection,
+	pageFor,
+	searchDocs,
+} from 'delphitools-v2/lib/canon-docs';
 
-const NavTip: TOC<{
-	Args: { label: string; show: boolean };
-	Blocks: { default: [] };
-}> = <template>
-	<Tooltip>
-		<TooltipTrigger>{{yield}}</TooltipTrigger>
-		{{#if @show}}
-			<TooltipContent
-				@side="right"
-			>{{@label}}</TooltipContent>
-		{{/if}}
-	</Tooltip>
-</template>;
+const PAGES = [
+	{ name: 'Home', icon: 'home', href: '/' },
+	{ name: 'Substrata', icon: 'brush', href: '/editor' },
+	{ name: 'Errata', icon: 'signature', href: '/errata' },
+	{ name: 'Workflows', icon: 'workflow', href: '/workflows' },
+	{ name: 'Experiments', icon: 'flask-conical', href: '/experiments' },
+];
 
 const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 	...cat,
 	tools: cat.tools
-		.filter((t) => !t.route)
+		// a routed tool with its own page row is listed once
+		.filter((t) => !PAGES.some((page) => page.href === t.href))
 		.sort(
 			(a, b) =>
 				Number(!!b.atlas) - Number(!!a.atlas) ||
@@ -43,24 +48,157 @@ const SIDEBAR_CATEGORIES: ToolCategory[] = toolCategories.map((cat) => ({
 		),
 }));
 
+interface NavRowSignature {
+	Args: {
+		name: string;
+		icon?: string;
+		href: string;
+		external?: boolean;
+		/** Opens the magazine at this page id instead of following the link. */
+		magazine?: string;
+		description?: string;
+		/** Overrides the URL match, for a row that stands for many pages. */
+		current?: boolean;
+	};
+	Element: HTMLElement;
+}
+
+class NavRow extends Component<NavRowSignature> {
+	@service declare router: RouterService;
+	@service declare magazine: MagazineService;
+
+	get selected() {
+		return (
+			this.args.current ??
+			this.router.currentURL?.split('?')[0] === this.args.href
+		);
+	}
+
+	get detail() {
+		return this.selected ? this.args.description : undefined;
+	}
+
+	// canon rows are plain links
+	go = (event: MouseEvent) => {
+		if (this.args.magazine) {
+			if (!isPlainClick(event)) return;
+			event.preventDefault();
+			this.magazine.open(this.args.magazine);
+			return;
+		}
+		if (
+			this.args.external ||
+			event.button !== 0 ||
+			event.metaKey ||
+			event.ctrlKey ||
+			event.shiftKey ||
+			event.altKey
+		)
+			return;
+		event.preventDefault();
+		void this.router.transitionTo(this.args.href);
+	};
+
+	<template>
+		{{#if @external}}
+			<CanonSidebarRow
+				@title={{@name}}
+				@icon={{component IconSvg name=@icon}}
+				@href={{@href}}
+				target="_blank"
+				rel="noopener noreferrer"
+			/>
+		{{else}}
+			<CanonSidebarRow
+				@title={{@name}}
+				@icon={{if
+					@icon
+					(component IconSvg name=@icon)
+				}}
+				@href={{@href}}
+				@selected={{this.selected}}
+				@onClick={{this.go}}
+				...attributes
+			/>
+			{{#if this.detail}}
+				<p class="dt-nav-detail">{{this.detail}}</p>
+			{{/if}}
+		{{/if}}
+	</template>
+}
+
 export default class AppSidebar extends Component {
+	@service declare router: RouterService;
 	@service declare sidebar: SidebarService;
 
-	@tracked search = '';
+	@tracked toolSearch = '';
+	@tracked docsSearch = '';
+	@tracked aboutOpen = false;
+
+	openAbout = (event: MouseEvent) => {
+		// webkit leaves a clicked button unfocused; the dialog returns focus to it
+		(event.currentTarget as HTMLElement).focus();
+		this.aboutOpen = true;
+	};
+
+	closeAbout = () => {
+		this.aboutOpen = false;
+	};
 
 	pride = PRIDE;
 	commitSha = COMMIT_SHA;
+	pages = PAGES;
+	opensSection = opensSection;
 
-	get collapsed() {
-		return (
-			this.sidebar.state === 'collapsed' &&
-			!this.sidebar.isMobile
-		);
+	/** On the /canon docs the drawer lists the docs pages instead of the tools. */
+	get inDocs() {
+		const route = this.router.currentRouteName ?? '';
+		return route === 'canon' || route.startsWith('canon.');
+	}
+
+	get search() {
+		return this.inDocs ? this.docsSearch : this.toolSearch;
 	}
 
 	get query() {
 		return this.search.toLowerCase();
 	}
+
+	get docsSections() {
+		return searchDocs(this.docsSearch);
+	}
+
+	get docsPage() {
+		return navIdFor(
+			pageFor(
+				this.router.currentRouteName,
+				this.router.currentRoute?.params,
+			),
+		);
+	}
+
+	// while searching, rows match by URL; otherwise a section row stands for its pages
+	isCurrent = (id: string) =>
+		this.docsSearch.trim() ? undefined : id === this.docsPage;
+
+	// keeps the current docs row in the drawer's view
+	reveal = modifier((nav: HTMLElement, [id]: [string | undefined]) => {
+		if (!id) return;
+		const scroller = nav.querySelector<HTMLElement>(
+			'.canon-sidebar-scroll',
+		);
+		const row = nav.querySelector<HTMLElement>(
+			'.canon-sidebar-rows [aria-current="page"]',
+		);
+		if (!scroller || !row) return;
+		const top = row.offsetTop - scroller.offsetTop;
+		if (
+			top < scroller.scrollTop ||
+			top + row.offsetHeight >
+				scroller.scrollTop + scroller.clientHeight
+		)
+			scroller.scrollTop = top - scroller.clientHeight / 3;
+	});
 
 	get featured(): Tool[] {
 		return featuredTools.filter((t) => matchesQuery(t, this.query));
@@ -84,365 +222,293 @@ export default class AppSidebar extends Component {
 		);
 	}
 
+	shortcut = navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K';
+
 	onSearch = (event: Event) => {
-		this.search = (event.target as HTMLInputElement).value;
+		const value = (event.target as HTMLInputElement).value;
+		if (this.inDocs) this.docsSearch = value;
+		else this.toolSearch = value;
 	};
 
 	clearSearch = () => {
-		this.search = '';
+		if (this.inDocs) this.docsSearch = '';
+		else this.toolSearch = '';
 	};
 
-	<template>
-		{{#if this.sidebar.openMobile}}
-			<button
-				type="button"
-				class="dt-sidebar-scrim"
-				aria-label="Close navigation"
-				{{on "click" this.sidebar.closeMobile}}
-			></button>
-		{{/if}}
+	// the home omnibox claims the key first and prevents default
+	searchKey = modifier((input: HTMLInputElement) => {
+		const keydown = (event: KeyboardEvent) => {
+			if (
+				event.defaultPrevented ||
+				!(event.metaKey || event.ctrlKey) ||
+				event.key.toLowerCase() !== 'k'
+			)
+				return;
+			event.preventDefault();
+			this.sidebar.setOpen(true);
+			// the drawer leaves inert on the next render
+			requestAnimationFrame(() => {
+				input.focus();
+				input.select();
+			});
+		};
+		window.addEventListener('keydown', keydown);
+		return () => window.removeEventListener('keydown', keydown);
+	});
 
-		<aside
+	<template>
+		<CanonSidebar
 			class="dt-sidebar"
-			data-state={{this.sidebar.state}}
-			data-mobile={{if this.sidebar.isMobile "true" "false"}}
-			data-open-mobile={{if
-				this.sidebar.openMobile
-				"true"
-				"false"
-			}}
+			@compact={{true}}
+			@collapsed={{false}}
+			aria-label={{if this.inDocs "Docs" "Main"}}
+			{{this.reveal this.docsPage}}
 		>
-			<div class="dt-sidebar-header">
-				<LinkTo @route="index" class="dt-brand">
-					<img
-						src="/delphi-lowlod.png"
-						width="64"
-						height="64"
-						alt=""
-						class="dt-brand-logo
-							{{if
-								this.pride
-								'pride-ring'
-							}}"
-					/>
-					<span class="dt-brand-text">
-						<span
-							class="dt-brand-name
-								{{if
-									this.pride
-									'pride-wordmark'
-								}}"
+			<:hero>
+				<div class="dt-sidebar-hero">
+					{{#if this.inDocs}}
+						<NavRow
+							class="dt-docs-back"
+							@name="delphitools"
+							@icon="arrow-left"
+							@href={{this.sidebar.appUrl}}
+						/>
+					{{else}}
+						<LinkTo
+							@route="index"
+							class="dt-brand"
 						>
-							delphitools
-						</span>
-						<span class="dt-brand-sub">
-							<span
-								class="dt-brand-tagline
+							<img
+								src="/delphi-lowlod.png"
+								width="64"
+								height="64"
+								alt=""
+								class="dt-brand-logo
 									{{if
 										this.pride
-										'pride-tagline'
+										'pride-ring'
 									}}"
-							>
-								{{#if
-									this.pride
-								}}trans rights{{else}}indie
-									tools{{/if}}
-							</span>
-							<span
-								class="dt-brand-sha"
-								title="Build commit"
-							>
-								v{{VERSION}}
-								·
-								{{this.commitSha}}
-							</span>
-						</span>
-					</span>
-				</LinkTo>
-			</div>
-
-			<div class="dt-sidebar-search">
-				<Icon @name="search" class="dt-search-icon" />
-				<input
-					type="text"
-					class="dt-search-input"
-					placeholder="Search tools..."
-					aria-label="Search tools"
-					value={{this.search}}
-					{{on "input" this.onSearch}}
-				/>
-				{{#if this.search}}
-					<button
-						type="button"
-						class="dt-search-clear"
-						aria-label="Clear search"
-						{{on "click" this.clearSearch}}
-					>
-						<Icon @name="x" />
-					</button>
-				{{/if}}
-			</div>
-
-			<nav aria-label="Main" class="dt-sidebar-nav">
-				{{#unless this.query}}
-					<div class="dt-nav-group">
-						<NavTip
-							@label="Home"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="index"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="home"
-								/>
-								<span
-									class="dt-nav-label"
-								>Home</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Substrata"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="editor"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="brush"
-								/>
-								<span
-									class="dt-nav-label"
-								>Substrata</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Errata"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="errata"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="signature"
-								/>
-								<span
-									class="dt-nav-label"
-								>Errata</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Workflows"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="workflows"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="workflow"
-								/>
-								<span
-									class="dt-nav-label"
-								>Workflows</span>
-							</LinkTo>
-						</NavTip>
-						<NavTip
-							@label="Experiments"
-							@show={{this.collapsed}}
-						>
-							<LinkTo
-								@route="experiments"
-								class="dt-nav-link"
-							>
-								<Icon
-									@name="flask-conical"
-								/>
-								<span
-									class="dt-nav-label"
-								>Experiments</span>
-							</LinkTo>
-						</NavTip>
-					</div>
-				{{/unless}}
-
-				{{#if this.empty}}
-					<output
-						class="dt-nav-empty"
-						aria-live="polite"
-					>No tools found</output>
-				{{/if}}
-
-				{{#if this.featured.length}}
-					<div class="dt-nav-group">
-						<h2 class="dt-nav-group-label">
-							<Icon
-								@name="star"
-								class="dt-star"
 							/>
-							Greatest Hits
-						</h2>
+							<span
+								class="dt-brand-text"
+							>
+								<span
+									class="dt-brand-name
+										{{if
+											this.pride
+											'pride-wordmark'
+										}}"
+								>
+									delphitools
+								</span>
+								<span
+									class="dt-brand-sub"
+								>
+									<span
+										class="dt-brand-tagline
+											{{if
+												this.pride
+												'pride-tagline'
+											}}"
+									>
+										{{#if
+											this.pride
+										}}trans
+											rights{{else}}indie
+											tools{{/if}}
+									</span>
+									<span
+										class="dt-brand-sha"
+										title="Build commit"
+									>
+										v{{VERSION}}
+										·
+										{{this.commitSha}}
+									</span>
+								</span>
+							</span>
+						</LinkTo>
+					{{/if}}
+					<div class="dt-search">
+						<IconSvg @name="search" />
+						<input
+							type="search"
+							class="dt-search-input"
+							placeholder={{if
+								this.inDocs
+								"Search docs..."
+								"Search tools..."
+							}}
+							aria-label={{if
+								this.inDocs
+								"Search docs"
+								"Search tools"
+							}}
+							value={{this.search}}
+							{{on
+								"input"
+								this.onSearch
+							}}
+							{{this.searchKey}}
+						/>
+						{{#if this.search}}
+							<button
+								type="button"
+								class="dt-search-clear"
+								aria-label="Clear search"
+								{{on
+									"click"
+									this.clearSearch
+								}}
+							>
+								<IconSvg
+									@name="x"
+								/>
+							</button>
+						{{else}}
+							<kbd
+								class="dt-search-key"
+							>{{this.shortcut}}</kbd>
+						{{/if}}
+					</div>
+				</div>
+			</:hero>
+			<:default>
+				{{#if this.inDocs}}
+					{{#each this.docsSections as |section|}}
+						{{#if section.title}}
+							<CanonHeading
+								@text={{section.title}}
+							/>
+						{{/if}}
+						{{#each
+							section.pages
+							as |page|
+						}}
+							<NavRow
+								@name={{page.title}}
+								@icon={{if
+									(this.opensSection
+										page
+									)
+									page.icon
+								}}
+								@href={{page.url}}
+								@current={{this.isCurrent
+									page.id
+								}}
+							/>
+						{{/each}}
+					{{else}}
+						<output
+							class="dt-nav-empty"
+							aria-live="polite"
+						>No pages</output>
+					{{/each}}
+				{{else}}
+					{{#unless this.query}}
+						{{#each this.pages as |page|}}
+							<NavRow
+								@name={{page.name}}
+								@icon={{page.icon}}
+								@href={{page.href}}
+							/>
+						{{/each}}
+					{{/unless}}
+
+					{{#if this.empty}}
+						<output
+							class="dt-nav-empty"
+							aria-live="polite"
+						>No tools found</output>
+					{{/if}}
+
+					{{#if this.featured.length}}
+						<CanonHeading
+							@text="Greatest Hits"
+						/>
 						{{#each
 							this.featured
 							as |tool|
 						}}
-							<NavTip
-								@label={{tool.name}}
-								@show={{this.collapsed}}
-							>
-								{{#if
-									tool.route
-								}}
-									<LinkTo
-										@route={{tool.route}}
-										class="dt-nav-link dt-nav-link--featured"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</LinkTo>
-								{{else}}
-									<LinkTo
-										@route="tools.tool"
-										@model={{tool.id}}
-										class="dt-nav-link dt-nav-link--featured"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</LinkTo>
-								{{/if}}
-							</NavTip>
+							<NavRow
+								@name={{tool.name}}
+								@icon={{tool.icon}}
+								@href={{tool.href}}
+								@description={{tool.description}}
+							/>
 						{{/each}}
-					</div>
-				{{/if}}
+					{{/if}}
 
-				{{#each this.categories as |category|}}
-					<div class="dt-nav-group">
-						<h2
-							class="dt-nav-group-label"
-						>{{category.name}}</h2>
+					{{#each this.categories as |category|}}
+						<CanonHeading
+							@text={{category.name}}
+						/>
 						{{#each
 							category.tools
 							as |tool|
 						}}
-							<NavTip
-								@label={{tool.name}}
-								@show={{this.collapsed}}
-							>
-								{{#if
+							<NavRow
+								@name={{tool.name}}
+								@icon={{tool.icon}}
+								@href={{tool.href}}
+								@external={{if
+									tool.magazine
+									false
 									tool.external
 								}}
-									<a
-										href={{tool.href}}
-										class="dt-nav-link"
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</a>
-								{{else}}
-									<LinkTo
-										@route="tools.tool"
-										@model={{tool.id}}
-										class="dt-nav-link
-											{{if
-												tool.atlas
-												'dt-nav-link--atlas'
-											}}"
-									>
-										<Icon
-											@name={{tool.icon}}
-										/>
-										<span
-											class="dt-nav-label"
-										>{{tool.name}}</span>
-									</LinkTo>
-								{{/if}}
-							</NavTip>
-						{{/each}}
-					</div>
-				{{/each}}
-			</nav>
-
-			<div class="dt-sidebar-footer">
-				<Dialog as |d|>
-					<button
-						type="button"
-						class="dt-about"
-						{{d.focusOnClose}}
-						{{on "click" d.open}}
-					>
-						<span class="dt-about-text">
-							<span>No logins. No
-								tracking.</span>
-							<span>Long live the
-								handmade web.</span>
-						</span>
-						<Icon
-							@name="info"
-							class="dt-about-icon"
-						/>
-						<span class="dt-sr-only">About
-							delphitools</span>
-					</button>
-
-					<d.Content class="dt-dialog">
-						<header class="dt-dialog-head">
-							<h2>About delphitools</h2>
-							<button
-								type="button"
-								class="dt-dialog-close"
-								aria-label="Close"
-								{{on
-									"click"
-									d.close
+								@magazine={{if
+									tool.magazine
+									tool.id
 								}}
-							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-						</header>
-						<AboutDelphitoolsBody />
-					</d.Content>
-				</Dialog>
-				<LinkTo
-					@route="privacy"
-					class="dt-about"
-					aria-label="Privacy"
-				>
-					<span
-						class="dt-about-text"
-					>Privacy</span>
-					<Icon
-						@name="shield-check"
-						class="dt-about-icon"
-					/>
-				</LinkTo>
-			</div>
+								@description={{tool.description}}
+							/>
+						{{/each}}
+					{{/each}}
 
-			<button
-				type="button"
-				class="dt-sidebar-rail"
-				aria-label="Toggle sidebar"
-				tabindex="-1"
-				{{on "click" this.sidebar.toggle}}
-			></button>
-		</aside>
+					{{#unless this.query}}
+						<CanonHeading
+							@text="delphitools"
+						/>
+						<CanonSidebarRow
+							@title="About"
+							@icon={{component
+								IconSvg
+								name="info"
+							}}
+							{{on
+								"click"
+								this.openAbout
+							}}
+						/>
+						<CanonDialog
+							class="dt-about"
+							@open={{this.aboutOpen}}
+							@title="About delphitools"
+							@onClose={{this.closeAbout}}
+						>
+							<:default>
+								<AboutDelphitoolsBody
+								/>
+							</:default>
+							<:footer as |close|>
+								<CanonButton
+									@text="Close"
+									@onClick={{fn
+										close
+										""
+									}}
+								/>
+							</:footer>
+						</CanonDialog>
+						<NavRow
+							@name="Privacy"
+							@icon="shield-check"
+							@href="/privacy"
+						/>
+					{{/unless}}
+				{{/if}}
+			</:default>
+		</CanonSidebar>
 	</template>
 }

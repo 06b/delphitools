@@ -1,136 +1,215 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { Tabs, TabsList, TabsTrigger } from 'delphitools-v2/components/ui/tabs';
+import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+import CanonBar from 'delphicanon/components/canon-bar';
+import CanonBigNumberField from 'delphicanon/components/canon-big-number-field';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import press from 'delphicanon/modifiers/canon-press';
 import {
 	STUPID_CATEGORIES,
 	convertStupid,
 	formatStupid,
 	type StupidCategory,
-	type StupidUnit,
 } from 'delphitools-v2/lib/stupid-units';
+import './stupid-units/stupid-units.css';
 
-export default class StupidUnitsTool extends Component {
-	@tracked category: StupidCategory = STUPID_CATEGORIES[0]!;
-	@tracked inputUnit: StupidUnit | null = null;
-	@tracked inputValue = '';
+const categoryNames = STUPID_CATEGORIES.map((c) => c.name);
+
+// the middle of a category's ladder is a size people know
+const middle = (category: StupidCategory) =>
+	Math.floor(category.units.length / 2);
+
+/**
+ * Query flags, for harnesses and screenshots: ?suCategory=<key>
+ * ?suUnit=<unit key> ?suValue=<number>.
+ */
+function launchFlags(search: string) {
+	const query = new URLSearchParams(search);
+	const category =
+		STUPID_CATEGORIES.find(
+			(c) => c.key === query.get('suCategory'),
+		) ?? STUPID_CATEGORIES[0]!;
+	const unit = category.units.findIndex(
+		(u) => u.key === (query.get('suUnit') ?? 'banana'),
+	);
+	return {
+		category,
+		unit: unit < 0 ? middle(category) : unit,
+		value: query.get('suValue') ?? '1',
+	};
+}
+
+/** Every unit of a category against one typed amount; a click on a row converts from it. */
+export default class StupidUnits extends Component {
+	@tracked category: StupidCategory;
+	@tracked fromIndex: number;
+	@tracked text: string;
+
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		this.category = flags.category;
+		this.fromIndex = flags.unit;
+		this.text = flags.value;
+	}
+
+	get categoryIndex() {
+		return STUPID_CATEGORIES.indexOf(this.category);
+	}
+
+	get from() {
+		return this.category.units[this.fromIndex]!;
+	}
+
+	get amount() {
+		const value = Number.parseFloat(this.text.replace(',', '.'));
+		return Number.isFinite(value) ? value : undefined;
+	}
 
 	get rows() {
-		const { category, inputUnit, inputValue } = this;
-		const amount = Number.parseFloat(inputValue);
-		const hasValue = inputUnit !== null && Number.isFinite(amount);
+		const { category, amount, from } = this;
 		const { units, symbol } = category;
 		// ponytail: bar is the unit's log size, not the count; counts span 40 decades
 		const lo = Math.log10(units[0]!.factor);
 		const hi = Math.log10(units[units.length - 1]!.factor);
 		const span = hi - lo || 1;
-
-		return units.map((unit) => {
-			const isActive = unit === inputUnit;
+		return units.map((unit, index) => {
+			const value =
+				amount === undefined
+					? '—'
+					: formatStupid(
+							convertStupid(
+								amount,
+								from,
+								unit,
+							),
+						);
 			return {
-				key: unit.key,
+				index,
 				name: unit.name,
 				base: `${formatStupid(unit.factor)} ${symbol}`.trim(),
-				style: htmlSafe(
-					`width: ${((Math.log10(unit.factor) - lo) / span) * 100}%`,
-				),
-				isActive,
-				value: isActive
-					? inputValue
-					: hasValue
-						? formatStupid(
-								convertStupid(
-									amount,
-									inputUnit,
-									unit,
-								),
-							)
-						: '',
+				share: (Math.log10(unit.factor) - lo) / span,
+				value,
+				lit: index === this.fromIndex,
 			};
 		});
 	}
 
-	chooseCategory = (key: string) => {
-		this.category =
-			STUPID_CATEGORIES.find((c) => c.key === key) ??
-			this.category;
-		this.inputUnit = null;
-		this.inputValue = '';
+	pickCategory = (index: number) => {
+		const category = STUPID_CATEGORIES[index];
+		if (!category || category === this.category) return;
+		this.category = category;
+		this.fromIndex = middle(category);
 	};
 
-	setUnitValue = (key: string, event: Event) => {
-		this.inputUnit =
-			this.category.units.find((u) => u.key === key) ?? null;
-		this.inputValue = (event.target as HTMLInputElement).value;
+	pickUnit = (index: number) => {
+		if (index === this.fromIndex) return;
+		// the amount follows, so the quantity stays the same
+		const { amount } = this;
+		const unit = this.category.units[index]!;
+		if (amount !== undefined)
+			this.text = formatStupid(
+				convertStupid(amount, this.from, unit),
+			).replaceAll(',', '');
+		this.fromIndex = index;
+	};
+
+	typed = (text: string) => (this.text = text);
+
+	/** Whole steps, tenths below one, never under zero (UnitConverterViewController.nudge). */
+	step = (direction: -1 | 1) => {
+		const current = this.amount ?? 0;
+		const size = current !== 0 && Math.abs(current) < 1 ? 0.1 : 1;
+		const next = (Math.round(current / size) + direction) * size;
+		this.text = String(Math.max(0, Number(next.toFixed(10))));
+	};
+
+	// a click places the caret after focus, so select on the next frame
+	selectAll = (event: FocusEvent) => {
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
 	};
 
 	<template>
-		<div class="dt-su">
-			<Tabs
-				@value={{this.category.key}}
-				@onValueChange={{this.chooseCategory}}
-			>
-				<TabsList class="dt-su-tabs">
-					{{#each
-						STUPID_CATEGORIES key="key"
-						as |option|
-					}}
-						<TabsTrigger
-							class="dt-su-tab"
-							@value={{option.key}}
-						>
-							{{option.name}}
-						</TabsTrigger>
-					{{/each}}
-				</TabsList>
-			</Tabs>
-
-			<div class="dt-su-table">
-				{{#each this.rows key="key" as |row|}}
-					<div
-						class="dt-su-row
-							{{if
-								row.isActive
-								'is-active'
-							}}"
-					>
-						<span class="dt-su-name">
-							<span
-								class="dt-su-unit"
-							>{{row.name}}</span>
-							<span
-								class="dt-su-base"
-							>{{row.base}}</span>
-						</span>
-						<span
-							class="dt-su-bar"
-							aria-hidden="true"
-						>
-							<span
-								class="dt-su-fill"
-								style={{row.style}}
-							></span>
-						</span>
-						<input
-							type="text"
-							inputmode="decimal"
-							class="dt-su-input"
-							value={{row.value}}
-							placeholder="0"
-							aria-label={{row.name}}
+		<CanonSplit class="stupid-units">
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonBigNumberField
+						class="stupid-units-value"
+						@value={{this.text}}
+						@placeholder="0"
+						@unit={{this.from.name}}
+						@label="Value"
+						@onStep={{this.step}}
+						@onInput={{this.typed}}
+						{{on "focusin" this.selectAll}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Category" />
+					<CanonSegmented
+						@items={{categoryNames}}
+						@selected={{this.categoryIndex}}
+						@columns={{2}}
+						@onChange={{this.pickCategory}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text={{this.category.name}}
+					/>
+					{{#each this.rows key="index" as |row|}}
+						<button
+							type="button"
+							class="stupid-units-row
+								{{if
+									row.lit
+									'stupid-units-row--lit'
+								}}"
+							aria-pressed={{if
+								row.lit
+								"true"
+								"false"
+							}}
+							aria-label="{{row.name}}, {{row.value}}"
+							{{press}}
 							{{on
-								"input"
+								"click"
 								(fn
-									this.setUnitValue
-									row.key
+									this.pickUnit
+									row.index
 								)
 							}}
-						/>
-					</div>
-				{{/each}}
-			</div>
-		</div>
+						>
+							<span
+								class="stupid-units-name"
+							>
+								<span
+									class="stupid-units-unit"
+								>{{row.name}}</span>
+								<span
+									class="stupid-units-base"
+								>{{row.base}}</span>
+							</span>
+							<CanonBar
+								class="stupid-units-bar"
+								@share={{row.share}}
+							/>
+							<span
+								class="stupid-units-amount"
+							>{{row.value}}</span>
+						</button>
+					{{/each}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

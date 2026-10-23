@@ -9,6 +9,7 @@ import {
 	buildPassphrase,
 	charKind,
 	generatePassword,
+	parseRolls,
 	parseWordlist,
 	passphraseEntropy,
 	passwordEntropy,
@@ -365,5 +366,18 @@ module('Unit | Lib | password > charKind', function () {
 		}
 		// space separator is neither lookup
 		assert.strictEqual(charKind(' '), 'letter');
+	});
+
+	test('parseRolls maps each word to its dice, skipping other lines', function (assert) {
+		const rolls = parseRolls(
+			'11111\tabacus\n66666\tzoom\n12\tbad\n16134\tt-shirt\n',
+		);
+		assert.deepEqual(
+			[...rolls],
+			[
+				['abacus', '11111'],
+				['zoom', '66666'],
+			],
+		);
 	});
 });

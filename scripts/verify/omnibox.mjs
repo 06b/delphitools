@@ -22,15 +22,76 @@ async function type(value) {
 }
 
 const idle = await page.evaluate(() => ({
-	legend: document.querySelectorAll('.dt-omni-legend-btn').length,
+	legend: document.querySelectorAll('.dt-omni-legend .canon-button').length,
 	sections: document.querySelectorAll('.dt-section').length,
 	art: document
-		.querySelector('.dt-hero.is-doodle .dt-hero-art')
+		.querySelector('.dt-hero .dt-hero-art')
 		?.getAttribute('src'),
 }));
 check('idle: legend strip with three entries', idle.legend === 3);
 check('idle: catalogue sections render', idle.sections > 5, `${idle.sections}`);
 check('idle: hero art renders from the manifest', !!idle.art, idle.art ?? '');
+
+// rows whose cells do not reach the grid's inner width leave a hole
+function latticeHoles() {
+	return page.evaluate(() => {
+		const holes = [];
+		for (const grid of document.querySelectorAll('.dt-grid')) {
+			const box = grid.getBoundingClientRect();
+			const inner = box.width - 2;
+			const rows = new Map();
+			for (const cell of grid.children) {
+				const r = cell.getBoundingClientRect();
+				const top = Math.round(r.top);
+				rows.set(top, (rows.get(top) ?? 0) + r.width + 1);
+			}
+			for (const [top, width] of rows) {
+				if (Math.abs(width - 1 - inner) > 2)
+					holes.push(`${Math.round(width)}/${Math.round(inner)}@${top}`);
+			}
+		}
+		return holes;
+	});
+}
+
+const fill = await latticeHoles();
+check('lattice: every row fills the grid at 1400', fill.length === 0, fill.join(' '));
+
+const links = await page.evaluate(() => {
+	const cells = [...document.querySelectorAll('.dt-omni-catalogue .dt-cell')];
+	const bad = cells
+		.filter((cell) => {
+			const href = cell.getAttribute('href') ?? '';
+			const id = cell.dataset.tool;
+			return id ? href !== `/tools/${id}` : !href;
+		})
+		.map((cell) => cell.textContent.trim().slice(0, 30));
+	return { count: cells.length, bad };
+});
+check(
+	'lattice: every tool cell links to its tool',
+	links.count > 50 && links.bad.length === 0,
+	`${links.count} cells; ${links.bad.join(', ')}`,
+);
+
+await page.setViewport({ width: 390, height: 844 });
+await sleep(500);
+const narrow = await page.evaluate(() => {
+	const main = document.querySelector('.dt-main');
+	return {
+		main: main.scrollWidth - main.clientWidth,
+		doc: document.documentElement.scrollWidth - innerWidth,
+	};
+});
+check(
+	'390: no horizontal scroll',
+	narrow.main <= 0 && narrow.doc <= 0,
+	JSON.stringify(narrow),
+);
+const narrowFill = await latticeHoles();
+check('lattice: every row fills the grid at 390', narrowFill.length === 0, narrowFill.join(' '));
+await page.setViewport({ width: 1400, height: 1000 });
+await sleep(500);
 
 await type('palette');
 // chunks load on demand
@@ -43,7 +104,7 @@ const search = await page.evaluate(() => ({
 		.querySelector('.dt-section-title')
 		?.textContent.trim()
 		.replace(/\s+/g, ' '),
-	cells: document.querySelectorAll('.dt-section:first-of-type .dt-cell')
+	cells: document.querySelectorAll('.dt-home > .dt-section:first-of-type .dt-cell')
 		.length,
 	dimmed: !!document.querySelector('.dt-omni-catalogue.is-dimmed'),
 }));
@@ -63,7 +124,7 @@ const spaced = await page.evaluate(() => {
 	return {
 		matches: titles.find((t) => t.startsWith('Matches')) ?? '',
 		names: [
-			...document.querySelectorAll('.dt-section:first-of-type .dt-cell'),
+			...document.querySelectorAll('.dt-home > .dt-section:first-of-type .dt-cell'),
 		].map((el) => el.textContent.trim().split('\n')[0]),
 	};
 });
@@ -120,14 +181,18 @@ await page.evaluate(() =>
 		.find((a) => a.getAttribute('href')?.includes('colour-converter'))
 		?.click(),
 );
-await page.waitForSelector('.dt-cc-value', { timeout: 15000 });
+await page.waitForSelector('.colour-converter .canon-colour-strip-value', {
+	timeout: 15000,
+});
 const landed = await page.evaluate(() => ({
 	search: location.search,
-	value: document.querySelector('.dt-cc-value')?.value,
+	value: document
+		.querySelector('.colour-converter .canon-colour-strip-value')
+		?.textContent.trim(),
 }));
 check(
 	'colour: the converter opens on the carried colour',
-	landed.search === '?color=2e7d32' && landed.value === '#2e7d32',
+	landed.search === '?color=2e7d32' && landed.value === '#2E7D32',
 	JSON.stringify(landed),
 );
 await visit(page, '/');
@@ -320,7 +385,7 @@ const file = await page.evaluate(() => ({
 	meta: document
 		.querySelector('.dt-omni-file-meta')
 		?.textContent.trim(),
-	cells: document.querySelectorAll('.dt-section:first-of-type .dt-cell')
+	cells: document.querySelectorAll('.dt-home > .dt-section:first-of-type .dt-cell')
 		.length,
 }));
 check(
@@ -343,10 +408,10 @@ await page.click('[data-tool="metadata-stripper"]');
 await page.waitForFunction(
 	() =>
 		location.pathname === '/tools/metadata-stripper' &&
-		!!document.querySelector('.dt-strip-name'),
+		!!document.querySelector('.ms-source .canon-row-title'),
 	{ timeout: 15000 },
 );
-const handed = await page.$eval('.dt-strip-name', (el) =>
+const handed = await page.$eval('.ms-source .canon-row-title', (el) =>
 	el.textContent.trim(),
 );
 check(
@@ -365,7 +430,7 @@ const focused = await page.evaluate(() =>
 check('⌘K focuses the field', focused === true);
 
 await visit(page, '/');
-const legend = await page.$$eval('.dt-omni-legend-btn', (buttons) =>
+const legend = await page.$$eval('.dt-omni-legend .canon-button', (buttons) =>
 	buttons.map((b) => b.textContent?.replace(/\s+/g, ' ').trim()),
 );
 check(
@@ -403,7 +468,7 @@ const lastBtn = await page.$eval('.dt-wn-btn.is-primary', (el) =>
 );
 check("the last slide ends on let's go", lastBtn === 'let\u2019s go', lastBtn);
 await page.click('.dt-wn-btn.is-primary');
-await sleep(200);
+await sleep(500);
 check('closing returns to the page', await page.$eval('.dt-wn:not(.dt-cl)', (el) => !el.open));
 const second = await page.$eval('.dt-hero-link', (el) =>
 	el.textContent.replace(/\s+/g, ' ').trim(),
@@ -442,17 +507,40 @@ check(
 	),
 );
 await page.click('.dt-cl-close');
-await sleep(200);
+await sleep(500);
 check(
 	'the changelog closes',
 	await page.$eval('.dt-cl', (el) => !el.open),
 );
-await page.click('.dt-omni-legend-btn:last-child');
+await page.click('.dt-omni-legend .canon-button:last-child');
 await page.waitForFunction(() => location.pathname !== '/', { timeout: 10000 });
 check(
 	'legend: feeling lucky opens a tool page',
 	await page.evaluate(() => /^\/(tools\/|editor|workflows)/.test(location.pathname)),
 	await page.evaluate(() => location.pathname),
+);
+
+await visit(page, '/');
+await sleep(800);
+await page.click('.canon-jump-heading-button');
+await sleep(800);
+await page.evaluate(() =>
+	[...document.querySelectorAll('.canon-jump-grid-tile')]
+		.find((t) => t.textContent.includes('PDF'))
+		.click(),
+);
+await sleep(2500);
+check(
+	'jump: a section heading opens the jump grid and scrolls to the pick',
+	await page.evaluate(() => {
+		const heading = [...document.querySelectorAll('.canon-jump-heading')].find(
+			(h) => h.dataset.canonJumpTitle === 'PDF',
+		);
+		const main = document.querySelector('.dt-main');
+		return (
+			Math.abs(heading.getBoundingClientRect().top - main.getBoundingClientRect().top) < 2
+		);
+	}),
 );
 
 await finish(browser);

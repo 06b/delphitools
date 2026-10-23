@@ -1,798 +1,691 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
-import { eq } from 'ember-truth-helpers';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import { modifier } from 'ember-modifier';
 import type Owner from '@ember/owner';
-import Icon from 'delphitools-v2/components/icon';
-import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonEmptyRow from 'delphicanon/components/canon-empty-row';
+import CanonFigure from 'delphicanon/components/canon-figure';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import CanonValueLine from 'delphicanon/components/canon-value-line';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import MarkedEditor from 'delphitools-v2/components/tools/media/marked-editor';
 import { downloadText } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import { TEXT_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
 import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import {
+	addLineNumbers,
+	decodeUrl,
+	encodeUrl,
+	extract,
+	findRanges,
+	pieces,
+	removeDuplicates,
+	removeEmptyLines,
+	removeExtraSpaces,
+	removeLineBreaks,
+	removeLineNumbers,
+	replaceIn,
+	reverseLines,
+	shuffleLines,
+	sortByLength,
+	sortLines,
+	sortLinesReverse,
+	toCamelCase,
+	toKebabCase,
+	toLower,
+	toSentenceCase,
+	toSnakeCase,
+	toTitleCase,
+	toUpper,
+	trimWhitespace,
+	wrapAt,
+	type ExtractKind,
+} from 'delphitools-v2/components/tools/markdown-writer/text-ops';
+import './markdown-writer/markdown-writer.css';
 
 const STORAGE_KEY = 'delphitools-scratchpad';
 const ACCEPT = acceptAttr(TEXT_ACCEPT);
-const SAVE_DEBOUNCE_MS = 1000;
-const COPIED_MS = 1500;
+const saveDelay = 1000;
+// copy all ignores the limit
+const listed = 50;
+// ponytail: marks past this stay unlit; the count stays exact
+const markLimit = 10_000;
 
-export function toUpper(text: string): string {
-	return text.toUpperCase();
-}
-
-export function toLower(text: string): string {
-	return text.toLowerCase();
-}
-
-export function toTitleCase(text: string): string {
-	return text.replace(
-		/\w\S*/g,
-		(word) =>
-			word.charAt(0).toUpperCase() +
-			word.slice(1).toLowerCase(),
-	);
-}
-
-export function toSentenceCase(text: string): string {
-	return text
-		.toLowerCase()
-		.replace(/(^\s*\w|[.!?]\s*\w)/g, (c) => c.toUpperCase());
-}
-
-export function toCamelCase(text: string): string {
-	return text
-		.toLowerCase()
-		.replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) =>
-			c.toUpperCase(),
-		);
-}
-
-export function toSnakeCase(text: string): string {
-	return text
-		.replace(/\s+/g, '_')
-		.replace(/([a-z])([A-Z])/g, '$1_$2')
-		.toLowerCase()
-		.replace(/[^a-z0-9_]/g, '_')
-		.replace(/_+/g, '_');
-}
-
-export function toKebabCase(text: string): string {
-	return text
-		.replace(/\s+/g, '-')
-		.replace(/([a-z])([A-Z])/g, '$1-$2')
-		.toLowerCase()
-		.replace(/[^a-z0-9-]/g, '-')
-		.replace(/-+/g, '-');
-}
-
-export function sortLines(text: string): string {
-	return text
-		.split('\n')
-		.sort((a, b) => a.localeCompare(b))
-		.join('\n');
-}
-
-export function sortLinesReverse(text: string): string {
-	return text
-		.split('\n')
-		.sort((a, b) => b.localeCompare(a))
-		.join('\n');
-}
-
-export function sortByLength(text: string): string {
-	return text
-		.split('\n')
-		.sort((a, b) => a.length - b.length)
-		.join('\n');
-}
-
-export function reverseLines(text: string): string {
-	return text.split('\n').reverse().join('\n');
-}
-
-// fisher–yates on a copy
-export function shuffleLines(text: string): string {
-	const lines = text.split('\n');
-	for (let i = lines.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		const a = lines[i]!;
-		const b = lines[j]!;
-		lines[i] = b;
-		lines[j] = a;
-	}
-	return lines.join('\n');
-}
-
-export function removeDuplicates(text: string): string {
-	return [...new Set(text.split('\n'))].join('\n');
-}
-
-export function addLineNumbers(text: string): string {
-	return text
-		.split('\n')
-		.map((line, i) => `${i + 1}. ${line}`)
-		.join('\n');
-}
-
-export function removeLineNumbers(text: string): string {
-	return text
-		.split('\n')
-		.map((line) => line.replace(/^\d+[.):-]\s*/, ''))
-		.join('\n');
-}
-
-export function trimWhitespace(text: string): string {
-	return text
-		.split('\n')
-		.map((line) => line.trim())
-		.join('\n');
-}
-
-export function removeEmptyLines(text: string): string {
-	return text
-		.split('\n')
-		.filter((line) => line.trim())
-		.join('\n');
-}
-
-export function removeLineBreaks(text: string): string {
-	return text.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-export function removeExtraSpaces(text: string): string {
-	return text.replace(/[^\S\n]+/g, ' ');
-}
-
-// long word gets own line
-export function wrapAt(text: string, width: number): string {
-	const lines: string[] = [];
-	let current = '';
-	for (const word of text.split(/\s+/)) {
-		if (current.length + word.length + 1 <= width) {
-			current += (current ? ' ' : '') + word;
-		} else {
-			if (current) lines.push(current);
-			current = word;
-		}
-	}
-	if (current) lines.push(current);
-	return lines.join('\n');
-}
-
-export function encodeUrl(text: string): string {
-	return encodeURIComponent(text);
-}
-
-// throws on malformed percent
-export function decodeUrl(text: string): string {
-	return decodeURIComponent(text);
-}
-
-// throws on bad regex
-export function replaceIn(
-	text: string,
-	find: string,
-	replacement: string,
-	useRegex: boolean,
-	all: boolean,
-): string {
-	if (useRegex) {
-		return text.replace(
-			new RegExp(find, all ? 'g' : ''),
-			replacement,
-		);
-	}
-	return all
-		? text.split(find).join(replacement)
-		: text.replace(find, replacement);
-}
-
-// bad pattern counts zero
-export function countMatches(
-	text: string,
-	find: string,
-	useRegex: boolean,
-): number {
-	if (!find) return 0;
-	try {
-		if (useRegex) {
-			return (text.match(new RegExp(find, 'g')) ?? []).length;
-		}
-		return text.split(find).length - 1;
-	} catch {
-		return 0;
-	}
-}
-
-export const EXTRACT_PATTERNS = {
-	emails: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-	urls: /https?:\/\/[^\s<>"{}|\\^`[\]]+/g,
-	numbers: /-?\d+\.?\d*/g,
-} as const;
-
-export type ExtractKind = keyof typeof EXTRACT_PATTERNS;
-
-// first-seen order
-export function extract(text: string, kind: ExtractKind): string[] {
-	return [...new Set(text.match(EXTRACT_PATTERNS[kind]) ?? [])];
-}
-
-interface TransformButton {
+interface Transform {
 	label: string;
 	run: (text: string) => string;
-	// alerted, not thrown
-	error?: string;
 	title?: string;
-	wide?: boolean;
 }
 
-export const PANELS: { id: string; icon: string; label: string }[] = [
-	{ id: 'case', icon: 'case-upper', label: 'Case' },
-	{ id: 'lines', icon: 'arrow-up-down', label: 'Lines' },
-	{ id: 'cleanup', icon: 'sparkles', label: 'Clean Up' },
-	{ id: 'find', icon: 'search', label: 'Find & Replace' },
-	{ id: 'extract', icon: 'file-text', label: 'Extract' },
-];
-
-const CASE_BUTTONS: TransformButton[] = [
+const caseOps: Transform[] = [
 	{ label: 'UPPERCASE', run: toUpper },
 	{ label: 'lowercase', run: toLower },
 	{ label: 'Title Case', run: toTitleCase },
 	{ label: 'Sentence case', run: toSentenceCase },
 	{ label: 'camelCase', run: toCamelCase },
 	{ label: 'snake_case', run: toSnakeCase },
-	{ label: 'kebab-case', run: toKebabCase, wide: true },
+	{ label: 'kebab-case', run: toKebabCase },
 ];
 
-const LINE_BUTTONS: TransformButton[] = [
+const lineOps: Transform[] = [
 	{ label: 'Sort A–Z', run: sortLines },
 	{ label: 'Sort Z–A', run: sortLinesReverse },
-	{ label: 'By Length', run: sortByLength },
+	{ label: 'Sort by Length', run: sortByLength },
 	{ label: 'Reverse Order', run: reverseLines },
 	{ label: 'Shuffle', run: shuffleLines },
 	{ label: 'Remove Duplicates', run: removeDuplicates },
-	{ label: 'Add Line Nos.', run: addLineNumbers },
-	{ label: 'Remove Line Nos.', run: removeLineNumbers },
+	{ label: 'Add Line Numbers', run: addLineNumbers },
+	{ label: 'Remove Line Numbers', run: removeLineNumbers },
 ];
 
-const CLEANUP_BUTTONS: TransformButton[] = [
+const cleanOps: Transform[] = [
 	{ label: 'Trim Lines', run: trimWhitespace },
 	{ label: 'Remove Empty Lines', run: removeEmptyLines },
 	{ label: 'Remove Extra Spaces', run: removeExtraSpaces },
 	{ label: 'Join Lines', run: removeLineBreaks },
-	{ label: 'Wrap at 80', run: (t) => wrapAt(t, 80) },
-	{ label: 'Wrap at 120', run: (t) => wrapAt(t, 120) },
+	{ label: 'Wrap at 80', run: (text) => wrapAt(text, 80) },
+	{ label: 'Wrap at 120', run: (text) => wrapAt(text, 120) },
 	{
-		label: 'Encode URL',
+		label: 'URL Encode',
 		run: encodeUrl,
 		title: 'Encode special characters (e.g. / → %2F)',
 	},
-	{
-		label: 'Decode URL',
-		run: decodeUrl,
-		title: 'Decode %XX characters (e.g. %2F → /)',
-		error: 'Unable to decode - text may contain invalid percent-encoded sequences',
-	},
 ];
 
-const EXTRACT_BUTTONS: { label: string; kind: ExtractKind }[] = [
-	{ label: 'Extract Emails', kind: 'emails' },
-	{ label: 'Extract URLs', kind: 'urls' },
-	{ label: 'Extract Numbers', kind: 'numbers' },
+const extractOps: { label: string; kind: ExtractKind }[] = [
+	{ label: 'Emails', kind: 'emails' },
+	{ label: 'URLs', kind: 'urls' },
+	{ label: 'Numbers', kind: 'numbers' },
 ];
 
-const INVALID_REGEX = 'Invalid regex pattern';
-const CLEAR_PROMPT = 'Clear all content?';
+const FilesIcon = <template><IconSvg @name="folder" /></template>;
+const ClearIcon = <template><IconSvg @name="trash-2" /></template>;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
+const DownloadIcon = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
+const count = (n: number) => n.toLocaleString();
+
+function readStore(): string {
+	try {
+		return localStorage.getItem(STORAGE_KEY) ?? '';
+	} catch {
+		return '';
+	}
+}
+
+function writeStore(text: string) {
+	try {
+		if (text) localStorage.setItem(STORAGE_KEY, text);
+		else localStorage.removeItem(STORAGE_KEY);
+	} catch {
+		// private mode: the draft stays in memory
+	}
+}
+
+/** The port of TextScratchpadViewController, ScratchpadEditor as the picture. */
 export default class MarkdownWriterTool extends Component {
-	@tracked content = '';
-	@tracked copied = false;
+	@service('canon-toast') declare toast: CanonToastService;
+
+	@tracked text = '';
 	@tracked lastSaved: Date | null = null;
 	@tracked findText = '';
 	@tracked replaceText = '';
 	@tracked useRegex = false;
-	@tracked extractedItems: string[] = [];
-	@tracked activePanel: string | null = null;
+	@tracked extracted: string[] | null = null;
+	@tracked decodeFailed = false;
 
-	#editor: HTMLTextAreaElement | null = null;
-	#saveTimer?: ReturnType<typeof setTimeout>;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	#editor?: HTMLTextAreaElement;
+	#file?: HTMLInputElement;
+	#saveTimer?: number;
+	// a text from the query never touches the saved draft (iOS shared text)
+	#persists = true;
 
 	constructor(owner: Owner, args: object) {
 		super(owner, args);
-		if (typeof localStorage === 'undefined') return;
-		this.content = localStorage.getItem(STORAGE_KEY) ?? '';
+		// ?padText= ?padFind= ?padRegex=1 ?padExtract=emails|urls|numbers: the iOS launch arguments
+		const query = new URLSearchParams(window.location.search);
+		const padText = query.get('padText');
+		if (padText !== null) {
+			this.text = padText.replaceAll('\\n', '\n');
+			this.#persists = false;
+		} else {
+			this.text = readStore();
+		}
+		this.findText = query.get('padFind') ?? '';
+		this.useRegex = query.get('padRegex') === '1';
+		const kind = query.get('padExtract');
+		if (kind && extractOps.some((op) => op.kind === kind))
+			this.runExtract(kind as ExtractKind);
+		window.addEventListener('pagehide', this.#flush);
 	}
 
 	willDestroy() {
 		super.willDestroy();
-		clearTimeout(this.#saveTimer);
-		clearTimeout(this.#copiedTimer);
+		window.removeEventListener('pagehide', this.#flush);
+		this.#flush();
 	}
 
-	registerEditor = modifier((element: HTMLTextAreaElement) => {
-		this.#editor = element;
-		return () => {
-			if (this.#editor === element) this.#editor = null;
-		};
-	});
+	#flush = () => {
+		if (this.#saveTimer === undefined) return;
+		window.clearTimeout(this.#saveTimer);
+		this.#saveTimer = undefined;
+		writeStore(this.text);
+	};
 
-	get panels() {
-		return PANELS;
+	get caseOps() {
+		return caseOps;
 	}
 
-	get caseButtons() {
-		return CASE_BUTTONS;
+	get lineOps() {
+		return lineOps;
 	}
 
-	get lineButtons() {
-		return LINE_BUTTONS;
+	get cleanOps() {
+		return cleanOps;
 	}
 
-	get cleanupButtons() {
-		return CLEANUP_BUTTONS;
+	get extractOps() {
+		return extractOps;
 	}
 
-	get extractButtons() {
-		return EXTRACT_BUTTONS;
+	get empty() {
+		return !this.text;
 	}
 
-	get wordCount() {
-		return this.content.trim()
-			? this.content.trim().split(/\s+/).length
-			: 0;
+	get words() {
+		const trimmed = this.text.trim();
+		return count(trimmed ? trimmed.split(/\s+/).length : 0);
 	}
 
-	get charCount() {
-		return this.content.length;
+	get chars() {
+		return count(this.text.length);
 	}
 
-	get lineCount() {
-		return this.content ? this.content.split('\n').length : 0;
+	get lines() {
+		return count(this.text ? this.text.split('\n').length : 0);
 	}
 
 	get savedAt() {
 		return this.lastSaved?.toLocaleTimeString() ?? '';
 	}
 
+	@cached
+	get ranges() {
+		return findRanges(this.text, this.findText, this.useRegex);
+	}
+
+	get badPattern() {
+		return this.ranges === null;
+	}
+
 	get matchCount() {
-		return countMatches(this.content, this.findText, this.useRegex);
+		return this.ranges?.length ?? 0;
 	}
 
-	togglePanel = (id: string) => {
-		this.activePanel = this.activePanel === id ? null : id;
-	};
-
-	setContent = (event: Event) => {
-		this.content = (event.target as HTMLTextAreaElement).value;
-		this.#scheduleSave();
-	};
-
-	readFile = async (file: File) => {
-		if (!matchesAccept(file, ACCEPT)) return;
-		if (this.content.trim() && !confirm('Replace draft?')) return;
-		this.content = await file.text();
-		this.#scheduleSave();
-	};
-
-	drop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file) void this.readFile(file);
-	};
-
-	dragOver = (event: DragEvent) => event.preventDefault();
-
-	#scheduleSave() {
-		clearTimeout(this.#saveTimer);
-		if (!this.content) return;
-		this.#saveTimer = setTimeout(() => {
-			localStorage.setItem(STORAGE_KEY, this.content);
-			this.lastSaved = new Date();
-		}, SAVE_DEBOUNCE_MS);
+	get matchText() {
+		return count(this.matchCount);
 	}
 
-	// keeps browser undo stack
-	#applyTransform(transform: (text: string) => string) {
+	get matchUnit() {
+		return this.matchCount === 1 ? 'match' : 'matches';
+	}
+
+	get cantReplace() {
+		return this.matchCount === 0;
+	}
+
+	get pieces() {
+		return pieces(
+			this.text,
+			(this.ranges ?? []).slice(0, markLimit),
+		);
+	}
+
+	get extractHeading() {
+		const found = this.extracted;
+		return found?.length
+			? `${count(found.length)} found`
+			: 'Extract';
+	}
+
+	get hasExtracted() {
+		return this.extracted !== null;
+	}
+
+	get listedItems() {
+		return this.extracted?.slice(0, listed) ?? [];
+	}
+
+	editorElement = modifier((element: HTMLElement) => {
+		this.#editor = element.querySelector('textarea') ?? undefined;
+	});
+
+	fileField = modifier((element: HTMLInputElement) => {
+		this.#file = element;
+	});
+
+	setText = (text: string) => {
+		this.text = text;
+		if (!this.#persists) return;
+		window.clearTimeout(this.#saveTimer);
+		this.#saveTimer = window.setTimeout(() => {
+			this.#saveTimer = undefined;
+			writeStore(this.text);
+			this.lastSaved = this.text ? new Date() : null;
+		}, saveDelay);
+	};
+
+	// insertText keeps the whole change as one step of the browser's undo
+	#write(next: string) {
 		const editor = this.#editor;
-		if (!editor) return;
-		const next = transform(editor.value);
-		if (next === editor.value) return;
-		editor.focus();
+		if (!editor || next === editor.value) return;
+		const back = document.activeElement as HTMLElement | null;
+		const scroller = editor.closest('.mw-scroll');
+		const top = scroller?.scrollTop ?? 0;
+		const caret = Math.min(editor.selectionStart, next.length);
+		editor.focus({ preventScroll: true });
 		editor.select();
 		document.execCommand('insertText', false, next);
 		// insertText no-op fallback
 		if (editor.value !== next) editor.value = next;
-		this.content = editor.value;
-		this.#scheduleSave();
+		editor.setSelectionRange(caret, caret);
+		if (scroller) scroller.scrollTop = top;
+		if (back && back !== editor)
+			back.focus({ preventScroll: true });
+		this.setText(editor.value);
 	}
 
-	apply = (button: TransformButton) => {
+	apply = (op: Transform) => {
+		this.decodeFailed = false;
+		this.#write(op.run(this.text));
+	};
+
+	decode = () => {
+		this.decodeFailed = false;
 		try {
-			this.#applyTransform(button.run);
-		} catch (error) {
-			if (!button.error) throw error;
-			alert(button.error);
-		}
-	};
-
-	setFindText = (event: Event) => {
-		this.findText = (event.target as HTMLInputElement).value;
-	};
-
-	setReplaceText = (event: Event) => {
-		this.replaceText = (event.target as HTMLInputElement).value;
-	};
-
-	setUseRegex = (event: Event) => {
-		this.useRegex = (event.target as HTMLInputElement).checked;
-	};
-
-	doReplace = (all: boolean) => {
-		if (!this.findText) return;
-		try {
-			this.#applyTransform((text) =>
-				replaceIn(
-					text,
-					this.findText,
-					this.replaceText,
-					this.useRegex,
-					all,
-				),
-			);
+			this.#write(decodeUrl(this.text));
 		} catch {
-			alert(INVALID_REGEX);
+			this.decodeFailed = true;
 		}
+	};
+
+	setFind = (value: string) => (this.findText = value);
+
+	setReplace = (value: string) => (this.replaceText = value);
+
+	setRegex = (on: boolean) => (this.useRegex = on);
+
+	replace = (all: boolean) => {
+		if (this.cantReplace) return;
+		this.#write(
+			replaceIn(
+				this.text,
+				this.findText,
+				this.replaceText,
+				this.useRegex,
+				all,
+			),
+		);
 	};
 
 	runExtract = (kind: ExtractKind) => {
-		this.extractedItems = extract(this.content, kind);
+		this.extracted = extract(this.text, kind);
 	};
 
-	copyExtracted = () => {
-		void navigator.clipboard.writeText(
-			this.extractedItems.join('\n'),
-		);
-	};
+	copyFound = () =>
+		void this.toast.copy(this.extracted?.join('\n') ?? '');
 
-	copyContent = () => {
-		void navigator.clipboard.writeText(this.content);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
-	};
+	copy = () => void this.toast.copy(this.text);
 
-	downloadContent = () => {
-		downloadText(this.content, 'scratchpad.txt', 'text/plain');
-	};
+	download = () =>
+		downloadText(this.text, 'scratchpad.txt', 'text/plain');
 
-	clearContent = () => {
-		if (!confirm(CLEAR_PROMPT)) return;
-		this.content = '';
-		if (this.#editor) this.#editor.value = '';
-		clearTimeout(this.#saveTimer);
-		localStorage.removeItem(STORAGE_KEY);
+	clear = () => {
+		if (!confirm('Clear all content?')) return;
+		this.#write('');
+		window.clearTimeout(this.#saveTimer);
+		this.#saveTimer = undefined;
+		if (this.#persists) writeStore('');
 		this.lastSaved = null;
 	};
 
+	openFiles = () => this.#file?.click();
+
+	pick = (event: Event) => {
+		const field = event.target as HTMLInputElement;
+		const file = field.files?.[0];
+		field.value = '';
+		if (file) void this.readFile(file);
+	};
+
+	readFile = async (file: File) => {
+		if (!matchesAccept(file, ACCEPT)) return;
+		if (this.text.trim() && !confirm('Replace draft?')) return;
+		const text = await file.text();
+		if (!this.isDestroying) this.#write(text);
+	};
+
+	// a file dropped anywhere on the tool; text drops stay with the editor
+	drop = (event: DragEvent) => {
+		const file = event.dataTransfer?.files[0];
+		if (!file) return;
+		event.preventDefault();
+		void this.readFile(file);
+	};
+
+	dragOver = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
+
 	<template>
-		<div
-			class="dt-md"
+		<CanonSplit
+			class="markdown-writer"
+			@halves={{true}}
+			@collapsesTo={{180}}
 			{{filePaste this.readFile accept=ACCEPT}}
 			{{on "drop" this.drop}}
 			{{on "dragover" this.dragOver}}
 		>
-			<div class="dt-md-tabs">
-				{{#each this.panels key="id" as |panel|}}
-					<button
-						type="button"
-						class="dt-md-tab
-							{{if
-								(eq
-									this.activePanel
-									panel.id
-								)
-								'is-active'
-							}}"
-						{{on
-							"click"
-							(fn
-								this.togglePanel
-								panel.id
-							)
-						}}
-					>
-						<Icon @name={{panel.icon}} />
-						{{panel.label}}
-						<Icon
-							class="dt-md-tab-chevron"
-							@name="chevron-down"
+			<:sidebar>
+				<CanonCanvas @height={{2000}}>
+					<div class="mw-editor">
+						<div class="mw-strip">
+							<span
+								class="mw-counts"
+								role="group"
+								aria-label="{{this.words}} words, {{this.chars}} chars, {{this.lines}} lines"
+							>
+								<CanonFigure
+									@text={{this.words}}
+									@unit="words"
+									@size={{15}}
+									@colour="var(--canon-foreground)"
+								/>
+								<CanonFigure
+									@text={{this.chars}}
+									@unit="chars"
+									@size={{15}}
+									@colour="var(--canon-foreground)"
+								/>
+								<CanonFigure
+									@text={{this.lines}}
+									@unit="lines"
+									@size={{15}}
+									@colour="var(--canon-foreground)"
+								/>
+							</span>
+							{{#if this.lastSaved}}
+								<span
+									class="mw-saved"
+								>Saved
+									{{this.savedAt}}</span>
+							{{/if}}
+						</div>
+						<div class="mw-scroll">
+							<MarkedEditor
+								class="mw-text"
+								@text={{this.text}}
+								@placeholder="Paste or type text here…"
+								@label="Text"
+								@onInput={{this.setText}}
+								{{this.editorElement}}
+							>
+								{{~#each
+									this.pieces
+									as |piece|
+								~}}
+									<span
+										class={{if
+											piece.hit
+											"mw-hit"
+										}}
+									>{{piece.text}}</span>
+								{{~/each~}}
+							</MarkedEditor>
+						</div>
+					</div>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Text" />
+					<CanonGrid @columns={{2}}>
+						<CanonButton
+							@text="Files"
+							@icon={{FilesIcon}}
+							@onClick={{this.openFiles}}
 						/>
-					</button>
-				{{/each}}
-			</div>
-
-			{{#if (eq this.activePanel "case")}}
-				<div class="dt-md-panel">
-					<div class="segmented dt-md-actions">
-						{{#each
-							this.caseButtons
-							key="label"
-							as |op|
-						}}
-							<button
-								type="button"
-								class="dt-md-action
-									{{if
-										op.wide
-										'is-wide'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.apply
-										op
-									)
-								}}
-							>{{op.label}}</button>
-						{{/each}}
-					</div>
-				</div>
-			{{/if}}
-
-			{{#if (eq this.activePanel "lines")}}
-				<div class="dt-md-panel">
-					<div class="segmented dt-md-actions">
-						{{#each
-							this.lineButtons
-							key="label"
-							as |op|
-						}}
-							<button
-								type="button"
-								class="dt-md-action"
-								{{on
-									"click"
-									(fn
-										this.apply
-										op
-									)
-								}}
-							>{{op.label}}</button>
-						{{/each}}
-					</div>
-				</div>
-			{{/if}}
-
-			{{#if (eq this.activePanel "cleanup")}}
-				<div class="dt-md-panel">
-					<div class="segmented dt-md-actions">
-						{{#each
-							this.cleanupButtons
-							key="label"
-							as |op|
-						}}
-							<button
-								type="button"
-								class="dt-md-action"
-								title={{op.title}}
-								{{on
-									"click"
-									(fn
-										this.apply
-										op
-									)
-								}}
-							>{{op.label}}</button>
-						{{/each}}
-					</div>
-				</div>
-			{{/if}}
-
-			{{#if (eq this.activePanel "find")}}
-				<div class="dt-md-panel">
-									<div class="dt-md-find">
+						<CanonButton
+							@text="Clear"
+							@icon={{ClearIcon}}
+							@disabled={{this.empty}}
+							@onClick={{this.clear}}
+						/>
+					</CanonGrid>
 					<input
-							type="text"
-							class="dt-md-find-input"
-							value={{this.findText}}
-							placeholder="Find…"
-							aria-label="Find"
-							{{on
-								"input"
-								this.setFindText
+						type="file"
+						accept={{ACCEPT}}
+						hidden
+						aria-label="Files"
+						{{this.fileField}}
+						{{on "change" this.pick}}
+					/>
+					<CanonGrid>
+						<CanonButton
+							class="mw-download"
+							@text={{passAlong
+								"Download"
 							}}
+							@icon={{DownloadIcon}}
+							@disabled={{this.empty}}
+							@onClick={{this.download}}
 						/>
-						<input
-							type="text"
-							class="dt-md-find-input"
-							value={{this.replaceText}}
-							placeholder="Replace with…"
-							aria-label="Replace with"
-							{{on
-								"input"
-								this.setReplaceText
-							}}
+						<CanonButton
+							class="mw-copy"
+							@text="Copy"
+							@icon={{CopyIcon}}
+							@iconStyle="oversized"
+							@kind="primary"
+							@disabled={{this.empty}}
+							@onClick={{this.copy}}
 						/>
-					</div>
-					<div class="dt-md-find-bar">
-						<label class="dt-md-check">
-							<input
-								type="checkbox"
-								checked={{this.useRegex}}
-								{{on
-									"change"
-									this.setUseRegex
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Case" />
+					<CanonGrid @columns={{2}}>
+						{{#each this.caseOps as |op|}}
+							<CanonButton
+								@text={{op.label}}
+								@onClick={{fn
+									this.apply
+									op
 								}}
 							/>
-							Use Regex
-						</label>
-						{{#if this.findText}}
-							<span
-								class="dt-md-matches"
-							>{{this.matchCount}}
-								matches</span>
-						{{/if}}
-						<div
-							class="segmented dt-md-replace-actions"
-						>
-							<button
-								type="button"
-								class="dt-md-action"
-								{{on
-									"click"
-									(fn
-										this.doReplace
-										false
-									)
-								}}
-							>Replace</button>
-							<button
-								type="button"
-								class="dt-md-action is-primary"
-								{{on
-									"click"
-									(fn
-										this.doReplace
-										true
-									)
-								}}
-							>Replace All</button>
-						</div>
-					</div>
-				</div>
-			{{/if}}
-
-			{{#if (eq this.activePanel "extract")}}
-				<div class="dt-md-panel">
-					<div
-						class="segmented dt-md-actions is-thirds"
-					>
-						{{#each
-							this.extractButtons
-							key="kind"
-							as |op|
-						}}
-							<button
-								type="button"
-								class="dt-md-action"
-								{{on
-									"click"
-									(fn
-										this.runExtract
-										op.kind
-									)
-								}}
-							>{{op.label}}</button>
 						{{/each}}
-					</div>
-					{{#if this.extractedItems}}
-						<div class="dt-md-extracted">
-							<div
-								class="dt-md-extracted-bar"
-							>
-								<span
-									class="dt-md-extracted-count"
-								>{{this.extractedItems.length}}
-									items
-									found</span>
-								<button
-									type="button"
-									class="dt-md-extracted-copy"
-									{{on
-										"click"
-										this.copyExtracted
-									}}
-								>
-									<Icon
-										@name="copy"
-									/>
-									Copy All
-								</button>
-							</div>
-							<div
-								class="dt-md-extracted-list"
-							>
-								{{#each
-									this.extractedItems
-									key="@identity"
-									as |item|
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Lines" />
+					<CanonGrid @columns={{2}}>
+						{{#each this.lineOps as |op|}}
+							<CanonButton
+								@text={{op.label}}
+								@onClick={{fn
+									this.apply
+									op
 								}}
-									<div
-										class="dt-md-extracted-item"
-									>{{item}}</div>
-								{{/each}}
-							</div>
-						</div>
+							/>
+						{{/each}}
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Clean Up" />
+					<CanonGrid @columns={{2}}>
+						{{#each this.cleanOps as |op|}}
+							<CanonButton
+								title={{op.title}}
+								@text={{op.label}}
+								@onClick={{fn
+									this.apply
+									op
+								}}
+							/>
+						{{/each}}
+						<CanonButton
+							title="Decode %XX characters (e.g. %2F → /)"
+							@text="URL Decode"
+							@onClick={{this.decode}}
+						/>
+					</CanonGrid>
+					{{#if this.decodeFailed}}
+						<CanonStatus
+							@text="Invalid escape"
+							@tone="warn"
+							@row={{true}}
+						/>
 					{{/if}}
-				</div>
-			{{/if}}
-
-			<textarea
-				class="dt-md-editor"
-				aria-label="Scratchpad"
-				placeholder="Start typing or paste text here…"
-				value={{this.content}}
-				{{this.registerEditor}}
-				{{on "input" this.setContent}}
-			></textarea>
-
-			<div class="dt-md-status">
-				<div class="dt-md-stats">
-					<span>{{this.wordCount}} words</span>
-					<span>{{this.charCount}} chars</span>
-					<span>{{this.lineCount}} lines</span>
-					{{#if this.lastSaved}}
-						<span class="dt-md-saved">Saved
-							{{this.savedAt}}</span>
-					{{/if}}
-				</div>
-				<div class="dt-md-status-actions">
-					<button
-						type="button"
-						class="dt-md-status-btn"
-						title="Copy"
-						aria-label="Copy"
-						{{on "click" this.copyContent}}
-					>
-						<Icon
-							@name={{if
-								this.copied
-								"check"
-								"copy"
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Find & Replace" />
+					<label class="mw-field">
+						<IconSvg @name="search" />
+						<CanonTextCell
+							@value={{this.findText}}
+							@placeholder="Find"
+							@onChange={{this.setFind}}
+							aria-label="Find"
+							autocomplete="off"
+							autocapitalize="off"
+							spellcheck="false"
+						/>
+					</label>
+					<label class="mw-field">
+						<IconSvg
+							@name="corner-down-right"
+						/>
+						<CanonTextCell
+							@value={{this.replaceText}}
+							@placeholder="Replace"
+							@onChange={{this.setReplace}}
+							aria-label="Replace"
+							autocomplete="off"
+							autocapitalize="off"
+							spellcheck="false"
+						/>
+					</label>
+					<div class="mw-find-status">
+						<CanonRow
+							@title="Regex"
+							as |titleId|
+						>
+							<CanonSwitch
+								aria-labelledby={{titleId}}
+								@on={{this.useRegex}}
+								@onChange={{this.setRegex}}
+							/>
+						</CanonRow>
+						<span class="mw-find-count">
+							{{#if this.badPattern}}
+								<CanonStatus
+									@text="Invalid regex"
+									@tone="warn"
+								/>
+							{{else if
+								this.findText
+							}}
+								<CanonFigure
+									@text={{this.matchText}}
+									@unit={{this.matchUnit}}
+									@size={{17}}
+									@colour="var(--canon-foreground)"
+								/>
+							{{/if}}
+						</span>
+					</div>
+					<CanonGrid @columns={{2}}>
+						<CanonButton
+							@text="Replace"
+							@disabled={{this.cantReplace}}
+							@onClick={{fn
+								this.replace
+								false
 							}}
 						/>
-					</button>
-					<button
-						type="button"
-						class="dt-md-status-btn"
-						title={{passAlong "Download"}}
-						aria-label={{passAlong
-							"Download"
-						}}
-						{{on
-							"click"
-							this.downloadContent
-						}}
-					>
-						<Icon
-							@name={{(downloadIcon)}}
+						<CanonButton
+							@text="Replace All"
+							@disabled={{this.cantReplace}}
+							@onClick={{fn
+								this.replace
+								true
+							}}
 						/>
-					</button>
-					<button
-						type="button"
-						class="dt-md-status-btn"
-						title="Clear"
-						aria-label="Clear"
-						{{on "click" this.clearContent}}
-					>
-						<Icon @name="trash-2" />
-					</button>
-				</div>
-			</div>
-		</div>
+					</CanonGrid>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading
+						@text={{this.extractHeading}}
+					/>
+					<CanonGrid @columns={{3}}>
+						{{#each
+							this.extractOps
+							as |op|
+						}}
+							<CanonButton
+								@text={{op.label}}
+								@onClick={{fn
+									this.runExtract
+									op.kind
+								}}
+							/>
+						{{/each}}
+					</CanonGrid>
+					{{#if this.hasExtracted}}
+						{{#each
+							this.listedItems
+							key="@index"
+							as |item index|
+						}}
+							<CanonValueLine
+								@layout="numbered"
+								@label={{rank
+									index
+								}}
+								@value={{item}}
+							/>
+						{{else}}
+							<CanonEmptyRow
+								@text="None"
+							/>
+						{{/each}}
+						{{#if this.listedItems.length}}
+							<CanonButton
+								@text="Copy All"
+								@icon={{CopyIcon}}
+								@onClick={{this.copyFound}}
+							/>
+						{{/if}}
+					{{/if}}
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
+}
+
+function rank(index: number) {
+	return String(index + 1);
 }

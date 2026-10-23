@@ -1,0 +1,86 @@
+/* the picture: typeset lines drawn by the kit's maths morph */
+.alg-picture {
+	position: absolute;
+	inset: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-math-font);
+}
+
+.alg-picture-svg {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: visible;
+}
+
+.alg-picture-svg g > * {
+	transform-box: view-box;
+	transform-origin: 0 0;
+}
+
+.alg-picture-svg text {
+	fill: currentcolor;
+	white-space: pre;
+}
+
+.alg-picture-svg rect:not([fill]) {
+	fill: currentcolor;
+}
+
+/* the expression: the tool's main value, large */
+.canon-math-field.alg-field {
+	min-block-size: var(--canon-primary-height);
+}
+
+.alg-variable {
+	font-family: var(--canon-mono-font);
+	text-align: center;
+}
+
+/* examples: the maths, its syntax beside it */
+.alg-example {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	box-sizing: border-box;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding: 8px var(--canon-panel-padding);
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.alg-example[aria-current="true"] {
+	background: var(--canon-accent-bg);
+}
+
+@media (hover: hover) {
+	.alg-example:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.alg-example:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.alg-example-math {
+	min-inline-size: 0;
+	flex-shrink: 1;
+}
+
+.alg-example-code {
+	flex: none;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-footnote);
+}

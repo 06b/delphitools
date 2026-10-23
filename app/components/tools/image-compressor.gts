@@ -1,494 +1,436 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq, not } from 'ember-truth-helpers';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import { downloadUrl } from 'delphitools-v2/lib/download';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import { registerDestructor, isDestroying } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCompressionScale from 'delphicanon/components/canon-compression-scale';
+import CanonDropZone from 'delphicanon/components/canon-drop-zone';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonImageCompare from 'delphicanon/components/canon-image-compare';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
 	compressImageData,
 	formatBytes,
-	savingsPercent,
-	QUALITY_FORMATS,
 	COMPRESS_EXTENSIONS,
+	QUALITY_FORMATS,
 	type CompressFormat,
 } from 'delphitools-v2/lib/image-compress';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import './image-compressor/image-compressor.css';
 
-interface CompressOption {
-	id: CompressFormat;
-	label: string;
-}
-
-const FORMATS: CompressOption[] = [
+const FORMATS: { id: CompressFormat; label: string }[] = [
 	{ id: 'mozjpeg', label: 'JPEG' },
 	{ id: 'webp', label: 'WebP' },
 	{ id: 'oxipng', label: 'PNG' },
 	{ id: 'avif', label: 'AVIF' },
+	{ id: 'jxl', label: 'JXL' },
 ];
 
-const DROP_HINT = 'or click to select an image, or paste';
+const whole = (value: number) => String(Math.round(value));
 
-interface SourceImage {
+// the document paste (filePaste) would load a drop-zone paste a second time
+const keepPaste = (event: Event) => event.stopPropagation();
+
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+
+interface Source {
 	file: File;
 	url: string;
-	width: number;
-	height: number;
+	bitmap?: ImageBitmap;
 }
 
-interface CompressedImage {
-	blob: Blob;
-	url: string;
+// ?compressSample ?compressFormat=<JPEG|WebP|PNG|AVIF|JXL> ?compressQuality=<1-100> ?compressEffort=<1-6>
+function launchFlags() {
+	const query = new URLSearchParams(window.location.search);
+	const label = query.get('compressFormat')?.toLowerCase();
+	const format = FORMATS.find((f) => f.label.toLowerCase() === label)?.id;
+	const clamp = (
+		key: string,
+		min: number,
+		max: number,
+		fallback: number,
+	) => {
+		const value = Number(query.get(key) ?? fallback);
+		return Number.isFinite(value)
+			? Math.min(max, Math.max(min, Math.round(value)))
+			: fallback;
+	};
+	return {
+		sample: query.has('compressSample'),
+		format: format ?? 'webp',
+		quality: clamp('compressQuality', 1, 100, 75),
+		effort: clamp('compressEffort', 1, 6, 2),
+	};
 }
 
-async function decodeToCanvas(
-	file: File,
-	background: string | null,
-): Promise<{ canvas: HTMLCanvasElement; width: number; height: number }> {
-	let bitmap: ImageBitmap;
-	try {
-		// preserve exif orientation
-		bitmap = await createImageBitmap(file, {
-			imageOrientation: 'from-image',
-		});
-	} catch {
-		bitmap = await createImageBitmap(file);
-	}
+function pixelsOf(bitmap: ImageBitmap, background: string | null) {
 	const canvas = document.createElement('canvas');
 	canvas.width = bitmap.width;
 	canvas.height = bitmap.height;
-	const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+	const context = canvas.getContext('2d', { willReadFrequently: true })!;
 	if (background) {
-		ctx.fillStyle = background;
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		context.fillStyle = background;
+		context.fillRect(0, 0, canvas.width, canvas.height);
 	}
-	ctx.drawImage(bitmap, 0, 0);
-	bitmap.close();
-	return { canvas, width: canvas.width, height: canvas.height };
+	context.drawImage(bitmap, 0, 0);
+	return context.getImageData(0, 0, canvas.width, canvas.height);
 }
 
-export default class ImageCompressorTool extends Component {
-	@tracked source: SourceImage | null = null;
-	@tracked format: CompressFormat = 'webp';
-	@tracked quality = 75;
-	@tracked effort = 2;
-	@tracked avifEnabled = false;
-	@tracked compressed: CompressedImage | null = null;
-	@tracked compressing = false;
+/** The port of ImageCompressorViewController, on the web tool's codecs. */
+export default class ImageCompressor extends Component {
+	@tracked source?: Source;
+	@tracked format: CompressFormat;
+	@tracked quality: number;
+	@tracked effort: number;
+	@tracked result?: { blob: Blob; url: string };
 	@tracked failed = false;
+	@tracked decoding = false;
+	@tracked busy = false;
 
-	#encodeSeq = 0;
+	#queued = false;
 
-	get hasQuality(): boolean {
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags();
+		this.format = flags.format;
+		this.quality = flags.quality;
+		this.effort = flags.effort;
+		registerDestructor(this, () => this.#release());
+		if (flags.sample)
+			void drawnSample().then((file) => this.load(file));
+	}
+
+	get formatLabels() {
+		return FORMATS.map((f) => f.label);
+	}
+
+	get formatIndex() {
+		return FORMATS.findIndex((f) => f.id === this.format);
+	}
+
+	get formatLabel() {
+		return FORMATS.find((f) => f.id === this.format)!.label;
+	}
+
+	get working() {
+		return this.decoding || (this.busy && !!this.source?.bitmap);
+	}
+
+	get hasQuality() {
 		return QUALITY_FORMATS.includes(this.format);
 	}
 
-	get visibleFormats(): CompressOption[] {
-		return FORMATS.filter(
-			(option) => option.id !== 'avif' || this.avifEnabled,
-		);
+	get meta() {
+		const { source } = this;
+		if (!source) return '';
+		const size = formatBytes(source.file.size);
+		return source.bitmap
+			? `${source.bitmap.width} × ${source.bitmap.height} · ${size}`
+			: size;
 	}
 
-	get meta(): string {
-		if (!this.source) return '';
-		return `${this.source.width} × ${this.source.height} · ${formatBytes(this.source.file.size)}`;
+	get aspect() {
+		const bitmap = this.source?.bitmap;
+		return bitmap ? Math.max(1, bitmap.width / bitmap.height) : 1.5;
 	}
 
-	get afterSize(): string {
-		return this.compressed
-			? formatBytes(this.compressed.blob.size)
-			: '';
-	}
-
-	get savings(): number | null {
-		if (!this.source || !this.compressed) return null;
-		return savingsPercent(
-			this.source.file.size,
-			this.compressed.blob.size,
-		);
-	}
-
-	get isSmaller(): boolean {
-		return (this.savings ?? 0) < 0;
-	}
-
-	get savingsLabel(): string {
-		const savings = this.savings;
-		if (savings === null) return '';
-		if (savings === 0) return '±0%';
-		return `${savings < 0 ? '−' : '+'}${Math.abs(savings)}%`;
-	}
-
-	get downloadName(): string {
+	get downloadName() {
 		if (!this.source) return '';
 		return this.source.file.name.replace(
-			/\.[^.]+$/,
+			/(\.[^.]+)?$/,
 			`.${COMPRESS_EXTENSIONS[this.format]}`,
 		);
 	}
 
-	readFile = (file: File) => {
-		if (!file.type.startsWith('image/')) return;
-		this.#setSource(file);
-	};
-
-	handleFileSelect = (event: Event) => {
-		const file = (event.target as HTMLInputElement).files?.[0];
-		if (file) this.#setSource(file);
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = event.dataTransfer?.files?.[0];
-		if (file?.type.startsWith('image/')) this.#setSource(file);
+	loadFiles = (files: File[]) => {
+		if (files[0]) void this.load(files[0]);
 	};
 
 	allowDrop = (event: DragEvent) => {
+		if (event.dataTransfer?.types.includes('Files'))
+			event.preventDefault();
+	};
+
+	// a drop on the picture or the settings replaces the image; the drop zone handles its own
+	dropAnywhere = (event: DragEvent) => {
+		if (event.defaultPrevented) return;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		void this.load(file);
 	};
 
-	#setSource(file: File) {
-		this.#revokeSource();
-		this.source = {
-			file,
-			url: URL.createObjectURL(file),
-			width: 0,
-			height: 0,
-		};
-		void this.#compress();
-	}
-
-	setFormat = (format: CompressFormat) => {
-		this.format = format;
-		void this.#compress();
-	};
-
-	setQuality = (event: Event) => {
-		this.quality = Number((event.target as HTMLInputElement).value);
-		void this.#compress();
-	};
-
-	setEffort = (event: Event) => {
-		this.effort = Number((event.target as HTMLInputElement).value);
-		void this.#compress();
-	};
-
-	toggleAvif = () => {
-		this.avifEnabled = !this.avifEnabled;
-		if (!this.avifEnabled && this.format === 'avif') {
-			this.format = 'webp';
-			void this.#compress();
+	load = async (file: File) => {
+		this.clear();
+		const source: Source = { file, url: URL.createObjectURL(file) };
+		this.source = source;
+		this.decoding = true;
+		let bitmap: ImageBitmap;
+		try {
+			bitmap = await decodeImage(file);
+		} catch {
+			if (this.source !== source) return;
+			this.decoding = false;
+			this.failed = true;
+			return;
 		}
+		if (this.source !== source || isDestroying(this)) {
+			bitmap.close();
+			return;
+		}
+		this.decoding = false;
+		this.source = { ...source, bitmap };
+		this.#compress();
 	};
 
 	clear = () => {
-		// invalidate active encodes
-		this.#encodeSeq++;
-		this.#revokeSource();
-		this.#revokeCompressed();
-		this.source = null;
+		this.#release();
+		this.source = undefined;
+		this.result = undefined;
 		this.failed = false;
+		this.decoding = false;
 	};
 
-	download = () => {
-		if (!this.compressed) return;
-		downloadUrl(this.compressed.url, this.downloadName);
+	pickFormat = (index: number) => {
+		const format = FORMATS[index]?.id;
+		if (!format || format === this.format) return;
+		this.format = format;
+		this.#compress();
 	};
 
-	async #compress() {
-		const source = this.source;
-		if (!source) return;
-		const seq = ++this.#encodeSeq;
-		this.compressing = true;
+	pickQuality = (value: number) => {
+		if (value === this.quality) return;
+		this.quality = value;
+		this.#compress();
+	};
+
+	pickEffort = (value: number) => {
+		if (value === this.effort) return;
+		this.effort = value;
+		this.#compress();
+	};
+
+	save = () => {
+		if (this.result)
+			downloadBlob(this.result.blob, this.downloadName);
+	};
+
+	// live on every change; one encode in flight, the newest settings run next
+	#compress() {
+		if (!this.source?.bitmap) return;
 		this.failed = false;
-		try {
-			const { canvas, width, height } = await decodeToCanvas(
-				source.file,
-				// mozjpeg drops alpha
-				this.format === 'mozjpeg' ? '#ffffff' : null,
-			);
-			const imageData = canvas
-				.getContext('2d', { willReadFrequently: true })!
-				.getImageData(0, 0, width, height);
-			const blob = await compressImageData(
-				imageData,
-				this.format,
-				{
-					quality: this.quality,
-					level: this.effort,
-				},
-			);
-			// discard stale encodes
-			if (seq !== this.#encodeSeq) return;
-			source.width = width;
-			source.height = height;
-			this.#revokeCompressed();
-			this.compressed = {
-				blob,
-				url: URL.createObjectURL(blob),
-			};
-		} catch (error) {
-			if (seq !== this.#encodeSeq) return;
-			console.error(
-				`Failed to compress ${source.file.name}:`,
-				error,
-			);
-			this.failed = true;
-		} finally {
-			if (seq === this.#encodeSeq) this.compressing = false;
+		if (this.busy) {
+			this.#queued = true;
+			return;
 		}
+		void this.#drain();
 	}
 
-	#revokeSource() {
-		if (this.source) URL.revokeObjectURL(this.source.url);
+	async #drain() {
+		this.busy = true;
+		for (;;) {
+			this.#queued = false;
+			const { source, format } = this;
+			if (!source?.bitmap) break;
+			let blob: Blob | undefined;
+			try {
+				blob = await compressImageData(
+					// mozjpeg drops alpha
+					pixelsOf(
+						source.bitmap,
+						format === 'mozjpeg'
+							? '#ffffff'
+							: null,
+					),
+					format,
+					{
+						quality: this.quality,
+						level: this.effort,
+					},
+				);
+			} catch (error) {
+				console.error(
+					`Failed to compress ${source.file.name}:`,
+					error,
+				);
+			}
+			if (isDestroying(this)) return;
+			if (this.#queued) continue;
+			if (source !== this.source) break;
+			if (this.result) URL.revokeObjectURL(this.result.url);
+			this.result = blob
+				? { blob, url: URL.createObjectURL(blob) }
+				: undefined;
+			this.failed = !blob;
+			break;
+		}
+		this.busy = false;
 	}
 
-	#revokeCompressed() {
-		if (this.compressed) URL.revokeObjectURL(this.compressed.url);
-		this.compressed = null;
+	#release() {
+		if (this.source) {
+			URL.revokeObjectURL(this.source.url);
+			this.source.bitmap?.close();
+		}
+		if (this.result) URL.revokeObjectURL(this.result.url);
 	}
 
 	<template>
-		<div class="dt-ic" {{filePaste this.readFile accept="image/*"}}>
-			<div class="dt-ic-frame">
-				{{#unless this.source}}
-					<label
-						class="dt-ic-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
-						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-ic-drop-title"
-						>Drop image here</span>
-						<span
-							class="dt-ic-drop-hint"
-						>{{DROP_HINT}}</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.source}}
-					<div class="dt-ic-bar">
-						<div class="dt-ic-info">
-							<p
-								class="dt-ic-name"
-							>{{this.source.file.name}}</p>
-							<p
-								class="dt-ic-meta"
-							>{{this.meta}}</p>
-						</div>
-						<button
-							type="button"
-							class="dt-ic-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+		<CanonSplit
+			class="image-compressor"
+			@mainLeadsStacked={{true}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.allowDrop}}
+			{{on "drop" this.dropAnywhere}}
+		>
+			<:banner>
+				<CanonCanvas @height={{176}}>
+					<CanonCompressionScale
+						@before={{if
+							this.source
+							this.source.file.size
+							0
+						}}
+						@after={{if
+							this.result
+							this.result.blob.size
+							0
+						}}
+						@format={{if
+							this.source
+							this.formatLabel
+							"Compressed"
+						}}
+						@working={{this.working}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					{{#if this.source}}
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="ic-source"
+							@title={{this.source.file.name}}
+							@detail={{this.meta}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-ic-btn is-primary dt-ic-download"
-							disabled={{not
-								this.compressed
-							}}
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel />
-						</button>
-					</div>
-
-					<div class="dt-ic-fields">
-						<div class="dt-ic-field">
-							<span>Format</span>
-							<div
-								class="segmented dt-ic-formats
-									{{if
-										this.avifEnabled
-										'is-avif'
-									}}"
-							>
-								{{#each
-									this.visibleFormats
-									key="id"
-									as |fmt|
-								}}
-									<button
-										type="button"
-										class="dt-ic-format
-											{{if
-												(eq
-													this.format
-													fmt.id
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.setFormat
-												fmt.id
-											)
-										}}
-									>{{fmt.label}}</button>
-								{{/each}}
-							</div>
-						</div>
-
-						{{#if this.hasQuality}}
-							<label
-								class="dt-ic-field"
-							>
-								<span
-								>Quality</span>
-								<span
-									class="dt-ic-slider"
-								>
-									<input
-										type="range"
-										min="1"
-										max="100"
-										step="1"
-										value={{this.quality}}
-										class="dt-ic-quality"
-										{{on
-											"input"
-											this.setQuality
-										}}
-									/>
-									<span
-										class="dt-ic-readout"
-									>{{this.quality}}%</span>
-								</span>
-							</label>
-						{{else}}
-							<label
-								class="dt-ic-field"
-							>
-								<span
-								>Effort</span>
-								<span
-									class="dt-ic-slider"
-								>
-									<input
-										type="range"
-										min="1"
-										max="6"
-										step="1"
-										value={{this.effort}}
-										class="dt-ic-effort"
-										{{on
-											"input"
-											this.setEffort
-										}}
-									/>
-									<span
-										class="dt-ic-readout"
-									>{{this.effort}}</span>
-								</span>
-							</label>
-						{{/if}}
-
-						<label class="dt-ic-field">
-							<span>AVIF</span>
-							<span
-								class="dt-ic-avif"
-							>
-								<input
-									type="checkbox"
-									class="dt-ic-switch"
-									checked={{this.avifEnabled}}
-									{{on
-										"change"
-										this.toggleAvif
-									}}
-								/>
-								<span
-									class="dt-ic-note"
-								>AVIF is slow</span>
-							</span>
-						</label>
-					</div>
-
-					<div class="dt-ic-compare">
-						<figure class="dt-ic-pane">
-							<img
-								src={{this.source.url}}
-								alt="Original"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-							<figcaption
-								class="dt-ic-pane-meta"
-							>
-								<span
-								>Before</span>
-								<span
-								>{{formatBytes
-										this.source.file.size
-									}}</span>
-							</figcaption>
-						</figure>
-						<figure class="dt-ic-pane">
-							{{#if this.compressed}}
-								<img
-									src={{this.compressed.url}}
-									alt="Compressed"
-									class="dt-ic-after-img"
-								/>
-							{{else}}
-								<p
-									class="dt-ic-status"
-								>
-									<NdsLoader
-									/>
-									{{if
-										this.failed
-										"Failed"
-										"Compressing…"
-									}}
-								</p>
-							{{/if}}
-							<figcaption
-								class="dt-ic-pane-meta"
-							>
-								<span
-								>After</span>
-								{{#if
-									this.compressed
-								}}
-									<span
-										class="dt-ic-after-size"
-									>
-										{{this.afterSize}}
-										<span
-											class="dt-ic-savings
-												{{unless
-													this.isSmaller
-													'is-larger'
-												}}"
-										>{{this.savingsLabel}}</span>
-									</span>
-								{{/if}}
-							</figcaption>
-						</figure>
-					</div>
+						</CanonRow>
+					{{/if}}
+					<CanonHeading @text="Format" />
+					<CanonSegmented
+						class="ic-formats"
+						@items={{this.formatLabels}}
+						@selected={{this.formatIndex}}
+						@onChange={{this.pickFormat}}
+					/>
+					{{#if this.hasQuality}}
+						<CanonRow
+							class="ic-quality"
+							@title="Quality"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.quality}}
+								@min={{1}}
+								@max={{100}}
+								@step={{1}}
+								@readout={{whole}}
+								@labelledBy={{titleId}}
+								@onChange={{this.pickQuality}}
+							/>
+						</CanonRow>
+					{{else}}
+						<CanonRow
+							class="ic-effort"
+							@title="Effort"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.effort}}
+								@min={{1}}
+								@max={{6}}
+								@step={{1}}
+								@readout={{whole}}
+								@labelledBy={{titleId}}
+								@onChange={{this.pickEffort}}
+							/>
+						</CanonRow>
+					{{/if}}
+					{{#if this.source}}
+						<CanonButton
+							class="ic-download"
+							@kind="primary"
+							@text={{passAlong
+								"Download"
+							}}
+							@icon={{Save}}
+							@disabled={{if
+								this.result
+								false
+								true
+							}}
+							@onClick={{this.save}}
+						/>
+					{{/if}}
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonCanvas
+						@aspect={{this.aspect}}
+						@boxing="unlessWide"
+						@background="var(--canon-muted)"
+					>
+						<CanonImageCompare
+							@before={{if
+								this.source.bitmap
+								this.source.url
+							}}
+							@after={{this.result.url}}
+							@failed={{this.failed}}
+							@failure="Failed"
+						/>
+						{{#if this.working}}
+							<CanonLoader
+								class="ic-encoding"
+							/>
+						{{/if}}
+					</CanonCanvas>
+				{{else}}
+					<CanonRows @framed={{true}}>
+						<CanonDropZone
+							class="ic-drop"
+							@prompt="Drop an image"
+							@onFiles={{this.loadFiles}}
+							{{on "paste" keepPaste}}
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-		</div>
+			</:main>
+		</CanonSplit>
 	</template>
 }

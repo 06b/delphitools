@@ -251,6 +251,13 @@ export function tokenise(text: string): GlossToken[] {
 	return tokens;
 }
 
+// punctuation and spacing included
+export function glossToText(tokens: GlossToken[]): string {
+	return tokens
+		.map((token) => token.gloss?.shavian ?? token.value)
+		.join('');
+}
+
 // after tier 2 load
 export function reResolveTokens(tokens: GlossToken[]): GlossToken[] {
 	return tokens.map((token) => {

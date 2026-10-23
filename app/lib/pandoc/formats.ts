@@ -136,6 +136,8 @@ export function guessFormatFromContent(text: string): string {
 	)
 		return 'html';
 	if (/^#\+(title|options|begin_src|author)\b/im.test(t)) return 'org';
+	// a markdown rule and fence otherwise pass the rst test below
+	if (/^(#{1,6}\s|```)/m.test(t)) return 'markdown';
 	if (/^\.\.\s+\w+::|^={3,}\s*$|^-{3,}\s*$/m.test(t) && /::|`{2}/.test(t))
 		return 'rst';
 	return 'markdown';

@@ -43,6 +43,11 @@ export function ensureScene(): void {
 	viewport.fit();
 }
 
+export function openLoaded(doc: SubstrataDoc): void {
+	handle = null;
+	setDoc(doc);
+}
+
 export async function openRecent(id: string): Promise<void> {
 	const current = getSnapshot();
 	if (current?.id === id) return;
@@ -52,8 +57,7 @@ export async function openRecent(id: string): Promise<void> {
 		toast('open-failed');
 		return;
 	}
-	handle = null;
-	setDoc(doc);
+	openLoaded(doc);
 }
 
 export async function openScene(): Promise<void> {
@@ -95,6 +99,5 @@ export async function saveScene(asCopy = false): Promise<void> {
 		);
 		if (!asCopy && saved) handle = saved;
 		toast('saved');
-	} catch {
-	}
+	} catch {}
 }

@@ -1,0 +1,674 @@
+/* iOS EditorDrawer: the settings page and the gallery, a framed panel
+   rising from the bottom edge beside the column */
+.sub-pg-drawer {
+	position: absolute;
+	inset-block-end: 0;
+	inset-inline: 0 calc(var(--sub-pad) + var(--sub-box) + var(--sub-gap));
+	z-index: 22;
+	display: flex;
+	flex-direction: column;
+	block-size: 300px;
+	box-sizing: border-box;
+	padding: var(--sub-frame) var(--sub-frame) 0;
+	background: var(--canon-border);
+	box-shadow: 0 -2px 8px rgb(0 0 0 / 10%);
+	pointer-events: auto;
+	animation: sub-pg-rise 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.sub-pg-drawer.is-phone {
+	inset-inline: 0;
+}
+
+/* iOS settingsHeight: the drawer's place made taller */
+.sub-pg-drawer.is-settings {
+	block-size: min(440px, 100% - var(--sub-gap));
+}
+
+@keyframes sub-pg-rise {
+	from {
+		translate: 0 100%;
+	}
+}
+
+.sub-pg-drawer > .sub-panel-header > .sub-cell {
+	flex: none;
+	inline-size: var(--sub-cell);
+	block-size: var(--sub-cell);
+	min-block-size: var(--sub-cell);
+	padding: 0;
+}
+
+.sub-pg-drawer > .sub-panel-header > .sub-pg-back {
+	inline-size: auto;
+	padding-inline: var(--sub-pad);
+}
+
+/* the sections, in columns as tall as the page, scrolling sideways */
+.sub-pg-scroller {
+	--sub-pg-column: 300px;
+
+	display: flex;
+	flex: 1;
+	align-items: stretch;
+	min-block-size: 0;
+	box-sizing: border-box;
+	padding: var(--sub-pad);
+	overflow: auto hidden;
+	overscroll-behavior: contain;
+	background: var(--canon-background);
+}
+
+.sub-pg-scroller::after {
+	flex: none;
+	inline-size: var(--sub-pad);
+	content: "";
+}
+
+.sub-pg-block {
+	flex: none;
+	block-size: 100%;
+	column-width: var(--sub-pg-column);
+	column-gap: var(--canon-hairline);
+	column-fill: auto;
+}
+
+.sub-pg-block.is-continued {
+	margin-inline-start: var(--sub-pad);
+}
+
+/* hairlines between and round the rows: each row's outline, overlapping
+   its neighbour's in the 1 px between them */
+.sub-pg-block > * {
+	box-sizing: border-box;
+	margin: 0 0 var(--canon-hairline);
+	outline: var(--canon-hairline) solid var(--canon-border);
+	break-inside: avoid;
+}
+
+.sub-pg-block > .canon-heading {
+	margin-block: 0 var(--canon-hairline);
+}
+
+.sub-pg-block > .canon-grid {
+	min-block-size: var(--canon-row-height);
+}
+
+.sub-pg-dim {
+	opacity: 0.4;
+	pointer-events: none;
+}
+
+.sub-pg-value {
+	color: var(--canon-muted-foreground);
+	text-align: end;
+}
+
+.sub-pg-rule {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--sub-gap);
+	inline-size: 48px;
+	padding-block-start: 10px;
+	color: var(--canon-muted-foreground);
+}
+
+.sub-pg-rule svg {
+	inline-size: 18px;
+	block-size: 18px;
+}
+
+.sub-pg-rule-line {
+	flex: 1;
+	inline-size: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+/* the actions: Gallery, Export and Save As tiles down the first column */
+.sub-pg-actions {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: 12px;
+	inline-size: var(--sub-pg-column);
+	block-size: 100%;
+}
+
+.sub-pg-redo {
+	inline-size: auto;
+	box-shadow: none;
+}
+
+.sub-pg-redo > .sub-cell {
+	inline-size: 100%;
+}
+
+.sub-pg-tile {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: stretch;
+	min-block-size: 0;
+	margin: 0;
+	padding: 6px 8px 8px;
+	border: var(--sub-frame) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.sub-pg-tile:hover {
+	background: color-mix(
+		in srgb,
+		var(--canon-card),
+		var(--canon-foreground) 4%
+	);
+}
+
+.sub-pg-tile:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -4px;
+}
+
+.sub-pg-tile-art {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+	min-block-size: 0;
+	overflow: hidden;
+}
+
+.sub-pg-tile-title {
+	text-align: center;
+	flex: none;
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-medium);
+}
+
+.sub-pg-art {
+	position: relative;
+	display: block;
+	block-size: min(72px, 100%);
+	aspect-ratio: var(--sub-pg-aspect);
+	max-inline-size: 100%;
+}
+
+.sub-pg-art-card {
+	position: absolute;
+	inset: 0;
+	display: block;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 100%;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: #fff;
+	object-fit: cover;
+}
+
+.sub-pg-art.is-pages .sub-pg-art-card {
+	inset: 0 3px 3px 0;
+	inline-size: auto;
+	block-size: auto;
+}
+
+.sub-pg-art-card.is-under {
+	translate: 3px 3px;
+}
+
+.sub-pg-reels {
+	display: grid;
+	grid-auto-flow: column;
+	grid-template-rows: repeat(3, 1fr);
+	gap: 0 24px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 13px;
+	text-align: center;
+	opacity: 0.35;
+}
+
+.sub-pg-link-cell,
+.sub-pg-well {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	min-block-size: var(--canon-row-height);
+	margin: 0;
+	padding-inline: var(--sub-pad);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	cursor: pointer;
+}
+
+.sub-pg-link-cell svg {
+	inline-size: 16px;
+	block-size: 16px;
+}
+
+.sub-pg-well {
+	justify-content: flex-start;
+	padding: 0;
+}
+
+.sub-pg-well-swatch {
+	align-self: stretch;
+	inline-size: var(--canon-row-height);
+	border-inline-end: var(--canon-hairline) solid var(--canon-border);
+	background:
+		linear-gradient(var(--sub-pg-well), var(--sub-pg-well)),
+		repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 12px 12px;
+}
+
+.sub-pg-well-hex {
+	padding-inline: var(--sub-pad);
+	font-family: var(--canon-mono-font);
+	text-transform: uppercase;
+}
+
+.sub-pg-row-button.canon-button,
+.sub-pg-files,
+.sub-pg-confirm {
+	inline-size: 100%;
+	min-block-size: var(--canon-row-height);
+}
+
+.sub-pg-statement {
+	padding: 12px var(--sub-pad);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	line-height: 1.4;
+}
+
+.sub-pg-link {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	inline-size: 100%;
+	min-block-size: var(--canon-row-height);
+	padding-inline: var(--sub-pad);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	font-size: var(--canon-text-body);
+	text-align: start;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.sub-pg-link svg {
+	inline-size: 16px;
+	block-size: 16px;
+	color: var(--canon-muted-foreground);
+}
+
+.sub-pg-link:focus-visible,
+.sub-pg-link-cell:focus-visible,
+.sub-pg-well:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* the gallery: New, then the projects in one sideways row */
+.sub-gal-scroller {
+	display: flex;
+	flex: 1;
+	align-items: flex-start;
+	gap: 12px;
+	min-block-size: 0;
+	padding: var(--sub-pad);
+	overflow: auto hidden;
+	overscroll-behavior: contain;
+	background: var(--canon-background);
+}
+
+.sub-gal-menu {
+	flex: none;
+}
+
+.sub-gal-tile {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: 6px;
+	inline-size: 132px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--canon-foreground);
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+}
+
+.sub-gal-picture {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: min(165px, calc(300px - 44px - 2 * var(--sub-pad) - 54px));
+	overflow: hidden;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+}
+
+.sub-gal-picture svg {
+	inline-size: 28px;
+	block-size: 28px;
+}
+
+.sub-gal-picture img {
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+	background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 12px
+		12px;
+}
+
+.sub-gal-tile.is-current .sub-gal-picture {
+	border: var(--sub-frame) solid var(--canon-primary);
+}
+
+.sub-gal-tile:focus-visible .sub-gal-picture {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 2px;
+}
+
+.sub-gal-name {
+	overflow: hidden;
+	font-size: var(--canon-text-subheadline);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sub-gal-date {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.sub-gal-tile.is-persist {
+	cursor: default;
+}
+
+/* forms: a popover beside the control that opened them */
+.sub-pg-pop {
+	inline-size: min(380px, calc(100vw - 2 * var(--sub-pad, 16px)));
+	max-block-size: calc(100dvh - 16px);
+	padding: 0;
+	overflow: auto;
+	border: 0;
+	background: var(--canon-background);
+}
+
+.sub-pg-pop.is-centred {
+	inset: 0;
+	margin: auto;
+	block-size: fit-content;
+}
+
+.sub-pg-pop:focus {
+	outline: none;
+}
+
+.sub-pg-primary.canon-button {
+	inline-size: 100%;
+}
+
+.sub-pg-figure {
+	margin-inline-start: auto;
+	font-family: var(--canon-mono-font);
+}
+
+.sub-pg-name.canon-text-cell {
+	inline-size: 100%;
+	box-sizing: border-box;
+	min-block-size: var(--canon-row-height);
+	padding-inline: var(--sub-pad);
+	background: var(--canon-card);
+}
+
+.sub-pg-destructive.canon-button {
+	background: var(--canon-destructive);
+}
+
+.sub-pg-sheet .canon-dialog-body {
+	overflow: auto;
+}
+
+/* dialogs: shortcuts and about */
+.sub-pg-dialog.is-wide {
+	inline-size: min(720px, 100%);
+}
+
+.sub-pg-key-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sub-pad);
+	min-block-size: 40px;
+	padding-inline: var(--sub-pad);
+	background: var(--canon-card);
+	font-size: var(--canon-text-subheadline);
+}
+
+.sub-pg-key-row kbd {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+}
+
+.sub-pg-about {
+	padding: var(--canon-panel-padding);
+	background: var(--canon-card);
+	font-size: var(--canon-text-subheadline);
+	line-height: 1.45;
+}
+
+/* onboarding: art over centred words, Back and Next with the dots between */
+.sub-pg-onb.canon-dialog:not(.canon-sheet) {
+	inline-size: min(520px, 100%);
+	block-size: min(640px, 100%);
+}
+
+.sub-pg-onb-page {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: var(--canon-panel-padding);
+	padding: calc(2 * var(--canon-panel-padding));
+	background: var(--canon-background);
+	font-size: var(--canon-text-body);
+	line-height: 1.4;
+	text-align: center;
+}
+
+.sub-pg-onb-page p {
+	margin: 0;
+}
+
+.sub-pg-onb-page a {
+	color: var(--canon-primary);
+}
+
+.sub-pg-onb-note {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+.sub-pg-onb-art {
+	inline-size: auto;
+	max-inline-size: 100%;
+	block-size: auto;
+	max-block-size: 240px;
+}
+
+.sub-pg-onb-art.is-small {
+	max-block-size: 140px;
+}
+
+.sub-pg-onb-art.is-medium {
+	max-block-size: 160px;
+}
+
+.sub-pg-onb-storage.canon-button {
+	inline-size: auto;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.sub-pg-onb-bar {
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: minmax(112px, auto) 1fr minmax(112px, auto);
+	align-items: center;
+	gap: var(--sub-pad);
+	padding: var(--sub-pad);
+	background: var(--canon-card);
+}
+
+.sub-pg-onb-dots {
+	display: flex;
+	justify-content: center;
+	gap: 8px;
+}
+
+.sub-pg-onb-dot {
+	inline-size: 7px;
+	block-size: 7px;
+	border-radius: 50%;
+	background: var(--canon-border);
+}
+
+.sub-pg-onb-dot.is-on {
+	background: var(--canon-foreground);
+}
+
+/* the help overlay: the editor dimmed but for its controls */
+.sub-help {
+	position: absolute;
+	inset: 0;
+	z-index: 50;
+	cursor: pointer;
+	animation: sub-help-fade 200ms ease-out;
+}
+
+.sub-help:focus {
+	outline: none;
+}
+
+@keyframes sub-help-fade {
+	from {
+		opacity: 0;
+	}
+}
+
+.sub-help-dim,
+.sub-help-arrows {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+}
+
+.sub-help-dim path {
+	fill: color-mix(in srgb, var(--canon-background) 90%, transparent);
+}
+
+.sub-help-arrows path {
+	fill: none;
+	stroke: var(--canon-primary);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-dasharray: 1000;
+	stroke-dashoffset: 0;
+	animation: sub-help-draw 300ms ease-out backwards;
+	animation-delay: calc(0.22s + var(--sub-help-i, 0) * 35ms);
+}
+
+@keyframes sub-help-draw {
+	from {
+		stroke-dashoffset: 1000;
+	}
+}
+
+.sub-help-sizer {
+	position: absolute;
+	inset: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* measured unscaled: the pop starts at 0.6 */
+.sub-help-sizer .sub-help-note {
+	position: absolute;
+	inline-size: max-content;
+	animation: none;
+}
+
+.sub-help-notes {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sub-help-note {
+	position: absolute;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	box-sizing: border-box;
+	animation: sub-help-pop 400ms cubic-bezier(0.3, 1.4, 0.5, 1) backwards;
+	animation-delay: calc(0.12s + var(--sub-help-i, 0) * 35ms);
+}
+
+.sub-help-note.is-trailing {
+	align-items: flex-end;
+	text-align: end;
+}
+
+.sub-help-note strong {
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.sub-help-note span {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+@keyframes sub-help-pop {
+	from {
+		opacity: 0;
+		scale: 0.6;
+	}
+}
+
+.sub-help-hint {
+	position: absolute;
+	margin: 0;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sub-pg-drawer,
+	.sub-help,
+	.sub-help-note,
+	.sub-help-arrows path {
+		animation: none;
+	}
+}

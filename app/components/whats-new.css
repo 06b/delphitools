@@ -1,0 +1,53 @@
+.dt-wn {
+	--canon-dialog-width: 448px;
+}
+
+.dt-wn-slide {
+	flex: none;
+	padding: 20px;
+	background: var(--canon-card);
+	color: var(--canon-secondary-foreground);
+	font-size: var(--canon-text-subheadline);
+	line-height: 1.6;
+}
+
+.dt-wn-slide p {
+	margin: 0;
+}
+
+.dt-wn-art {
+	display: block;
+	inline-size: 100%;
+	block-size: auto;
+	margin: 0 auto 12px;
+}
+
+.dt-wn-link {
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.dt-wn-link:hover {
+	color: var(--canon-foreground);
+}
+
+.dt-wn-dots {
+	display: flex;
+	flex: none;
+	justify-content: center;
+	gap: 6px;
+	padding-block: 12px;
+	background: var(--canon-card);
+}
+
+.dt-wn-dot {
+	inline-size: 6px;
+	block-size: 6px;
+	border-radius: 50%;
+	background: var(--canon-border);
+}
+
+.dt-wn-dot.is-active {
+	background: var(--canon-primary);
+}

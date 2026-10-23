@@ -1,0 +1,341 @@
+/* the metrics picture */
+.fx-picture {
+	position: absolute;
+	inset: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+}
+
+.fx-picture-caption {
+	position: absolute;
+	inset-block-start: 4px;
+	inset-inline: var(--canon-panel-padding);
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	block-size: 44px;
+}
+
+.fx-picture-names {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 1px;
+	min-inline-size: 0;
+	font-family: var(--canon-font);
+}
+
+.fx-picture-title,
+.fx-picture-detail,
+.fx-file-title,
+.fx-file-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fx-picture-title {
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.fx-picture-detail {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.fx-picture-svg {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	overflow: hidden;
+}
+
+.fx-picture-tint {
+	fill: color-mix(in srgb, var(--canon-primary) 7%, transparent);
+}
+
+.fx-rule {
+	stroke: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 55%,
+		transparent
+	);
+	stroke-width: 1;
+}
+
+.fx-rule--dashed {
+	stroke-dasharray: 4 3;
+}
+
+.fx-rule--baseline {
+	stroke: var(--canon-primary);
+	stroke-width: 2;
+}
+
+.fx-picture-type {
+	fill: var(--canon-muted-foreground);
+	white-space: pre;
+}
+
+.fx-picture-svg--values .fx-picture-type {
+	fill: var(--canon-foreground);
+}
+
+.fx-label {
+	text-anchor: end;
+	white-space: pre;
+}
+
+.fx-label-name {
+	fill: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.fx-label-value {
+	fill: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* the file row and preview */
+.fx-file {
+	display: flex;
+	align-items: stretch;
+	background: var(--canon-card);
+}
+
+.fx-file-names {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	justify-content: center;
+	min-inline-size: 0;
+	padding: 8px var(--canon-panel-padding);
+	font-family: var(--canon-font);
+}
+
+.fx-file-title {
+	font-size: var(--canon-text-body);
+}
+
+.fx-file-name {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.font-explorer .fx-preview {
+	inline-size: 100%;
+}
+
+.fx-table {
+	display: flex;
+	gap: 12px;
+	align-items: baseline;
+	min-block-size: var(--canon-control-height);
+	box-sizing: border-box;
+	padding: 11px var(--canon-panel-padding);
+	background: var(--canon-card);
+	font-family: var(--canon-font);
+}
+
+.fx-table-tag {
+	flex: none;
+	inline-size: 52px;
+	color: var(--canon-primary);
+	font-family: var(--canon-mono-font);
+	font-size: 14px;
+	font-weight: var(--canon-weight-semibold);
+	white-space: pre;
+}
+
+.fx-table-detail {
+	color: var(--canon-secondary-foreground);
+	font-size: var(--canon-text-footnote);
+}
+
+/* specimens in the loaded face */
+.fx-waterfall {
+	background: var(--canon-card);
+}
+
+.fx-step {
+	display: flex;
+	align-items: center;
+	padding-inline: var(--canon-panel-padding);
+	overflow: hidden;
+	border-block-end: var(--canon-hairline) solid var(--canon-border);
+}
+
+.fx-step:last-child {
+	border-block-end: 0;
+}
+
+.fx-step-size {
+	flex: none;
+	inline-size: 44px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+}
+
+.fx-step-text {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	min-inline-size: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	line-height: 1;
+	white-space: nowrap;
+	mask-image: linear-gradient(to left, transparent, #000 40px);
+}
+
+.fx-sample {
+	padding: 10px var(--canon-panel-padding);
+	overflow-wrap: anywhere;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	line-height: 1.4;
+}
+
+.fx-glyphs {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.fx-glyph {
+	display: grid;
+	place-items: center;
+	aspect-ratio: 1;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	appearance: none;
+	touch-action: manipulation;
+}
+
+@media (hover: hover) {
+	.fx-glyph:hover {
+		background: var(--canon-accent-bg);
+	}
+}
+
+.fx-glyph:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+/* the main pane: one column, two once there is room for the glyphs beside the specimens */
+.fx-columns {
+	container-type: inline-size;
+}
+
+.fx-columns-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.fx-column {
+	display: contents;
+}
+
+.fx-waterfall-rows {
+	order: 1;
+}
+
+.fx-sample-rows {
+	order: 2;
+}
+
+.fx-glyph-rows {
+	order: 3;
+}
+
+.fx-css-rows {
+	order: 4;
+}
+
+@container (width > 1100px) {
+	.fx-columns-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		align-items: start;
+	}
+
+	.fx-column {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+}
+
+/* the full table: a dialog the size of the window, the grid its own scroller */
+.fx-table-dialog {
+	--canon-dialog-width: 100%;
+
+	block-size: 100%;
+}
+
+.fx-table-dialog .canon-dialog-body::after {
+	display: none;
+}
+
+.fx-table-scroller {
+	flex: 1 1 0;
+	min-block-size: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: var(--canon-card);
+}
+
+.fx-table-stage {
+	position: relative;
+}
+
+.fx-table-block,
+.fx-table-row {
+	position: absolute;
+	inset-inline: 0;
+	inset-block-start: 0;
+	box-sizing: border-box;
+	margin: 0;
+}
+
+.fx-table-block {
+	display: flex;
+	align-items: flex-end;
+	padding: 0 var(--canon-panel-padding) 6px;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+/* hairlines drawn on the cells, so a short last row leaves no grey strip */
+.fx-table-row {
+	display: grid;
+	grid-template-columns: repeat(var(--fx-table-columns), minmax(0, 1fr));
+}
+
+.fx-table-row .fx-glyph {
+	aspect-ratio: auto;
+	box-shadow: inset calc(-1 * var(--canon-hairline))
+		calc(-1 * var(--canon-hairline)) 0 var(--canon-border);
+}

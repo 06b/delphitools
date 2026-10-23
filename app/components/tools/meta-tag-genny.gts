@@ -1,133 +1,98 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import Icon from 'delphitools-v2/components/icon';
+import { fn } from '@ember/helper';
+import { service } from '@ember/service';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCodeBlock from 'delphicanon/components/canon-code-block';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonTextArea from 'delphicanon/components/canon-text-area';
+import CanonTextCell from 'delphicanon/components/canon-text-cell';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Board, {
+	Result,
+	type PreviewContent,
+} from 'delphitools-v2/components/tools/meta-tag-genny/preview';
+import {
+	LIMITS,
+	OG_TYPES,
+	TWITTER_CARDS,
+	generateMetaTags,
+	type MetaFields,
+} from 'delphitools-v2/components/tools/meta-tag-genny/tags';
+import './meta-tag-genny/meta-tag-genny.css';
 
-export interface MetaFields {
-	title: string;
-	description: string;
-	url: string;
-	image: string;
-	siteName: string;
-	twitterHandle: string;
-}
+type TextField = Exclude<keyof MetaFields, 'ogType' | 'twitterCard'>;
 
-// google truncates near 60
-const TITLE_LIMIT = 60;
-const DESCRIPTION_LIMIT = 160;
+const CopyIcon = <template><IconSvg @name="copy" /></template>;
 
-const COPIED_MS = 1500;
-
-// unescaped quotes broke tags
-function escapeAttribute(value: string): string {
-	return value
-		.replaceAll('&', '&amp;')
-		.replaceAll('<', '&lt;')
-		.replaceAll('>', '&gt;')
-		.replaceAll('"', '&quot;');
-}
-
-export function generateMetaTags(fields: MetaFields): string {
-	const { title, description, url, image, siteName, twitterHandle } =
-		fields;
-	const e = escapeAttribute;
-	const tags: string[] = [];
-
-	if (title) {
-		tags.push(`<title>${e(title)}</title>`);
-		tags.push(`<meta name="title" content="${e(title)}">`);
-	}
-	if (description) {
-		tags.push(
-			`<meta name="description" content="${e(description)}">`,
-		);
-	}
-
-	tags.push('');
-	tags.push('<!-- Open Graph / Facebook -->');
-	tags.push(`<meta property="og:type" content="website">`);
-	if (url) tags.push(`<meta property="og:url" content="${e(url)}">`);
-	if (title)
-		tags.push(`<meta property="og:title" content="${e(title)}">`);
-	if (description)
-		tags.push(
-			`<meta property="og:description" content="${e(description)}">`,
-		);
-	if (image)
-		tags.push(`<meta property="og:image" content="${e(image)}">`);
-	if (siteName)
-		tags.push(
-			`<meta property="og:site_name" content="${e(siteName)}">`,
-		);
-
-	tags.push('');
-	tags.push('<!-- Twitter -->');
-	tags.push(
-		`<meta property="twitter:card" content="summary_large_image">`,
-	);
-	if (url) tags.push(`<meta property="twitter:url" content="${e(url)}">`);
-	if (title)
-		tags.push(
-			`<meta property="twitter:title" content="${e(title)}">`,
-		);
-	if (description)
-		tags.push(
-			`<meta property="twitter:description" content="${e(description)}">`,
-		);
-	if (image)
-		tags.push(
-			`<meta property="twitter:image" content="${e(image)}">`,
-		);
-	if (twitterHandle)
-		tags.push(
-			`<meta property="twitter:creator" content="${e(twitterHandle)}">`,
-		);
-
-	return tags.join('\n');
-}
-
-const SAMPLE_TITLE = 'Page Title';
-const SAMPLE_URL = 'https://example.com';
-const SAMPLE_DESCRIPTION = 'Page description will appear here...';
-const SAMPLE_CARD_DESCRIPTION = 'Description';
-const SAMPLE_HOST = 'example.com';
-
+// the web tool's wording
+const DESCRIPTION_PLACEHOLDER = 'A brief description of your page...';
+const IMAGE_NOTE = 'Recommended size: 1200×630px';
 // template lint reads @ as path
-const TWITTER_PLACEHOLDER = '@username';
+const HANDLE_PLACEHOLDER = '@username';
 
-export function previewHost(url: string): string {
-	try {
-		return new URL(url || SAMPLE_URL).hostname;
-	} catch {
-		return SAMPLE_HOST;
-	}
-}
+const SAMPLE: Omit<MetaFields, 'ogType' | 'twitterCard'> = {
+	title: 'Field Notes: printing at home',
+	description:
+		'A weekly letter about risograph printing, paper stocks and the tools that keep a small press running.',
+	keywords: 'printing, risograph, paper',
+	author: 'R. Morgan',
+	url: 'https://example.com/notes/printing-at-home',
+	siteName: 'Field Notes',
+	image: 'https://example.com/images/press-room.jpg',
+	twitterHandle: '@fieldnotes',
+};
+const LONG_TITLE =
+	'Field Notes: a weekly letter on printing, paper and the small tools that make both a little easier';
 
+/** The port of MetaTagGeneratorViewController. */
 export default class MetaTagGennyTool extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
 	@tracked title = '';
 	@tracked description = '';
+	@tracked keywords = '';
+	@tracked author = '';
 	@tracked url = '';
 	@tracked image = '';
 	@tracked siteName = '';
 	@tracked twitterHandle = '';
-	@tracked copied = false;
-	@tracked showPreview = false;
+	@tracked ogType = 0;
+	// summary_large_image is common
+	@tracked twitterCard = 1;
 
-	#copiedTimer?: ReturnType<typeof setTimeout>;
-
-	willDestroy() {
-		super.willDestroy();
-		clearTimeout(this.#copiedTimer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		// ?metaSample=1 ?metaLong=1 ?metaCard=summary|summary_large_image: the iOS -metaSample, -metaLong, -metaCard flags
+		const query = new URLSearchParams(window.location.search);
+		if (query.get('metaSample')) {
+			Object.assign(this, SAMPLE);
+			if (query.get('metaLong')) this.title = LONG_TITLE;
+		}
+		const card = TWITTER_CARDS.indexOf(query.get('metaCard') ?? '');
+		if (card >= 0) this.twitterCard = card;
 	}
 
 	get fields(): MetaFields {
 		return {
 			title: this.title,
 			description: this.description,
+			keywords: this.keywords,
+			author: this.author,
 			url: this.url,
 			image: this.image,
 			siteName: this.siteName,
 			twitterHandle: this.twitterHandle,
+			ogType: OG_TYPES[this.ogType] ?? 'website',
+			twitterCard:
+				TWITTER_CARDS[this.twitterCard] ?? 'summary',
 		};
 	}
 
@@ -135,307 +100,253 @@ export default class MetaTagGennyTool extends Component {
 		return generateMetaTags(this.fields);
 	}
 
+	get content(): PreviewContent {
+		return {
+			title: this.title,
+			description: this.description,
+			url: this.url,
+			siteName: this.siteName,
+			image: this.image,
+			large: this.twitterCard === 1,
+		};
+	}
+
 	get titleCount() {
-		return `${this.title.length}/${TITLE_LIMIT}`;
+		return `${[...this.title].length} / ${LIMITS.title}`;
 	}
 
 	get titleOver() {
-		return this.title.length > TITLE_LIMIT;
+		return [...this.title].length > LIMITS.title;
 	}
 
 	get descriptionCount() {
-		return `${this.description.length}/${DESCRIPTION_LIMIT}`;
+		return `${[...this.description].length} / ${LIMITS.description}`;
 	}
 
 	get descriptionOver() {
-		return this.description.length > DESCRIPTION_LIMIT;
+		return [...this.description].length > LIMITS.description;
 	}
 
-	get previewTitle() {
-		return this.title || SAMPLE_TITLE;
-	}
-
-	get previewUrl() {
-		return this.url || SAMPLE_URL;
-	}
-
-	get previewDescription() {
-		return this.description || SAMPLE_DESCRIPTION;
-	}
-
-	get cardDescription() {
-		return this.description || SAMPLE_CARD_DESCRIPTION;
-	}
-
-	get previewSiteName() {
-		return this.siteName || previewHost(this.url);
-	}
-
-	setTitle = (event: Event) => {
-		this.title = (event.target as HTMLInputElement).value;
+	set = (field: TextField, value: string) => {
+		this[field] = value;
 	};
 
-	setDescription = (event: Event) => {
-		this.description = (event.target as HTMLTextAreaElement).value;
+	setOgType = (index: number) => {
+		this.ogType = index;
 	};
 
-	setUrl = (event: Event) => {
-		this.url = (event.target as HTMLInputElement).value;
+	setCard = (index: number) => {
+		this.twitterCard = index;
 	};
 
-	setImage = (event: Event) => {
-		this.image = (event.target as HTMLInputElement).value;
-	};
-
-	setSiteName = (event: Event) => {
-		this.siteName = (event.target as HTMLInputElement).value;
-	};
-
-	setTwitterHandle = (event: Event) => {
-		this.twitterHandle = (event.target as HTMLInputElement).value;
-	};
-
-	togglePreview = () => {
-		this.showPreview = !this.showPreview;
-	};
-
-	copy = async () => {
-		await navigator.clipboard.writeText(this.tags);
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
-	};
-
-	copyTags = () => void this.copy();
+	copy = () => void this.toast.copy(this.tags);
 
 	<template>
-		<div class="dt-meta">
-			<div class="dt-meta-form">
-				<div class="dt-meta-field">
-					<div class="dt-meta-head">
-						<label for="dt-meta-title">Page
-							Title</label>
-						<span
-							class="dt-meta-count
-								{{if
-									this.titleOver
-									'is-over'
-								}}"
-						>{{this.titleCount}}</span>
-					</div>
-					<input
-						id="dt-meta-title"
-						type="text"
-						class="dt-meta-input is-tall"
-						value={{this.title}}
-						placeholder="My Awesome Website"
-						{{on "input" this.setTitle}}
-					/>
-				</div>
-
-				<div class="dt-meta-field">
-					<div class="dt-meta-head">
-						<label
-							for="dt-meta-description"
-						>Description</label>
-						<span
-							class="dt-meta-count
-								{{if
-									this.descriptionOver
-									'is-over'
-								}}"
-						>{{this.descriptionCount}}</span>
-					</div>
-					<textarea
-						id="dt-meta-description"
-						class="dt-meta-textarea"
-						value={{this.description}}
-						placeholder="A brief description of your page..."
-						{{on
-							"input"
-							this.setDescription
-						}}
-					></textarea>
-				</div>
-
-				<div class="dt-meta-field">
-					<div class="dt-meta-head">
-						<label
-							for="dt-meta-url"
-						>URL</label>
-					</div>
-					<input
-						id="dt-meta-url"
-						type="text"
-						class="dt-meta-input is-mono"
-						value={{this.url}}
-						placeholder="https://example.com"
-						{{on "input" this.setUrl}}
-					/>
-				</div>
-
-				<div class="dt-meta-field">
-					<div class="dt-meta-head">
-						<label for="dt-meta-image">Image
-							URL</label>
-					</div>
-					<input
-						id="dt-meta-image"
-						type="text"
-						class="dt-meta-input is-mono"
-						value={{this.image}}
-						placeholder="https://example.com/og-image.jpg"
-						{{on "input" this.setImage}}
-					/>
-					<p class="dt-meta-note">Recommended
-						size: 1200×630px</p>
-				</div>
-
-				<div class="dt-meta-row">
-					<div class="dt-meta-field">
-						<div class="dt-meta-head">
-							<label
-								for="dt-meta-site"
-							>Site Name</label>
-						</div>
-						<input
-							id="dt-meta-site"
-							type="text"
-							class="dt-meta-input"
-							value={{this.siteName}}
-							placeholder="My Website"
-							{{on
-								"input"
-								this.setSiteName
+		<CanonSplit class="meta-tag-genny" @halves={{true}}>
+			<:banner>
+				<CanonCanvas
+					@fitting={{true}}
+					@animated={{true}}
+				>
+					<Board @content={{this.content}} />
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Basic Meta Tags" />
+					<CanonRow
+						class="{{if
+								this.titleOver
+								'mt-over'
+							}}"
+						@title="Page Title"
+						@detail={{this.titleCount}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell"
+							@value={{this.title}}
+							@placeholder="My Awesome Website"
+							@onChange={{fn
+								this.set
+								"title"
 							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="{{if
+								this.descriptionOver
+								'mt-over'
+							}}"
+						@title="Description"
+						@detail={{this.descriptionCount}}
+						@form="stacked"
+						as |titleId|
+					>
+						<CanonTextArea
+							class="mt-description"
+							@value={{this.description}}
+							@placeholder={{DESCRIPTION_PLACEHOLDER}}
+							@height={{96}}
+							@onChange={{fn
+								this.set
+								"description"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Keywords"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell"
+							@value={{this.keywords}}
+							@onChange={{fn
+								this.set
+								"keywords"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Author"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell"
+							@value={{this.author}}
+							@onChange={{fn
+								this.set
+								"author"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Canonical URL"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell mt-cell--url"
+							type="url"
+							spellcheck="false"
+							autocapitalize="off"
+							@value={{this.url}}
+							@placeholder="https://example.com"
+							@onChange={{fn
+								this.set
+								"url"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Social Sharing" />
+					<CanonRow
+						@title="Site name"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell"
+							@value={{this.siteName}}
+							@placeholder="My Website"
+							@onChange={{fn
+								this.set
+								"siteName"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="OG Image URL"
+						@detail={{IMAGE_NOTE}}
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell mt-cell--url"
+							type="url"
+							spellcheck="false"
+							autocapitalize="off"
+							@value={{this.image}}
+							@placeholder="https://example.com/og-image.jpg"
+							@onChange={{fn
+								this.set
+								"image"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonRow
+						@title="Creator"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonTextCell
+							class="mt-cell"
+							autocapitalize="off"
+							@value={{this.twitterHandle}}
+							@placeholder={{HANDLE_PLACEHOLDER}}
+							@onChange={{fn
+								this.set
+								"twitterHandle"
+							}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonHeading @text="OG Type" />
+					<CanonSegmented
+						@items={{OG_TYPES}}
+						@selected={{this.ogType}}
+						@columns={{3}}
+						@onChange={{this.setOgType}}
+						aria-label="OG Type"
+					/>
+					<CanonHeading @text="Twitter Card" />
+					<CanonSegmented
+						@items={{TWITTER_CARDS}}
+						@selected={{this.twitterCard}}
+						@columns={{2}}
+						@onChange={{this.setCard}}
+						aria-label="Twitter Card"
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows class="mt-search" @framed={{true}}>
+					<CanonHeading @text="Search" />
+					<div class="mt-search-row">
+						<Result
+							@content={{this.content}}
 						/>
 					</div>
-					<div class="dt-meta-field">
-						<div class="dt-meta-head">
-							<label
-								for="dt-meta-twitter"
-							>Twitter Handle</label>
-						</div>
-						<input
-							id="dt-meta-twitter"
-							type="text"
-							class="dt-meta-input"
-							value={{this.twitterHandle}}
-							placeholder={{TWITTER_PLACEHOLDER}}
-							{{on
-								"input"
-								this.setTwitterHandle
-							}}
-						/>
-					</div>
-				</div>
-			</div>
-
-			<div class="dt-meta-output">
-				<div class="dt-meta-output-head">
-									<span>Generated Meta Tags</span>
-				</div>
-				<pre class="dt-meta-code">{{this.tags}}</pre>
-			</div>
-
-			<div class="dt-meta-actions">
-				<button
-					type="button"
-					class="dt-meta-copy"
-					{{on "click" this.copyTags}}
-				>
-					<Icon
-						@name={{if
-							this.copied
-							"check"
-							"copy"
-						}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Generated Tags" />
+					<CanonCodeBlock
+						class="mt-code"
+						@code={{this.tags}}
+						@language="HTML"
 					/>
-					{{if
-						this.copied
-						"Copied to clipboard!"
-						"Copy Meta Tags"
-					}}
-				</button>
-				<button
-					type="button"
-					class="dt-meta-toggle"
-					{{on "click" this.togglePreview}}
-				>
-					<Icon
-						@name={{if
-							this.showPreview
-							"eye-off"
-							"eye"
-						}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonButton
+						@kind="primary"
+						@text="Copy"
+						@icon={{CopyIcon}}
+						@iconStyle="oversized"
+						@onClick={{this.copy}}
 					/>
-					{{if
-						this.showPreview
-						"Hide Preview"
-						"Preview"
-					}}
-				</button>
-			</div>
-
-			{{#if this.showPreview}}
-				<div class="dt-meta-previews">
-					<div class="dt-meta-preview">
-						<span
-							class="dt-meta-preview-label"
-						>Google</span>
-						<div class="dt-meta-serp">
-							<span
-								class="dt-meta-serp-title"
-							>{{this.previewTitle}}</span>
-							<span
-								class="dt-meta-serp-url"
-							>{{this.previewUrl}}</span>
-							<span
-								class="dt-meta-serp-desc"
-							>{{this.previewDescription}}</span>
-						</div>
-					</div>
-
-					<div class="dt-meta-preview is-card">
-						<span
-							class="dt-meta-preview-label"
-						>Social Card</span>
-						<div class="dt-meta-card">
-							<div
-								class="dt-meta-card-image"
-							>
-								{{#if
-									this.image
-								}}
-									<img
-										src={{this.image}}
-										alt="Preview"
-									/>
-								{{else}}
-									<span>No
-										image</span>
-								{{/if}}
-							</div>
-							<div
-								class="dt-meta-card-body"
-							>
-								<span
-									class="dt-meta-card-host"
-								>{{this.previewSiteName}}</span>
-								<span
-									class="dt-meta-card-title"
-								>{{this.previewTitle}}</span>
-								<span
-									class="dt-meta-card-desc"
-								>{{this.cardDescription}}</span>
-							</div>
-						</div>
-					</div>
-				</div>
-			{{/if}}
-		</div>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

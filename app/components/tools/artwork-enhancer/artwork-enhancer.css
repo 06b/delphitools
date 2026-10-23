@@ -1,0 +1,89 @@
+.artwork-frame {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	padding: var(--canon-panel-padding);
+	gap: 6px;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.artwork-area {
+	display: grid;
+	flex: 1;
+	place-items: center;
+	min-block-size: 0;
+	container-type: size;
+}
+
+.artwork-box {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: min(100cqi, 100cqb * (var(--artwork-aspect)));
+	aspect-ratio: var(--artwork-aspect);
+}
+
+.artwork-compare {
+	position: absolute;
+	inset: 0;
+}
+
+.artwork-caption {
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 12px;
+	font-weight: var(--canon-weight-semibold);
+	text-align: center;
+}
+
+.artwork-slot {
+	--media-slot-icon: 34px;
+}
+
+.artwork-loader {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+	color: var(--canon-primary);
+}
+
+/* the detail shows pixels, not a smoothed blur */
+.artwork-grain .canon-image-compare img {
+	image-rendering: pixelated;
+}
+
+.artwork-loupe {
+	position: absolute;
+	box-sizing: border-box;
+	border: 2px solid var(--canon-primary);
+	box-shadow: 0 0 0 var(--canon-hairline) var(--canon-card);
+	cursor: grab;
+	touch-action: none;
+}
+
+/* a 64 px detail on a large image is a few screen pixels: a wider grip,
+   larger than the 44 px compare grip so part of it stays reachable */
+.artwork-loupe::before {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	inline-size: max(100% + 24px, 64px);
+	block-size: max(100% + 24px, 64px);
+	content: "";
+	translate: -50% -50%;
+}
+
+/* where the two overlap, the divider grip wins */
+.artwork-box .canon-image-compare-grip {
+	z-index: 1;
+}
+
+.artwork-loupe:active {
+	cursor: grabbing;
+}
+
+.artwork-loupe:focus-visible {
+	outline: 2px solid var(--canon-foreground);
+	outline-offset: 2px;
+}

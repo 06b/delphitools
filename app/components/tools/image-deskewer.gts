@@ -1,586 +1,495 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
+import CanonAspectPopover from 'delphicanon/components/canon-aspect-popover';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonLoader from 'delphicanon/components/canon-loader';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { stem } from 'delphicanon/lib/files';
+import { springEasing } from 'delphicanon/lib/motion';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { decodeImage } from 'delphitools-v2/lib/decode-image';
 import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
 import {
 	ASPECTS,
 	fitAspect,
 	insetQuad,
 	outputSize,
 	warp,
-	type Aspect,
-	type Point,
 	type Quad,
 } from 'delphitools-v2/lib/deskew';
+import filePaste from 'delphitools-v2/modifiers/file-paste';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import { drawnSample } from 'delphitools-v2/components/tools/image-compressor/sample';
+import Board from 'delphitools-v2/components/tools/image-deskewer/board';
+import Result from 'delphitools-v2/components/tools/image-deskewer/result';
+import {
+	capped,
+	isConvex,
+	toRatio,
+} from 'delphitools-v2/components/tools/image-deskewer/geometry';
+import './image-deskewer/image-deskewer.css';
 
-const FILE_ACCEPT = 'image/*';
-const LOAD_FAILED = 'This file could not be read as an image.';
-const PREVIEW_EDGE = 720;
-const CORNERS = ['Top left', 'Top right', 'Bottom right', 'Bottom left'];
+const accept = 'image/*';
+const unreadable = "That file can't be read as an image";
+const crossed = "Don't let the streams cross!";
+const resultAspect = 4 / 3;
+// iOS: spring damping 0.82 over 0.55 s
+const spring = htmlSafe(`--deskew-spring: ${springEasing(0.82)}`);
+const custom = ASPECTS.length;
+const aspectNames = [...ASPECTS.map(({ label }) => label), 'Custom'];
+// iOS ImageDeskewerViewModel.previewEdge; the web tool's 720 while dragging
+const previewEdge = { resting: 1024, dragging: 720 };
 
-const NUDGE: Record<string, [number, number]> = {
-	ArrowLeft: [-1, 0],
-	ArrowRight: [1, 0],
-	ArrowUp: [0, -1],
-	ArrowDown: [0, 1],
-};
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Upload = <template><IconSvg @name="upload" /></template>;
+const Undo = <template><IconSvg @name="rotate-ccw" /></template>;
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
 
-const cornerLabel = (index: number) => CORNERS[index];
-
-const cornerStyle = (corner: Point, width: number, height: number) =>
-	htmlSafe(
-		`left: ${(corner.x / width) * 100}%; top: ${(corner.y / height) * 100}%`,
-	);
-
-interface Drag {
-	index: number;
-	left: number;
-	top: number;
-	scale: number;
+interface Source {
+	canvas: HTMLCanvasElement;
+	data: ImageData;
+	stem: string;
 }
 
-export default class ImageDeskewerTool extends Component {
-	@tracked fileName = '';
-	@tracked width = 0;
-	@tracked height = 0;
-	@tracked quad: Quad | null = null;
-	@tracked aspect: Aspect = ASPECTS[0]!;
-	@tracked dragging = -1;
-	@tracked busy = false;
-	@tracked error = '';
-	@tracked fileOver = false;
+const nextFrame = () =>
+	new Promise((resolve) => requestAnimationFrame(resolve));
 
-	#source: ImageData | null = null;
-	#result: HTMLCanvasElement | null = null;
-	#drag: Drag | null = null;
+/** The port of ImageDeskewerViewController, on the web tool's warp. */
+export default class ImageDeskewer extends Component {
+	@tracked source?: Source;
+	@tracked quad: Quad = insetQuad(1, 1);
+	@tracked aspect = 0;
+	@tracked ratio = { width: 4, height: 5 };
+	@tracked failed = false;
+	@tracked exporting = false;
+	@tracked dragging = false;
+	@tracked drawn = false;
+	@tracked stamp = 0;
+	@tracked held?: number;
+
+	drop = new Drop(accept, (file) => void this.load(file));
+	preview = document.createElement('canvas');
+	#input?: HTMLInputElement;
+	#loading = 0;
 	#frame = 0;
-	#fullDrawn = false;
 
-	willDestroy() {
-		super.willDestroy();
-		cancelAnimationFrame(this.#frame);
+	// ?deskewSample ?deskewAspect=<index> ?deskewRatio=<w>:<h> ?deskewCorners=x,y;x,y;x,y;x,y (unit) ?deskewGrab=<corner>: the iOS launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		const aspect = Number(query.get('deskewAspect'));
+		if (aspect)
+			this.aspect = Math.min(
+				Math.max(Math.round(aspect), 0),
+				custom,
+			);
+		const [rw, rh] = (query.get('deskewRatio') ?? '')
+			.split(':')
+			.map(Number);
+		if (rw! >= 1 && rh! >= 1) {
+			this.ratio = { width: rw!, height: rh! };
+			this.aspect = custom;
+		}
+		const corners = (query.get('deskewCorners') ?? '')
+			.split(';')
+			.map((pair) => pair.split(',').map(Number))
+			.filter(
+				(pair) =>
+					pair.length === 2 &&
+					pair.every(Number.isFinite),
+			);
+		const grab = query.get('deskewGrab');
+		if (query.has('deskewSample'))
+			void drawnSample()
+				.then((file) => this.load(file))
+				.then(() => {
+					const { source } = this;
+					if (!source) return;
+					const { width, height } = source.canvas;
+					if (corners.length === 4) {
+						this.quad = corners.map(
+							([x, y]) => ({
+								x: x! * width,
+								y: y! * height,
+							}),
+						) as Quad;
+						this.#changed();
+					}
+					if (grab !== null)
+						this.held = Math.min(
+							Math.max(
+								Number(grab) ||
+									0,
+								0,
+							),
+							3,
+						);
+				});
+		registerDestructor(this, () =>
+			cancelAnimationFrame(this.#frame),
+		);
+	}
+
+	get valid() {
+		return isConvex(this.quad);
+	}
+
+	get custom() {
+		return this.aspect === custom;
 	}
 
 	get output() {
-		return fitAspect(outputSize(this.quad!), this.aspect.ratio);
-	}
-
-	get points() {
-		return this.quad!.map((p) => `${p.x},${p.y}`).join(' ');
-	}
-
-	get shade() {
-		const [tl, tr, br, bl] = this.quad!;
-		return (
-			`M0 0H${this.width}V${this.height}H0Z` +
-			`M${tl.x} ${tl.y}L${tr.x} ${tr.y}L${br.x} ${br.y}L${bl.x} ${bl.y}Z`
+		const size = outputSize(this.quad);
+		const { width, height } = this.ratio;
+		return capped(
+			this.custom
+				? toRatio(size, width, height)
+				: fitAspect(size, ASPECTS[this.aspect]!.ratio),
 		);
 	}
 
-	source = modifier((canvas: HTMLCanvasElement) => {
-		canvas.width = this.width;
-		canvas.height = this.height;
-		if (this.#source)
-			canvas.getContext('2d')?.putImageData(
-				this.#source,
-				0,
-				0,
-			);
+	get pixelsText() {
+		const { source } = this;
+		return source
+			? `${source.canvas.width} × ${source.canvas.height}`
+			: '';
+	}
+
+	get exportDisabled() {
+		return !this.source || !this.valid || this.exporting;
+	}
+
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
 	});
 
-	result = modifier((canvas: HTMLCanvasElement) => {
-		this.#result = canvas;
-		this.#queue(true);
-		return () => {
-			this.#result = null;
-		};
-	});
+	choose = () => this.#input?.click();
 
-	readFile = (file: File) => void this.#load(file);
+	picked = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		// the same file twice fires change again
+		input.value = '';
+		if (file) void this.load(file);
+	};
 
-	async #load(file: File) {
-		this.error = '';
+	load = async (file: File) => {
+		const run = ++this.#loading;
+		let source: Source;
 		try {
-			const bitmap = await createImageBitmap(file);
+			const bitmap = await decodeImage(file);
 			const canvas = document.createElement('canvas');
 			canvas.width = bitmap.width;
 			canvas.height = bitmap.height;
-			const ctx = canvas.getContext('2d')!;
-			ctx.drawImage(bitmap, 0, 0);
+			const context = canvas.getContext('2d', {
+				willReadFrequently: true,
+			})!;
+			context.drawImage(bitmap, 0, 0);
 			bitmap.close();
-			if (this.isDestroying) return;
-			this.#cancelDrag();
-			this.#source = ctx.getImageData(
-				0,
-				0,
-				canvas.width,
-				canvas.height,
-			);
-			this.fileName = file.name;
-			this.width = canvas.width;
-			this.height = canvas.height;
-			this.quad = insetQuad(canvas.width, canvas.height);
-			this.#queue(true);
+			source = {
+				canvas,
+				data: context.getImageData(
+					0,
+					0,
+					canvas.width,
+					canvas.height,
+				),
+				stem: stem(file.name) || 'image',
+			};
 		} catch {
-			this.error = LOAD_FAILED;
+			if (run !== this.#loading || isDestroying(this)) return;
+			this.failed = true;
+			return;
 		}
-	}
-
-	chooseFile = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		this.fileOver = false;
-		const file = event.dataTransfer?.files[0];
-		if (file) this.readFile(file);
-	};
-
-	handleDragOver = (event: DragEvent) => {
-		if (!event.dataTransfer?.types.includes('Files')) return;
-		event.preventDefault();
-		this.fileOver = true;
-	};
-
-	handleDragLeave = () => {
-		this.fileOver = false;
+		if (run !== this.#loading || isDestroying(this)) return;
+		this.source = source;
+		this.failed = false;
+		this.held = undefined;
+		this.drawn = false;
+		this.quad = insetQuad(
+			source.canvas.width,
+			source.canvas.height,
+		);
+		this.#changed();
 	};
 
 	clear = () => {
+		this.#loading++;
 		cancelAnimationFrame(this.#frame);
-		this.#cancelDrag();
-		this.#source = null;
-		this.quad = null;
-		this.fileName = '';
-		this.width = 0;
-		this.height = 0;
-		this.error = '';
+		this.source = undefined;
+		this.failed = false;
+		this.held = undefined;
+		this.drawn = false;
 	};
 
 	reset = () => {
-		this.quad = insetQuad(this.width, this.height);
-		this.#queue(true);
-	};
-
-	selectAspect = (aspect: Aspect) => {
-		this.aspect = aspect;
-		this.#queue(true);
-	};
-
-	#setCorner(index: number, x: number, y: number) {
-		const next = [...this.quad!] as Quad;
-		next[index] = {
-			x: Math.max(0, Math.min(this.width, x)),
-			y: Math.max(0, Math.min(this.height, y)),
-		};
-		this.quad = next;
-	}
-
-	#cancelDrag() {
-		this.#drag = null;
-		this.dragging = -1;
-	}
-
-	startDrag = (index: number, event: PointerEvent) => {
-		if (event.button !== 0) return;
-		const handle = event.currentTarget as HTMLElement;
-		const rect = handle.parentElement!.getBoundingClientRect();
-		if (!rect.width) return;
-		this.#drag = {
-			index,
-			left: rect.left,
-			top: rect.top,
-			scale: this.width / rect.width,
-		};
-		this.dragging = index;
-		handle.setPointerCapture(event.pointerId);
-		event.preventDefault();
-		handle.focus();
-	};
-
-	moveDrag = (event: PointerEvent) => {
-		const drag = this.#drag;
-		if (!drag) return;
-		this.#setCorner(
-			drag.index,
-			(event.clientX - drag.left) * drag.scale,
-			(event.clientY - drag.top) * drag.scale,
+		const { source } = this;
+		if (!source) return;
+		this.quad = insetQuad(
+			source.canvas.width,
+			source.canvas.height,
 		);
-		this.#queue(false);
+		this.#changed();
 	};
 
-	endDrag = (event: PointerEvent) => {
-		const handle = event.currentTarget as HTMLElement;
-		if (handle.hasPointerCapture(event.pointerId)) {
-			handle.releasePointerCapture(event.pointerId);
-		}
-		if (!this.#drag) return;
-		this.#drag = null;
-		this.dragging = -1;
-		this.#queue(true);
+	pickAspect = (index: number) => {
+		this.aspect = index;
+		this.#changed();
 	};
 
-	nudge = (index: number, event: KeyboardEvent) => {
-		const delta = NUDGE[event.key];
-		if (!delta) return;
-		event.preventDefault();
-		const step = event.shiftKey ? 10 : 1;
-		const corner = this.quad![index]!;
-		this.#setCorner(
-			index,
-			corner.x + delta[0] * step,
-			corner.y + delta[1] * step,
-		);
-		this.#queue(true);
+	setRatio = (width: number, height: number) => {
+		this.ratio = { width, height };
+		this.aspect = custom;
+		this.#changed();
 	};
 
-	#queue(full: boolean) {
+	setQuad = (quad: Quad) => {
+		this.quad = quad;
+		this.held = undefined;
+		this.dragging = true;
+		this.#changed();
+	};
+
+	settle = () => {
+		this.dragging = false;
+		this.#changed();
+	};
+
+	#changed() {
+		this.stamp++;
 		cancelAnimationFrame(this.#frame);
-		this.#frame = requestAnimationFrame(() => this.#draw(full));
+		this.#frame = requestAnimationFrame(() => this.#draw());
 	}
 
-	#draw(full: boolean) {
-		const canvas = this.#result;
-		if (!canvas || !this.#source || !this.quad) return;
-		const { width, height } = this.output;
-		const scale = full
-			? 1
-			: Math.min(1, PREVIEW_EDGE / Math.max(width, height));
-		const image = warp(
-			this.#source,
-			this.quad,
-			Math.max(1, Math.round(width * scale)),
-			Math.max(1, Math.round(height * scale)),
-		);
-		canvas.width = image.width;
-		canvas.height = image.height;
-		canvas.getContext('2d')?.putImageData(image, 0, 0);
-		this.#fullDrawn = full;
+	// keeps the last good preview
+	#draw() {
+		const { source, quad } = this;
+		if (!source || !this.valid) return;
+		const edge = this.dragging
+			? previewEdge.dragging
+			: previewEdge.resting;
+		const { width, height } = capped(this.output, edge);
+		const image = warp(source.data, quad, width, height);
+		const { preview } = this;
+		preview.width = width;
+		preview.height = height;
+		preview.getContext('2d')?.putImageData(image, 0, 0);
+		this.drawn = true;
 	}
 
-	download = async () => {
-		const canvas = this.#result;
-		if (!canvas || this.busy) return;
-		this.busy = true;
+	export = async () => {
+		const { source } = this;
+		if (this.exportDisabled || !source) return;
+		this.exporting = true;
 		try {
-			if (!this.#fullDrawn) this.#draw(true);
+			// the loader paints before the warp blocks
+			await nextFrame();
+			const { width, height } = this.output;
+			const canvas = document.createElement('canvas');
+			canvas.width = width;
+			canvas.height = height;
+			canvas.getContext('2d')?.putImageData(
+				warp(source.data, this.quad, width, height),
+				0,
+				0,
+			);
 			const blob = await new Promise<Blob | null>((resolve) =>
 				canvas.toBlob(resolve, 'image/png'),
 			);
-			if (blob) {
-				const base =
-					this.fileName.replace(/\.[^.]+$/, '') ||
-					'image';
-				downloadBlob(blob, `${base}-deskewed.png`);
-			}
+			if (blob)
+				downloadBlob(
+					blob,
+					`${source.stem}-deskewed.png`,
+				);
 		} finally {
-			this.busy = false;
+			this.exporting = false;
 		}
 	};
 
+	get springs() {
+		return !this.dragging;
+	}
+
+	get resetDisabled() {
+		return !this.source;
+	}
+
+	get showsCrossed() {
+		return !!this.source && !this.valid;
+	}
+
+	get boardAspect() {
+		const { source } = this;
+		if (!source) return 4 / 3;
+		const { width, height } = source.canvas;
+		return Math.min(Math.max(width / Math.max(height, 1), 0.6), 2);
+	}
+
 	<template>
-		<div
-			class="dt-dsk"
-			{{filePaste this.readFile accept=FILE_ACCEPT}}
+		<CanonSplit
+			class="image-deskewer"
+			@halves={{true}}
+			@collapsesTo={{240}}
+			style={{spring}}
+			{{filePaste this.load accept=accept}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
 		>
-			<div
-				class="dt-dsk-frame
-					{{if this.fileOver 'is-dragging'}}"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.handleDragOver}}
-				{{on "dragleave" this.handleDragLeave}}
-			>
-				{{#if this.quad}}
-					<div class="dt-dsk-bar">
-						<Icon @name="file-image" />
-						<span
-							class="dt-dsk-name"
-						>{{this.fileName}}</span>
-						<span
-							class="dt-dsk-size"
-						>{{this.width}}
-							×
-							{{this.height}}</span>
-						<div class="dt-dsk-bar-tools">
-							<label
-								class="dt-dsk-btn"
-								aria-label="Open file"
-							>
-								<input
-									type="file"
-									class="dt-sr-only"
-									accept={{FILE_ACCEPT}}
-									{{on
-										"change"
-										this.chooseFile
-									}}
-								/>
-								<Icon
-									@name="upload"
-								/>
-							</label>
-							<button
-								type="button"
-								class="dt-dsk-btn"
-								{{on
-									"click"
-									this.reset
-								}}
-							>
-								<Icon
-									@name="rotate-ccw"
-								/>
-								<span
-									class="dt-dsk-btn-text"
-								>Reset</span>
-							</button>
-							<button
-								type="button"
-								class="dt-dsk-btn"
-								aria-label="Clear"
-								{{on
-									"click"
-									this.clear
-								}}
-							>
-								<Icon
-									@name="x"
-								/>
-							</button>
-							<button
-								type="button"
-								class="dt-dsk-btn is-primary"
-								disabled={{this.busy}}
-								{{on
-									"click"
-									this.download
-								}}
-							>
-								<DownloadLabel
-									@busy={{this.busy}}
-								/>
-							</button>
-						</div>
-					</div>
-
-					<div class="dt-dsk-settings">
-						<div class="dt-dsk-cell">
-							<span>Output aspect
-								ratio</span>
-							<div
-								class="segmented dt-dsk-aspects"
-							>
-								{{#each
-									ASPECTS
-									key="label"
-									as |option|
-								}}
-									<button
-										type="button"
-										class="dt-dsk-aspect
-											{{if
-												(eq
-													option
-													this.aspect
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.selectAspect
-												option
-											)
-										}}
-									>{{option.label}}</button>
-								{{/each}}
-							</div>
-						</div>
-						<div class="dt-dsk-cell">
-							<span>Output</span>
-							<span
-								class="dt-dsk-cell-value"
-							>{{this.output.width}}
-								×
-								{{this.output.height}}
-								px</span>
-						</div>
-					</div>
-
-					<div class="dt-dsk-panes">
-						<div class="dt-dsk-pane">
-							<div
-								class="dt-dsk-pane-head"
-							>
-								<span
-									class="dt-dsk-pane-label"
-								>Source</span>
-								<span
-									class="dt-dsk-pane-hint"
-								>
-									<Icon
-										@name="move"
-									/>
-									Drag the
-									corners
-								</span>
-							</div>
-							<div
-								class="dt-dsk-stage-wrap"
-							>
-								{{! template-lint-disable no-pointer-down-event-binding }}
-								<div
-									class="dt-dsk-stage
-										{{if
-											(eq
-												this.dragging
-												-1
-											)
-											''
-											'is-dragging'
-										}}"
-								>
-									<canvas
-										class="dt-dsk-source"
-										{{this.source}}
-									></canvas>
-									<svg
-										class="dt-dsk-overlay"
-										viewBox="0 0 {{this.width}} {{this.height}}"
-										preserveAspectRatio="none"
-										aria-hidden="true"
-									>
-										<path
-											class="dt-dsk-shade"
-											d={{this.shade}}
-											fill-rule="evenodd"
-										/>
-										<polygon
-											class="dt-dsk-quad"
-											points={{this.points}}
-											vector-effect="non-scaling-stroke"
-										/>
-									</svg>
-									{{! preserve pointer capture }}
-									{{#each
-										this.quad
-										key="@index"
-										as |corner index|
-									}}
-										<button
-											type="button"
-											class="dt-dsk-handle
-												{{if
-													(eq
-														index
-														this.dragging
-													)
-													'is-active'
-												}}"
-											aria-label={{cornerLabel
-												index
-											}}
-											style={{cornerStyle
-												corner
-												this.width
-												this.height
-											}}
-											{{on
-												"pointerdown"
-												(fn
-													this.startDrag
-													index
-												)
-											}}
-											{{on
-												"pointermove"
-												this.moveDrag
-											}}
-											{{on
-												"pointerup"
-												this.endDrag
-											}}
-											{{on
-												"pointercancel"
-												this.endDrag
-											}}
-											{{on
-												"lostpointercapture"
-												this.endDrag
-											}}
-											{{on
-												"keydown"
-												(fn
-													this.nudge
-													index
-												)
-											}}
-										></button>
-									{{/each}}
-								</div>
-							</div>
-						</div>
-
-						<div
-							class="dt-dsk-pane is-right"
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.boardAspect}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Board
+						@canvas={{this.source.canvas}}
+						@quad={{this.quad}}
+						@valid={{this.valid}}
+						@over={{this.drop.over}}
+						@held={{this.held}}
+						@onChoose={{this.choose}}
+						@onMove={{this.setQuad}}
+						@onSettle={{this.settle}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="deskew-source"
+							@title={{this.source.stem}}
+							@detail={{this.pixelsText}}
+							@form="flush"
 						>
-							<div
-								class="dt-dsk-pane-head"
-							>
-								<span
-									class="dt-dsk-pane-label"
-								>Corrected</span>
-							</div>
-							<div
-								class="dt-dsk-stage-wrap"
-							>
-								<canvas
-									class="dt-dsk-result"
-									{{this.result}}
-								></canvas>
-							</div>
-						</div>
-					</div>
-				{{else}}
-					<label class="dt-dsk-drop">
-						<input
-							type="file"
-							accept={{FILE_ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.chooseFile
-							}}
+							<CanonButton
+								class="deskew-open"
+								@kind="cell"
+								@icon={{Upload}}
+								@label="Open file"
+								@onClick={{this.choose}}
+							/>
+							<CanonButton
+								class="deskew-clear"
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					</CanonRows>
+					<CanonCanvas
+						class="deskew-result-canvas"
+						@aspect={{resultAspect}}
+						@boxing="unlessWide"
+						@maxHeight={{460}}
+						@background="var(--canon-muted)"
+					>
+						<Result
+							@canvas={{this.preview}}
+							@size={{this.output}}
+							@valid={{this.valid}}
+							@drawn={{this.drawn}}
+							@stamp={{this.stamp}}
+							@springs={{this.springs}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-dsk-drop-title"
-						>Drop an image here</span>
-						<span
-							class="dt-dsk-drop-hint"
-						>or click to select a file, or
-							paste</span>
-					</label>
+					</CanonCanvas>
+				{{else if this.failed}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							class="deskew-unreadable"
+							@text={{unreadable}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					</CanonRows>
 				{{/if}}
-
-				{{#if this.error}}
-					<p
-						class="dt-dsk-error"
-						role="alert"
-					>{{this.error}}</p>
-				{{/if}}
-			</div>
-		</div>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Aspect" />
+					<CanonSegmented
+						class="deskew-aspects"
+						@items={{aspectNames}}
+						@columns={{4}}
+						@selected={{this.aspect}}
+						@onChange={{this.pickAspect}}
+					/>
+					{{#if this.custom}}
+						<CanonRow
+							class="deskew-ratio"
+							@title="Ratio"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonAspectPopover
+								@width={{this.ratio.width}}
+								@height={{this.ratio.height}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setRatio}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonRow
+						@title="Corners"
+						@form="flush"
+					>
+						<CanonButton
+							class="deskew-reset"
+							@kind="cell"
+							@text="Reset"
+							@icon={{Undo}}
+							@disabled={{this.resetDisabled}}
+							@onClick={{this.reset}}
+						/>
+					</CanonRow>
+					{{#if this.showsCrossed}}
+						<CanonStatus
+							class="deskew-crossed"
+							@text={{crossed}}
+							@tone="warn"
+							@row={{true}}
+						/>
+					{{/if}}
+					<CanonButton
+						class="deskew-export"
+						@kind="primary"
+						@text={{passAlong
+							"Download PNG"
+						}}
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{this.exportDisabled}}
+						@onClick={{this.export}}
+					/>
+					{{#if this.exporting}}
+						<CanonRow @title="Processing…">
+							<CanonLoader />
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				{{! the empty board and the open button use it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept={{accept}}
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

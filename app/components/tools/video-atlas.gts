@@ -1,52 +1,98 @@
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import Icon from 'delphitools-v2/components/icon';
-import AtlasOpenIn from 'delphitools-v2/components/atlas-open-in';
+import { service } from '@ember/service';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonReadoutBand from 'delphicanon/components/canon-readout-band';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import type CanonToastService from 'delphicanon/services/canon-toast';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { VideoIntake } from 'delphitools-v2/lib/video';
 import { VIDEO_ACCEPT, acceptAttr } from 'delphitools-v2/lib/tools';
+import { toolsForFile } from 'delphitools-v2/lib/omni';
+import { sample } from 'delphitools-v2/lib/workflows';
 import {
 	analyzeMedia,
+	blankSections,
 	reportText,
 	sections,
 	type Track,
 } from 'delphitools-v2/lib/mediainfo';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import OpenIn from 'delphitools-v2/components/tools/media/open-in';
+import Playback from 'delphitools-v2/components/tools/media/playback';
+import Sections from 'delphitools-v2/components/tools/media/sections';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import Strips, {
+	bandHeight,
+} from 'delphitools-v2/components/tools/media/strips';
+import Transport from 'delphitools-v2/components/tools/media/transport';
+import {
+	release,
+	thumbnails,
+} from 'delphitools-v2/components/tools/media/frames';
+import './media/media.css';
 
 const ACCEPT = acceptAttr(VIDEO_ACCEPT);
-const COPIED_MS = 1500;
-
-const DROP_TITLE = 'Drop a video here';
-
 const READ_ERROR = "Couldn't read that file's container";
+const BLANK_INFO = blankSections(['General', 'Video', 'Audio']);
+const BLANK_OPEN = toolsForFile(sample('video/mp4')).filter(
+	(tool) => tool.id !== 'video-atlas' && !tool.route,
+);
+// iOS: height over width at most 1.25, at most 340 pt tall
+const tallest = 1.25;
+const tallestPreview = 340;
 
-export default class VideoAtlasTool extends Component {
-	intake = new VideoIntake({
-		onLoad: (file) => void this.#analyze(file),
-	});
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Copy = <template><IconSvg @name="copy" /></template>;
+const Pip = <template><IconSvg @name="picture-in-picture-2" /></template>;
+const Full = <template><IconSvg @name="maximize" /></template>;
+
+const pipSupported = () =>
+	typeof document !== 'undefined' && document.pictureInPictureEnabled;
+
+/** The port of VideoAtlasViewController, on the web tool's MediaInfo report. */
+export default class VideoAtlas extends Component {
+	@service('canon-toast') declare toast: CanonToastService;
+
+	intake = new VideoIntake({ onLoad: (file) => this.#load(file) });
+	drop = new Drop(ACCEPT, (file) => this.intake.load(file));
+	playback = new Playback();
 
 	@tracked tracks: Track[] = [];
 	@tracked busy = false;
-	@tracked errorCode = '';
-	@tracked copied = false;
+	@tracked failed = false;
+	@tracked frames: string[] = [];
+	@tracked aspect = 16 / 9;
 
 	#token = 0;
-	#copiedTimer?: ReturnType<typeof setTimeout>;
+	#video?: HTMLVideoElement;
 
 	willDestroy() {
 		super.willDestroy();
 		this.#token++;
-		clearTimeout(this.#copiedTimer);
 		this.intake.release();
+		release(this.frames);
 	}
 
-	get hasVideo() {
+	get loaded() {
 		return this.intake.url !== null;
 	}
 
 	@cached
 	get sections() {
 		return sections(this.tracks);
+	}
+
+	get shownInfo() {
+		return this.sections.length ? this.sections : BLANK_INFO;
 	}
 
 	get streamSummary() {
@@ -57,208 +103,264 @@ export default class VideoAtlasTool extends Component {
 		return n === 1 ? '1 stream' : `${n} streams`;
 	}
 
-	get errorMessage() {
+	get warning() {
 		if (this.intake.error) return this.intake.error;
-		if (this.errorCode === 'read') return READ_ERROR;
+		if (this.failed) return READ_ERROR;
 		return '';
 	}
 
-	async #analyze(file: File) {
+	get detail() {
+		if (this.warning) return this.warning;
+		if (this.busy) return 'Reading…';
+		return this.streamSummary;
+	}
+
+	get previewAspect() {
+		return Math.max(this.aspect, 1 / tallest);
+	}
+
+	get ready() {
+		return this.intake.duration > 0;
+	}
+
+	#load(file: File) {
 		const token = ++this.#token;
-		this.busy = true;
+		const live = () => token === this.#token;
+		release(this.frames);
+		this.frames = [];
 		this.tracks = [];
-		this.errorCode = '';
-		try {
-			const tracks = await analyzeMedia(file);
-			if (token !== this.#token) return;
-			this.tracks = tracks;
-		} catch (error) {
-			if (token !== this.#token) return;
-			console.error('MediaInfo failed:', error);
-			this.errorCode = 'read';
-		} finally {
-			if (token === this.#token) this.busy = false;
-		}
+		this.failed = false;
+		this.busy = true;
+		void thumbnails(file, live).then((urls) => {
+			if (!live()) return release(urls);
+			this.frames = urls;
+		});
+		void (async () => {
+			try {
+				const tracks = await analyzeMedia(file);
+				if (live()) this.tracks = tracks;
+			} catch (error) {
+				if (!live()) return;
+				console.error('MediaInfo failed:', error);
+				this.failed = true;
+			} finally {
+				if (live()) this.busy = false;
+			}
+		})();
 	}
 
-	copy = () => void this.#copy();
+	keepVideo = modifier((video: HTMLVideoElement) => {
+		this.#video = video;
+		// full screen has no transport: the browser's controls stand in
+		const controls = () =>
+			(video.controls = document.fullscreenElement === video);
+		video.addEventListener('fullscreenchange', controls);
+		return () => {
+			video.removeEventListener('fullscreenchange', controls);
+			if (this.#video === video) this.#video = undefined;
+		};
+	});
 
-	async #copy() {
-		if (this.tracks.length === 0) return;
-		try {
-			await navigator.clipboard.writeText(
-				reportText(this.tracks),
-			);
-		} catch (error) {
-			console.warn('Clipboard write refused:', error);
-			return;
-		}
-		this.copied = true;
-		clearTimeout(this.#copiedTimer);
-		this.#copiedTimer = setTimeout(
-			() => (this.copied = false),
-			COPIED_MS,
-		);
-	}
+	metadata = (event: Event) => {
+		this.intake.ready(event);
+		const video = event.target as HTMLVideoElement;
+		if (video.videoWidth && video.videoHeight)
+			this.aspect = video.videoWidth / video.videoHeight;
+	};
+
+	copy = () => {
+		if (this.tracks.length)
+			void this.toast.copy(reportText(this.tracks));
+	};
+
+	pictureInPicture = () => {
+		const video = this.#video;
+		if (!video) return;
+		if (document.pictureInPictureElement === video)
+			void document.exitPictureInPicture();
+		else void video.requestPictureInPicture().catch(() => {});
+	};
+
+	fullScreen = () =>
+		void this.#video?.requestFullscreen().catch(() => {});
 
 	clear = () => {
+		this.playback.unload();
 		this.#token++;
 		this.intake.clear();
+		release(this.frames);
+		this.frames = [];
 		this.tracks = [];
 		this.busy = false;
-		this.errorCode = '';
+		this.failed = false;
+		this.aspect = 16 / 9;
 	};
 
 	<template>
-		<div class="dt-va" {{filePaste this.intake.load accept=ACCEPT}}>
-			<div
-				class="dt-va-frame"
-				{{on "drop" this.intake.drop}}
-				{{on "dragover" this.intake.dragOver}}
-			>
-				<div class="dt-va-bar">
-					<label
-						class="dt-va-file"
-						aria-label="Open video file"
+		<CanonSplit
+			class="video-atlas"
+			@bannerSticks={{true}}
+			@mainLeadsStacked={{true}}
+			{{filePaste this.intake.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas @height={{bandHeight}}>
+					<CanonReadoutBand
+						@transport={{this.playback.transport}}
+						@idle={{if
+							this.intake.duration
+							this.intake.duration
+							null
+						}}
+						@readout="below"
 					>
-						<input
-							type="file"
-							class="dt-sr-only"
-							accept={{ACCEPT}}
-							{{on
-								"change"
-								this.intake.chooseFile
+						<Strips
+							@thumbnails={{this.frames}}
+							@aspect={{this.aspect}}
+							@duration={{this.intake.duration}}
+							@playhead={{this.playback.playhead}}
+							@onScrub={{this.playback.scrub}}
+							@blank={{if
+								this.loaded
+								false
+								true
 							}}
 						/>
-						<Icon @name="film" />
-						<span
-							class="dt-va-filename"
-						>{{if
-								this.intake.fileName
-								this.intake.fileName
-								"Choose video"
-							}}</span>
-					</label>
-					{{#if this.busy}}
-						<span
-							class="dt-va-status"
-							role="status"
-						>Reading…</span>
-					{{else if this.streamSummary}}
-						<span
-							class="dt-va-status"
-						>{{this.streamSummary}}</span>
+					</CanonReadoutBand>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<Sections @sections={{this.shownInfo}} />
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Source" />
+					{{#if this.loaded}}
+						<CanonRow
+							class="va-source"
+							@title={{this.intake.fileName}}
+							@detail={{this.detail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					{{else}}
+						<Slot
+							class="va-slot"
+							@prompt="Drop a video here"
+							@icon="film"
+							@row={{true}}
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.intake.load}}
+						/>
+						{{#if this.warning}}
+							<CanonStatus
+								@text={{this.warning}}
+								@tone="warn"
+								@row={{true}}
+							/>
+						{{/if}}
 					{{/if}}
-					<button
-						type="button"
-						class="dt-va-btn"
-						disabled={{unless
+					<CanonButton
+						class="va-copy"
+						@kind="primary"
+						@text="Copy report"
+						@icon={{Copy}}
+						@disabled={{if
 							this.tracks.length
+							false
 							true
 						}}
-						{{on "click" this.copy}}
-					>
-						<Icon
-							@name={{if
-								this.copied
-								"check"
-								"copy"
-							}}
-						/>
-						<span>Copy report</span>
-					</button>
-					<button
-						type="button"
-						class="dt-va-clear"
-						disabled={{unless
-							this.hasVideo
-							true
-						}}
-						aria-label="Clear"
-						{{on "click" this.clear}}
-					>
-						<Icon @name="x" />
-					</button>
-				</div>
-
-				<div class="dt-va-stage">
-					{{#if this.hasVideo}}
+						@onClick={{this.copy}}
+					/>
+				</CanonRows>
+				<CanonCanvas
+					class="va-preview"
+					@aspect={{this.previewAspect}}
+					@maxHeight={{tallestPreview}}
+					@boxing="unlessWide"
+					@background={{if
+						this.loaded
+						"#000"
+						"var(--canon-muted)"
+					}}
+				>
+					{{#if this.loaded}}
+						{{! the transport is its control; user media lacks captions }}
 						{{! template-lint-disable require-media-caption }}
 						<video
+							class="va-video"
 							src={{this.intake.url}}
-							controls
 							playsinline
 							preload="metadata"
 							{{this.intake.register}}
+							{{this.playback.register}}
+							{{this.keepVideo}}
 							{{on
 								"loadedmetadata"
-								this.intake.ready
+								this.metadata
 							}}
 							{{on
 								"error"
 								this.intake.failed
 							}}
 						></video>
-					{{else}}
-						<label class="dt-va-drop">
-							<input
-								type="file"
-								class="dt-sr-only"
-								accept={{ACCEPT}}
-								{{on
-									"change"
-									this.intake.chooseFile
-								}}
-							/>
-							<Icon @name="film" />
-							<span
-								class="dt-va-drop-title"
-							>{{DROP_TITLE}}</span>
-							{{! wording duplicated in background-remover }}
-							<span
-								class="dt-va-drop-hint"
-							>or click to select a
-								file, or paste</span>
-						</label>
 					{{/if}}
-				</div>
-
-				{{#each this.sections key="title" as |panel|}}
-					<section class="dt-va-panel">
-						<h3
-							class="dt-va-panel-title"
-						>{{panel.title}}</h3>
-						<dl class="dt-va-meta">
-							{{#each
-								panel.rows
-								key="label"
-								as |row|
-							}}
-								<div
-									class="dt-va-cell"
-								>
-									<dt
-									>{{row.label}}</dt>
-									<dd
-									>{{row.value}}</dd>
-								</div>
-							{{/each}}
-						</dl>
-					</section>
-				{{/each}}
-
-				<AtlasOpenIn
-					@file={{this.intake.file}}
-					@self="video-atlas"
-				/>
-
-				{{#if this.errorMessage}}
-					<p
-						class="dt-va-error"
-						role="alert"
-					>{{this.errorMessage}}</p>
+				</CanonCanvas>
+				{{#if this.loaded}}
+					<OpenIn
+						class="va-open"
+						@file={{this.intake.file}}
+						@self="video-atlas"
+					/>
+				{{else}}
+					<OpenIn
+						class="va-open media-open--blank"
+						@tools={{BLANK_OPEN}}
+						inert
+					/>
 				{{/if}}
-			</div>
-		</div>
+			</:main>
+			<:footer>
+				<Transport
+					@playback={{this.playback}}
+					@ready={{this.ready}}
+				>
+					{{#if (pipSupported)}}
+						<CanonButton
+							class="va-pip"
+							@icon={{Pip}}
+							@label="Picture in Picture"
+							@disabled={{if
+								this.ready
+								false
+								true
+							}}
+							@onClick={{this.pictureInPicture}}
+						/>
+					{{/if}}
+					<CanonButton
+						class="va-full"
+						@icon={{Full}}
+						@label="Full Screen"
+						@disabled={{if
+							this.ready
+							false
+							true
+						}}
+						@onClick={{this.fullScreen}}
+					/>
+				</Transport>
+			</:footer>
+		</CanonSplit>
 	</template>
 }

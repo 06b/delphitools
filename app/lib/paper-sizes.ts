@@ -15,6 +15,8 @@ export interface PaperSize {
 export interface PaperGroup {
 	id: string;
 	label: string;
+	/** The iOS series name, where it is shorter than the label. */
+	short?: string;
 	description: string;
 	sizes: PaperSize[];
 }
@@ -233,6 +235,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'iso-a',
 		label: 'ISO A Series',
+		short: 'ISO A',
 		description:
 			'International standard sizes with 1:√2 aspect ratio.',
 		sizes: [
@@ -257,6 +260,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'iso-b',
 		label: 'ISO B Series',
+		short: 'ISO B',
 		description: 'Geometric mean between A series sizes.',
 		sizes: [
 			isoBSize('B0', 1000, 1414),
@@ -275,6 +279,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'iso-c',
 		label: 'ISO C Series',
+		short: 'ISO C',
 		description: 'Envelope sizes - geometric mean between A and B.',
 		sizes: [
 			isoCSize('C0', 917, 1297),
@@ -291,6 +296,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'raw-format',
 		label: 'RA Series',
+		short: 'RA',
 		description: 'Raw format sizes for printing before trimming.',
 		sizes: [
 			raSize('RA0', 860, 1220),
@@ -303,6 +309,7 @@ export const paperSizeGroups: PaperGroup[] = [
 	{
 		id: 'sra-series',
 		label: 'SRA Series',
+		short: 'SRA',
 		description: 'Supplementary Raw Format A - extra bleed area.',
 		sizes: [
 			sraSize('SRA0', 900, 1280),
@@ -629,4 +636,54 @@ const ALL_SIZES: PaperSize[] = (() => {
 
 export function findPaperSize(id: string): PaperSize | undefined {
 	return ALL_SIZES.find((s) => s.id === id);
+}
+
+/** The custom side range in millimetres, as iOS. */
+export const CUSTOM_MIN_MM = 10;
+export const CUSTOM_MAX_MM = 5000;
+
+const customPattern = /^(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(?:mm)?$/i;
+
+/** A custom size id: `WxH` in millimetres, at most two decimals. */
+export function customSizeId(widthMm: number, heightMm: number): string {
+	const mm = (value: number) => String(Number(value.toFixed(2)));
+	return `${mm(widthMm)}x${mm(heightMm)}`;
+}
+
+/** A custom `WxH` millimetre id, each side within `min` to `max`. */
+export function parseCustomSize(
+	id: string,
+	min = CUSTOM_MIN_MM,
+	max = CUSTOM_MAX_MM,
+): { widthMm: number; heightMm: number } | undefined {
+	const found = customPattern.exec(id.trim());
+	if (!found) return undefined;
+	const [widthMm, heightMm] = [Number(found[1]), Number(found[2])];
+	const fits = (value: number) => value >= min && value <= max;
+	return fits(widthMm) && fits(heightMm)
+		? { widthMm, heightMm }
+		: undefined;
+}
+
+/** A catalogue id, or a custom `WxH` millimetre id within `min` to `max`. */
+export function paperSizeFor(
+	id: string,
+	min = CUSTOM_MIN_MM,
+	max = CUSTOM_MAX_MM,
+): PaperSize | undefined {
+	const found = findPaperSize(id);
+	if (found) return found;
+	const custom = parseCustomSize(id, min, max);
+	if (!custom) return undefined;
+	const { widthMm, heightMm } = custom;
+	return {
+		id: customSizeId(widthMm, heightMm),
+		label: 'Custom',
+		series: 'custom',
+		region: '',
+		widthMm,
+		heightMm,
+		widthIn: widthMm / INCH_TO_MM,
+		heightIn: heightMm / INCH_TO_MM,
+	};
 }

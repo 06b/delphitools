@@ -21,20 +21,20 @@ const dropText = (selector) =>
 
 await visit(page, '/tools/markdown-writer');
 await page.evaluate(() => {
-	const area = document.querySelector('.dt-md textarea');
+	const area = document.querySelector('.media-marked-source');
 	area.value = 'an old draft';
 	area.dispatchEvent(new Event('input', { bubbles: true }));
 });
-await dropText('.dt-md');
+await dropText('.markdown-writer');
 await sleep(300);
 check(
 	'Markdown Writer replaces its draft with the dropped file',
-	(await page.$eval('.dt-md textarea', (a) => a.value)) === MD,
+	(await page.$eval('.media-marked-source', (a) => a.value)) === MD,
 );
 
 await visit(page, '/tools/text-editor');
 await page.waitForSelector('.dt-editor', { timeout: 15000 });
-await dropText('.dt-te');
+await dropText('.text-editor');
 await sleep(500);
 const heading = await page.$eval('.dt-editor h1', (h) => h.textContent?.trim()).catch(() => null);
 check('Text Editor loads the dropped file as a document', heading === 'Dropped heading', heading ?? 'no h1');

@@ -1,251 +1,145 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
-import { eq } from 'ember-truth-helpers';
-
-import type { PDFDocument } from 'pdf-lib';
-
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import PaperSizeCombobox from 'delphitools-v2/components/ui/paper-size-combobox';
+import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+	type CanonPageMenuItem,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonSwitch from 'delphicanon/components/canon-switch';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import PaperPopover from 'delphitools-v2/components/tools/paper-sizes/popover';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Slot from 'delphitools-v2/components/tools/media/slot';
 import { downloadBlob } from 'delphitools-v2/lib/download';
-import { MM_TO_POINTS, PAPER_SIZES } from 'delphitools-v2/lib/imposition';
-import { findPaperSize } from 'delphitools-v2/lib/paper-sizes';
+import { formatBytes } from 'delphitools-v2/lib/image-compress';
+import { PAPER_SIZES } from 'delphitools-v2/lib/imposition';
+import { paperSizeFor } from 'delphitools-v2/lib/paper-sizes';
 import {
 	ZINE_FOLDS,
 	buildFoldLayout,
 	getFoldOption,
 	type ZineFoldId,
 	type ZineFoldLayout,
-	type ZineSide,
 } from 'delphitools-v2/lib/zine-folds';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
+import {
+	ACCEPT,
+	fillOrder,
+	loadFiles,
+	move,
+	placement,
+	release,
+	resize,
+	samples,
+	zinePdf,
+	type ZineImage,
+} from 'delphitools-v2/components/tools/zine-imposer/images';
+import Sheet from 'delphitools-v2/components/tools/zine-imposer/sheet';
+import './media/media.css';
+import './zine-imposer/zine-imposer.css';
 
-const DPI_OPTIONS = [72, 150, 300, 600];
-
-const PREVIEW_SCALE = 2;
-
-// 3mm uk/eu; us 1/8in
-const BLEED_MM = 3;
-
+const DPIS = [72, 150, 300, 600];
+const DPI_LABELS = DPIS.map((dpi) => `${dpi} DPI`);
+const FOLD_NAMES = ZINE_FOLDS.map((fold) => fold.name);
+const PANELS = getFoldOption('accordion').panelOptions ?? [];
+const PANEL_LABELS = PANELS.map(String);
 const FALLBACK_PAPER = PAPER_SIZES[0]!;
+const DROP_TYPES = ['image/*', 'application/pdf'];
+const inc = (n: number) => n + 1;
 
-interface ZineImage {
-	id: string;
-	dataUrl: string;
-	/** decoded once at upload */
-	element: HTMLImageElement;
-	fitMode: 'fit' | 'fill';
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Folder = <template><IconSvg @name="folder-open" /></template>;
+const Book = <template><IconSvg @name="book-open" /></template>;
+const Cross = <template><IconSvg @name="x" /></template>;
+const Fit = <template><IconSvg @name="minimize" /></template>;
+const Fill = <template><IconSvg @name="maximize" /></template>;
+
+// ios PaperUnit.decimal
+const decimal = (value: number, places = 1) =>
+	String(Math.round(value * 10 ** places) / 10 ** places);
+const millimetres = (width: number, height: number) =>
+	`${decimal(width)} × ${decimal(height)} mm`;
+
+interface Result {
+	blob: Blob;
+	name: string;
+	detail: string;
 }
 
-function loadImage(file: File): Promise<ZineImage> {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onload = () => {
-			const element = new Image();
-			element.onload = () =>
-				resolve({
-					id: Math.random()
-						.toString(36)
-						.slice(2, 9),
-					dataUrl: element.src,
-					element,
-					fitMode: 'fill',
-				});
-			element.onerror = reject;
-			element.src = reader.result as string;
-		};
-		reader.onerror = reject;
-		reader.readAsDataURL(file);
-	});
-}
+const keep = modifier(
+	(element: HTMLInputElement, [store]: [(e: HTMLInputElement) => void]) =>
+		store(element),
+);
 
-function drawImageInCell(
-	ctx: CanvasRenderingContext2D,
-	img: HTMLImageElement,
-	targetX: number,
-	targetY: number,
-	targetWidth: number,
-	targetHeight: number,
-	fitMode: 'fit' | 'fill',
-	rotation: number,
-) {
-	ctx.save();
-	ctx.translate(targetX + targetWidth / 2, targetY + targetHeight / 2);
-	ctx.rotate((rotation * Math.PI) / 180);
-
-	const imgAspect = img.width / img.height;
-	const targetAspect = targetWidth / targetHeight;
-
-	let drawWidth = targetWidth;
-	let drawHeight = targetHeight;
-	let sourceX = 0;
-	let sourceY = 0;
-	let sourceWidth = img.width;
-	let sourceHeight = img.height;
-
-	if (fitMode === 'fit') {
-		if (imgAspect > targetAspect) {
-			drawHeight = targetWidth / imgAspect;
-		} else {
-			drawWidth = targetHeight * imgAspect;
-		}
-	} else if (imgAspect > targetAspect) {
-		sourceWidth = img.height * targetAspect;
-		sourceX = (img.width - sourceWidth) / 2;
-	} else {
-		sourceHeight = img.width / targetAspect;
-		sourceY = (img.height - sourceHeight) / 2;
-	}
-
-	ctx.drawImage(
-		img,
-		sourceX,
-		sourceY,
-		sourceWidth,
-		sourceHeight,
-		-drawWidth / 2,
-		-drawHeight / 2,
-		drawWidth,
-		drawHeight,
-	);
-
-	ctx.restore();
-}
-
-// creases; cut lines front only
-function drawGuides(
-	ctx: CanvasRenderingContext2D,
-	layout: ZineFoldLayout,
-	side: ZineSide,
-	width: number,
-	height: number,
-) {
-	ctx.strokeStyle = '#888888';
-	ctx.lineWidth = 1;
-	ctx.setLineDash([8, 4]);
-
-	for (const fold of layout.foldLines) {
-		ctx.beginPath();
-		if (fold.axis === 'v') {
-			const x = fold.pos * width;
-			ctx.moveTo(x, 0);
-			ctx.lineTo(x, height);
-		} else {
-			const y = fold.pos * height;
-			ctx.moveTo(0, y);
-			ctx.lineTo(width, y);
-		}
-		ctx.stroke();
-	}
-
-	ctx.setLineDash([]);
-
-	if (side.side !== 'front') return;
-
-	ctx.strokeStyle = '#cc0000';
-	ctx.lineWidth = 2;
-	for (const cut of layout.cutLines) {
-		ctx.beginPath();
-		ctx.moveTo(cut.x1 * width, cut.y1 * height);
-		ctx.lineTo(cut.x2 * width, cut.y2 * height);
-		ctx.stroke();
-
-		const mx = ((cut.x1 + cut.x2) / 2) * width;
-		const my = ((cut.y1 + cut.y2) / 2) * height;
-		ctx.fillStyle = '#cc0000';
-		ctx.font = 'bold 10px monospace';
-		ctx.textAlign = 'center';
-		ctx.fillText('✂ CUT', mx, my - 6);
-	}
-}
-
-function drawPageNumbers(
-	ctx: CanvasRenderingContext2D,
-	side: ZineSide,
-	cellWidth: number,
-	cellHeight: number,
-) {
-	ctx.font = 'bold 24px monospace';
-	ctx.textAlign = 'center';
-	ctx.textBaseline = 'middle';
-
-	for (const placement of side.placements) {
-		ctx.save();
-		ctx.translate(
-			placement.col * cellWidth + cellWidth / 2,
-			placement.row * cellHeight + cellHeight / 2,
-		);
-		ctx.rotate((placement.rotation * Math.PI) / 180);
-
-		ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-		ctx.beginPath();
-		ctx.arc(0, 0, 20, 0, Math.PI * 2);
-		ctx.fill();
-
-		ctx.fillStyle = '#ffffff';
-		ctx.fillText(placement.page.toString(), 0, 0);
-
-		ctx.restore();
-	}
-}
-
-// centre-crop; pdf-lib cannot clip
-function cropToAspect(img: HTMLImageElement, targetAspect: number): string {
-	const imgAspect = img.width / img.height;
-	let sourceX = 0;
-	let sourceY = 0;
-	let sourceWidth = img.width;
-	let sourceHeight = img.height;
-
-	if (imgAspect > targetAspect) {
-		sourceWidth = img.height * targetAspect;
-		sourceX = (img.width - sourceWidth) / 2;
-	} else {
-		sourceHeight = img.width / targetAspect;
-		sourceY = (img.height - sourceHeight) / 2;
-	}
-
-	const canvas = document.createElement('canvas');
-	canvas.width = sourceWidth;
-	canvas.height = sourceHeight;
-	canvas.getContext('2d')?.drawImage(
-		img,
-		sourceX,
-		sourceY,
-		sourceWidth,
-		sourceHeight,
-		0,
-		0,
-		sourceWidth,
-		sourceHeight,
-	);
-	return canvas.toDataURL('image/png');
-}
-
-function embedImage(pdfDoc: PDFDocument, bytes: ArrayBuffer, isPng: boolean) {
-	// mime unreliable; retry other decoder
-	return isPng
-		? pdfDoc.embedPng(bytes).catch(() => pdfDoc.embedJpg(bytes))
-		: pdfDoc.embedJpg(bytes).catch(() => pdfDoc.embedPng(bytes));
-}
-
-export default class ZineImposerTool extends Component {
+/** The port of ZineImposerViewController, on the web tool's pdf-lib export. */
+export default class ZineImposer extends Component {
 	@tracked foldId: ZineFoldId = 'mini-8';
 	@tracked panels = 8;
 	@tracked doubleSided = false;
 	@tracked split = false;
 	@tracked paperSizeId = 'a4';
-	@tracked bleedEnabled = false;
-	@tracked selectedDpi = 300;
-	@tracked isGenerating = false;
-	@tracked draggedIndex: number | null = null;
-	@tracked dragOverIndex: number | null = null;
+	@tracked bleed = false;
+	@tracked dpi = 300;
+	@tracked images: (ZineImage | null)[] = Array<null>(8).fill(null);
+	/** 1-based page */
+	@tracked lit?: number;
+	@tracked showsBack = false;
+	@tracked over = false;
+	@tracked busy = false;
+	@tracked failed = false;
+	@tracked result: Result | null = null;
 
-	@tracked images: (ZineImage | null)[] = Array<ZineImage | null>(
-		this.layout.pageCount,
-	).fill(null);
+	#bulk?: HTMLInputElement;
+	#one?: HTMLInputElement;
+	#picking = 0;
+	#queue: Promise<void> = Promise.resolve();
+	// bumps cancel in-flight export
+	#seq = 0;
+
+	// ?zine* ios launch arguments
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const query = new URLSearchParams(window.location.search);
+		if (query.get('zineFold') === '1') this.foldId = 'accordion';
+		const panels = Number(query.get('zinePanels'));
+		if (PANELS.includes(panels)) this.panels = panels;
+		if (query.has('zineDouble')) this.doubleSided = true;
+		if (query.has('zineSplit')) this.split = true;
+		const paper = paperSizeFor(query.get('zinePaper') ?? '');
+		if (paper) this.paperSizeId = paper.id;
+		this.images = resize([], this.layout.pageCount);
+		const lit = Number(query.get('zineLit'));
+		const sample = Number(query.get('zineSample'));
+		if (sample > 0)
+			void samples(
+				Math.min(sample, this.layout.pageCount),
+			).then((files) => {
+				this.add(files, 0);
+				if (lit > 0)
+					void this.#queue.then(() =>
+						this.light(lit - 1),
+					);
+			});
+		else if (lit > 0) this.light(lit - 1);
+	}
+
+	willDestroy() {
+		super.willDestroy();
+		this.#seq++;
+		release(this.images);
+	}
 
 	@cached
 	get layout(): ZineFoldLayout {
@@ -256,28 +150,23 @@ export default class ZineImposerTool extends Component {
 		});
 	}
 
-	get foldOption() {
+	get fold() {
 		return getFoldOption(this.foldId);
 	}
 
-	get panelOptions() {
-		return this.foldOption.panelOptions ?? [];
+	get foldIndex() {
+		return ZINE_FOLDS.findIndex((f) => f.id === this.foldId);
 	}
 
-	get hasOptions() {
-		const {
-			configurablePanels,
-			supportsDoubleSided,
-			supportsSplit,
-		} = this.foldOption;
-		return (
-			configurablePanels ||
-			supportsDoubleSided ||
-			supportsSplit
-		);
+	get panelIndex() {
+		return PANELS.indexOf(this.panels);
 	}
 
-	get isDuplex() {
+	get dpiIndex() {
+		return DPIS.indexOf(this.dpi);
+	}
+
+	get duplex() {
 		return this.layout.sides.length > 1;
 	}
 
@@ -285,42 +174,6 @@ export default class ZineImposerTool extends Component {
 		return this.layout.duplexFlip === 'long-edge'
 			? 'long edge'
 			: 'short edge';
-	}
-
-	get paperSize() {
-		return findPaperSize(this.paperSizeId) ?? FALLBACK_PAPER;
-	}
-
-	// print landscape, rotate size
-	get sheetWidthMm() {
-		return Math.max(
-			this.paperSize.widthMm,
-			this.paperSize.heightMm,
-		);
-	}
-
-	get sheetHeightMm() {
-		return Math.min(
-			this.paperSize.widthMm,
-			this.paperSize.heightMm,
-		);
-	}
-
-	get imageCount() {
-		return this.images.filter((img) => img !== null).length;
-	}
-
-	get slots() {
-		return this.images.map((image, index) => ({
-			image,
-			index,
-			number: index + 1,
-			alt: `Page ${index + 1}`,
-		}));
-	}
-
-	get generateDisabled() {
-		return this.imageCount === 0 || this.isGenerating;
 	}
 
 	get doubleSidedHint() {
@@ -335,1091 +188,701 @@ export default class ZineImposerTool extends Component {
 			: 'One full-height strip';
 	}
 
+	get paper() {
+		return paperSizeFor(this.paperSizeId) ?? FALLBACK_PAPER;
+	}
+
+	// print landscape, rotate size
+	get sheetWidthMm() {
+		return Math.max(this.paper.widthMm, this.paper.heightMm);
+	}
+
+	get sheetHeightMm() {
+		return Math.min(this.paper.widthMm, this.paper.heightMm);
+	}
+
+	get cellWidthMm() {
+		return this.sheetWidthMm / this.layout.cols;
+	}
+
+	get cellHeightMm() {
+		return this.sheetHeightMm / this.layout.rows;
+	}
+
+	get figure() {
+		const px = (mm: number) => Math.round((mm / 25.4) * this.dpi);
+		return `${px(this.cellWidthMm)}×${px(this.cellHeightMm)}`;
+	}
+
+	get tiles() {
+		const { cellWidthMm: w, cellHeightMm: h } = this;
+		return [
+			{
+				label: 'Sheet',
+				value: millimetres(
+					this.sheetWidthMm,
+					this.sheetHeightMm,
+				),
+			},
+			{ label: 'Page', value: millimetres(w, h) },
+			{ label: 'Ratio', value: `${decimal(w / h, 3)}:1` },
+			{
+				label: 'Orientation',
+				value: w < h ? 'Portrait' : 'Landscape',
+			},
+		];
+	}
+
+	get filled() {
+		return this.images.filter(Boolean).length;
+	}
+
+	get count() {
+		return `${this.filled}/${this.layout.pageCount} filled`;
+	}
+
 	get sideRanges() {
-		if (!this.isDuplex) return '';
-		const parts = this.layout.sides.map((side) => {
-			const pages = side.placements.map((p) => p.page);
-			return `${side.side} ${Math.min(...pages)}–${Math.max(...pages)}`;
-		});
-		return ` · ${parts.join(', ')}`;
-	}
-
-	get pageStats() {
-		const widthMm = this.sheetWidthMm / this.layout.cols;
-		const heightMm = this.sheetHeightMm / this.layout.rows;
-		const widthPx = Math.round((widthMm / 25.4) * this.selectedDpi);
-		const heightPx = Math.round(
-			(heightMm / 25.4) * this.selectedDpi,
-		);
-		return {
-			mm: `${widthMm.toFixed(1)} × ${heightMm.toFixed(1)} mm`,
-			px: `${widthPx} × ${heightPx} px @ ${this.selectedDpi} dpi`,
-			ratio: `${(widthMm / heightMm).toFixed(3)}:1`,
-			orientation:
-				widthMm < heightMm ? 'Portrait' : 'Landscape',
-		};
-	}
-
-	get previewNote() {
-		const base = this.isDuplex
-			? `Double-sided print. Print both pages, flip on the ${this.duplexLabel}.`
-			: 'Single-sided print.';
-		return this.layout.cutLines.length > 0
-			? `${base} The red line shows where to cut.`
-			: base;
-	}
-
-	@cached
-	get previews() {
-		if (!this.images.some((img) => img !== null)) return [];
-
-		const layout = this.layout;
-		const sheetWidthPx = this.sheetWidthMm * PREVIEW_SCALE;
-		const sheetHeightPx = this.sheetHeightMm * PREVIEW_SCALE;
-		const cellWidthPx = sheetWidthPx / layout.cols;
-		const cellHeightPx = sheetHeightPx / layout.rows;
-
-		return layout.sides.map((side) => {
-			const canvas = document.createElement('canvas');
-			canvas.width = sheetWidthPx;
-			canvas.height = sheetHeightPx;
-			const ctx = canvas.getContext('2d');
-			const alt = `Zine imposition preview ${side.side}`;
-			if (!ctx) return { side: side.side, alt, src: '' };
-
-			ctx.fillStyle = '#ffffff';
-			ctx.fillRect(0, 0, sheetWidthPx, sheetHeightPx);
-
-			for (const placement of side.placements) {
-				const zineImage =
-					this.images[placement.page - 1];
-				if (!zineImage) continue;
-				drawImageInCell(
-					ctx,
-					zineImage.element,
-					placement.col * cellWidthPx,
-					placement.row * cellHeightPx,
-					cellWidthPx,
-					cellHeightPx,
-					zineImage.fitMode,
-					placement.rotation,
+		if (!this.duplex) return '';
+		return this.layout.sides
+			.map((side) => {
+				const pages = side.placements.map(
+					(p) => p.page,
 				);
-			}
+				return `${side.side} ${Math.min(...pages)}–${Math.max(...pages)}`;
+			})
+			.join(', ');
+	}
 
-			drawGuides(
-				ctx,
-				layout,
-				side,
-				sheetWidthPx,
-				sheetHeightPx,
-			);
-			drawPageNumbers(ctx, side, cellWidthPx, cellHeightPx);
+	get legend() {
+		if (!this.duplex) return this.fold.name;
+		return this.showsBack ? 'Back' : 'Front';
+	}
 
+	get pages(): CanonPage[] {
+		const cell = {
+			width: this.cellWidthMm,
+			height: this.cellHeightMm,
+		};
+		const half = this.layout.pageCount / 2;
+		return this.images.map((image, index) => {
+			const name = this.duplex
+				? index < half
+					? 'Front'
+					: 'Back'
+				: undefined;
+			if (!image) return { size: cell, name };
 			return {
-				side: side.side,
-				alt,
-				src: canvas.toDataURL(),
+				size: cell,
+				name,
+				picture: image.url,
+				placement: placement(
+					image.element,
+					cell,
+					image.fitMode === 'fill',
+				),
 			};
 		});
 	}
 
-	#resizeSlots() {
-		const count = this.layout.pageCount;
-		if (this.images.length === count) return;
-		const next = Array<ZineImage | null>(count).fill(null);
-		for (let i = 0; i < Math.min(this.images.length, count); i++) {
-			next[i] = this.images[i] ?? null;
-		}
-		this.images = next;
+	get litIndex() {
+		return this.lit === undefined ? undefined : this.lit - 1;
 	}
 
-	#setAt(index: number, image: ZineImage | null) {
+	get litImage() {
+		return this.litIndex === undefined
+			? null
+			: (this.images[this.litIndex] ?? null);
+	}
+
+	get litTitle() {
+		return `Page ${this.lit}`;
+	}
+
+	get fitText() {
+		return this.litImage?.fitMode === 'fill' ? 'Fit' : 'Fill';
+	}
+
+	get fitIcon() {
+		return this.litImage?.fitMode === 'fill' ? Fit : Fill;
+	}
+
+	get fileName() {
+		return [
+			`zine-${this.foldId}-${this.paper.id}`,
+			this.duplex ? '-duplex' : '',
+			this.bleed ? '-bleed' : '',
+			'.pdf',
+		].join('');
+	}
+
+	// ios job.reset; dpi exempt
+	#changed() {
+		this.#seq++;
+		this.busy = false;
+		this.failed = false;
+		this.result = null;
+	}
+
+	#relayout(change: () => void) {
+		change();
+		const count = this.layout.pageCount;
+		release(this.images.slice(count));
+		this.images = resize(this.images, count);
+		if (this.lit !== undefined && this.lit > count)
+			this.lit = undefined;
+		if (!this.duplex) this.showsBack = false;
+		this.#changed();
+	}
+
+	pickFold = (index: number) => {
+		const fold = ZINE_FOLDS[index];
+		if (fold && fold.id !== this.foldId)
+			this.#relayout(() => (this.foldId = fold.id));
+	};
+
+	pickPanels = (index: number) => {
+		const panels = PANELS[index];
+		if (panels !== undefined && panels !== this.panels)
+			this.#relayout(() => (this.panels = panels));
+	};
+
+	setDoubleSided = (on: boolean) =>
+		this.#relayout(() => (this.doubleSided = on));
+
+	setSplit = (on: boolean) => this.#relayout(() => (this.split = on));
+
+	pickPaper = (id: string) => {
+		if (id === this.paperSizeId) return;
+		this.paperSizeId = id;
+		this.#changed();
+	};
+
+	pickDpi = (index: number) => {
+		this.dpi = DPIS[index] ?? this.dpi;
+	};
+
+	setBleed = (on: boolean) => {
+		this.bleed = on;
+		this.#changed();
+	};
+
+	light = (index: number) => {
+		if (index < 0 || index >= this.images.length) return;
+		this.lit = index + 1;
+		const side = this.layout.sides.findIndex((s) =>
+			s.placements.some((p) => p.page === index + 1),
+		);
+		this.showsBack = side === 1;
+	};
+
+	flip = () => {
+		if (this.duplex) this.showsBack = !this.showsBack;
+	};
+
+	/** fills empty from start */
+	add = (files: File[], start: number, replace = false) => {
+		if (!files.length) return;
+		this.#queue = this.#queue.then(async () => {
+			const room = fillOrder(
+				this.images.map((image, i) =>
+					replace && i === start
+						? false
+						: !!image,
+				),
+				start,
+			).length;
+			const loaded = await loadFiles(files, room);
+			if (this.isDestroying) return release(loaded);
+			const next = [...this.images];
+			if (replace && loaded.length && start < next.length) {
+				release([next[start] ?? null]);
+				next[start] = loaded.shift()!;
+			}
+			const slots = fillOrder(next.map(Boolean), start);
+			loaded.forEach((image, i) => {
+				const slot = slots[i];
+				if (slot === undefined) release([image]);
+				else next[slot] = image;
+			});
+			this.images = next;
+			this.#changed();
+		});
+	};
+
+	paste = (file: File) => this.add([file], this.litIndex ?? 0);
+
+	dropOnStrip = (index: number, files: File[]) => this.add(files, index);
+
+	dropOnPage = (index: number, files: File[]) => {
+		this.light(index);
+		this.add(files, index, true);
+	};
+
+	enter = (event: DragEvent) => {
+		if (!event.dataTransfer?.types.includes('Files')) return;
+		event.preventDefault();
+		this.over = true;
+	};
+
+	leave = (event: DragEvent) => {
+		const root = event.currentTarget as Element;
+		if (!root.contains(event.relatedTarget as Node | null))
+			this.over = false;
+	};
+
+	drop = (event: DragEvent) => {
+		this.over = false;
+		// strip, sheet handle own
+		if (event.defaultPrevented) return;
+		const files = [...(event.dataTransfer?.files ?? [])];
+		if (!files.length) return;
+		event.preventDefault();
+		this.add(files, 0);
+	};
+
+	storeBulk = (input: HTMLInputElement) => (this.#bulk = input);
+	storeOne = (input: HTMLInputElement) => (this.#one = input);
+
+	chooseBulk = () => this.#bulk?.click();
+
+	choosePage = (index: number) => {
+		this.#picking = index;
+		this.#one?.click();
+	};
+
+	chooseLit = () => {
+		if (this.litIndex !== undefined) this.choosePage(this.litIndex);
+	};
+
+	pickedBulk = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const files = [...(input.files ?? [])];
+		// allows same-file re-pick
+		input.value = '';
+		this.add(files, 0);
+	};
+
+	pickedOne = (event: Event) => {
+		const input = event.target as HTMLInputElement;
+		const files = [...(input.files ?? [])];
+		input.value = '';
+		this.add(files, this.#picking, true);
+	};
+
+	#put(index: number, image: ZineImage | null) {
 		const next = [...this.images];
 		next[index] = image;
 		this.images = next;
+		this.#changed();
 	}
 
-	setFold = (id: ZineFoldId) => {
-		this.foldId = id;
-		this.#resizeSlots();
-	};
-
-	setPanels = (count: number) => {
-		this.panels = count;
-		this.#resizeSlots();
-	};
-
-	setDoubleSided = (event: Event) => {
-		this.doubleSided = (event.target as HTMLInputElement).checked;
-		this.#resizeSlots();
-	};
-
-	setSplit = (event: Event) => {
-		this.split = (event.target as HTMLInputElement).checked;
-		this.#resizeSlots();
-	};
-
-	setPaperSize = (id: string) => {
-		this.paperSizeId = id;
-	};
-
-	setDpi = (dpi: number) => {
-		this.selectedDpi = dpi;
-	};
-
-	setBleed = (event: Event) => {
-		this.bleedEnabled = (event.target as HTMLInputElement).checked;
-	};
-
-	clearAll = () => {
-		this.images = Array<ZineImage | null>(
-			this.layout.pageCount,
-		).fill(null);
-	};
-
-	removeImage = (index: number) => {
-		this.#setAt(index, null);
-	};
-
-	toggleFitMode = (index: number) => {
+	toggleFit = (index: number) => {
 		const image = this.images[index];
 		if (!image) return;
-		this.#setAt(index, {
+		this.#put(index, {
 			...image,
 			fitMode: image.fitMode === 'fit' ? 'fill' : 'fit',
 		});
 	};
 
-	async #place(index: number, file: File) {
+	toggleLit = () => {
+		if (this.litIndex !== undefined) this.toggleFit(this.litIndex);
+	};
+
+	remove = (index: number) => {
+		release([this.images[index] ?? null]);
+		this.#put(index, null);
+	};
+
+	removeLit = () => {
+		if (this.litIndex !== undefined) this.remove(this.litIndex);
+	};
+
+	clear = () => {
+		release(this.images);
+		this.images = resize([], this.layout.pageCount);
+		this.#changed();
+	};
+
+	movePage = (from: number, to: number) => {
+		this.images = move(this.images, from, to);
+		this.light(to);
+		this.#changed();
+	};
+
+	menu = (index: number): CanonPageMenuItem[] | undefined => {
+		if (this.busy) return undefined;
+		const image = this.images[index];
+		const items: CanonPageMenuItem[] = [
+			{
+				title: 'Files',
+				action: () => this.choosePage(index),
+			},
+		];
+		if (!image) return items;
+		items.push(
+			{
+				title:
+					image.fitMode === 'fill'
+						? 'Fit'
+						: 'Fill',
+				action: () => this.toggleFit(index),
+			},
+			{
+				title: 'Remove',
+				destructive: true,
+				action: () => this.remove(index),
+			},
+		);
+		return items;
+	};
+
+	run = () => void this.#run();
+
+	async #run() {
+		if (!this.filled || this.busy) return;
+		const seq = ++this.#seq;
+		this.busy = true;
+		this.failed = false;
+		this.result = null;
+		const name = this.fileName;
+		const sides = this.layout.sides.length;
 		try {
-			this.#setAt(index, await loadImage(file));
-		} catch {
-			// undecodable: keep slot
-		}
-	}
-
-	async #fill(files: FileList | null) {
-		const imageFiles = Array.from(files ?? []).filter((f) =>
-			f.type.startsWith('image/'),
-		);
-		if (imageFiles.length === 0) return;
-
-		const settled = await Promise.all(
-			imageFiles.map((file) =>
-				loadImage(file).catch(() => null),
-			),
-		);
-		const loaded = settled.filter(
-			(img): img is ZineImage => img !== null,
-		);
-		if (loaded.length === 0) return;
-
-		const next = [...this.images];
-		let slot = 0;
-		for (const image of loaded) {
-			while (slot < next.length && next[slot] !== null)
-				slot++;
-			if (slot >= next.length) break;
-			next[slot++] = image;
-		}
-		this.images = next;
-	}
-
-	pasteFile = (file: File) => {
-		const empty = this.images.findIndex((img) => img === null);
-		if (empty === -1) return;
-		void this.#place(empty, file);
-	};
-
-	selectForSlot = (index: number, event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		// same file re-pick still fires
-		input.value = '';
-		if (file?.type.startsWith('image/'))
-			void this.#place(index, file);
-	};
-
-	selectBulk = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		void this.#fill(input.files);
-		input.value = '';
-	};
-
-	dropBulk = (event: DragEvent) => {
-		event.preventDefault();
-		void this.#fill(event.dataTransfer?.files ?? null);
-	};
-
-	// else browser navigates to file
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	dragStart = (index: number, event: DragEvent) => {
-		if (!this.images[index]) return;
-		this.draggedIndex = index;
-		if (event.dataTransfer) {
-			event.dataTransfer.effectAllowed = 'move';
-			event.dataTransfer.setData('text/plain', String(index));
-		}
-	};
-
-	dragOver = (index: number, event: DragEvent) => {
-		event.preventDefault();
-		if (this.draggedIndex === index) return;
-		this.dragOverIndex = index;
-		if (event.dataTransfer) {
-			event.dataTransfer.dropEffect =
-				this.draggedIndex === null ? 'copy' : 'move';
-		}
-	};
-
-	dragLeave = () => {
-		this.dragOverIndex = null;
-	};
-
-	dragEnd = () => {
-		this.draggedIndex = null;
-		this.dragOverIndex = null;
-	};
-
-	drop = (index: number, event: DragEvent) => {
-		event.preventDefault();
-		this.dragOverIndex = null;
-
-		const file = event.dataTransfer?.files[0];
-		if (file) {
-			if (file.type.startsWith('image/'))
-				void this.#place(index, file);
-			this.draggedIndex = null;
-			return;
-		}
-
-		const from = this.draggedIndex;
-		this.draggedIndex = null;
-		if (from === null || from === index) return;
-
-		const next = [...this.images];
-		next[from] = this.images[index] ?? null;
-		next[index] = this.images[from] ?? null;
-		this.images = next;
-	};
-
-	generatePdf = async () => {
-		this.isGenerating = true;
-
-		try {
-			const { PDFDocument, degrees } =
-				await import('pdf-lib');
-			const pdfDoc = await PDFDocument.create();
-
-			const layout = this.layout;
-			const sheetWidthPt = this.sheetWidthMm * MM_TO_POINTS;
-			const sheetHeightPt = this.sheetHeightMm * MM_TO_POINTS;
-			const cellWidthPt = sheetWidthPt / layout.cols;
-			const cellHeightPt = sheetHeightPt / layout.rows;
-			const targetAspect = cellWidthPt / cellHeightPt;
-
-			// bleed grows page, isolates cells
-			const bleedPt = this.bleedEnabled
-				? BLEED_MM * MM_TO_POINTS
-				: 0;
-			const pageWidthPt = sheetWidthPt + bleedPt * 2;
-			const pageHeightPt = sheetHeightPt + bleedPt * 2;
-
-			for (const side of layout.sides) {
-				const page = pdfDoc.addPage([
-					pageWidthPt,
-					pageHeightPt,
-				]);
-				if (bleedPt) {
-					// trim box = cut line
-					page.setTrimBox(
-						bleedPt,
-						bleedPt,
-						sheetWidthPt,
-						sheetHeightPt,
-					);
-					page.setBleedBox(
-						0,
-						0,
-						pageWidthPt,
-						pageHeightPt,
-					);
-				}
-
-				for (const placement of side.placements) {
-					const zineImage =
-						this.images[placement.page - 1];
-					if (!zineImage) continue;
-
-					// bleed only on sheet edges
-					const out = bleedPt
-						? {
-								left:
-									placement.col ===
-									0
-										? bleedPt
-										: 0,
-								right:
-									placement.col ===
-									layout.cols -
-										1
-										? bleedPt
-										: 0,
-								top:
-									placement.row ===
-									0
-										? bleedPt
-										: 0,
-								bottom:
-									placement.row ===
-									layout.rows -
-										1
-										? bleedPt
-										: 0,
-							}
-						: {
-								left: 0,
-								right: 0,
-								top: 0,
-								bottom: 0,
-							};
-
-					const boxWidthPt =
-						cellWidthPt +
-						out.left +
-						out.right;
-					const boxHeightPt =
-						cellHeightPt +
-						out.top +
-						out.bottom;
-					const boxAspect =
-						boxWidthPt / boxHeightPt;
-
-					// fill crops; fit skips bleed
-					const dataUrl =
-						zineImage.fitMode === 'fill'
-							? cropToAspect(
-									zineImage.element,
-									boxAspect,
-								)
-							: zineImage.dataUrl;
-					const bytes = await fetch(dataUrl).then(
-						(r) => r.arrayBuffer(),
-					);
-					const embedded = await embedImage(
-						pdfDoc,
-						bytes,
-						dataUrl.includes('image/png'),
-					);
-
-					// pdf origin bottom-left, +bleed shift
-					const cellX =
-						bleedPt +
-						placement.col * cellWidthPt;
-					const cellY =
-						bleedPt +
-						(layout.rows -
-							1 -
-							placement.row) *
-							cellHeightPt;
-
-					let drawWidth = boxWidthPt;
-					let drawHeight = boxHeightPt;
-					let drawX = cellX - out.left;
-					let drawY = cellY - out.bottom;
-
-					if (zineImage.fitMode === 'fit') {
-						const imgAspect =
-							embedded.width /
-							embedded.height;
-						drawWidth = cellWidthPt;
-						drawHeight = cellHeightPt;
-						if (imgAspect > targetAspect) {
-							drawHeight =
-								cellWidthPt /
-								imgAspect;
-						} else {
-							drawWidth =
-								cellHeightPt *
-								imgAspect;
-						}
-						drawX =
-							cellX +
-							(cellWidthPt -
-								drawWidth) /
-								2;
-						drawY =
-							cellY +
-							(cellHeightPt -
-								drawHeight) /
-								2;
-					}
-
-					if (placement.rotation === 180) {
-						// 180 starts from far corner
-						page.drawImage(embedded, {
-							x: drawX + drawWidth,
-							y: drawY + drawHeight,
-							width: drawWidth,
-							height: drawHeight,
-							rotate: degrees(180),
-						});
-					} else {
-						page.drawImage(embedded, {
-							x: drawX,
-							y: drawY,
-							width: drawWidth,
-							height: drawHeight,
-						});
-					}
-				}
-			}
-
+			const bytes = await zinePdf({
+				layout: this.layout,
+				images: this.images,
+				sheetWidthMm: this.sheetWidthMm,
+				sheetHeightMm: this.sheetHeightMm,
+				bleed: this.bleed,
+			});
+			if (seq !== this.#seq) return;
 			// pdf-lib save: ArrayBufferLike ≠ BlobPart
-			const blob = new Blob(
-				[new Uint8Array(await pdfDoc.save())],
-				{
-					type: 'application/pdf',
-				},
-			);
-			downloadBlob(
+			const blob = new Blob([new Uint8Array(bytes)], {
+				type: 'application/pdf',
+			});
+			this.result = {
 				blob,
-				[
-					`zine-${this.foldId}-${this.paperSize.id}`,
-					this.isDuplex ? '-duplex' : '',
-					this.bleedEnabled ? '-bleed' : '',
-					'.pdf',
-				].join(''),
-			);
+				name,
+				detail: `${formatBytes(blob.size)} · ${sides === 1 ? '1 page' : `${sides} pages`}`,
+			};
 		} catch (err) {
 			console.error('zine pdf generation failed', err);
+			if (seq === this.#seq) this.failed = true;
 		} finally {
-			this.isGenerating = false;
+			if (seq === this.#seq) this.busy = false;
 		}
+	}
+
+	save = () => {
+		if (this.result)
+			downloadBlob(this.result.blob, this.result.name);
 	};
 
 	<template>
-		<div
-			class="dt-zine"
-			{{filePaste this.pasteFile accept="image/*"}}
+		<CanonSplit
+			class="zine-imposer"
+			{{filePaste this.paste accept=ACCEPT}}
+			{{on "dragover" this.enter}}
+			{{on "dragleave" this.leave}}
+			{{on "drop" this.drop}}
 		>
-			<div class="dt-zine-panel">
-				<div class="dt-zine-folds">
-					<span class="dt-zine-title">Fold type</span>
-					<div
-						class="segmented dt-zine-fold-tabs"
-						role="group"
-						aria-label="Fold type"
-					>
-						{{#each
-							ZINE_FOLDS key="id"
-							as |fold|
-						}}
-							<button
-								type="button"
-								aria-pressed={{if
-									(eq
-										fold.id
-										this.foldId
-									)
-									"true"
-									"false"
-								}}
-								class="dt-zine-fold
-									{{if
-										(eq
-											fold.id
-											this.foldId
-										)
-										'is-active'
-									}}"
-								{{on
-									"click"
-									(fn
-										this.setFold
-										fold.id
-									)
-								}}
-							>
-								{{#if
-									(eq
-										fold.id
-										"accordion"
-									)
-								}}
-									<svg
-										class="dt-zine-glyph"
-										viewBox="0 0 44 28"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.6"
-										stroke-linejoin="round"
-										stroke-linecap="round"
-										aria-hidden="true"
-									><polyline
-											points="3,23 11,5 19,23 27,5 35,23 42,9"
-										/></svg>
-								{{else}}
-									<svg
-										class="dt-zine-glyph"
-										viewBox="0 0 44 28"
-										fill="none"
-										stroke="currentColor"
-										aria-hidden="true"
-									><rect
-											x="2"
-											y="2"
-											width="40"
-											height="24"
-											stroke-width="1.6"
-										/><path
-											d="M12 2v24M22 2v24M32 2v24M2 14h40"
-											stroke-width="1"
-											opacity="0.55"
-										/><path
-											d="M12 14h20"
-											stroke-width="2.6"
-											stroke-linecap="round"
-										/></svg>
-								{{/if}}
-								<span
-									class="dt-zine-fold-text"
-								>
-									<span
-										class="dt-zine-fold-name"
-									>{{fold.name}}</span>
-									<span
-										class="dt-zine-fold-tagline"
-									>{{fold.tagline}}</span>
-								</span>
-							</button>
-						{{/each}}
-					</div>
-				</div>
-
-				<div class="dt-zine-setup">
-					<div class="dt-zine-options">
-						<span
-							class="dt-zine-title"
-						>Options</span>
-						<p
-							class="dt-zine-note"
-						>{{this.foldOption.description}}</p>
-
-						{{#if this.hasOptions}}
-							{{#if
-								this.foldOption.configurablePanels
-							}}
-								<div
-									class="dt-zine-field"
-								>
-									<span
-										class="dt-zine-label"
-									>Panels</span>
-									<div
-										class="segmented dt-zine-segments"
-										role="radiogroup"
-										aria-label="Panels"
-									>
-										{{#each
-											this.panelOptions
-											key="@index"
-											as |count|
-										}}
-											<button
-												type="button"
-												role="radio"
-												aria-checked={{if
-													(eq
-														count
-														this.panels
-													)
-													"true"
-													"false"
-												}}
-												class="dt-zine-segment
-													{{if
-														(eq
-															count
-															this.panels
-														)
-														'is-active'
-													}}"
-												{{on
-													"click"
-													(fn
-														this.setPanels
-														count
-													)
-												}}
-											>{{count}}</button>
-										{{/each}}
-									</div>
-								</div>
-							{{/if}}
-
-							{{#if
-								this.foldOption.supportsDoubleSided
-							}}
-								<div
-									class="dt-zine-switch-row"
-								>
-									<label
-										class="dt-zine-switch-text"
-										for="zine-double-sided"
-									>
-										<span
-											class="dt-zine-switch-label"
-										>Double-sided</span>
-										<span
-											class="dt-zine-switch-hint"
-										>{{this.doubleSidedHint}}</span>
-									</label>
-									<input
-										id="zine-double-sided"
-										type="checkbox"
-										class="dt-zine-switch"
-										checked={{this.doubleSided}}
-										{{on
-											"change"
-											this.setDoubleSided
-										}}
-									/>
-								</div>
-							{{/if}}
-
-							{{#if
-								this.foldOption.supportsSplit
-							}}
-								<div
-									class="dt-zine-switch-row"
-								>
-									<label
-										class="dt-zine-switch-text"
-										for="zine-split"
-									>
-										<span
-											class="dt-zine-switch-label"
-										>Split
-											in
-											half
-											(two-up)</span>
-										<span
-											class="dt-zine-switch-hint"
-										>{{this.splitHint}}</span>
-									</label>
-									<input
-										id="zine-split"
-										type="checkbox"
-										class="dt-zine-switch"
-										checked={{this.split}}
-										{{on
-											"change"
-											this.setSplit
-										}}
-									/>
-								</div>
-							{{/if}}
-						{{else}}
-							<p
-								class="dt-zine-hint"
-							>Fixed
-								{{this.layout.pageCount}}-page
-								layout — no
-								options to set.</p>
-						{{/if}}
-					</div>
-
-					<div class="dt-zine-output">
-						<span
-							class="dt-zine-title"
-						>Sheet & output</span>
-
-						<div class="dt-zine-field">
-							<span
-								class="dt-zine-label"
-							>Paper size</span>
-							<PaperSizeCombobox
-								@value={{this.paperSizeId}}
-								@onValueChange={{this.setPaperSize}}
-								@triggerClass="dt-zine-combo"
-							/>
-						</div>
-
-						<div class="dt-zine-field">
-							<span
-								class="dt-zine-label"
-							>Reference DPI</span>
-							<div
-								class="segmented dt-zine-segments"
-								role="radiogroup"
-								aria-label="Reference DPI"
-							>
-								{{#each
-									DPI_OPTIONS
-									key="@index"
-									as |dpi|
-								}}
-									<button
-										type="button"
-										role="radio"
-										aria-checked={{if
-											(eq
-												dpi
-												this.selectedDpi
-											)
-											"true"
-											"false"
-										}}
-										class="dt-zine-segment
-											{{if
-												(eq
-													dpi
-													this.selectedDpi
-												)
-												'is-active'
-											}}"
-										{{on
-											"click"
-											(fn
-												this.setDpi
-												dpi
-											)
-										}}
-									>{{dpi}}</button>
-								{{/each}}
-							</div>
-						</div>
-
-						<div class="dt-zine-switch-row">
-							<label
-								class="dt-zine-switch-label"
-								for="zine-bleed"
-							>Add 3mm bleed</label>
-							<input
-								id="zine-bleed"
-								type="checkbox"
-								class="dt-zine-switch"
-								checked={{this.bleedEnabled}}
-								{{on
-									"change"
-									this.setBleed
-								}}
-							/>
-						</div>
-					</div>
-				</div>
-
-				<div class="dt-zine-stats">
-					<span class="dt-zine-label">Each page</span>
-					<span
-						class="dt-zine-stat is-strong"
-					>{{this.pageStats.mm}}</span>
-					<span
-						class="dt-zine-stat"
-					>{{this.pageStats.px}}</span>
-					<span
-						class="dt-zine-stat"
-					>{{this.pageStats.ratio}}</span>
-					<span
-						class="dt-zine-stat"
-					>{{this.pageStats.orientation}}</span>
-				</div>
-			</div>
-
-			<label
-				class="dt-zine-bulk"
-				{{on "drop" this.dropBulk}}
-				{{on "dragover" this.allowDrop}}
-			>
-				<input
-					type="file"
-					accept="image/*"
-					multiple
-					class="dt-sr-only"
-					{{on "change" this.selectBulk}}
-				/>
-				<Icon @name="upload" />
-				<span class="dt-zine-bulk-title">Drop images
-					here to fill empty slots</span>
-				<span class="dt-zine-bulk-hint">or click to
-					select multiple files, or paste</span>
-			</label>
-
-			<div class="dt-zine-panel">
-				<div class="dt-zine-grid-head">
-					<span class="dt-zine-title">Zine pages
-						<span class="dt-zine-subtle">·
-							drag to reorder</span></span>
-					<div class="dt-zine-grid-actions">
-						<span
-							class="dt-zine-subtle"
-						>{{this.imageCount}}/{{this.layout.pageCount}}
-							filled{{this.sideRanges}}</span>
-						{{#if this.imageCount}}
-							<button
-								type="button"
-								class="dt-zine-clear"
-								{{on
-									"click"
-									this.clearAll
-								}}
-							>Clear all</button>
-						{{/if}}
-					</div>
-				</div>
-
-				<div class="dt-zine-grid">
-					{{#each
-						this.slots key="index"
-						as |slot|
-					}}
-						{{#if slot.image}}
-							<div
-								class="dt-zine-slot is-filled
-									{{if
-										(eq
-											this.draggedIndex
-											slot.index
-										)
-										'is-dragging'
-									}}
-									{{if
-										(eq
-											this.dragOverIndex
-											slot.index
-										)
-										'is-over'
-									}}"
-								draggable="true"
-								{{on
-									"dragstart"
-									(fn
-										this.dragStart
-										slot.index
-									)
-								}}
-								{{on
-									"dragover"
-									(fn
-										this.dragOver
-										slot.index
-									)
-								}}
-								{{on
-									"dragleave"
-									this.dragLeave
-								}}
-								{{on
-									"drop"
-									(fn
-										this.drop
-										slot.index
-									)
-								}}
-								{{on
-									"dragend"
-									this.dragEnd
-								}}
-							>
-								<img
-									class="dt-zine-thumb
-										{{if
-											(eq
-												slot.image.fitMode
-												'fill'
-											)
-											'is-fill'
-										}}"
-									src={{slot.image.dataUrl}}
-									alt={{slot.alt}}
-								/>
-								<div
-									class="dt-zine-overlay"
-								>
-									<Icon
-										@name="grip-vertical"
-										class="dt-zine-grip"
-									/>
-									<span
-										class="dt-zine-number"
-									>{{slot.number}}</span>
-									<div
-										class="dt-zine-slot-actions"
-									>
-										<button
-											type="button"
-											class="dt-zine-fit"
-											{{on
-												"click"
-												(fn
-													this.toggleFitMode
-													slot.index
-												)
-											}}
-										>
-											{{#if
-												(eq
-													slot.image.fitMode
-													"fill"
-												)
-											}}
-												<Icon
-													@name="minimize"
-												/>
-												Fit
-											{{else}}
-												<Icon
-													@name="maximize"
-												/>
-												Fill
-											{{/if}}
-										</button>
-										<button
-											type="button"
-											class="dt-zine-remove"
-											aria-label="Remove"
-											{{on
-												"click"
-												(fn
-													this.removeImage
-													slot.index
-												)
-											}}
-										>
-											<Icon
-												@name="x"
-											/>
-										</button>
-									</div>
-								</div>
-							</div>
-						{{else}}
-							<label
-								class="dt-zine-slot is-empty
-									{{if
-										(eq
-											this.dragOverIndex
-											slot.index
-										)
-										'is-over'
-									}}"
-								{{on
-									"dragover"
-									(fn
-										this.dragOver
-										slot.index
-									)
-								}}
-								{{on
-									"dragleave"
-									this.dragLeave
-								}}
-								{{on
-									"drop"
-									(fn
-										this.drop
-										slot.index
-									)
-								}}
-							>
-								<input
-									type="file"
-									accept="image/*"
-									class="dt-sr-only"
-									{{on
-										"change"
-										(fn
-											this.selectForSlot
-											slot.index
-										)
-									}}
-								/>
-								<Icon
-									@name="upload"
-								/>
-								<span
-									class="dt-zine-slot-label"
-								>Page
-									{{slot.number}}</span>
-							</label>
-						{{/if}}
-					{{/each}}
-				</div>
-			</div>
-
-			{{#if this.previews.length}}
-				<div class="dt-zine-panel">
-					<div class="dt-zine-preview-head">
-						<span
-							class="dt-zine-title"
-						>Imposition Preview</span>
-						<p
-							class="dt-zine-note"
-						>{{this.previewNote}}</p>
-					</div>
-					<div
-						class="dt-zine-previews
-							{{if
-								this.isDuplex
-								'is-duplex'
-							}}"
-					>
-						{{#each
-							this.previews key="side"
-							as |preview|
-						}}
-							<div
-								class="dt-zine-preview"
-							>
-								{{#if
-									this.isDuplex
-								}}
-									<span
-										class="dt-zine-preview-label"
-									>{{preview.side}}</span>
-								{{/if}}
-								<img
-									src={{preview.src}}
-									alt={{preview.alt}}
-								/>
-							</div>
-						{{/each}}
-					</div>
-				</div>
-			{{/if}}
-
-			<button
-				type="button"
-				class="dt-zine-generate"
-				disabled={{this.generateDisabled}}
-				{{on "click" this.generatePdf}}
-			>
-				{{#if this.isGenerating}}
-					Generating PDF...
-				{{else}}
-					<DownloadLabel
-						@label="Download Zine PDF"
+			<:banner>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
+				>
+					<CanonPageStrip
+						class="zi-strip"
+						@pages={{this.pages}}
+						@selected={{this.litIndex}}
+						@reorders={{true}}
+						@dropTypes={{DROP_TYPES}}
+						@onSelect={{this.light}}
+						@onMove={{this.movePage}}
+						@onDrop={{this.dropOnStrip}}
+						@menu={{this.menu}}
 					/>
-				{{/if}}
-			</button>
-
-			<div class="dt-zine-panel">
-				<p class="dt-zine-steps-title">How to fold your
-					zine:</p>
-				<ol class="dt-zine-steps">
-					{{#each
-						this.layout.instructions
-						key="@index"
-						as |step|
-					}}
-						<li>{{step}}</li>
-					{{/each}}
-				</ol>
-			</div>
-		</div>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Fold Type" />
+					<CanonSegmented
+						class="zi-folds"
+						@items={{FOLD_NAMES}}
+						@selected={{this.foldIndex}}
+						@onChange={{this.pickFold}}
+					/>
+					<CanonStatus
+						@text={{this.fold.tagline}}
+						@tone="muted"
+						@row={{true}}
+					/>
+					{{#if this.fold.configurablePanels}}
+						<CanonHeading @text="Panels" />
+						<CanonSegmented
+							class="zi-panels"
+							@items={{PANEL_LABELS}}
+							@selected={{this.panelIndex}}
+							@onChange={{this.pickPanels}}
+						/>
+					{{/if}}
+					{{#if this.fold.supportsDoubleSided}}
+						<CanonRow
+							@title="Double-sided"
+							@detail={{this.doubleSidedHint}}
+							as |titleId|
+						>
+							<CanonSwitch
+								id="zine-double-sided"
+								@on={{this.doubleSided}}
+								@onChange={{this.setDoubleSided}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					{{/if}}
+					{{#if this.fold.supportsSplit}}
+						<CanonRow
+							@title="Split in half (two-up)"
+							@detail={{this.splitHint}}
+							as |titleId|
+						>
+							<CanonSwitch
+								id="zine-split"
+								@on={{this.split}}
+								@onChange={{this.setSplit}}
+								aria-labelledby={{titleId}}
+							/>
+						</CanonRow>
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Pages" />
+					<Slot
+						class="zi-slot"
+						@prompt="Drop images here"
+						@icon="image-plus"
+						@row={{true}}
+						@over={{this.over}}
+						@onChoose={{this.chooseBulk}}
+					/>
+					<CanonRow
+						class="zi-count"
+						@title={{this.count}}
+						@detail={{this.sideRanges}}
+						@form="flush"
+					>
+						<CanonButton
+							class="zi-clear"
+							@kind="cell"
+							@text="Clear"
+							@icon={{Trash}}
+							@disabled={{if
+								this.filled
+								false
+								true
+							}}
+							@onClick={{this.clear}}
+						/>
+					</CanonRow>
+					{{#if this.lit}}
+						<CanonRow
+							class="zi-page"
+							@title={{this.litTitle}}
+							@detail={{if
+								this.litImage
+								this.litImage.name
+							}}
+							@form="flush"
+						>
+							<CanonButton
+								class="zi-page-files"
+								@kind="cell"
+								@text="Files"
+								@icon={{Folder}}
+								@onClick={{this.chooseLit}}
+							/>
+							{{#if this.litImage}}
+								<CanonButton
+									class="zi-page-fit"
+									@kind="cell"
+									@text={{this.fitText}}
+									@icon={{this.fitIcon}}
+									@onClick={{this.toggleLit}}
+								/>
+								<CanonButton
+									class="zi-page-remove"
+									@kind="cell"
+									@icon={{Cross}}
+									@label="Remove"
+									@onClick={{this.removeLit}}
+								/>
+							{{/if}}
+						</CanonRow>
+					{{/if}}
+					{{! labelled by Files cells }}
+					{{! template-lint-disable require-input-label }}
+					<input
+						class="zi-bulk"
+						type="file"
+						accept={{ACCEPT}}
+						multiple
+						hidden
+						{{keep this.storeBulk}}
+						{{on "change" this.pickedBulk}}
+					/>
+					<input
+						class="zi-one"
+						type="file"
+						accept={{ACCEPT}}
+						hidden
+						{{keep this.storeOne}}
+						{{on "change" this.pickedOne}}
+					/>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Paper" />
+					<PaperPopover
+						class="zi-paper-menu"
+						@value={{this.paper.id}}
+						@label="Paper"
+						@onPick={{this.pickPaper}}
+					/>
+					<CanonHeading @text="Reference DPI" />
+					<CanonSegmented
+						class="zi-dpi"
+						@items={{DPI_LABELS}}
+						@selected={{this.dpiIndex}}
+						@onChange={{this.pickDpi}}
+					/>
+					<CanonRow
+						@title="Add 3mm bleed"
+						as |titleId|
+					>
+						<CanonSwitch
+							id="zine-bleed"
+							@on={{this.bleed}}
+							@onChange={{this.setBleed}}
+							aria-labelledby={{titleId}}
+						/>
+					</CanonRow>
+					<CanonTiles @items={{this.tiles}} />
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<Job
+						@title="Export PDF"
+						@icon={{Book}}
+						@failure="Failed"
+						@disabled={{if
+							this.filled
+							false
+							true
+						}}
+						@busy={{this.busy}}
+						@failed={{this.failed}}
+						@result={{this.result}}
+						@onRun={{this.run}}
+						@onSave={{this.save}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					class="zi-canvas"
+					@fitting={{true}}
+					@boxing="unlessWide"
+					@background="var(--canon-muted)"
+				>
+					<Sheet
+						@layout={{this.layout}}
+						@images={{this.images}}
+						@width={{this.sheetWidthMm}}
+						@height={{this.sheetHeightMm}}
+						@lit={{this.lit}}
+						@back={{this.showsBack}}
+						@legend={{this.legend}}
+						@detail={{this.paper.label}}
+						@figure={{this.figure}}
+						@onFlip={{this.flip}}
+						@onDropAt={{this.dropOnPage}}
+					/>
+				</CanonCanvas>
+				<CanonRows class="zi-steps" @framed={{true}}>
+					<CanonHeading @text="How to Fold" />
+					<div class="zi-key">
+						<span class="zi-key-item">
+							<svg
+								class="zi-key-line"
+								aria-hidden="true"
+							>
+								<line
+									class="zi-crease"
+									x1="0"
+									y1="50%"
+									x2="100%"
+									y2="50%"
+									stroke-dasharray="6 4"
+								/>
+							</svg>
+							Valley fold
+						</span>
+						<span class="zi-key-item">
+							<svg
+								class="zi-key-line"
+								aria-hidden="true"
+							>
+								<line
+									class="zi-crease"
+									x1="0"
+									y1="50%"
+									x2="100%"
+									y2="50%"
+									stroke-dasharray="8 3 1.5 3"
+								/>
+							</svg>
+							Mountain fold
+						</span>
+						{{#if
+							this.layout.cutLines.length
+						}}
+							<span
+								class="zi-key-item"
+							>
+								<svg
+									class="zi-key-line"
+									aria-hidden="true"
+								>
+									<line
+										class="zi-cut"
+										x1="0"
+										y1="50%"
+										x2="100%"
+										y2="50%"
+									/>
+								</svg>
+								Cut
+							</span>
+						{{/if}}
+					</div>
+					<ol class="zi-step-list">
+						{{#each
+							this.layout.instructions
+							as |step index|
+						}}
+							<li class="zi-step">
+								<span
+									class="zi-step-number"
+									aria-hidden="true"
+								>{{inc
+										index
+									}}</span>
+								<span
+								>{{step}}</span>
+							</li>
+						{{/each}}
+					</ol>
+				</CanonRows>
+			</:main>
+		</CanonSplit>
 	</template>
 }

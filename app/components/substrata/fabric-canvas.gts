@@ -133,17 +133,20 @@ import {
 import {
 	clearPixelSelection,
 	getPixelSelection,
-	setPixelSelectionMask,
 	subscribePixelSelection,
 } from 'delphitools-v2/lib/substrata/pixel-selection';
 import {
+	cropAspect,
+	draggedCrop,
+} from 'delphitools-v2/lib/substrata/crop-ratio';
+import {
+	addToSelection,
 	cutSelection,
 	extractSelection,
 	growSelection,
 	invertSelection,
 	shrinkSelection,
 } from 'delphitools-v2/lib/substrata/select-ops';
-import { reportSelectionAnchor } from 'delphitools-v2/components/substrata/selection-popup';
 import { toast } from 'delphitools-v2/lib/substrata/toast';
 import { subscribeLuts } from 'delphitools-v2/lib/substrata/lut-data';
 import {
@@ -199,7 +202,6 @@ import {
 	type SnapBox,
 } from 'delphitools-v2/lib/substrata/snap-engine';
 
-
 // fabric serialization key
 class AnchorBoxLayout extends FitContentLayout {
 	calcBoundingBox(
@@ -230,7 +232,23 @@ function chromeInset(wrap: HTMLElement, rulers: boolean): Inset {
 		bottom: 0,
 		left: rulers ? RULER_PX : 0,
 	};
-	const area = wrap.closest('.sub-shell-canvas-area');
+	const area = wrap.closest<HTMLElement>('.sub-shell-canvas-area');
+	// the canon editor measures its floating pieces
+	const measured = area?.dataset['inset']?.split(',').map(Number);
+	if (measured?.length === 4 && measured.every(Number.isFinite)) {
+		const [top, right, bottom, left] = measured as [
+			number,
+			number,
+			number,
+			number,
+		];
+		return {
+			top: Math.max(inset.top, top),
+			right,
+			bottom,
+			left: Math.max(inset.left, left),
+		};
+	}
 	const docks =
 		area?.querySelectorAll('.sub-omni-dock, .sub-omni-rail-dock') ??
 		[];
@@ -308,10 +326,10 @@ export default class FabricCanvas extends Component {
 		const applySelectionChrome = () => {
 			const css = getComputedStyle(document.documentElement);
 			const primary = css
-				.getPropertyValue('--primary')
+				.getPropertyValue('--canon-primary')
 				.trim();
 			const paper = css
-				.getPropertyValue('--background')
+				.getPropertyValue('--canon-background')
 				.trim();
 			const chrome = {
 				transparentCorners: false,
@@ -342,7 +360,6 @@ export default class FabricCanvas extends Component {
 		let themeInk: {
 			foreground: string;
 			primary: string;
-			primaryFg: string;
 			destructive: string;
 			background: string;
 			border: string;
@@ -353,13 +370,12 @@ export default class FabricCanvas extends Component {
 			const v = (name: string, fallback: string) =>
 				css.getPropertyValue(name).trim() || fallback;
 			return {
-				foreground: v('--foreground', '#000'),
-				primary: v('--primary', '#3a7'),
-				primaryFg: v('--primary-foreground', '#fff'),
-				destructive: v('--destructive', '#c33'),
-				background: v('--background', '#fff'),
-				border: v('--border', '#ccc'),
-				mutedFg: v('--muted-foreground', '#888'),
+				foreground: v('--canon-foreground', '#000'),
+				primary: v('--canon-primary', '#3a7'),
+				destructive: v('--canon-destructive', '#c33'),
+				background: v('--canon-background', '#fff'),
+				border: v('--canon-border', '#ccc'),
+				mutedFg: v('--canon-muted-foreground', '#888'),
 			};
 		};
 		const themeObserver = new MutationObserver(() => {
@@ -374,7 +390,7 @@ export default class FabricCanvas extends Component {
 		// suppress selection echo
 		let squelchSelectionEvents = false;
 
-				const selectedLeafObjects = (): FabricObject[] => {
+		const selectedLeafObjects = (): FabricObject[] => {
 			const doc = getSnapshot();
 			if (!doc) return [];
 			const effective = new Map(
@@ -1125,7 +1141,7 @@ export default class FabricCanvas extends Component {
 								p.y,
 								s.tolerance,
 							);
-				setPixelSelectionMask(mask);
+				addToSelection(mask);
 			}
 			canvas.requestRenderAll();
 			return true;
@@ -1170,7 +1186,7 @@ export default class FabricCanvas extends Component {
 					)
 						clearPixelSelection();
 					else {
-						setPixelSelectionMask(
+						addToSelection(
 							rectMask(
 								doc.artboard
 									.width,
@@ -1191,7 +1207,7 @@ export default class FabricCanvas extends Component {
 					if (d.pts.length < 3)
 						clearPixelSelection();
 					else
-						setPixelSelectionMask(
+						addToSelection(
 							polygonMask(
 								doc.artboard
 									.width,
@@ -1208,7 +1224,12 @@ export default class FabricCanvas extends Component {
 		let antPhase = 0;
 		let antTimer: number | null = null;
 		const syncAntTimer = () => {
-			const has = getPixelSelection() !== null;
+			// iOS: the ants stand still under reduced motion
+			const has =
+				getPixelSelection() !== null &&
+				!window.matchMedia(
+					'(prefers-reduced-motion: reduce)',
+				).matches;
 			if (has && antTimer === null) {
 				antTimer = window.setInterval(() => {
 					antPhase = (antPhase + 1) % 8;
@@ -1239,8 +1260,8 @@ export default class FabricCanvas extends Component {
 		canvas.on('selection:updated', syncSelectionToStore);
 		canvas.on('selection:cleared', syncSelectionToStore);
 
-				// use composed selection transform
-				const absoluteTransformOf = (obj: FabricObject): Transform => {
+		// use composed selection transform
+		const absoluteTransformOf = (obj: FabricObject): Transform => {
 			const d = fabricUtil.qrDecompose(
 				obj.calcTransformMatrix(),
 			);
@@ -1295,7 +1316,6 @@ export default class FabricCanvas extends Component {
 				flipY: target.flipY,
 			});
 		});
-
 
 		const SNAP_SCREEN_PX = 6;
 		let activeGuides: { v: number[]; h: number[] } | null = null;
@@ -1594,8 +1614,6 @@ export default class FabricCanvas extends Component {
 		};
 
 		const CROP_GRAB_PX = 6;
-		// layer pixels
-		const CROP_MIN = 8;
 		const cropModeActive = () =>
 			getActiveTool() === 'move' &&
 			getActiveSubs().move === 'crop';
@@ -1605,7 +1623,7 @@ export default class FabricCanvas extends Component {
 			t: Transform;
 			crop: CropRect;
 		};
-				const cropTarget = (): CropTarget | null => {
+		const cropTarget = (): CropTarget | null => {
 			const doc = getSnapshot();
 			const ids = getSelectedLayerIds();
 			const onlyId = ids[0];
@@ -1648,12 +1666,19 @@ export default class FabricCanvas extends Component {
 			const inverse = fabricUtil.invertTransform(local);
 			return {
 				toScreen: (lx: number, ly: number) =>
-					new Point(lx - dims.width / 2, ly - dims.height / 2).transform(
-						screen,
-					),
+					new Point(
+						lx - dims.width / 2,
+						ly - dims.height / 2,
+					).transform(screen),
 				toLocal: (sceneX: number, sceneY: number) => {
-					const p = new Point(sceneX, sceneY).transform(inverse);
-					return { lx: p.x + dims.width / 2, ly: p.y + dims.height / 2 };
+					const p = new Point(
+						sceneX,
+						sceneY,
+					).transform(inverse);
+					return {
+						lx: p.x + dims.width / 2,
+						ly: p.y + dims.height / 2,
+					};
 				},
 			};
 		};
@@ -1665,7 +1690,7 @@ export default class FabricCanvas extends Component {
 			dims: CropTarget['dims'];
 			t: Transform;
 		} | null = null;
-				const cropClaim = (px: number, py: number): boolean => {
+		const cropClaim = (px: number, py: number): boolean => {
 			const tgt = cropTarget();
 			if (!tgt) return false;
 			const m = cropProject(tgt.t, tgt.dims);
@@ -1720,53 +1745,21 @@ export default class FabricCanvas extends Component {
 			}
 			const { start, dims, t, hx, hy } = cropDrag;
 			const p = sceneXY(px, py);
-			const { lx, ly } = cropProject(t, dims).toLocal(p.x, p.y);
-			let { x, y, w, h } = start;
-			if (hx === -1) {
-				const right = start.x + start.w;
-				x = Math.min(
-					Math.max(lx, 0),
-					Math.max(0, right - CROP_MIN),
-				);
-				w = right - x;
-			} else if (hx === 1) {
-				w =
-					Math.min(
-						Math.max(
-							lx,
-							start.x + CROP_MIN,
-						),
-						dims.width,
-					) - start.x;
-			}
-			if (hy === -1) {
-				const bottom = start.y + start.h;
-				y = Math.min(
-					Math.max(ly, 0),
-					Math.max(0, bottom - CROP_MIN),
-				);
-				h = bottom - y;
-			} else if (hy === 1) {
-				h =
-					Math.min(
-						Math.max(
-							ly,
-							start.y + CROP_MIN,
-						),
-						dims.height,
-					) - start.y;
-			}
-			// preserve crop bounds
-			const rx = Math.round(x);
-			const ry = Math.round(y);
+			const { lx, ly } = cropProject(t, dims).toLocal(
+				p.x,
+				p.y,
+			);
 			setCrop(
 				cropDrag.id,
-				{
-					x: rx,
-					y: ry,
-					w: Math.round(x + w) - rx,
-					h: Math.round(y + h) - ry,
-				},
+				draggedCrop(
+					start,
+					hx,
+					hy,
+					lx,
+					ly,
+					dims,
+					cropAspect(t),
+				),
 				{ transient: true },
 			);
 		};
@@ -2171,6 +2164,9 @@ export default class FabricCanvas extends Component {
 			}
 
 			if (showGrid) {
+				// iOS: the step doubles until lines are 8 px apart
+				let step = GRID_SIZE;
+				while (step * z < 8) step *= 2;
 				ctx.save();
 				ctx.strokeStyle = ink.foreground;
 				ctx.globalAlpha = 0.12;
@@ -2179,7 +2175,7 @@ export default class FabricCanvas extends Component {
 				for (
 					let x = 0;
 					x <= doc.artboard.width;
-					x += GRID_SIZE
+					x += step
 				) {
 					ctx.moveTo(sx(x), sy(0));
 					ctx.lineTo(
@@ -2190,7 +2186,7 @@ export default class FabricCanvas extends Component {
 				for (
 					let y = 0;
 					y <= doc.artboard.height;
-					y += GRID_SIZE
+					y += step
 				) {
 					ctx.moveTo(sx(0), sy(y));
 					ctx.lineTo(
@@ -2259,31 +2255,6 @@ export default class FabricCanvas extends Component {
 					}
 				}
 				ctx.restore();
-				if (pixelSel) {
-					const b = pixelSel.bounds;
-					reportSelectionAnchor(
-						Math.min(
-							Math.max(
-								sx(
-									b.x +
-										b.w /
-											2,
-								),
-								60,
-							),
-							canvas.getWidth() - 60,
-						),
-						Math.min(
-							Math.max(
-								sy(b.y + b.h) +
-									10,
-								30,
-							),
-							canvas.getHeight() - 44,
-						),
-						pixelSel.epoch,
-					);
-				}
 			}
 
 			if (userGuides.length || guideDrag) {
@@ -2390,7 +2361,7 @@ export default class FabricCanvas extends Component {
 					);
 					ctx.save();
 					ctx.font =
-						'bold 9.5px "iA Writer Quattro", ui-monospace, monospace';
+						'bold 9.5px "Open Sans Condensed", system-ui, sans-serif';
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
 					for (const neighbour of [
@@ -2442,8 +2413,7 @@ export default class FabricCanvas extends Component {
 
 			if (activeGuides) {
 				ctx.save();
-				ctx.strokeStyle = ink.destructive;
-				ctx.setLineDash([4, 4]);
+				ctx.strokeStyle = ink.primary;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
 				for (const x of activeGuides.v) {
@@ -2521,8 +2491,12 @@ export default class FabricCanvas extends Component {
 						m.toScreen(x + w, y + h),
 						m.toScreen(x, y + h),
 					];
-					ctx.moveTo(corners[0]!.x, corners[0]!.y);
-					for (const c of corners.slice(1)) ctx.lineTo(c.x, c.y);
+					ctx.moveTo(
+						corners[0]!.x,
+						corners[0]!.y,
+					);
+					for (const c of corners.slice(1))
+						ctx.lineTo(c.x, c.y);
 					ctx.closePath();
 				};
 				ctx.save();
@@ -2533,30 +2507,36 @@ export default class FabricCanvas extends Component {
 				quad(crop.x, crop.y, crop.w, crop.h);
 				ctx.fill('evenodd');
 				ctx.strokeStyle = ink.primary;
-				ctx.lineWidth = 1;
+				ctx.lineWidth = 1.5;
 				ctx.beginPath();
 				quad(crop.x, crop.y, crop.w, crop.h);
 				ctx.stroke();
+				ctx.lineWidth = 1;
 				ctx.fillStyle = ink.background;
 				for (const fx of [0, 0.5, 1]) {
 					for (const fy of [0, 0.5, 1]) {
 						if (fx === 0.5 && fy === 0.5)
 							continue;
-						const { x: hx, y: hy } = m.toScreen(
-							crop.x + fx * crop.w,
-							crop.y + fy * crop.h,
-						);
+						const { x: hx, y: hy } =
+							m.toScreen(
+								crop.x +
+									fx *
+										crop.w,
+								crop.y +
+									fy *
+										crop.h,
+							);
 						ctx.fillRect(
-							hx - 3,
-							hy - 3,
-							6,
-							6,
+							hx - 4,
+							hy - 4,
+							8,
+							8,
 						);
 						ctx.strokeRect(
-							hx - 3,
-							hy - 3,
-							6,
-							6,
+							hx - 4,
+							hy - 4,
+							8,
+							8,
 						);
 					}
 				}
@@ -2575,19 +2555,28 @@ export default class FabricCanvas extends Component {
 					text = `${Math.round(((t.angle % 360) + 360) % 360)}°`;
 				}
 				ctx.save();
+				// iOS CanvasOverlay badge: mono figures on a hairline card
 				ctx.font =
-					'10.5px "iA Writer Quattro", ui-monospace, monospace';
-				const w = ctx.measureText(text).width + 14;
-				const h = 17;
+					'13px Iosevka, ui-monospace, monospace';
+				const w = ctx.measureText(text).width + 16;
+				const h = 28;
 				let bx = dragBadge.px + 14;
 				let by = dragBadge.py + 18;
 				if (bx + w > canvas.getWidth() - 2)
 					bx = dragBadge.px - 14 - w;
 				if (by + h > canvas.getHeight() - 2)
 					by = dragBadge.py - 18 - h;
-				ctx.fillStyle = ink.primary;
+				ctx.fillStyle = ink.background;
 				ctx.fillRect(bx, by, w, h);
-				ctx.fillStyle = ink.primaryFg;
+				ctx.strokeStyle = ink.border;
+				ctx.lineWidth = 1;
+				ctx.strokeRect(
+					bx + 0.5,
+					by + 0.5,
+					w - 1,
+					h - 1,
+				);
+				ctx.fillStyle = ink.foreground;
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
 				ctx.fillText(text, bx + w / 2, by + h / 2 + 1);
@@ -2644,7 +2633,7 @@ export default class FabricCanvas extends Component {
 				ctx.stroke();
 				ctx.fillStyle = muted;
 				ctx.font =
-					'9px "iA Writer Quattro", ui-monospace, monospace';
+					'9px "Open Sans Condensed", system-ui, sans-serif';
 				ctx.textBaseline = 'top';
 				ctx.textAlign = 'left';
 				for (
@@ -2803,6 +2792,7 @@ export default class FabricCanvas extends Component {
 						'canvas.upper-canvas',
 					).length,
 				vt: () => canvas.viewportTransform,
+				doc: getSnapshot,
 				menuState: () => getLayerMenu(),
 				hitTest: (x: number, y: number) => {
 					const info = canvas.findTarget(
@@ -3092,8 +3082,7 @@ export default class FabricCanvas extends Component {
 								);
 							}
 						}
-					} catch {
-					}
+					} catch {}
 					return {
 						ok: true,
 						size: outcome.blob.size,
@@ -3216,7 +3205,7 @@ export default class FabricCanvas extends Component {
 				const hud = document.createElement('div');
 				hud.style.cssText =
 					'position:fixed;top:56px;right:8px;z-index:9999;background:rgba(0,0,0,.75);color:#4ade80;' +
-					'font:11px/1.6 ui-monospace,monospace;padding:6px 9px;pointer-events:none;white-space:pre';
+					'font:11px/1.6 Iosevka,ui-monospace,monospace;padding:6px 9px;pointer-events:none;white-space:pre';
 				document.body.appendChild(hud);
 				let frames = 0;
 				let renders = 0;
@@ -3635,12 +3624,12 @@ export default class FabricCanvas extends Component {
 			{{this.mount}}
 			{{filePaste this.paste accept="image/*"}}
 		>
-						<div
+			<div
 				class="sub-canvas-wordmark"
 				aria-hidden="true"
 			></div>
 			<canvas></canvas>
-						<div
+			<div
 				class="sub-canvas-drop-hint hidden"
 				aria-hidden="true"
 			></div>

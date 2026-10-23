@@ -9,18 +9,21 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 // children carry the styling
 const UNSTYLED_CONTAINERS = new Set([
 	'dt-bc-rows',
-	'dt-atlas-table',
-	'dt-cc-table',
+	'dt-cl-close', // CanonButton carries styling
+	'dt-cl-tab', // CanonButton carries styling
+	'dt-cl-tabs', // CanonGrid carries styling
 	'dt-docconv-option-text',
-	'dt-shades-rows',
 	'dt-tc-table',
-	'dt-tabs',
+	'dt-wn-btn', // CanonButton carries styling
 	'sub-csm-section',
-	'sub-grip', // draggable modifier handle
-	'sub-preset-strip', // .segmented carries styling
+	'sub-ed-panel-keys', // Cells groups, styled by .sub-cells
+	'sub-ed-stack',
+	'sub-ed-tools',
+	'sub-ct-types', // CanonSegmented carries styling
+	'sub-pg-zoom', // CanonGrid carries styling
+	'sub-ring-band', // focus targets over the ring canvas
+	'sub-ring-keys',
 	'sub-topbar-seg-hook', // span[title] rigs read
-	'dt-ic-after-img', // bytes fetched off blob src
-	'dt-ic-download', // disabled state read
 ]);
 
 function* walk(dir) {
@@ -32,8 +35,10 @@ function* walk(dir) {
 }
 
 let css = '';
-for (const path of walk(join(root, 'app/styles')))
-	if (/\.(scss|css)$/.test(path)) css += readFileSync(path, 'utf8');
+// canon surfaces keep a plain .css beside their component
+for (const dir of ['app/styles', 'app/components'])
+	for (const path of walk(join(root, dir)))
+		if (/\.(scss|css)$/.test(path)) css += readFileSync(path, 'utf8');
 
 const failures = [];
 let checked = 0;
@@ -54,7 +59,7 @@ for (const path of walk(join(root, 'app/components'))) {
 		if (UNSTYLED_CONTAINERS.has(cls)) continue;
 		if (!css.includes(`.${cls}`))
 			failures.push(
-				`${path.slice(root.length + 1)}: .${cls} is used but defined nowhere in app/styles`,
+				`${path.slice(root.length + 1)}: .${cls} is used but defined in no stylesheet`,
 			);
 	}
 }

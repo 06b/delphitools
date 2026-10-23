@@ -23,7 +23,14 @@ const openInIds = () =>
 	);
 
 await visit(page, '/tools/image-atlas');
-check('image-atlas: no open-in block before a file', (await openInIds()).length === 0);
+check(
+	'image-atlas: the open-in block is inert before a file',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.ia-open--blank[inert] .dt-atlas-open [data-tool]') &&
+			!document.querySelector('.ia-open:not([inert])'),
+	),
+);
 await page.evaluate(
 	() =>
 		new Promise((resolve) => {
@@ -35,7 +42,7 @@ await page.evaluate(
 				transfer.items.add(
 					new File([blob], 'IMG_2041.png', { type: 'image/png' }),
 				);
-				document.querySelector('.dt-ia-frame').dispatchEvent(
+				document.querySelector('.image-atlas').dispatchEvent(
 					new DragEvent('drop', { dataTransfer: transfer, bubbles: true }),
 				);
 				resolve();
@@ -59,34 +66,39 @@ await page
 	.waitForFunction(
 		() =>
 			location.pathname === '/tools/metadata-stripper' &&
-			!!document.querySelector('.dt-strip-name'),
+			!!document.querySelector('.ms-source .canon-row-title'),
 		{ timeout: 15000 },
 	)
 	.catch(() => {});
 const handed = await page
-	.$eval('.dt-strip-name', (el) => el.textContent.trim())
+	.$eval('.ms-source .canon-row-title', (el) => el.textContent.trim())
 	.catch(() => '');
 check('image-atlas: picking a tool hands the file over', handed.startsWith('IMG_2041'));
 
 await visit(page, '/tools/video-atlas');
-await dropFile('.dt-va-frame', 'clip.mp4', 'video/mp4');
+await dropFile('.video-atlas', 'clip.mp4', 'video/mp4');
 check('video-atlas: open-in lists video tools', (await openInIds()).includes('video-muter'));
 
 await visit(page, '/tools/audio-atlas');
-await dropFile('.dt-aa-frame', 'take.mp3', 'audio/mpeg');
+await dropFile('.audio-atlas', 'take.mp3', 'audio/mpeg');
 check('audio-atlas: open-in lists audio tools', (await openInIds()).includes('audio-trimmer'));
 
 const nav = await page.evaluate(() => {
-	const groups = [...document.querySelectorAll('.dt-nav-group')];
-	const links = (needle) =>
-		[...(groups.find((g) => g.querySelector('.dt-nav-group-label')?.textContent.includes(needle))?.querySelectorAll('.dt-nav-link') ?? [])];
-	const first = (needle, n) =>
-		links(needle).slice(0, n).map((a) => ({ name: a.textContent.trim(), atlas: a.classList.contains('dt-nav-link--atlas') }));
+	const rows = [...document.querySelectorAll('.canon-sidebar-rows > *')];
+	const first = (needle, n) => {
+		const start = rows.findIndex((el) => el.matches('.canon-heading') && el.textContent.includes(needle));
+		const end = rows.findIndex((el, i) => i > start && el.matches('.canon-heading'));
+		// the drawer puts a description line under the open tool's row
+		return rows
+			.slice(start + 1, end)
+			.filter((el) => el.matches('.canon-sidebar-row'))
+			.slice(0, n)
+			.map((a) => a.textContent.trim());
+	};
 	return { images: first('Image', 2), av: first('Audio', 3), colour: first('Colour', 2) };
 });
-check('sidebar: Image Atlas leads its category', nav.images[0]?.name === 'Image Atlas' && nav.images[0].atlas);
-check('sidebar: Audio and Video Atlas lead theirs', nav.av[0]?.name === 'Audio Atlas' && nav.av[1]?.name === 'Video Atlas' && nav.av[1].atlas);
-check('sidebar: Colour Atlas leads its category', nav.colour[0]?.name === 'Colour Atlas' && nav.colour[0].atlas);
-check('sidebar: non-atlas tools are not tinted', nav.images[1] && !nav.images[1].atlas);
+check('sidebar: Image Atlas leads its category', nav.images[0] === 'Image Atlas');
+check('sidebar: Audio and Video Atlas lead theirs', nav.av[0] === 'Audio Atlas' && nav.av[1] === 'Video Atlas');
+check('sidebar: Colour Atlas leads its category', nav.colour[0] === 'Colour Atlas');
 
 await finish(browser);

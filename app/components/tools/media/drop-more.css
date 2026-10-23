@@ -1,0 +1,43 @@
+.media-drop-more {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	inline-size: 100%;
+	min-block-size: var(--canon-control-height);
+	padding: 8px var(--canon-panel-padding);
+	border: var(--canon-frame) dashed
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 50%,
+			transparent
+		);
+	background: var(--canon-card);
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+	cursor: pointer;
+}
+
+.media-drop-more:focus-visible {
+	border-style: solid;
+	border-color: var(--canon-primary);
+	outline: none;
+}
+
+.media-drop-more--over {
+	background: var(--canon-accent-bg);
+	color: var(--canon-primary);
+}
+
+.media-drop-more-icon {
+	display: flex;
+	opacity: 0.6;
+}
+
+.media-drop-more-icon svg {
+	inline-size: 20px;
+	block-size: 20px;
+}

@@ -1,0 +1,110 @@
+.dt-mag {
+	position: fixed;
+	width: 100vw;
+	max-width: none;
+	height: 100dvh;
+	max-height: none;
+	padding: 0;
+	border: 0;
+	margin: 0;
+	background: transparent;
+	inset: 0;
+	overscroll-behavior: contain;
+}
+
+.dt-mag::backdrop {
+	background: var(--canon-dialog-backdrop);
+	backdrop-filter: blur(3px);
+}
+
+.dt-mag-canvas {
+	position: absolute;
+	display: block;
+	width: 100%;
+	height: 100%;
+	inset: 0;
+	outline: none;
+	touch-action: none;
+}
+
+.dt-mag-ring {
+	position: fixed;
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 0;
+	pointer-events: none;
+}
+
+.dt-mag-ring[hidden] {
+	display: none;
+}
+
+/* off screen, laid out at full size so the rasteriser and readers get it */
+.dt-mag-pages.is-hidden {
+	position: absolute;
+	overflow: hidden;
+	width: 1px;
+	height: 1px;
+	clip-path: inset(50%);
+}
+
+.dt-mag-pages.is-hidden .dt-mag-page {
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+.dt-mag-pages.is-flat {
+	position: absolute;
+	display: grid;
+	overflow: hidden;
+	inset: 16px 16px 76px;
+	place-items: center;
+}
+
+.dt-mag-pages.is-flat .dt-mag-page {
+	grid-area: 1 / 1;
+	box-shadow: var(--canon-dialog-shadow);
+	scale: var(--dt-mag-fit, 1);
+}
+
+.dt-mag-page[hidden] {
+	display: none;
+}
+
+.dt-mag-flat-nav {
+	position: absolute;
+	display: flex;
+	width: min(360px, calc(100% - 32px));
+	justify-content: center;
+	background: var(--canon-card);
+	gap: var(--canon-hairline);
+	inset: auto 0 16px;
+	margin-inline: auto;
+}
+
+.dt-mag-flat-nav > * {
+	flex: 1;
+}
+
+.dt-mag-close {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	background: var(--canon-card);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.dt-mag-canvas {
+		animation: dt-mag-in 360ms ease-out;
+	}
+
+	.dt-mag[open]::backdrop {
+		animation: dt-mag-in 260ms ease-out;
+	}
+}
+
+@keyframes dt-mag-in {
+	from {
+		opacity: 0;
+	}
+}

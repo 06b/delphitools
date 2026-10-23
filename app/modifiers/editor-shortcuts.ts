@@ -35,7 +35,15 @@ const ARROWS: Record<string, readonly [number, number]> = {
 
 export default modifier(() => {
 	const onKey = (e: KeyboardEvent) => {
-		if (isTextEntry(e.target)) return;
+		// a focused control (a kit slider, a menu) already took the key
+		if (e.defaultPrevented || isTextEntry(e.target)) return;
+		// kit sliders and pickers are divs that take arrows and Backspace
+		const control =
+			e.target instanceof Element &&
+			e.target.closest(
+				'[role=slider], [role=spinbutton], [role=radiogroup], [role=listbox], [role=menu], [role=application], [role=dialog]',
+			);
+		if (control && !(e.metaKey || e.ctrlKey)) return;
 
 		if (
 			(e.key === 'Backspace' || e.key === 'Delete') &&

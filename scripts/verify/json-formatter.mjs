@@ -1,28 +1,27 @@
 // what unit tests cannot see
 // usage: npm start, then node scripts/verify/json-formatter.mjs
-//   (or `npm run verify:json-formatter`).
+//   SHOTS=<dir> also saves 390, 1400 and 2200 wide, light and dark
 
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 
-import { launch, visit, check, finish, sleep } from './harness.mjs';
+import { BASE, launch, visit, check, finish, sleep } from './harness.mjs';
 
+const shots = process.env.SHOTS;
 const { browser, page } = await launch();
+await page
+	.browserContext()
+	.overridePermissions(BASE, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
 const downloads = mkdtempSync(join(tmpdir(), 'dt-jf-dl-'));
 const client = await page.createCDPSession();
-await client.send('Browser.setDownloadBehavior', {
-	behavior: 'allow',
-	downloadPath: downloads,
-});
+await client.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
 
-// ember re-renders microtask/raf
-const settle = () => sleep(200);
+const settle = () => sleep(150);
 
 const typing = (text) =>
 	page.$eval(
-		'.dt-jf-source',
+		'.media-marked-source',
 		(el, value) => {
 			el.value = value;
 			el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -30,216 +29,362 @@ const typing = (text) =>
 		text,
 	);
 
-const clickOpt = (group, label) =>
+const pick = (group, label) =>
 	page.$$eval(
-		`.dt-jf-${group} .dt-jf-opt`,
+		`.json-formatter .canon-segmented[aria-label="${group}"] button`,
 		(els, l) => els.find((el) => el.textContent.trim() === l)?.click(),
 		label,
 	);
 
-const output = () => page.$eval('.dt-jf-output', (el) => el.value);
-const source = () => page.$eval('.dt-jf-source', (el) => el.value);
-const treeRowCount = () => page.$$eval('.dt-jf-tree-row', (els) => els.length);
+const listing = () =>
+	page.evaluate(() =>
+		[...document.querySelectorAll('.jf-listing-line')]
+			.map((el) => el.lastElementChild.textContent)
+			.join('\n'),
+	);
+const source = () => page.$eval('.media-marked-source', (el) => el.value);
+const treeRows = () =>
+	page.$$eval('.jf-tree-row', (els) => els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()));
+const tiles = () =>
+	page.$$eval('.json-formatter .canon-tiles-tile', (els) =>
+		Object.fromEntries(
+			els.map((el) => [
+				el.querySelector('.canon-tiles-label').textContent.trim(),
+				el.querySelector('.canon-tiles-value').textContent.trim(),
+			]),
+		),
+	);
+const disabled = (sel) => page.$eval(sel, (el) => el.disabled);
 
-// .crdownload intermediate
 async function waitForDownload(match, timeout = 15000) {
 	const until = Date.now() + timeout;
 	while (Date.now() < until) {
-		const name = readdirSync(downloads).find(
-			(n) => match.test(n) && !n.endsWith('.crdownload'),
-		);
-		if (name) {
-			const path = join(downloads, name);
-			if (statSync(path).size >= 0) return { name, text: readFileSync(path, 'utf8') };
-		}
+		const name = readdirSync(downloads).find((n) => match.test(n) && !n.endsWith('.crdownload'));
+		if (name) return { name, text: readFileSync(join(downloads, name), 'utf8') };
 		await sleep(150);
 	}
 	return null;
 }
 
 const DOC = '{"a":1,"b":{"c":[2,3]}}';
-const TWO_SPACES = '{\n  "a": 1,\n  "b": {\n    "c": [\n      2,\n      3\n    ]\n  }\n}';
+const TWO = '{\n  "a": 1,\n  "b": {\n    "c": [\n      2,\n      3\n    ]\n  }\n}';
 
 await visit(page, '/tools/json-formatter');
 
 check(
-	'defaults: 2-space indent and the text view are active',
+	'the split fills the slot',
+	await page.evaluate(
+		() =>
+			document.querySelector('.dt-canon-tool').getBoundingClientRect().height ===
+			document.querySelector('.json-formatter').getBoundingClientRect().height,
+	),
+);
+const editor = await page.evaluate(() => {
+	const area = document.querySelector('.media-marked-source');
+	const split = document.querySelector('.json-formatter').getBoundingClientRect();
+	return {
+		inPicture: document.querySelector('.canon-split-sidebar').contains(area),
+		named: area.getAttribute('aria-label'),
+		dashed: getComputedStyle(area).borderTopStyle,
+		share: area.getBoundingClientRect().width / split.width,
+		height: area.getBoundingClientRect().height,
+	};
+});
+check(
+	'the source is typed in the picture pane, the dashed box when empty',
+	editor.inPicture && editor.named === 'Source' && editor.dashed === 'dashed' && editor.share > 0.4,
+	JSON.stringify(editor),
+);
+check(
+	'defaults: 2 spaces and Text are picked',
 	await page.evaluate(() => {
-		const pick = (sel) =>
-			document.querySelector(`${sel} .dt-jf-opt.is-active`)?.textContent.trim();
-		return pick('.dt-jf-indent') === '2 spaces' && pick('.dt-jf-view') === 'Text';
+		const on = (g) =>
+			document
+				.querySelector(`.canon-segmented[aria-label="${g}"] [aria-checked="true"]`)
+				?.textContent.trim();
+		return on('Indent') === '2 spaces' && on('View') === 'Text';
 	}),
 );
 check(
-	'defaults: copy and download are disabled without input',
-	await page.evaluate(
-		() =>
-			document.querySelector('[aria-label="Copy"]').disabled &&
-			document.querySelector('[aria-label="Download"]').disabled,
-	),
+	'defaults: copy and download are disabled, the empty row shows',
+	(await disabled('.jf-copy')) &&
+		(await disabled('.jf-download')) &&
+		(await page.$eval('.json-formatter .canon-empty-row', (el) => el.textContent.trim())) === 'None',
 );
+check(
+	'empty: the dashed Document box and dashes in the tiles',
+	(await page.$eval('.jf-shape-empty', (el) => el.textContent.trim())) === 'Document' &&
+		Object.values(await tiles()).every((v) => v === '—'),
+);
+
+await page.click('.media-marked-source');
+await page.keyboard.type('{"a":1');
+await settle();
+check('live: a half-typed document is invalid at once', !!(await page.$('.jf-error')));
+await page.keyboard.type('}');
+await settle();
+check('live: the closing brace formats it', (await listing()) === '{\n  "a": 1\n}');
 
 await typing(DOC);
 await settle();
-check('2 spaces formats the document', (await output()) === TWO_SPACES);
-
-await clickOpt('indent', '4 spaces');
-await settle();
+check('2 spaces formats the document', (await listing()) === TWO);
+const t = await tiles();
 check(
-	'4 spaces formats the document',
-	(await output()) ===
-		'{\n    "a": 1,\n    "b": {\n        "c": [\n            2,\n            3\n        ]\n    }\n}',
-);
-
-await clickOpt('indent', 'Tabs');
-await settle();
-check(
-	'tabs format the document',
-	(await output()) ===
-		'{\n\t"a": 1,\n\t"b": {\n\t\t"c": [\n\t\t\t2,\n\t\t\t3\n\t\t]\n\t}\n}',
-);
-
-await clickOpt('indent', 'Minify');
-await settle();
-check('minify emits a single line', (await output()) === '{"a":1,"b":{"c":[2,3]}}');
-
-await clickOpt('indent', '2 spaces');
-await settle();
-
-await page.click('[aria-label="Copy"]');
-check(
-	'copy arms with the check state',
-	await page
-		.waitForSelector('.dt-jf-btn.is-copied', { timeout: 2000 })
-		.then(() => true)
-		.catch(() => false),
-);
-
-await page.click('[aria-label="Download"]');
-const download = await waitForDownload(/^formatted\.json$/);
-check('Download writes formatted.json', !!download, download?.name ?? 'nothing landed');
-check(
-	'the download carries the formatted text',
-	download?.text === (await output()),
-	download ? `${download.text.length} bytes` : 'no file',
-);
-
-await clickOpt('view', 'Tree');
-await settle();
-// root+a+b+c+0+1
-check('the tree lists every node', (await treeRowCount()) === 6, '6 rows');
-const counts = await page.$$eval('.dt-jf-tree-count', (els) =>
-	els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
+	'tiles read size, depth, keys and values',
+	t.Size === `${TWO.length} B` && t.Depth === '3' && t.Keys === '3' && t.Values === '3',
+	JSON.stringify(t),
 );
 check(
-	'containers show their entry counts',
-	counts.join(', ') === '2 entries, 1 entries, 2 items',
-	counts.join(', '),
-);
-
-await page.click('.dt-jf-tree-caret');
-await settle();
-check(
-	'collapsing the root withholds every child',
-	(await treeRowCount()) === 1,
-	'1 row',
-);
-await page.click('.dt-jf-tree-caret');
-await settle();
-check('re-expanding restores the walk', (await treeRowCount()) === 6, '6 rows');
-
-await page.$$eval('.dt-jf-tree-caret', (els) => els[1]?.click());
-await settle();
-check(
-	'collapsing a branch keeps the other branches',
-	(await treeRowCount()) === 3,
-	'3 rows',
-);
-const left = await page.$$eval('.dt-jf-tree-count', (els) =>
-	els.map((el) => el.textContent.replace(/\s+/g, ' ').trim()),
-);
-check('the collapsed branch still shows its count', left[1] === '1 entries', left.join(', '));
-
-await clickOpt('view', 'Text');
-await settle();
-
-await typing('{\n  "a": 1,\n  "b": tru\n}');
-await settle();
-check(
-	'invalid JSON shows the error panel',
-	await page
-		.waitForSelector('.dt-jf-error', { timeout: 2000 })
-		.then(() => true)
-		.catch(() => false),
-);
-const position = await page.$eval('.dt-jf-error-position', (el) =>
-	el.textContent.trim(),
-);
-check('the panel carries a line:column', /^3:\d+$/.test(position), position);
-const errorMessage = await page.$eval('.dt-jf-error-message', (el) =>
-	el.textContent.trim(),
-);
-check('the panel carries the engine message', errorMessage.length > 0);
-const hit = await page.$eval('.dt-jf-line.is-error', (el) => el.textContent.trim());
-check('the offending source line is highlighted', /"b": tru/.test(hit), hit);
-check(
-	'invalid JSON disables copy and download',
+	'the listing is coloured by token and numbered',
 	await page.evaluate(
 		() =>
-			document.querySelector('[aria-label="Copy"]').disabled &&
-			document.querySelector('[aria-label="Download"]').disabled,
+			document.querySelector('.jf-listing .jf-t--key')?.textContent === '"a"' &&
+			document.querySelector('.jf-listing .jf-t--number')?.textContent === '1' &&
+			document.querySelectorAll('.jf-listing .jf-gutter').length === 9,
 	),
 );
-
-const fixture = join(downloads, 'rig-fixture.json');
-writeFileSync(fixture, '{"from":"file","nested":{"ok":true}}');
-await (await page.$('.dt-jf-bar input[type="file"]')).uploadFile(fixture);
-await sleep(400);
 check(
-	'opening a file loads it as the source',
-	(await source()) === '{"from":"file","nested":{"ok":true}}',
+	'the marks sit under the editor in the same type',
+	await page.evaluate(() => {
+		const a = getComputedStyle(document.querySelector('.media-marked-text'));
+		const b = getComputedStyle(document.querySelector('.media-marked-source'));
+		const ra = document.querySelector('.media-marked-text').getBoundingClientRect();
+		const rb = document.querySelector('.media-marked-source').getBoundingClientRect();
+		return (
+			a.fontFamily === b.fontFamily &&
+			a.fontSize === b.fontSize &&
+			a.lineHeight === b.lineHeight &&
+			Math.abs(ra.right - rb.right) < 1 &&
+			Math.abs(ra.left - (rb.left + parseFloat(b.paddingLeft))) < 1 &&
+			b.color === 'rgba(0, 0, 0, 0)' &&
+			a.fontFamily.includes('Iosevka')
+		);
+	}),
 );
-check('the file formats', (await output()) !== '', '');
 
-await page.$eval('.dt-jf-frame', (el) => {
+await pick('Indent', '4 spaces');
+await settle();
+check('4 spaces', (await listing()) === JSON.stringify(JSON.parse(DOC), null, 4));
+await pick('Indent', 'Tabs');
+await settle();
+check('tabs', (await listing()) === JSON.stringify(JSON.parse(DOC), null, '\t'));
+await pick('Indent', 'Minify');
+await settle();
+check('minify emits one line', (await listing()) === DOC);
+await pick('Indent', '2 spaces');
+await settle();
+
+await page.click('.jf-copy');
+await sleep(300);
+check(
+	'copy writes the formatted text and confirms through the toast',
+	(await page.evaluate(() => navigator.clipboard.readText())) === TWO &&
+		!!(await page.$('.canon-toast')),
+);
+
+await page.click('.jf-download');
+const download = await waitForDownload(/^formatted\.json$/);
+check('Download writes formatted.json with the formatted text', download?.text === TWO, download?.name ?? 'none');
+
+// the picture
+const cells = () => page.$$eval('.jf-cell', (els) => els.map((el) => el.dataset.path));
+check(
+	'the shape draws a cell per value',
+	(await cells()).join() === 'root,root.0,root.1,root.1.0,root.1.0.0,root.1.0.1',
+	(await cells()).join(),
+);
+check(
+	'the legend names the kinds present',
+	(await page.$$eval('.jf-legend', (els) => els.map((el) => el.textContent.trim()))).join() ===
+		'Object,Array,Number',
+);
+await page.click('.jf-cell[data-path="root.1"]');
+await sleep(700);
+check(
+	'a container cell zooms in: the focus and its contents',
+	(await cells()).join() === 'root.1,root.1.0,root.1.0.0,root.1.0.1' &&
+		(await page.$eval('.jf-cell[data-path="root.1"]', (el) => el.style.left === '0%')),
+	(await cells()).join(),
+);
+check(
+	'the selected cell lights its line in the listing',
+	(await page.$eval('.jf-listing-line.jf-row--selected', (el) => el.lastElementChild.textContent)) === '  "b": {',
+);
+await page.click('.jf-cell[data-path="root.1"]');
+await sleep(700);
+check('the focus cell zooms out', (await cells()).length === 6);
+
+await page.focus('.jf-shape-rows');
+await page.keyboard.press('ArrowDown');
+await settle();
+check(
+	'arrow keys move the selection, read aloud',
+	(await page.$eval('.jf-cell--selected', (el) => el.dataset.path)) === 'root.0' &&
+		(await page.$eval('.jf-shape output', (el) => el.textContent.trim())) === 'a 1',
+);
+await page.keyboard.press('ArrowRight');
+await page.keyboard.press('Enter');
+await sleep(700);
+check('Enter zooms into the selected container', (await cells())[0] === 'root.1');
+await page.keyboard.press('Escape');
+await sleep(700);
+check('Escape zooms out', (await cells()).length === 6);
+
+// tree
+await pick('View', 'Tree');
+await settle();
+check(
+	'the tree lists every node in the iOS form',
+	(await treeRows()).join(' | ') === '▾ {2} | a: 1 | ▾ b: {1} | ▾ c: [2] | 0: 2 | 1: 3',
+	(await treeRows()).join(' | '),
+);
+await page.click('.jf-tree-row--container');
+await settle();
+check('collapsing the root withholds every child', (await treeRows()).join() === '▸ {2}');
+await page.click('.jf-cell[data-path="root.1.0.1"]');
+await settle();
+check(
+	'a tap in the picture opens the rows above it and lights its row',
+	(await treeRows()).length === 6 &&
+		(await page.$eval('.jf-tree .jf-row--selected', (el) => el.textContent.replace(/\s+/g, ' ').trim())) ===
+			'1: 3',
+);
+check(
+	'tree rows are named buttons with their state',
+	(await page.$$eval('.jf-tree-row--container', (els) => els.map((el) => el.getAttribute('aria-expanded')))).join() ===
+		'true,true,true',
+);
+await pick('View', 'Text');
+await settle();
+
+// errors
+await typing('{\n  "a": 1,\n  "b": tru\n}');
+await settle();
+const status = await page.$eval('.jf-error', (el) => el.textContent.trim());
+check('invalid JSON shows the message and line:column', /·\s+3:\d+$/.test(status), status);
+check(
+	'the excerpt marks the offending character',
+	(await page.$eval('.jf-excerpt', (el) => el.textContent)) === '  "b": tru' &&
+		!!(await page.$('.jf-excerpt-at, .jf-excerpt-caret')),
+	await page.$eval('.jf-excerpt', (el) => el.textContent),
+);
+check(
+	'the offending source line is tinted in the editor',
+	/"b": tru/.test(await page.$eval('.media-marked-line--lit', (el) => el.textContent)),
+);
+check(
+	'invalid: the Invalid box, the head status, copy and download off',
+	(await page.$eval('.jf-shape-empty--invalid', (el) => el.textContent.trim())) === 'Invalid' &&
+		(await page.$eval('.jf-editor-head .canon-status', (el) => el.textContent.trim())) === 'Invalid' &&
+		(await disabled('.jf-copy')) &&
+		(await disabled('.jf-download')),
+);
+
+// files
+const fixture = join(downloads, 'rig-fixture.json');
+writeFileSync(fixture, '﻿{"from":"file","nested":{"ok":true}}');
+await (await page.$('.jf-editor-head input[type="file"]')).uploadFile(fixture);
+await sleep(400);
+check('opening a file loads it, BOM dropped', (await source()) === '{"from":"file","nested":{"ok":true}}');
+check(
+	'the head names the file',
+	(await page.$eval('.jf-editor-file', (el) => el.textContent.trim())) === 'rig-fixture.json',
+);
+
+await page.$eval('.media-marked-source', (el) => {
 	const transfer = new DataTransfer();
-	transfer.items.add(
-		new File(['{"dropped":true}'], 'drop-sample.json', { type: 'application/json' }),
-	);
+	transfer.items.add(new File(['{"dropped":true}'], 'drop.json', { type: 'application/json' }));
 	el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
 });
 await sleep(400);
-check('dropping a file loads it as the source', (await source()) === '{"dropped":true}');
+check('dropping a file loads it', (await source()) === '{"dropped":true}');
 
 await page.evaluate(() => {
 	const transfer = new DataTransfer();
-	transfer.items.add(
-		new File(['{"pasted":1}'], 'paste-sample.json', { type: 'application/json' }),
-	);
-	document.dispatchEvent(
-		new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer }),
-	);
+	transfer.items.add(new File(['{"pasted":1}'], 'paste.json', { type: 'application/json' }));
+	document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer }));
 });
 await sleep(400);
-check('pasting a file loads it as the source', (await source()) === '{"pasted":1}');
+check('pasting a file anywhere loads it', (await source()) === '{"pasted":1}');
 
-const tall = JSON.stringify(Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`key${i}`, i])), null, 2);
-await typing(tall);
+await page.evaluate(() => navigator.clipboard.writeText('[true,null]'));
+await page.click('.jf-editor-head [aria-label="Paste"]');
+await sleep(300);
+check('Paste takes the clipboard text', (await source()) === '[true,null]');
+
+await page.click('.jf-editor-head [aria-label="Clear"]');
 await settle();
-await page.$eval('.dt-jf-source', (el) => {
-	el.scrollTop = 300;
-	el.dispatchEvent(new Event('scroll', { bubbles: true }));
-});
-await settle();
+check('Clear empties the source and the result', (await source()) === '' && !(await page.$('.jf-listing')));
+
+// query flags
+await visit(page, '/tools/json-formatter?jsonSample=1&jsonIndent=1&jsonTree=1&jsonCollapse=root.3');
 check(
-	'scrolling the source tracks the rendered copy',
-	await page.$eval('.dt-jf-lines-inner', (el) =>
-		el.getAttribute('style').includes('translate(0px, -300px)'),
-	),
+	'?jsonSample ?jsonIndent ?jsonTree ?jsonCollapse set up a state',
+	(await page.$eval('.canon-segmented[aria-label="Indent"] [aria-checked="true"]', (el) => el.textContent.trim())) ===
+		'4 spaces' &&
+		(await treeRows()).some((row) => row === '▸ tools: [3]'),
+	(await treeRows()).slice(0, 6).join(' | '),
+);
+await visit(page, '/tools/json-formatter?jsonSample=1&jsonTaps=root.3|root.3.1');
+check(
+	'?jsonTaps zooms the picture',
+	(await cells())[0] === 'root.3.1' && (await page.$eval('.jf-cell--selected', (el) => el.dataset.path)) === 'root.3.1',
+	(await cells()).slice(0, 3).join(),
+);
+check(
+	'the document never scrolls',
+	await page.evaluate(() => document.scrollingElement.scrollTop === 0),
 );
 
-await page.click('[aria-label="Clear"]');
-await settle();
-check('clear empties source and result', (await source()) === '' && (await output()) === '');
+// phone: one column, the picture collapses
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/json-formatter?jsonSample=1');
+const phone = await page.evaluate(() => {
+	const split = document.querySelector('.json-formatter');
+	const body = split.querySelector('.canon-split-body');
+	const before = split.querySelector('.canon-split-sidebar .canon-canvas').getBoundingClientRect().height;
+	body.scrollTop = 400;
+	return new Promise((resolve) =>
+		requestAnimationFrame(() =>
+			resolve({
+				collapsing: split.hasAttribute('data-collapsing'),
+				before,
+				after: split.querySelector('.canon-split-sidebar .canon-canvas').getBoundingClientRect().height,
+				overflow: document.documentElement.scrollWidth > window.innerWidth,
+			}),
+		),
+	);
+});
+check(
+	'390: stacked, the editor picture collapses to 150 on scroll, no sideways scroll',
+	phone.collapsing && phone.after === 150 && phone.before > phone.after && !phone.overflow,
+	JSON.stringify(phone),
+);
+
+if (shots) {
+	const sizes = [
+		[390, 844],
+		[1400, 1000],
+		[2200, 1100],
+	];
+	for (const theme of ['light', 'dark'])
+		for (const [width, height] of sizes) {
+			await page.setViewport({ width, height });
+			await visit(page, '/tools/json-formatter?jsonSample=1&jsonTaps=root.3');
+			await page.evaluate((t) => {
+				document.documentElement.classList.toggle('dark', t === 'dark');
+				document.documentElement.classList.toggle('light', t === 'light');
+			}, theme);
+			await sleep(700);
+			await page.screenshot({ path: `${shots}/json-formatter-${width}-${theme}.png` });
+		}
+	await page.setViewport({ width: 1400, height: 1000 });
+	await visit(page, '/tools/json-formatter?jsonSample=invalid');
+	await page.screenshot({ path: `${shots}/json-formatter-1400-invalid.png` });
+	await visit(page, '/tools/json-formatter?jsonSample=deep&jsonTree=1');
+	await page.screenshot({ path: `${shots}/json-formatter-1400-tree.png` });
+	await visit(page, '/tools/json-formatter');
+	await page.screenshot({ path: `${shots}/json-formatter-1400-empty.png` });
+}
 
 await finish(browser);

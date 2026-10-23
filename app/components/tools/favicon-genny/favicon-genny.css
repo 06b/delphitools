@@ -1,0 +1,265 @@
+/* banner: a browser window beside two home screen icons, stacked when narrow */
+.favicon-scene {
+	position: absolute;
+	inset: 10px var(--canon-panel-padding) 14px;
+	display: grid;
+	place-items: center;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	container-type: inline-size;
+}
+
+.favicon-scene-group {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	align-items: center;
+	inline-size: 100%;
+}
+
+@container (min-inline-size: 568px) {
+	.favicon-scene-group {
+		flex-direction: row;
+		gap: 48px;
+		justify-content: center;
+	}
+}
+
+.favicon-browser {
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	inline-size: min(380px, 100%);
+	block-size: 72px;
+	padding: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.favicon-tabs {
+	display: flex;
+	flex: none;
+	align-items: flex-end;
+	block-size: 34px;
+	padding-inline-start: 6px;
+	background: var(--canon-muted);
+}
+
+.favicon-tab {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	box-sizing: border-box;
+	min-inline-size: 0;
+	padding-inline: 10px;
+}
+
+.favicon-tab--back {
+	flex: 0 1 110px;
+	block-size: 28px;
+}
+
+.favicon-tab--front {
+	flex: 0 1 220px;
+	block-size: 30px;
+	background: var(--canon-card);
+}
+
+.favicon-tab-icon {
+	flex: none;
+	box-sizing: border-box;
+	inline-size: 16px;
+	block-size: 16px;
+}
+
+span.favicon-tab-icon {
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+}
+
+.favicon-tab--back .favicon-tab-icon {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+.favicon-tab-bar {
+	flex: 1;
+	block-size: 4px;
+	background: color-mix(
+		in srgb,
+		var(--canon-muted-foreground) 25%,
+		transparent
+	);
+}
+
+.favicon-tab-title {
+	flex: 1;
+	min-inline-size: 0;
+	overflow: hidden;
+	font-size: var(--canon-text-caption);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.favicon-tab-close {
+	display: flex;
+	flex: none;
+	color: var(--canon-muted-foreground);
+}
+
+.favicon-tab-close svg {
+	inline-size: 10px;
+	block-size: 10px;
+}
+
+.favicon-toolbar {
+	flex: 1;
+	padding: 8px 10px;
+	background: var(--canon-card);
+}
+
+.favicon-address {
+	display: block;
+	block-size: 100%;
+	background: var(--canon-muted);
+}
+
+.favicon-home {
+	display: flex;
+	flex: none;
+	gap: 28px;
+	align-items: center;
+}
+
+.favicon-home-item {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	align-items: center;
+	inline-size: 60px;
+}
+
+.favicon-touch,
+.favicon-app {
+	box-sizing: border-box;
+	overflow: hidden;
+}
+
+.favicon-touch {
+	inline-size: 60px;
+	block-size: 60px;
+	border-radius: 22.5%;
+}
+
+.favicon-app {
+	inline-size: 52px;
+	block-size: 52px;
+	margin-block: 4px;
+	border-radius: 50%;
+}
+
+span.favicon-touch,
+span.favicon-app {
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+}
+
+.favicon-home-name {
+	max-inline-size: 80px;
+	overflow: hidden;
+	font-size: 10px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* crop */
+.favicon-crop {
+	position: relative;
+	block-size: 220px;
+	overflow: hidden;
+	background: var(--canon-muted);
+}
+
+.favicon-crop:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.favicon-crop-picture {
+	position: absolute;
+	overflow: hidden;
+	background-size: 100% 100%;
+}
+
+.favicon-crop-shade {
+	position: absolute;
+	box-shadow: 0 0 0 100000px rgb(0 0 0 / 45%);
+}
+
+.favicon-crop-square {
+	position: absolute;
+	box-sizing: border-box;
+	border: var(--canon-frame) solid var(--canon-primary);
+	cursor: move;
+	touch-action: none;
+}
+
+.favicon-crop-handle {
+	position: absolute;
+	inset-block-end: -8px;
+	inset-inline-end: -8px;
+	inline-size: 14px;
+	block-size: 14px;
+	background: var(--canon-primary);
+	cursor: nwse-resize;
+}
+
+/* sizes */
+.favicon-row {
+	display: flex;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-row-height);
+}
+
+.favicon-well {
+	display: grid;
+	flex: none;
+	place-items: center;
+	inline-size: 72px;
+	padding-block: 8px;
+	background: var(--canon-muted);
+}
+
+.favicon-well img {
+	image-rendering: pixelated;
+}
+
+.favicon-blank {
+	background: var(--canon-card);
+}
+
+.favicon-meta {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	justify-content: center;
+	min-inline-size: 0;
+	padding-inline: var(--canon-panel-padding) 8px;
+	background: var(--canon-card);
+}
+
+.favicon-pixels {
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+}
+
+.favicon-role {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.favicon-save {
+	flex: none;
+	inline-size: 60px;
+}
+

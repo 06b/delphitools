@@ -28,7 +28,7 @@ for (const { label, query, expect } of CASES) {
 	await visit(page, `/tools/palette-genny${query}`);
 	await sleep(600);
 
-	const swatches = await page.$$eval('.dt-swatch-value', (els) =>
+	const swatches = await page.$$eval('.pg-col-value', (els) =>
 		els.map((el) => el.textContent.trim().toLowerCase()),
 	);
 
@@ -53,36 +53,29 @@ for (const { label, query, expect } of CASES) {
 
 	check(
 		`${label}: the list matches the swatches`,
-		(await page.$$eval('.dt-colour-row', (els) => els.length)) ===
+		(await page.$$eval('.pg-row', (els) => els.length)) ===
 			swatches.length,
 	);
 	check(
 		`${label}: the stepper agrees`,
-		(await page.$eval('.dt-count > span', (el) =>
-			el.textContent.trim(),
+		(await page.$eval('.pg-count input', (el) =>
+			el.value,
 		)) === `${swatches.length}`,
 	);
 
 	await browser.close();
 }
 
-// in-app: the collection card must carry ?colors= through the transition
+// in-app: the collection's open link must carry ?colors= through the transition
 {
 	const { browser, page } = await launch();
 	await visit(page, '/tools/palette-collection');
 
-	const strip = await page.$$eval(
-		'.dt-collection-cell:first-child .dt-collection-swatch',
-		(els) =>
-			els.map((el) =>
-				(el.getAttribute('style') ?? '')
-					.replace('background-color:', '')
-					.trim()
-					.toLowerCase(),
-			),
+	const strip = await page.$$eval('.pc-chip[data-hex]', (els) =>
+		els.map((el) => el.dataset.hex.toLowerCase()),
 	);
 
-	await page.click('.dt-collection-card');
+	await page.click('.pc-open');
 	await sleep(800);
 
 	check(
@@ -91,7 +84,7 @@ for (const { label, query, expect } of CASES) {
 		page.url(),
 	);
 
-	const swatches = await page.$$eval('.dt-swatch-value', (els) =>
+	const swatches = await page.$$eval('.pg-col-value', (els) =>
 		els.map((el) => el.textContent.trim().toLowerCase()),
 	);
 	check(

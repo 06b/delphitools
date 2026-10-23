@@ -1,0 +1,147 @@
+.regex-tester {
+	--rx-group-1: var(--canon-math-blue);
+	--rx-group-2: var(--canon-math-clay);
+	--rx-group-3: var(--canon-math-green);
+	--rx-group-4: var(--canon-math-yellow);
+	--rx-hit-1: color-mix(in srgb, var(--canon-primary) 22%, transparent);
+	--rx-hit-2: color-mix(in srgb, var(--canon-primary) 11%, transparent);
+}
+
+/* pattern row: / pattern / flags, then the copy cell */
+.rx-pattern {
+	display: flex;
+	gap: var(--canon-hairline);
+	min-block-size: var(--canon-row-height);
+	background: var(--canon-border);
+}
+
+.rx-pattern-cell {
+	display: flex;
+	flex: 1 1 auto;
+	gap: 4px;
+	align-items: center;
+	min-inline-size: 0;
+	padding-inline: var(--canon-panel-padding) 12px;
+	background: var(--canon-card);
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+	cursor: text;
+}
+
+.rx-slash {
+	color: var(--canon-muted-foreground);
+}
+
+.regex-tester .canon-text-cell.rx-pattern-field {
+	flex: 1 1 auto;
+	inline-size: auto;
+	padding: 0;
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+}
+
+.rx-pattern-flags {
+	color: var(--canon-primary);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rx-flags .canon-button-title {
+	white-space: pre;
+}
+
+.rx-line--1 .canon-value-line-value {
+	color: var(--rx-group-1);
+}
+
+.rx-line--2 .canon-value-line-value {
+	color: var(--rx-group-2);
+}
+
+.rx-line--3 .canon-value-line-value {
+	color: var(--rx-group-3);
+}
+
+.rx-line--4 .canon-value-line-value {
+	color: var(--rx-group-4);
+}
+
+/* picture */
+.rx-picture {
+	display: flex;
+	flex-direction: column;
+	block-size: 100%;
+	container-type: inline-size;
+}
+
+.rx-picture-head,
+.rx-picture-text {
+	box-sizing: border-box;
+	inline-size: min(100%, 736px);
+	margin-inline: auto;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.rx-picture-head {
+	display: flex;
+	flex: none;
+	gap: 24px;
+	align-items: center;
+	block-size: 44px;
+	margin-block-start: 6px;
+}
+
+.rx-picture-figure {
+	display: inline-flex;
+	gap: 8px;
+	align-items: baseline;
+}
+
+.rx-picture-word {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.rx-picture-word--failed {
+	color: var(--canon-destructive);
+}
+
+.rx-picture-scroll {
+	flex: 1 1 auto;
+	min-block-size: 0;
+	overflow-y: auto;
+}
+
+.rx-picture-text {
+	padding-block: 4px var(--canon-panel-padding);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 15px;
+	line-height: calc(1.2em + var(--rx-line-gap, 6px));
+}
+
+@container (min-width: 420px) {
+	.rx-picture-text {
+		font-size: 17px;
+	}
+}
+
+@container (min-width: 560px) {
+	.rx-picture-text {
+		font-size: 19px;
+	}
+}
+
+.rx-caret {
+	display: inline-block;
+	inline-size: 0;
+	block-size: 1.2em;
+	vertical-align: text-bottom;
+	box-shadow: 0 0 0 1px var(--rx-caret);
+}
+
+.rx-picture-tools {
+	display: flex;
+	gap: var(--canon-hairline);
+	margin-inline-start: auto;
+}

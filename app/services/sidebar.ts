@@ -2,20 +2,20 @@ import Service, { service } from '@ember/service';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { tracked } from '@glimmer/tracking';
+import type BreakpointService from 'delphitools-v2/services/breakpoint';
 
 const COOKIE = 'sidebar_state';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const MOBILE_BREAKPOINT = 768;
 const SHORTCUT = 'b';
 
 export default class SidebarService extends Service {
 	@service declare router: RouterService;
+	@service declare breakpoint: BreakpointService;
 
-	@tracked open = true;
-	@tracked openMobile = false;
-	@tracked isMobile = false;
-
-	#media?: MediaQueryList;
+	/** The drawer on a wide window; a phone shows the opposite. */
+	@tracked wideOpen = true;
+	/** The last URL outside the /canon docs, where the docs nav's back row goes. */
+	@tracked appUrl = '/';
 
 	constructor(owner: Owner) {
 		super(owner);
@@ -25,49 +25,49 @@ export default class SidebarService extends Service {
 		const stored = new RegExp(
 			`(?:^|;\\s*)${COOKIE}=(true|false)`,
 		).exec(document.cookie);
-		this.open = stored ? stored[1] === 'true' : true;
+		this.wideOpen = stored?.[1] !== 'false';
 
-		this.#media = window.matchMedia(
-			`(max-width: ${MOBILE_BREAKPOINT - 1}px)`,
-		);
-		this.isMobile = this.#media.matches;
-		this.#media.addEventListener('change', this.#onMediaChange);
+		// the first transition can finish before this service exists
+		const { pathname, search } = window.location;
+		if (!/^\/canon(\/|$)/.test(pathname))
+			this.appUrl = pathname + search;
 
 		window.addEventListener('keydown', this.#onKeydown);
-		this.router.on('routeDidChange', this.closeMobile);
+		this.router.on('routeDidChange', this.#onRouteChange);
 	}
 
 	willDestroy() {
 		super.willDestroy();
-		this.#media?.removeEventListener('change', this.#onMediaChange);
 		window.removeEventListener('keydown', this.#onKeydown);
-		this.router.off('routeDidChange', this.closeMobile);
+		this.router.off('routeDidChange', this.#onRouteChange);
 	}
 
-	get state() {
-		return this.open ? 'expanded' : 'collapsed';
+	get open() {
+		return this.breakpoint.current === 'mobile'
+			? !this.wideOpen
+			: this.wideOpen;
 	}
 
 	toggle = () => {
-		if (this.isMobile) {
-			this.openMobile = !this.openMobile;
-			return;
-		}
-		this.open = !this.open;
-		document.cookie = `${COOKIE}=${this.open}; path=/; max-age=${COOKIE_MAX_AGE}`;
+		this.setOpen(!this.open);
 	};
 
-	closeMobile = () => {
-		this.openMobile = false;
+	setOpen = (open: boolean) => {
+		this.wideOpen =
+			this.breakpoint.current === 'mobile' ? !open : open;
+		document.cookie = `${COOKIE}=${this.wideOpen}; path=/; max-age=${COOKIE_MAX_AGE}`;
 	};
 
-	setMobile = (isMobile: boolean) => {
-		this.isMobile = isMobile;
-		if (!isMobile) this.openMobile = false;
-	};
-
-	#onMediaChange = (e: MediaQueryListEvent) => {
-		this.setMobile(e.matches);
+	#onRouteChange = () => {
+		const route = this.router.currentRouteName ?? '';
+		if (
+			route !== 'canon' &&
+			!route.startsWith('canon.') &&
+			route !== 'not-found'
+		)
+			this.appUrl = this.router.currentURL ?? '/';
+		if (this.open && this.breakpoint.current === 'mobile')
+			this.setOpen(false);
 	};
 
 	#onKeydown = (e: KeyboardEvent) => {

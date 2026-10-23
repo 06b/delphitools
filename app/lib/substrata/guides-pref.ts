@@ -8,8 +8,9 @@ export interface GuidesPref {
 export const GRID_SIZE = 50;
 
 const KEY = 'substrata:guides';
+// iOS AppSettings.rulers defaults off
 const DEFAULTS: GuidesPref = {
-	rulers: true,
+	rulers: false,
 	guides: true,
 	grid: false,
 	snap: true,
@@ -47,7 +48,6 @@ export function toggleGuide(key: keyof GuidesPref): void {
 	pref = { ...pref, [key]: !pref[key] };
 	try {
 		window.localStorage.setItem(KEY, JSON.stringify(pref));
-	} catch {
-	}
+	} catch {}
 	for (const l of listeners) l();
 }

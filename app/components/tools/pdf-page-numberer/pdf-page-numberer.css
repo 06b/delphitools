@@ -1,0 +1,109 @@
+.ppn-picture {
+	position: absolute;
+	inset: 0;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.ppn-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+	display: grid;
+	place-items: center;
+	container-type: size;
+}
+
+.ppn-page {
+	position: relative;
+	box-sizing: border-box;
+	inline-size: min(100cqi, 100cqb * (var(--ppn-aspect)));
+	aspect-ratio: var(--ppn-aspect);
+	outline: var(--canon-hairline) solid var(--canon-border);
+	container-type: inline-size;
+}
+
+.ppn-page--blank {
+	background: var(--canon-muted);
+}
+
+/* paper in both themes */
+.ppn-paper {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	overflow: hidden;
+	background: #fff;
+	color: #000;
+}
+
+.ppn-render {
+	position: absolute;
+	inset: 0;
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	max-inline-size: none;
+}
+
+.ppn-mark {
+	position: absolute;
+	line-height: 1;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+/* matches export grey 0.4 */
+.ppn-mark--stamp {
+	color: #666;
+}
+
+.ppn-mark--watermark {
+	color: #000;
+}
+
+/* ios anchors, third-relative */
+.ppn-zones {
+	--media-anchor-x: 24%;
+	--media-anchor-y: 18%;
+}
+
+.ppn-zones .media-anchor-mark {
+	inline-size: 6px;
+	block-size: 6px;
+	border: 0;
+	background: color-mix(in srgb, var(--canon-primary) 35%, transparent);
+}
+
+.ppn-format > .canon-row-control {
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.ppn-format .ppn-tip-open {
+	flex: none;
+	inline-size: 52px;
+}
+
+/* fixed: % of viewport */
+.ppn-tip {
+	inline-size: 320px;
+	max-inline-size: calc(100% - 2 * var(--canon-panel-padding));
+}
+
+.ppn-tip-line {
+	margin: 0;
+	padding: 4px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	font-size: var(--canon-text-footnote);
+}
+
+.ppn-tip-line:last-child {
+	padding-block-end: 12px;
+}
+
+.ppn-stamp-text .ppn-stamp-field,
+.ppn-format .ppn-template {
+	inline-size: 100%;
+}

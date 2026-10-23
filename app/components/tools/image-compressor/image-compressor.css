@@ -1,0 +1,22 @@
+/* the empty picture: the drop target takes the picture's default 3:2 */
+.image-compressor .ic-drop .canon-drop-zone-target {
+	aspect-ratio: 3 / 2;
+}
+
+/* on the result side for slow encodes (AVIF, JXL); fast ones end before it shows */
+.ic-encoding {
+	position: absolute;
+	inset-block-end: 12px;
+	inset-inline-end: 12px;
+	padding: 12px;
+	background: var(--canon-card);
+	color: var(--canon-primary);
+	opacity: 0;
+	animation: ic-encoding-shown 0s 400ms forwards;
+}
+
+@keyframes ic-encoding-shown {
+	to {
+		opacity: 1;
+	}
+}

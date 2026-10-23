@@ -2,25 +2,55 @@ import type { BurnCodec } from 'delphitools-v2/lib/media-convert';
 import type { Cue } from 'delphitools-v2/lib/subtitles';
 
 export type FontChoice = 'sans' | 'serif' | 'mono' | 'quattro';
-export type TextStyle = 'outline' | 'box' | 'plain';
+export type TextStyle = 'outline' | 'box' | 'shadow' | 'plain';
 
 export interface BurnStyle {
 	font: FontChoice;
+	bold: boolean;
+	/** Fraction of the frame height. */
 	size: number;
+	/** Wrap column, fraction of the frame width. */
+	width: number;
 	colour: string;
 	text: TextStyle;
+	/** Outline, box and shadow colour. */
+	backing: string;
+	/** Fraction of the frame width, from the centre. */
 	x: number;
+	/** Fraction of the frame height, from the default baseline. */
 	y: number;
 }
 
 export const DEFAULT_STYLE: BurnStyle = {
 	font: 'sans',
+	bold: false,
 	size: 0.05,
+	width: 0.9,
 	colour: '#ffffff',
 	text: 'outline',
+	backing: '#000000',
 	x: 0,
 	y: 0,
 };
+
+// iOS SubtitleBurnStyle ranges
+export const X_RANGE = [-0.45, 0.45] as const;
+export const Y_RANGE = [-0.9, 0.05] as const;
+export const SIZE_RANGE = [0.02, 0.14] as const;
+export const WIDTH_RANGE = [0.3, 0.9] as const;
+
+/** Default baseline, a fraction from the frame top. */
+export const BASELINE = 0.94;
+
+/** In the top half the lines stack downward from the baseline. */
+export const growsDown = (y: number) => BASELINE + y < 0.5;
+
+export interface TextBox {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
 
 // quattro loads from app.scss
 export const FONT_STACKS: Record<FontChoice, string> = {
@@ -30,10 +60,7 @@ export const FONT_STACKS: Record<FontChoice, string> = {
 	quattro: '"iA Writer Quattro", sans-serif',
 };
 
-const MAX_WIDTH = 0.9;
 const LINE_HEIGHT = 1.25;
-const BOTTOM_MARGIN = 0.06;
-const BOX_FILL = 'rgb(0 0 0 / 65%)';
 
 export function stripTags(text: string): string {
 	return text.replace(/<[^>]+>/g, '');
@@ -69,45 +96,70 @@ export function wrapLines(
 	return out;
 }
 
+/** Draws the text as burnt; returns the union of its line boxes in canvas pixels. */
 export function drawSubtitle(
 	ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
 	text: string,
 	width: number,
 	height: number,
 	style: BurnStyle,
-): void {
+): TextBox | null {
 	const px = Math.max(8, Math.round(style.size * height));
-	ctx.font = `${px}px ${FONT_STACKS[style.font]}`;
+	ctx.font = `${style.bold ? 'bold ' : ''}${px}px ${FONT_STACKS[style.font]}`;
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'alphabetic';
 	ctx.lineJoin = 'round';
 
-	const lines = wrapLines(ctx, stripTags(text), width * MAX_WIDTH);
+	const lines = wrapLines(ctx, stripTags(text), width * style.width);
+	if (lines.length === 0) return null;
 	const lineH = px * LINE_HEIGHT;
 	const cx = width / 2 + style.x * width;
-	const bottom = height * (1 - BOTTOM_MARGIN) + style.y * height;
+	const bottom = height * BASELINE + style.y * height;
+	const down = growsDown(style.y);
+	const padX = px * 0.3;
+	const padY = px * 0.15;
+	const shadow = px * 0.08;
+	let top = Infinity;
+	let left = Infinity;
+	let right = -Infinity;
+	let end = -Infinity;
 
 	lines.forEach((line, i) => {
-		const y = bottom - (lines.length - 1 - i) * lineH;
+		const y = down
+			? bottom + i * lineH
+			: bottom - (lines.length - 1 - i) * lineH;
+		const w = ctx.measureText(line).width;
+		const box = {
+			x: cx - w / 2 - padX,
+			y: y - px * 0.85 - padY,
+			width: w + padX * 2,
+			height: px * 1.1 + padY * 2,
+		};
+		left = Math.min(left, box.x);
+		top = Math.min(top, box.y);
+		right = Math.max(right, box.x + box.width);
+		end = Math.max(end, box.y + box.height);
 		if (style.text === 'box') {
-			const w = ctx.measureText(line).width;
-			const padX = px * 0.3;
-			const padY = px * 0.15;
-			ctx.fillStyle = BOX_FILL;
-			ctx.fillRect(
-				cx - w / 2 - padX,
-				y - px * 0.85 - padY,
-				w + padX * 2,
-				px * 1.1 + padY * 2,
-			);
+			// 65 % alpha
+			ctx.fillStyle = `${style.backing}a6`;
+			ctx.fillRect(box.x, box.y, box.width, box.height);
 		} else if (style.text === 'outline') {
 			ctx.lineWidth = Math.max(2, px / 8);
-			ctx.strokeStyle = '#000';
+			ctx.strokeStyle = style.backing;
 			ctx.strokeText(line, cx, y);
+		} else if (style.text === 'shadow') {
+			// 85 % alpha
+			ctx.shadowColor = `${style.backing}d9`;
+			ctx.shadowOffsetY = shadow;
+			ctx.shadowBlur = shadow * 2;
 		}
 		ctx.fillStyle = style.colour;
 		ctx.fillText(line, cx, y);
+		ctx.shadowColor = 'transparent';
+		ctx.shadowOffsetY = 0;
+		ctx.shadowBlur = 0;
 	});
+	return { x: left, y: top, width: right - left, height: end - top };
 }
 
 export interface ExportFormat {

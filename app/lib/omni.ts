@@ -12,7 +12,6 @@ import { simulateHex, type SimulationType } from './colour-vision';
 import { formatScientific } from './math-constants';
 import { acceptsFile } from 'delphitools-v2/modifiers/file-paste';
 import { matchesQuery } from './tool-search';
-import type { CategoryKey } from 'delphitools-v2/components/tools/unit-converter';
 
 export interface OmniAnswer {
 	toolId: string;
@@ -88,7 +87,7 @@ async function colourAnswers(hex: string): Promise<OmniAnswer[]> {
 		});
 
 	const { generateShades } =
-		await import('delphitools-v2/components/tools/tailwind-shades');
+		await import('delphitools-v2/components/tools/tailwind-shades/shades');
 	const shades = generateShades(hex, 'classic');
 	if (shades)
 		push(answers, 'tailwind-shades', {
@@ -130,7 +129,7 @@ async function unitAnswers(input: string): Promise<OmniAnswer[]> {
 		const unit = typoMatch[2]!.toLowerCase();
 
 		const { UNITS } =
-			await import('delphitools-v2/components/tools/typo-calc');
+			await import('delphitools-v2/components/tools/typo-calc/units');
 		const info = UNITS[unit as keyof typeof UNITS];
 		if (!info) return [];
 		const px = info.toPx(value, 16);
@@ -156,46 +155,31 @@ async function unitAnswers(input: string): Promise<OmniAnswer[]> {
 	const value = parseFloat(generalMatch[1]!);
 	const symbol = generalMatch[2]!.trim();
 
-	const { UNIT_CATEGORIES, convertUnit, formatNumber } =
-		await import('delphitools-v2/components/tools/unit-converter');
+	const { categories, convert, format } =
+		await import('delphitools-v2/components/tools/unit-converter/units');
 
-	for (const category of Object.keys(UNIT_CATEGORIES) as CategoryKey[]) {
-		const units = UNIT_CATEGORIES[category].units;
-		const baseKey = UNIT_CATEGORIES[category].baseUnit;
-		for (const key of Object.keys(units)) {
-			if (
-				units[key]!.symbol.toLowerCase() !==
-				symbol.toLowerCase()
-			)
-				continue;
-
-			const baseValue = units[key]!.toBase(value);
-			const targetKeys = Object.keys(units).filter(
-				(k) => k !== key && k !== baseKey,
-			);
-			const extras = targetKeys.slice(0, 2);
-			const parts = [
-				`${formatNumber(baseValue)} ${units[baseKey]!.symbol}`,
-			];
-			for (const target of extras) {
-				parts.push(
-					`${formatNumber(
-						convertUnit(
-							category,
-							value,
-							key,
-							target,
-						),
-					)} ${units[target]!.symbol}`,
-				);
-			}
-
-			const answers: OmniAnswer[] = [];
-			push(answers, 'unit-converter', {
-				value: parts.join(' · '),
-			});
-			return answers;
-		}
+	for (const { units } of categories) {
+		const unit = units.find(
+			(u) => u.symbol.toLowerCase() === symbol.toLowerCase(),
+		);
+		if (!unit) continue;
+		// the category's first unit, then two siblings
+		const targets = [
+			units[0]!,
+			...units
+				.filter((u) => u !== unit && u !== units[0])
+				.slice(0, 2),
+		];
+		const answers: OmniAnswer[] = [];
+		push(answers, 'unit-converter', {
+			value: targets
+				.map(
+					(t) =>
+						`${format(convert(value, unit, t))} ${t.symbol}`,
+				)
+				.join(' · '),
+		});
+		return answers;
 	}
 
 	return [];
@@ -208,12 +192,11 @@ async function integerAnswers(input: string): Promise<OmniAnswer[]> {
 	const num = Number(input);
 	if (!Number.isSafeInteger(num) || num < 0) return [];
 
-	const { convertAll } =
-		await import('delphitools-v2/components/tools/base-converter');
-	const bases = convertAll(num);
+	const { allBases } =
+		await import('delphitools-v2/components/tools/base-converter/base-number');
 	const answers: OmniAnswer[] = [];
 	push(answers, 'base-converter', {
-		value: `${bases.dec} · 0x${bases.hex} · 0b${bases.bin} · 0o${bases.oct}`,
+		value: allBases(BigInt(num)).join(' · '),
 	});
 	return answers;
 }
@@ -277,7 +260,7 @@ async function algebraAnswers(input: string): Promise<OmniAnswer[]> {
 		return [];
 
 	const { compute } =
-		await import('delphitools-v2/components/tools/algebra-calc');
+		await import('delphitools-v2/components/tools/algebra-calc/algebra');
 	const math = await import('mathjs');
 	// infer first variable
 	const variable = /[a-zA-Z]/.exec(input)?.[0] ?? 'x';
@@ -332,7 +315,7 @@ async function qrAnswers(input: string): Promise<OmniAnswer[]> {
 
 async function glyphAnswers(input: string): Promise<OmniAnswer[]> {
 	const { describeGlyph } =
-		await import('delphitools-v2/components/tools/glyph-browser');
+		await import('delphitools-v2/components/tools/glyph-browser/glyphs');
 	const info = describeGlyph(input);
 	if (!info) return [];
 
@@ -377,8 +360,8 @@ const BASE64_PRINTABLE_FLOOR = 0.8;
 const URL_ENCODED_SHAPE = /%[0-9A-Fa-f]{2}/;
 
 async function encodingAnswers(input: string): Promise<OmniAnswer[]> {
-	const { encodeBase64, decodeBase64, convertUrl, tryDecodeUrl } =
-		await import('delphitools-v2/components/tools/encoder');
+	const { encodeBase64, decodeBase64, tryDecodeUrl } =
+		await import('delphitools-v2/components/tools/encoder/engine');
 
 	let decoded: string | null = null;
 	let mode: 'base64' | 'url' | null = null;
@@ -417,7 +400,7 @@ async function encodingAnswers(input: string): Promise<OmniAnswer[]> {
 	if (mode === 'base64') {
 		push(answers, 'encoder', {
 			value: `base64 decoded · ${truncate(decoded)} · url · ${truncate(
-				convertUrl('encode', decoded),
+				encodeURIComponent(decoded),
 			)}`,
 		});
 	} else {
@@ -437,20 +420,11 @@ let shavianCoreReady: Promise<void> | null = null;
 
 async function ensureShavianCore(): Promise<void> {
 	shavianCoreReady ??= (async () => {
-		const { parseDictJson } =
-			await import('delphitools-v2/components/tools/shavian-transliterator');
+		const { loadCoreDictionary } =
+			await import('delphitools-v2/lib/shavian/dictionary');
 		const { setCoreDictionary } =
 			await import('delphitools-v2/lib/shavian/transliterate');
-		const core =
-			await import('delphitools-v2/lib/shavian/dictionary-core.json?raw');
-		setCoreDictionary(
-			parseDictJson(
-				JSON.parse(core.default) as Record<
-					string,
-					string[]
-				>,
-			),
-		);
+		setCoreDictionary(await loadCoreDictionary());
 	})();
 	return shavianCoreReady;
 }
@@ -460,9 +434,7 @@ async function shavianAnswers(input: string): Promise<OmniAnswer[]> {
 	if (words.length < SHAVIAN_MIN_WORDS) return [];
 	if (!words.every((word) => SHAVIAN_WORD.test(word))) return [];
 
-	const { glossToText } =
-		await import('delphitools-v2/components/tools/shavian-transliterator');
-	const { tokenise } =
+	const { glossToText, tokenise } =
 		await import('delphitools-v2/lib/shavian/transliterate');
 	await ensureShavianCore();
 

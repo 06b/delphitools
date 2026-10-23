@@ -3,8 +3,12 @@ import { launch, visit, check, sleep, finish } from './harness.mjs';
 const { browser, page } = await launch();
 
 const trigger = '.dt-notation-trigger';
+const popoverOpen = () =>
+	page.evaluate(() => !!document.querySelector('.dt-notation-popover:popover-open'));
+const focusedLabel = () =>
+	page.evaluate(() => document.activeElement?.textContent.trim());
 const swatchValue = () =>
-	page.$eval('.dt-swatch-value', (el) => el.textContent.trim());
+	page.$eval('.pg-col-value', (el) => el.textContent.trim());
 
 await visit(page, '/tools/palette-genny');
 check('a Colour tool shows the selector', await page.$(trigger));
@@ -16,6 +20,18 @@ check('swatches read as hex', /^#[\da-f]{6}$/i.test(await swatchValue()));
 
 await page.click(trigger);
 await sleep(250);
+check('the trigger opens the popover', await popoverOpen());
+check('focus lands on the current notation', (await focusedLabel()) === 'HEX', await focusedLabel());
+await page.keyboard.press('Escape');
+await sleep(250);
+check('Escape closes it', !(await popoverOpen()));
+check(
+	'and returns focus to the trigger',
+	await page.evaluate((sel) => document.activeElement === document.querySelector(sel), trigger),
+);
+await page.keyboard.press('Enter');
+await sleep(250);
+check('Enter on the trigger reopens it', await popoverOpen());
 const options = await page.$$eval('.dt-notation-option', (els) =>
 	els.map((el) => el.textContent.trim()),
 );
@@ -42,7 +58,7 @@ await page.evaluate(() => {
 		.click();
 });
 await sleep(300);
-check('choosing closes the popover', !(await page.$('.dt-notation-popover')));
+check('choosing closes the popover', !(await popoverOpen()));
 check(
 	'the trigger shows the new notation',
 	(await page.$eval(trigger, (el) => el.textContent.trim())) === 'OKLCH',
@@ -55,7 +71,7 @@ check(
 
 await page.evaluate(() => {
 	document.querySelector(
-		'.dt-nav-link[href="/tools/colour-converter"]',
+		'.canon-sidebar-row[href="/tools/colour-converter"]',
 	)?.click();
 });
 await sleep(600);
@@ -67,7 +83,7 @@ check(
 
 await page.evaluate(() => {
 	document.querySelector(
-		'.dt-nav-link[href="/tools/favicon-genny"]',
+		'.canon-sidebar-row[href="/tools/favicon-genny"]',
 	)?.click();
 });
 await sleep(600);
@@ -79,10 +95,7 @@ check(
 
 // bare span matches icon
 await visit(page, '/tools/palette-genny');
-for (const [width, label] of [
-	[420, 'none'],
-	[900, 'block'],
-]) {
+for (const width of [420, 900]) {
 	await page.setViewport({ width, height: 800 });
 	await sleep(350);
 	const parts = await page.evaluate(() => {
@@ -104,8 +117,8 @@ for (const [width, label] of [
 		`icon ${parts.icon}px in a ${parts.trigger}px control`,
 	);
 	check(
-		`at ${width}px the label is ${label}`,
-		parts.label === label,
+		`at ${width}px the label shows`,
+		parts.label !== 'none',
 		parts.label,
 	);
 }

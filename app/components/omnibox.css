@@ -1,0 +1,339 @@
+.dt-home {
+	box-sizing: border-box;
+	min-height: 100%;
+	padding: 12px var(--canon-panel-padding) 40px;
+	background: var(--canon-background);
+	color: var(--canon-foreground);
+	container-type: inline-size;
+	font-family: var(--canon-font);
+	isolation: isolate;
+}
+
+.dt-hero {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+/* ios HomePatternView, under .dt-home's content */
+.dt-hero-pattern {
+	position: absolute;
+	z-index: -1;
+	overflow: hidden;
+	inset: -12px calc(-1 * var(--canon-panel-padding)) 0;
+	mask-image: linear-gradient(black, transparent);
+	opacity: 0.2;
+	pointer-events: none;
+}
+
+/* one block of slack for the drift */
+.dt-hero-pattern > div {
+	width: calc(100% + var(--hero-block));
+	height: calc(100% + var(--hero-block));
+	animation: dt-hero-drift 108s linear infinite;
+	background: var(--canon-primary);
+	mask-image: var(--hero-pattern);
+}
+
+@keyframes dt-hero-drift {
+	to {
+		transform: translate(
+			calc(-1 * var(--hero-block)),
+			calc(-1 * var(--hero-block))
+		);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dt-hero-pattern > div {
+		animation: none;
+	}
+}
+
+.dt-hero-pills {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: var(--canon-panel-padding);
+	gap: 8px;
+}
+
+.dt-hero-art {
+	width: 100%;
+	max-width: 672px;
+
+	/* source art 2.8:1; delphi.webp 2.84:1 */
+	aspect-ratio: 2.8 / 1;
+	object-fit: fill;
+}
+
+.dt-omni-zone {
+	max-width: 672px;
+	margin: var(--canon-panel-padding) auto 40px;
+}
+
+.dt-omni {
+	border: var(--canon-frame) solid var(--canon-border);
+	background: var(--canon-card);
+}
+
+.dt-omni:focus-within {
+	border-color: var(--canon-primary);
+}
+
+.dt-omni-field {
+	display: flex;
+	align-items: center;
+}
+
+.dt-omni-input {
+	min-width: 0;
+	flex: 1;
+	padding: 9px 8px;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+
+	/* doubles the caret, which has no width property; metrics halved */
+	font-size: calc(var(--canon-text-title3) / 2);
+	text-align: center;
+	zoom: 2;
+}
+
+.dt-omni-input::placeholder {
+	color: var(--canon-muted-foreground);
+	opacity: 0.7;
+}
+
+.dt-omni-input:focus-visible {
+	outline: none;
+}
+
+.dt-omni-legend {
+	border-top: var(--canon-hairline) solid var(--canon-border);
+}
+
+.dt-omni-legend .canon-button {
+	padding-inline: 8px;
+	background: var(--canon-muted);
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-regular);
+}
+
+.dt-omni-legend .canon-button-title {
+	white-space: normal;
+}
+
+@media (hover: hover) {
+	.dt-omni-legend .canon-button:hover:enabled {
+		background: var(--canon-accent-bg);
+		color: var(--canon-foreground);
+	}
+}
+
+.dt-omni-pick {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.dt-omni-file {
+	display: flex;
+	align-items: stretch;
+}
+
+.dt-omni-file-body {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	padding: var(--canon-panel-padding);
+	gap: 10px;
+}
+
+.dt-omni-file-body .dt-icon {
+	width: 20px;
+	height: 20px;
+	flex: none;
+	color: var(--canon-primary);
+}
+
+.dt-omni-file-name {
+	overflow: hidden;
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-bold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dt-omni-file-meta {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	white-space: nowrap;
+}
+
+.dt-omni-file .dt-omni-clear {
+	margin-left: auto;
+	padding-inline: 20px;
+	border-left: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-muted);
+}
+
+.dt-omni-answers {
+	border: var(--canon-frame) solid var(--canon-border);
+	border-top: 0;
+	background: var(--canon-card);
+}
+
+.dt-omni-row {
+	display: flex;
+	min-height: var(--canon-control-height);
+	box-sizing: border-box;
+	align-items: center;
+	padding: 6px var(--canon-panel-padding);
+	border-top: var(--canon-hairline) solid var(--canon-border);
+	font-size: var(--canon-text-subheadline);
+	gap: 10px;
+}
+
+.dt-omni-row > .dt-icon {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	color: var(--canon-primary);
+}
+
+.dt-omni-row-name {
+	font-weight: var(--canon-weight-bold);
+	white-space: nowrap;
+}
+
+.dt-omni-row-val {
+	overflow: hidden;
+	margin-left: auto;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dt-omni-swatches {
+	display: flex;
+	min-width: 0;
+	margin-left: auto;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-border);
+	gap: var(--canon-hairline);
+}
+
+.dt-omni-swatches i {
+	display: block;
+	width: 18px;
+	min-width: 6px;
+	flex: 0 1 auto;
+	height: 18px;
+}
+
+.dt-omni-thumb {
+	width: 40px;
+	height: 40px;
+	margin-left: auto;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-background);
+}
+
+.dt-omni-open {
+	display: flex;
+	min-width: 32px;
+	min-height: 32px;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	color: var(--canon-muted-foreground);
+}
+
+.dt-omni-open .dt-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.dt-omni-open:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+@media (hover: hover) {
+	.dt-omni-open:hover {
+		color: var(--canon-foreground);
+	}
+}
+
+.dt-omni-artbar {
+	display: flex;
+	min-height: 22px;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 6px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.dt-omni-artist {
+	color: inherit;
+	text-decoration: none;
+}
+
+.dt-omni-shuffle {
+	display: inline-flex;
+	align-items: center;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	cursor: pointer;
+	font: inherit;
+	gap: 6px;
+}
+
+.dt-omni-shuffle .dt-icon {
+	width: 12px;
+	height: 12px;
+}
+
+@media (hover: hover) {
+	.dt-omni-artist:hover,
+	.dt-omni-shuffle:hover {
+		color: var(--canon-foreground);
+	}
+
+	.dt-omni-artist:hover {
+		text-decoration: underline;
+	}
+}
+
+.dt-section {
+	margin-bottom: 36px;
+}
+
+.dt-section-title {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.dt-section-count {
+	font-family: var(--canon-mono-font);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-regular);
+}
+
+.dt-omni-catalogue.is-dimmed {
+	opacity: 0.45;
+}

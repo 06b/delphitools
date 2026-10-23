@@ -1,401 +1,568 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import Icon from 'delphitools-v2/components/icon';
-import { colourFromUrl } from 'delphitools-v2/lib/colour-query';
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourCard from 'delphicanon/components/canon-colour-card';
+import CanonColourControls, {
+	CanonColourSolidState,
+} from 'delphicanon/components/canon-colour-controls';
+import CanonColourNotationInput from 'delphicanon/components/canon-colour-notation-input';
+import CanonColourSolid from 'delphicanon/components/canon-colour-solid';
+import CanonColourStrip from 'delphicanon/components/canon-colour-strip';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSplit from 'delphicanon/components/canon-split';
+import press from 'delphicanon/modifiers/canon-press';
 import {
+	contrastFigure,
 	contrastRatio,
-	hexToRgb,
-	rgbToHex,
-	rgbToHsl,
-	hslToRgb,
-	luminance,
-} from 'delphitools-v2/lib/colour-maths';
+	hex,
+	parseHex,
+	type Rgb,
+} from 'delphicanon/lib/colour';
+import { solidSpaces, type SolidPoint } from 'delphicanon/lib/colour-space';
+import { springEasing } from 'delphicanon/lib/motion';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { colourFromQuery } from 'delphitools-v2/lib/colour-query';
+import { getColourName } from 'delphitools-v2/lib/colour-names';
 import type ColourNotationService from 'delphitools-v2/services/colour-notation';
+import {
+	kitFormat,
+	readColour,
+} from 'delphitools-v2/components/tools/colour-atlas/atlas';
+import {
+	suggest,
+	targets,
+	type Target,
+} from 'delphitools-v2/components/tools/contrast-checker/contrast';
+import Specimen, {
+	specimenHeight,
+} from 'delphitools-v2/components/tools/contrast-checker/specimen';
+import {
+	Lamps,
+	Scale,
+} from 'delphitools-v2/components/tools/contrast-checker/verdict';
+import './contrast-checker/contrast-checker.css';
 
-// wcag 2.1 thresholds
-const AA_NORMAL = 4.5;
-const AA_LARGE = 3;
-const AAA_NORMAL = 7;
-const AAA_LARGE = 4.5;
+const Flip = <template><IconSvg @name="arrow-left-right" /></template>;
+const Wand = <template><IconSvg @name="wand-sparkles" /></template>;
 
-const HEX = /^#[0-9a-f]{6}$/i;
+/** Changes closer together than this follow at once, as a drag; ContrastCheckerViewController's 0.12 s. */
+const followMs = 120;
 
-function isHex(value: string): boolean {
-	return HEX.test(value);
+// the channel titles beside the sliders truncate at the 340 px default
+const sidebarWidth = 400;
+
+// stacked, the band keeps the figure and its padding
+const collapsedBand = 104;
+
+const wellsStyle = htmlSafe(`--contrast-well-spring: ${springEasing(0.8)}`);
+
+const swatch = (colour: Rgb) => htmlSafe(`background: ${hex(colour)}`);
+const pair = (foreground: Rgb, background: Rgb) =>
+	htmlSafe(`color: ${hex(foreground)}; background: ${hex(background)}`);
+const closestName = (colour: Rgb) => getColourName(hex(colour));
+
+/**
+ * The iOS launch arguments as query flags: ?contrastFg= ?contrastBg= (any
+ * notation) ?contrastWell=1 (background) ?contrastSpace=<picker index>
+ * ?contrastLater (background well at 2 s, flip at 3.5 s, first suggestion
+ * at 5 s). ?color= is the web's carried colour, as the foreground.
+ */
+function launchFlags(search: string) {
+	const query = new URLSearchParams(search);
+	const typed = (key: string) => {
+		const text = query.get(key);
+		return text ? readColour(text) : undefined;
+	};
+	const carried = colourFromQuery(search);
+	return {
+		foreground:
+			typed('contrastFg') ??
+			(carried ? readColour(carried) : undefined) ??
+			parseHex('EAEAEA')!,
+		background: typed('contrastBg') ?? parseHex('1A1A2E')!,
+		onBackground: query.get('contrastWell') === '1',
+		space:
+			solidSpaces[Number(query.get('contrastSpace')) || 0] ??
+			'rgb',
+		later: query.has('contrastLater'),
+	};
 }
 
-// searches nearest passing lightness
-function fixContrast(
-	colourToFix: string,
-	reference: string,
-	target: number,
-): string {
-	const rgb = hexToRgb(colourToFix);
-	const refRgb = hexToRgb(reference);
-	if (!rgb || !refRgb) return colourToFix;
-
-	const [h, s] = rgbToHsl(...rgb);
-	const referenceIsLighter = luminance(...rgb) < luminance(...refRgb);
-	const start = referenceIsLighter ? 100 : 0;
-	const step = referenceIsLighter ? -1 : 1;
-
-	for (let i = 0; i <= 100; i++) {
-		const hex = rgbToHex(...hslToRgb(h, s, start + step * i));
-		const ratio = contrastRatio(hex, reference);
-		if (ratio !== null && ratio >= target) return hex;
-	}
-	return colourToFix;
+interface Suggestion {
+	target: Target;
+	candidate?: Rgb;
+	foreground: Rgb;
+	background: Rgb;
+	title: string;
+	detail: string;
+	ratio: string;
 }
 
-interface CheckRow {
-	key: string;
-	level: string;
-	label: string;
-	threshold: string;
-	pass: boolean;
-	markClass: string;
-}
-
-export default class ContrastCheckerTool extends Component {
+/** The port of ContrastCheckerViewController. */
+export default class ContrastChecker extends Component {
 	@service declare colourNotation: ColourNotationService;
 
-	@tracked background = '#1a1a2e';
-	@tracked foreground = colourFromUrl() ?? '#eaeaea';
+	state: CanonColourSolidState;
+	@tracked editsBackground: boolean;
+	/** The well the solid does not edit. */
+	@tracked fixed: Rgb;
+	/** Half turns of the flip icon, one per press. */
+	@tracked flips = 0;
+	#lastPick = 0;
+
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags(window.location.search);
+		this.editsBackground = flags.onBackground;
+		this.fixed = flags.onBackground
+			? flags.foreground
+			: flags.background;
+		// sliced row, rgb blue
+		this.state = new CanonColourSolidState({
+			space: flags.space,
+			colour: flags.onBackground
+				? flags.background
+				: flags.foreground,
+			activeRow: 2,
+		});
+		if (!flags.later) return;
+		const timers = [
+			window.setTimeout(() => this.edit(true), 2000),
+			window.setTimeout(() => this.flip(), 3500),
+			window.setTimeout(() => {
+				const first = this.suggestions.find(
+					(row) => row.candidate,
+				);
+				if (first) this.apply(first);
+			}, 5000),
+		];
+		registerDestructor(this, () =>
+			timers.forEach((timer) => window.clearTimeout(timer)),
+		);
+	}
+
+	get edited(): Rgb {
+		return this.state.colour;
+	}
+
+	get foreground(): Rgb {
+		return this.editsBackground ? this.fixed : this.edited;
+	}
+
+	get background(): Rgb {
+		return this.editsBackground ? this.edited : this.fixed;
+	}
 
 	get ratio() {
 		return contrastRatio(this.foreground, this.background);
 	}
 
-	get ratioLabel() {
-		const ratio = this.ratio;
-		return ratio === null ? '—' : `${ratio.toFixed(2)}:1`;
+	get animated() {
+		return this.state.animated;
 	}
 
-	get verdict() {
-		const ratio = this.ratio;
-		if (ratio === null) return null;
-		if (ratio >= AAA_NORMAL) return 'Excellent';
-		if (ratio >= AA_NORMAL) return 'Good';
-		if (ratio >= AA_LARGE) return 'Acceptable for large text';
-		return 'Poor';
+	get marks() {
+		return [this.fixed];
 	}
 
-	get aaMet() {
-		return this.ratio !== null && this.ratio >= AA_NORMAL;
+	get format() {
+		return kitFormat(this.colourNotation.notation);
 	}
 
-	get aaaMet() {
-		return this.ratio !== null && this.ratio >= AAA_NORMAL;
+	get foregroundText() {
+		return this.colourNotation.format(hex(this.foreground));
 	}
 
-	get rows(): CheckRow[] {
-		const ratio = this.ratio;
-		if (ratio === null) return [];
+	get backgroundText() {
+		return this.colourNotation.format(hex(this.background));
+	}
+
+	get wells() {
 		return [
 			{
-				key: 'aa-normal',
-				level: 'AA',
-				label: 'Normal text',
-				threshold: '4.5:1',
-				pass: ratio >= AA_NORMAL,
+				title: 'Foreground',
+				colour: this.foreground,
+				background: false,
 			},
 			{
-				key: 'aa-large',
-				level: 'AA',
-				label: 'Large text',
-				threshold: '3:1',
-				pass: ratio >= AA_LARGE,
+				title: 'Background',
+				colour: this.background,
+				background: true,
 			},
-			{
-				key: 'aaa-normal',
-				level: 'AAA',
-				label: 'Normal text',
-				threshold: '7:1',
-				pass: ratio >= AAA_NORMAL,
-			},
-			{
-				key: 'aaa-large',
-				level: 'AAA',
-				label: 'Large text',
-				threshold: '4.5:1',
-				pass: ratio >= AAA_LARGE,
-			},
-		].map((row) => ({
-			...row,
-			markClass: `dt-contrast-mark ${row.pass ? 'is-pass' : 'is-fail'}`,
+		].map((well) => ({
+			...well,
+			hex: hex(well.colour),
+			swatch: swatch(well.colour),
+			selected: well.background === this.editsBackground,
 		}));
 	}
 
-	get backgroundSwatch() {
-		return isHex(this.background) ? this.background : '#000000';
+	get suggestions(): Suggestion[] {
+		const { foreground, background } = this;
+		return targets.map((target) => {
+			const candidate = suggest(
+				target,
+				foreground,
+				background,
+			);
+			const [moving, fixed] = target.background
+				? [background, foreground]
+				: [foreground, background];
+			const shown = candidate ?? moving;
+			const met =
+				contrastRatio(foreground, background) >=
+				target.ratio;
+			return {
+				target,
+				candidate,
+				foreground: target.background
+					? foreground
+					: shown,
+				background: target.background
+					? shown
+					: background,
+				title: target.background
+					? 'Background'
+					: 'Foreground',
+				detail: `${target.level} · ${hex(shown)}`,
+				ratio: candidate
+					? `${contrastFigure(contrastRatio(candidate, fixed))}:1`
+					: met
+						? '✓'
+						: '—',
+			};
+		});
 	}
 
-	get foregroundSwatch() {
-		return isHex(this.foreground) ? this.foreground : '#ffffff';
-	}
-
-	get backgroundStyle() {
-		return htmlSafe(`background-color: ${this.backgroundSwatch}`);
-	}
-
-	get foregroundStyle() {
-		return htmlSafe(`background-color: ${this.foregroundSwatch}`);
-	}
-
-	get previewStyle() {
-		return htmlSafe(`background-color: ${this.backgroundSwatch}`);
-	}
-
-	get inkStyle() {
-		return htmlSafe(`color: ${this.foregroundSwatch}`);
-	}
-
-	get backgroundNotation() {
-		return this.inNotation(this.background);
-	}
-
-	get foregroundNotation() {
-		return this.inNotation(this.foreground);
-	}
-
-	inNotation(hex: string) {
-		if (this.colourNotation.notation === 'hex') return null;
-		if (!isHex(hex)) return null;
-		return this.colourNotation.format(hex);
-	}
-
-	setBackground = (event: Event) => {
-		this.background = (event.target as HTMLInputElement).value;
+	/** The solid's pick: one after another within 120 ms is a drag and follows at once. */
+	pick = (point: SolidPoint) => {
+		const now = performance.now();
+		const eases = now - this.#lastPick > followMs;
+		this.#lastPick = now;
+		this.state.setPoint(point, eases);
 	};
 
-	setForeground = (event: Event) => {
-		this.foreground = (event.target as HTMLInputElement).value;
+	/** Hands the solid the other well's colour, eased; the edited colour becomes the fixed one. */
+	#trade() {
+		const other = this.fixed;
+		this.fixed = this.edited;
+		this.state.use(other);
+	}
+
+	edit = (background: boolean) => {
+		if (background === this.editsBackground) return;
+		this.editsBackground = background;
+		this.#trade();
 	};
+
+	get flipTurn() {
+		return htmlSafe(`--contrast-flips: ${this.flips}`);
+	}
 
 	flip = () => {
-		const background = this.background;
-		this.background = this.foreground;
-		this.foreground = background;
+		this.flips += 1;
+		this.#trade();
 	};
 
-	fixToAa = () => {
-		this.foreground = fixContrast(
-			this.foreground,
-			this.background,
-			AA_NORMAL,
-		);
+	/** A colour for one well, whichever the solid edits. */
+	put(background: boolean, colour: Rgb) {
+		if (background === this.editsBackground) this.state.use(colour);
+		else this.fixed = colour;
+	}
+
+	apply = (row: Suggestion) => {
+		if (!row.candidate) return;
+		if (row.target.background === this.editsBackground) {
+			this.state.use(row.candidate);
+		} else {
+			this.fixed = row.candidate;
+			this.state.animated = true;
+		}
 	};
 
-	fixToAaa = () => {
-		this.foreground = fixContrast(
-			this.foreground,
-			this.background,
-			AAA_NORMAL,
+	useForeground = (colour: Rgb) => this.put(false, colour);
+
+	useBackground = (colour: Rgb) => this.put(true, colour);
+
+	parseForeground = (text: string) => {
+		const colour = readColour(text);
+		if (colour) this.put(false, colour);
+		return colour !== undefined;
+	};
+
+	parseBackground = (text: string) => {
+		const colour = readColour(text);
+		if (colour) this.put(true, colour);
+		return colour !== undefined;
+	};
+
+	// the web fields answered every keystroke; the kit input waits 400 ms
+	typeLive = (background: boolean, event: Event) => {
+		const colour = readColour(
+			(event.target as HTMLInputElement).value,
 		);
+		if (colour) this.put(background, colour);
+	};
+
+	// a click places the caret after focus, so select on the next frame
+	focusField = (background: boolean, event: FocusEvent) => {
+		this.edit(background);
+		const field = event.target;
+		if (field instanceof HTMLInputElement)
+			requestAnimationFrame(() => field.select());
 	};
 
 	<template>
-		<div class="dt-contrast">
-			<div class="dt-contrast-inputs">
-				<div class="dt-contrast-row">
-					<span class="dt-contrast-swatch">
+		<CanonSplit
+			class="contrast-checker
+				{{unless
+					this.animated
+					'contrast-checker--follows'
+				}}"
+			@sidebarWidth={{sidebarWidth}}
+			@collapsesTo={{collapsedBand}}
+		>
+			<:banner>
+				<CanonCanvas @height={{specimenHeight}}>
+					<Specimen
+						@foreground={{this.foreground}}
+						@background={{this.background}}
+						@ratio={{this.ratio}}
+						@animated={{this.animated}}
+					/>
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				<CanonRows @framed={{true}}>
+					<CanonRow
+						class="contrast-field"
+						@title="Foreground"
+						@form="stacked"
+						as |titleId|
+					>
+						<CanonColourNotationInput
+							class="contrast-input"
+							@colour={{this.foreground}}
+							@text={{this.foregroundText}}
+							@onColour={{this.useForeground}}
+							@parse={{this.parseForeground}}
+							@labelledBy={{titleId}}
+							{{on
+								"input"
+								(fn
+									this.typeLive
+									false
+								)
+							}}
+							{{on
+								"focusin"
+								(fn
+									this.focusField
+									false
+								)
+							}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="contrast-field"
+						@title="Background"
+						@form="stacked"
+						as |titleId|
+					>
+						<CanonColourNotationInput
+							class="contrast-input"
+							@colour={{this.background}}
+							@text={{this.backgroundText}}
+							@onColour={{this.useBackground}}
+							@parse={{this.parseBackground}}
+							@labelledBy={{titleId}}
+							{{on
+								"input"
+								(fn
+									this.typeLive
+									true
+								)
+							}}
+							{{on
+								"focusin"
+								(fn
+									this.focusField
+									true
+								)
+							}}
+						/>
+					</CanonRow>
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<div
+						class="contrast-wells"
+						style={{wellsStyle}}
+					>
+						{{#each this.wells as |well|}}
+							<button
+								type="button"
+								class="contrast-well
+									{{if
+										well.selected
+										'contrast-well--on'
+									}}"
+								aria-pressed={{if
+									well.selected
+									"true"
+									"false"
+								}}
+								aria-label="{{well.title}} {{well.hex}}"
+								{{press}}
+								{{on
+									"click"
+									(fn
+										this.edit
+										well.background
+									)
+								}}
+							>
+								<span
+									class="contrast-well-swatch"
+									style={{well.swatch}}
+								></span>
+								<span
+									class="contrast-well-text"
+								>
+									<span
+										class="contrast-well-title"
+									>{{well.title}}</span>
+									<span
+										class="contrast-well-hex"
+									>{{well.hex}}</span>
+								</span>
+							</button>
+						{{/each}}
+						<CanonButton
+							class="contrast-flip"
+							style={{this.flipTurn}}
+							@kind="cell"
+							@icon={{Flip}}
+							@label="Flip"
+							@onClick={{this.flip}}
+						/>
 						<span
-							style={{this.backgroundStyle}}
-							aria-hidden="true"
+							class="contrast-wells-indicator
+								{{if
+									this.editsBackground
+									'contrast-wells-indicator--end'
+								}}"
 						></span>
-						<input
-							type="color"
-							value={{this.backgroundSwatch}}
-							aria-label="Pick background"
-							{{on
-								"input"
-								this.setBackground
-							}}
-						/>
-					</span>
-					<span class="dt-contrast-field">
-						<span
-							class="dt-contrast-label"
-						>Background</span>
-						<input
-							type="text"
-							class="dt-contrast-hex"
-							value={{this.background}}
-							placeholder="#1a1a2e"
-							aria-label="Background"
-							{{on
-								"input"
-								this.setBackground
-							}}
-						/>
-						{{#if this.backgroundNotation}}
-							<span
-								class="dt-contrast-alt"
-							>{{this.backgroundNotation}}</span>
-						{{/if}}
-					</span>
-				</div>
-
-				<div class="dt-contrast-row">
-					<span class="dt-contrast-swatch">
-						<span
-							style={{this.foregroundStyle}}
-							aria-hidden="true"
-						></span>
-						<input
-							type="color"
-							value={{this.foregroundSwatch}}
-							aria-label="Pick foreground"
-							{{on
-								"input"
-								this.setForeground
-							}}
-						/>
-					</span>
-					<span class="dt-contrast-field">
-						<span
-							class="dt-contrast-label"
-						>Foreground</span>
-						<input
-							type="text"
-							class="dt-contrast-hex"
-							value={{this.foreground}}
-							placeholder="#eaeaea"
-							aria-label="Foreground"
-							{{on
-								"input"
-								this.setForeground
-							}}
-						/>
-						{{#if this.foregroundNotation}}
-							<span
-								class="dt-contrast-alt"
-							>{{this.foregroundNotation}}</span>
-						{{/if}}
-					</span>
-				</div>
-			</div>
-
-			<div class="segmented dt-contrast-actions">
-				<button type="button" {{on "click" this.flip}}>
-					<Icon @name="arrow-up-down" />
-					Flip
-				</button>
-				<button
-					type="button"
-					disabled={{this.aaMet}}
-					{{on "click" this.fixToAa}}
-				>
-					<Icon @name="wand-2" />
-					Fix to AA
-				</button>
-				<button
-					type="button"
-					disabled={{this.aaaMet}}
-					{{on "click" this.fixToAaa}}
-				>
-					<Icon @name="wand-2" />
-					Fix to AAA
-				</button>
-			</div>
-
-			<div class="dt-contrast-ratio">
-				<span class="dt-contrast-label">Contrast Ratio</span>
-				<span
-					class="dt-contrast-ratio-value"
-				>{{this.ratioLabel}}</span>
-				{{#if this.verdict}}
-					<span
-						class="dt-contrast-verdict"
-					>{{this.verdict}}</span>
-				{{/if}}
-			</div>
-
-			<div class="dt-contrast-block">
-				<div class="dt-contrast-head">
-					<span
-						class="dt-contrast-heading"
-					>Preview</span>
-				</div>
-				<div
-					class="dt-contrast-preview"
-					style={{this.previewStyle}}
-				>
-					<p
-						class="dt-contrast-large"
-						style={{this.inkStyle}}
-					>Large Text (24px+)</p>
-					<p
-						class="dt-contrast-normal"
-						style={{this.inkStyle}}
-					>Normal text at 16px. The quick brown
-						fox jumps over the lazy dog.</p>
-					<p
-						class="dt-contrast-small"
-						style={{this.inkStyle}}
-					>Small text at 14px for fine print and
-						captions.</p>
-				</div>
-			</div>
-
-			{{#if this.rows}}
-				<div class="dt-contrast-block">
-					<div class="dt-contrast-head is-ruled">
-						<span
-							class="dt-contrast-heading"
-						>WCAG 2.1 Compliance</span>
 					</div>
-					{{#each this.rows key="key" as |row|}}
-						<div class="dt-contrast-check">
+					<div class="contrast-solid">
+						<CanonColourSolid
+							class="contrast-solid-picture"
+							@space={{this.state.space}}
+							@point={{this.state.point}}
+							@animated={{this.state.animated}}
+							@sliceAxis={{this.state.sliceAxis}}
+							@isOrtho={{this.state.isOrtho}}
+							@showsWhole={{this.state.showsWhole}}
+							@marks={{this.marks}}
+							@onChange={{this.pick}}
+							@closestName={{closestName}}
+						/>
+						<CanonColourStrip
+							@colour={{this.edited}}
+							@nameOf={{getColourName}}
+							@format={{this.format}}
+						/>
+					</div>
+					<CanonColourControls
+						@state={{this.state}}
+						@hidesNotation={{true}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Contrast ratio" />
+					<Scale @ratio={{this.ratio}} />
+					<Lamps @ratio={{this.ratio}} />
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Suggestions" />
+					{{#each this.suggestions as |row|}}
+						<button
+							type="button"
+							class="contrast-suggestion"
+							disabled={{unless
+								row.candidate
+								true
+							}}
+							aria-label="{{row.title}} {{row.target.level}}, {{row.detail}}, {{row.ratio}}"
+							{{press}}
+							{{on
+								"click"
+								(fn
+									this.apply
+									row
+								)
+							}}
+						>
 							<span
-								class="dt-contrast-level"
-							>{{row.level}}</span>
+								class="contrast-suggestion-preview"
+								style={{pair
+									row.foreground
+									row.background
+								}}
+								aria-hidden="true"
+							>Aa</span>
 							<span
-								class="dt-contrast-desc"
+								class="contrast-suggestion-cell"
 							>
 								<span
-								>{{row.label}}</span>
+									class="contrast-suggestion-text"
+								>
+									<span
+										class="contrast-suggestion-title"
+									>{{row.title}}</span>
+									<span
+										class="contrast-suggestion-detail"
+									>{{row.detail}}</span>
+								</span>
 								<span
-									class="dt-contrast-threshold"
-								>{{row.threshold}}</span>
+									class="contrast-suggestion-ratio"
+								>{{row.ratio}}</span>
+								{{#if
+									row.candidate
+								}}
+									<span
+										class="contrast-suggestion-glyph"
+										aria-hidden="true"
+									><Wand
+										/></span>
+								{{/if}}
 							</span>
-							<span
-								class={{row.markClass}}
-							>
-								<Icon
-									@name={{if
-										row.pass
-										"check"
-										"x"
-									}}
-								/>
-							</span>
-						</div>
+						</button>
 					{{/each}}
+				</CanonRows>
+				<div class="contrast-cards">
+					<CanonColourCard
+						@colour={{this.foreground}}
+						@name="Foreground"
+						@primaryFormat={{this.format}}
+					/>
+					<CanonColourCard
+						@colour={{this.background}}
+						@name="Background"
+						@primaryFormat={{this.format}}
+					/>
 				</div>
-			{{/if}}
-
-			<div class="dt-contrast-about">
-				<span class="dt-contrast-about-title">About WCAG
-					Contrast Requirements</span>
-				<ul>
-					<li><strong>AA Normal:</strong>
-						4.5:1 minimum for text smaller
-						than 18pt (or 14pt bold)</li>
-					<li><strong>AA Large:</strong>
-						3:1 minimum for text 18pt+ (or
-						14pt+ bold)</li>
-					<li><strong>AAA Normal:</strong>
-						7:1 minimum for enhanced
-						accessibility</li>
-					<li><strong>AAA Large:</strong>
-						4.5:1 minimum for large text
-						enhanced accessibility</li>
-				</ul>
-			</div>
-		</div>
+			</:main>
+		</CanonSplit>
 	</template>
 }

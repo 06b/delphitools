@@ -1,0 +1,226 @@
+.masker-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.masker-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+}
+
+.masker-area > * {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+/* empty, the slot draws the dashed edge */
+.masker-picture--image .masker-checks {
+	outline: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	outline-offset: var(--canon-hairline);
+}
+
+.masker-checks {
+	background: repeating-conic-gradient(
+			var(--canon-muted) 0% 25%,
+			var(--canon-card) 0% 50%
+		)
+		0 0 / 16px 16px;
+}
+
+.masker-ghost {
+	display: block;
+	max-inline-size: none;
+	opacity: 0.22;
+	pointer-events: none;
+	user-select: none;
+}
+
+.masker-canvas {
+	display: block;
+	pointer-events: none;
+}
+
+.masker-edge {
+	overflow: visible;
+	fill: none;
+	pointer-events: none;
+	stroke: var(--canon-primary);
+	stroke-linejoin: round;
+	stroke-width: 1.5px;
+	vector-effect: non-scaling-stroke;
+}
+
+.masker-edge path {
+	vector-effect: non-scaling-stroke;
+}
+
+.masker-picture--image .masker-handle {
+	cursor: grab;
+}
+
+.masker-picture--dragging .masker-handle {
+	cursor: grabbing;
+}
+
+.masker-handle:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+}
+
+.masker-hint-box {
+	pointer-events: none;
+}
+
+.masker-hint {
+	position: absolute;
+	inset-block-end: 10px;
+	inset-inline-start: 50%;
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	padding: 5px 10px 5px 8px;
+	background: color-mix(in srgb, var(--canon-card) 88%, transparent);
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity 200ms;
+	translate: -50% 0;
+}
+
+.masker-hint svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+.masker-hint--shown {
+	opacity: 1;
+}
+
+/* the grey shape shows through the empty slot */
+.masker-slot:not(.media-slot--over) {
+	color: var(--canon-foreground);
+}
+
+.masker-slot.media-slot--over {
+	background: color-mix(in srgb, var(--canon-accent-bg) 70%, transparent);
+}
+
+.masker-loader {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+	color: var(--canon-primary);
+}
+
+.masker-picker {
+	display: grid;
+	gap: var(--canon-frame);
+	background: var(--canon-border);
+	container-type: inline-size;
+}
+
+.masker-cells {
+	display: grid;
+	gap: var(--canon-hairline);
+	grid-template-columns: repeat(7, 1fr);
+}
+
+.masker-cells--variants {
+	grid-template-columns: repeat(6, 1fr);
+}
+
+.masker-filler {
+	display: none;
+}
+
+/* iOS goes wide at 600 px; the web settings pane stops at 600 px, frame and padding included */
+@container (min-width: 540px) {
+	.masker-cells--families {
+		grid-template-columns: repeat(14, 1fr);
+	}
+
+	.masker-cells--variants {
+		grid-template-columns: repeat(12, 1fr);
+	}
+
+	.masker-filler {
+		display: block;
+	}
+}
+
+.masker-cell {
+	box-sizing: border-box;
+	aspect-ratio: 1;
+	padding: 7px;
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	cursor: pointer;
+}
+
+.masker-cell svg {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	fill: currentcolor;
+}
+
+.masker-cell:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+@media (hover: hover) {
+	.masker-cell:not(.masker-filler, .masker-cell--chosen):hover {
+		background: var(--canon-muted);
+	}
+}
+
+.masker-cell--chosen {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.masker-filler {
+	cursor: default;
+}
+
+.masker-custom {
+	display: flex;
+	gap: var(--canon-hairline);
+	background: var(--canon-border);
+}
+
+.masker-custom-file {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+/* the custom svg's alpha cuts the plate or the framed image */
+.masker-custom-cell {
+	flex: none;
+	inline-size: var(--canon-control-height);
+	cursor: default;
+}
+
+.masker-custom-cut {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	background-color: var(--canon-primary-foreground);
+	background-position: center;
+	background-size: cover;
+	mask-position: center;
+	mask-repeat: no-repeat;
+	mask-size: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.masker-hint {
+		transition: none;
+	}
+}

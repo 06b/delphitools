@@ -1,0 +1,126 @@
+@property --scroll-ratio {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 2;
+}
+
+.scroll-picture {
+	--media-slot-icon: 28px;
+
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.scroll-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+	display: grid;
+	place-items: center;
+	container-type: size;
+}
+
+/* images never mirror */
+.scroll-strip {
+	position: relative;
+	display: flex;
+	direction: ltr;
+	inline-size: min(100cqi, 100cqb * var(--scroll-ratio));
+	aspect-ratio: var(--scroll-ratio);
+	outline: var(--canon-frame) solid var(--canon-primary);
+	animation: scroll-in 250ms ease-in-out;
+	transition: --scroll-ratio 500ms var(--scroll-spring, ease-out);
+}
+
+@keyframes scroll-in {
+	from {
+		opacity: 0;
+	}
+}
+
+.scroll-slide {
+	position: relative;
+	flex: 1;
+	min-inline-size: 0;
+	container-type: inline-size;
+}
+
+.scroll-slide img {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	max-inline-size: none;
+	object-fit: fill;
+}
+
+.scroll-chip {
+	position: absolute;
+	inset-block-start: 3px;
+	inset-inline-start: 3px;
+	padding: 1px 4px;
+	background: color-mix(in srgb, var(--canon-card) 85%, transparent);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1.2;
+}
+
+@container (width < 24px) {
+	.scroll-chip {
+		display: none;
+	}
+}
+
+/* iOS: light over dark, so the marks read over any photo */
+.scroll-seam,
+.scroll-edge {
+	position: absolute;
+	inset-block: 0;
+	pointer-events: none;
+	transition: inset-inline-start 500ms var(--scroll-spring, ease-out);
+}
+
+.scroll-seam {
+	inline-size: 1px;
+	translate: -50% 0;
+	background: repeating-linear-gradient(
+		to bottom,
+		#fff 0 4px,
+		rgb(0 0 0 / 60%) 4px 8px
+	);
+}
+
+.scroll-edge {
+	inline-size: 2px;
+	translate: -1px 0;
+	background: repeating-linear-gradient(
+		to right,
+		#fff 0 1px,
+		rgb(0 0 0 / 60%) 1px 2px
+	);
+}
+
+.scroll-figure {
+	position: absolute;
+	inset-block-end: 6px;
+	inset-inline-end: var(--canon-panel-padding);
+}
+
+.scroll-loader {
+	position: absolute;
+	inset-block-start: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+	color: var(--canon-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.scroll-strip,
+	.scroll-seam,
+	.scroll-edge {
+		animation: none;
+		transition: none;
+	}
+}

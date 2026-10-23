@@ -2,6 +2,7 @@ import { getDB } from './db';
 import { getRaster } from './raster-cache';
 import { canvasToBlob } from './blobs';
 import { getPersistenceEnabled } from './persistence-pref';
+import { isIosWebKit } from 'delphitools-v2/lib/platform';
 
 // birefnet buffer limit
 const MODEL_ID = 'briaai/RMBG-1.4';
@@ -104,8 +105,8 @@ function loadPipeline(): NonNullable<typeof pipePromise> {
 			const { pipeline, env } =
 				await import('@huggingface/transformers');
 			env.allowLocalModels = false;
-			// ios cache api fails
-			env.useBrowserCache = false;
+			// ios cache api fails on the model files
+			env.useBrowserCache = !isIosWebKit();
 			const onProgress = (e: DownloadProgress) => {
 				if (
 					e.status !== 'progress' ||

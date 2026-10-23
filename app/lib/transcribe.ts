@@ -1,4 +1,5 @@
 import type { Cue } from 'delphitools-v2/lib/subtitles';
+import { isIosWebKit } from 'delphitools-v2/lib/platform';
 
 export type Mode = 'fast' | 'reasonable' | 'accurate';
 export type Device = 'webgpu' | 'wasm';
@@ -347,8 +348,8 @@ export async function transcribe(
 
 	const { pipeline, env } = await import('@huggingface/transformers');
 	env.allowLocalModels = false;
-	// ios safari cache failure
-	env.useBrowserCache = false;
+	// ios cache api fails on the model files
+	env.useBrowserCache = !isIosWebKit();
 
 	const build = (resolution: ModelResolution) =>
 		loadPipeline(

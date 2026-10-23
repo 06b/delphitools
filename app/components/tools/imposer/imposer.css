@@ -1,0 +1,246 @@
+/* ios PrintSheetView */
+.imp-picture {
+	padding: 10px var(--canon-panel-padding) 16px;
+}
+
+.imp-picture-head {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	min-block-size: 38px;
+	margin-block-end: 14px;
+}
+
+.imp-picture-text {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.imp-legend,
+.imp-detail {
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.imp-legend {
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+}
+
+.imp-detail {
+	margin-block-start: 1px;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+}
+
+.imp-total {
+	flex: none;
+	margin-block-start: -6px;
+}
+
+/* ios maxPaper: 560px */
+.imp-paper {
+	position: relative;
+	display: block;
+	inline-size: min(100%, calc(560px * var(--imp-aspect)));
+	aspect-ratio: var(--imp-aspect);
+	margin-inline: auto;
+	perspective: 2400px;
+}
+
+/* button cannot hold canvas */
+.imp-paper-press {
+	position: absolute;
+	inset: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.imp-paper-press:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: 3px;
+}
+
+.imp-faces {
+	position: absolute;
+	inset: 0;
+	transition: transform 0.5s ease-in-out;
+	transform-style: preserve-3d;
+}
+
+.imp-face {
+	position: absolute;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100%;
+	box-shadow: 0 1px 4px var(--canon-paper-shadow);
+	backface-visibility: hidden;
+}
+
+.imp-faces--y.imp-faces--back {
+	transform: rotateY(-180deg);
+}
+
+.imp-faces--y > .imp-face--back {
+	transform: rotateY(180deg);
+}
+
+.imp-faces--x.imp-faces--back {
+	transform: rotateX(180deg);
+}
+
+.imp-faces--x > .imp-face--back {
+	transform: rotateX(-180deg);
+}
+
+/* ios: cross dissolve */
+@media (prefers-reduced-motion: reduce) {
+	.imp-faces.imp-faces--back,
+	.imp-faces > .imp-face--back {
+		transform: none;
+	}
+
+	.imp-faces {
+		transition: none;
+	}
+
+	.imp-face {
+		backface-visibility: visible;
+		transition: opacity 0.22s;
+	}
+
+	.imp-faces--back > .imp-face:not(.imp-face--back),
+	.imp-faces:not(.imp-faces--back) > .imp-face--back {
+		opacity: 0;
+	}
+}
+
+.imp-hint {
+	display: flex;
+	gap: 4px;
+	align-items: center;
+	justify-content: center;
+	margin: 10px 0 0;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.imp-hint svg {
+	inline-size: 12px;
+	block-size: 12px;
+}
+
+/* ios SignatureBlockView */
+.imp-block {
+	inline-size: 100%;
+	block-size: 100%;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.imp-block-track {
+	position: relative;
+	display: flex;
+	gap: 14px;
+	inline-size: max-content;
+	block-size: 100%;
+	margin-inline: auto;
+	padding-inline: 16px;
+}
+
+.imp-block-signature {
+	display: block;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.imp-block-signature:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.imp-block-signature svg {
+	display: block;
+	overflow: visible;
+}
+
+.imp-block-glue {
+	position: absolute;
+	inset-block-start: 89px;
+	inset-inline: 12px;
+	block-size: 3px;
+	background: var(--canon-foreground);
+	pointer-events: none;
+}
+
+.imp-block-sheet {
+	fill: none;
+	stroke: var(--canon-foreground);
+	stroke-opacity: 0.45;
+	stroke-width: 1;
+}
+
+.imp-block-sheet--lit {
+	stroke: var(--canon-primary);
+	stroke-opacity: 1;
+	stroke-width: 2.5;
+}
+
+.imp-block-label {
+	fill: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 11px;
+	font-weight: var(--canon-weight-semibold);
+	text-anchor: middle;
+	dominant-baseline: hanging;
+}
+
+.imp-block-signature--lit .imp-block-label {
+	fill: var(--canon-primary);
+}
+
+.imp-paper-menu {
+	justify-content: space-between;
+	padding-inline: var(--canon-panel-padding);
+}
+
+.imp-guide-intro,
+.imp-guide-note,
+.imp-guide-steps {
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font-size: var(--canon-text-subheadline);
+	line-height: 1.45;
+}
+
+.imp-guide-intro,
+.imp-guide-note {
+	color: var(--canon-muted-foreground);
+}
+
+.imp-guide-steps {
+	padding-inline-start: calc(var(--canon-panel-padding) + 1.5em);
+}
+
+.imp-guide-steps li + li {
+	margin-block-start: 8px;
+}
+
+.imp-guide-front {
+	font-weight: var(--canon-weight-semibold);
+}
+
+.imp-guide-back {
+	display: block;
+	color: var(--canon-muted-foreground);
+}

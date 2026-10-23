@@ -1,0 +1,299 @@
+.stitch-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	direction: ltr;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	user-select: none;
+	-webkit-touch-callout: none;
+}
+
+.stitch-area {
+	position: absolute;
+	inset: calc(var(--canon-panel-padding) / 2) var(--canon-panel-padding)
+		var(--canon-panel-padding);
+	pointer-events: none;
+}
+
+.stitch-slot {
+	--media-slot-inset: calc(var(--canon-panel-padding) / 2)
+		var(--canon-panel-padding) var(--canon-panel-padding);
+}
+
+.stitch-tile,
+.stitch-blank,
+.stitch-add,
+.stitch-mark,
+.stitch-ghost,
+.stitch-dimension {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.stitch-tile {
+	display: block;
+	overflow: hidden;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+
+.stitch-picture--springs .stitch-tile {
+	transition:
+		left 450ms var(--stitch-spring),
+		top 450ms var(--stitch-spring),
+		width 450ms var(--stitch-spring),
+		height 450ms var(--stitch-spring);
+}
+
+span.stitch-tile {
+	cursor: grab;
+}
+
+.stitch-picture--dragging .stitch-tile {
+	cursor: grabbing;
+}
+
+.stitch-tile-image {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+}
+
+.stitch-tile-image--matte {
+	background: #fff;
+}
+
+.stitch-tile-image img {
+	position: absolute;
+	display: block;
+	max-inline-size: none;
+	pointer-events: none;
+}
+
+.stitch-tile--lifted {
+	opacity: 0.35;
+}
+
+/* the lit ring: a frame of primary over a hairline of background */
+.stitch-tile::after {
+	position: absolute;
+	inset: 0;
+	border: var(--canon-frame) solid var(--canon-primary);
+	box-shadow: inset 0 0 0 calc(var(--canon-frame) + var(--canon-hairline))
+		var(--canon-background);
+	content: "";
+	opacity: 0;
+	pointer-events: none;
+}
+
+.stitch-tile--lit::after {
+	opacity: 1;
+}
+
+.stitch-tile:focus-visible {
+	z-index: 1;
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: calc(-1 * var(--canon-frame));
+}
+
+.stitch-plate {
+	position: absolute;
+	inset-block-start: 3px;
+	inset-inline-start: 3px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-inline-size: 18px;
+	block-size: 16px;
+	box-sizing: border-box;
+	padding: 0 4px;
+	background: color-mix(in srgb, var(--canon-card) 88%, transparent);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1;
+}
+
+.stitch-plate--pin {
+	block-size: 18px;
+	padding: 0;
+}
+
+.stitch-plate--pin svg {
+	inline-size: 10px;
+	block-size: 10px;
+	fill: currentcolor;
+}
+
+.stitch-blank {
+	border: 1.5px dashed
+		color-mix(
+			in srgb,
+			var(--canon-muted-foreground) 60%,
+			transparent
+		);
+	pointer-events: none;
+}
+
+.stitch-add {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	cursor: pointer;
+}
+
+.stitch-add svg {
+	inline-size: 14px;
+	block-size: 14px;
+}
+
+/* targets reach 44 px */
+.stitch-add::before {
+	position: absolute;
+	inset: min(0px, calc((100% - 44px) / 2));
+	content: "";
+}
+
+.stitch-add:focus-visible {
+	outline: var(--canon-frame) solid var(--canon-primary);
+	outline-offset: 1px;
+}
+
+.stitch-add--gutter {
+	border: 1.5px dashed var(--canon-border);
+	background: color-mix(in srgb, var(--canon-card) 50%, transparent);
+	color: var(--canon-muted-foreground);
+}
+
+.stitch-add--gutter:hover {
+	background: var(--canon-accent-bg);
+	color: var(--canon-primary);
+}
+
+.stitch-add--seam,
+.stitch-add--filled {
+	z-index: 2;
+	border-radius: 50%;
+}
+
+.stitch-add--seam {
+	border: var(--canon-hairline) solid var(--canon-primary);
+	background: var(--canon-card);
+	color: var(--canon-primary);
+}
+
+.stitch-add--seam:hover {
+	background: var(--canon-accent-bg);
+}
+
+.stitch-add--filled {
+	border: var(--canon-hairline) solid var(--canon-background);
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.stitch-add--filled svg {
+	stroke-width: 3;
+}
+
+.stitch-mark {
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--canon-primary) 24%, transparent);
+	pointer-events: none;
+}
+
+.stitch-mark--top {
+	border-block-start: 3px solid var(--canon-primary);
+}
+
+.stitch-mark--bottom {
+	border-block-end: 3px solid var(--canon-primary);
+}
+
+.stitch-mark--left {
+	border-inline-start: 3px solid var(--canon-primary);
+}
+
+.stitch-mark--right {
+	border-inline-end: 3px solid var(--canon-primary);
+}
+
+.stitch-mark-badge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: min(24px, 100% - 2px);
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+.stitch-mark-badge svg {
+	inline-size: 60%;
+	block-size: 60%;
+	stroke-width: 3;
+}
+
+.stitch-ghost {
+	z-index: 4;
+	overflow: hidden;
+	border: var(--canon-frame) solid var(--canon-primary);
+	box-shadow: 0 6px 10px rgb(0 0 0 / 28%);
+	rotate: 4deg;
+	scale: 1.06;
+	pointer-events: none;
+}
+
+.stitch-ghost img {
+	display: block;
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: cover;
+}
+
+.stitch-ghost--matte img {
+	background: #fff;
+	object-fit: contain;
+}
+
+.stitch-dimension {
+	pointer-events: none;
+}
+
+.stitch-reading {
+	position: absolute;
+	overflow: hidden;
+	inline-size: 1px;
+	block-size: 1px;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.stitch-loader {
+	position: absolute;
+	inset-block-end: var(--canon-panel-padding);
+	inset-inline-end: var(--canon-panel-padding);
+}
+
+.stitch-point {
+	position: absolute;
+	inline-size: 0;
+	block-size: 0;
+	pointer-events: none;
+}
+
+/* the empty strip: a blank sheet, no number */
+@media (prefers-reduced-motion: reduce) {
+	.stitch-picture--springs .stitch-tile {
+		transition: none;
+	}
+}

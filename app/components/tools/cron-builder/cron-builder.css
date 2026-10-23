@@ -1,0 +1,353 @@
+.cron-builder {
+	--cron-rail: 36px;
+	--cron-rail-gap: 10px;
+}
+
+/* the expression is the main field: primary height; its size comes from its length */
+.cron-builder .canon-text-cell.cron-expression {
+	inline-size: 100%;
+	min-block-size: var(--canon-primary-height);
+	padding-inline: var(--canon-panel-padding);
+	font-family: var(--canon-mono-font);
+	font-weight: var(--canon-weight-medium);
+}
+
+/* field rows */
+.cron-field {
+	display: flex;
+	gap: var(--canon-hairline);
+	min-block-size: calc(var(--canon-row-height) + 4px);
+	background: var(--canon-border);
+}
+
+.cron-field-face {
+	display: flex;
+	flex: 1 1 auto;
+	gap: 8px;
+	align-items: center;
+	min-inline-size: 0;
+	padding: 8px 12px 8px var(--canon-panel-padding);
+	border: 0;
+	background: var(--canon-card);
+	color: var(--canon-foreground);
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+}
+
+@media (hover: hover) {
+	.cron-field-face:hover {
+		background: color-mix(
+			in srgb,
+			var(--canon-accent-bg) 60%,
+			var(--canon-card)
+		);
+	}
+}
+
+.cron-field-face:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -2px;
+}
+
+.cron-field--open .cron-field-face {
+	background: var(--canon-accent-bg);
+}
+
+.cron-field-words {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 1px;
+	min-inline-size: 0;
+}
+
+.cron-field-name {
+	font-size: var(--canon-text-body);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.cron-field--open .cron-field-name {
+	color: var(--canon-primary);
+}
+
+.cron-field-detail {
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cron-field--failed .cron-field-detail,
+.cron-builder .cron-field--failed .cron-field-source {
+	color: var(--canon-destructive);
+}
+
+.cron-field-chevron {
+	display: flex;
+	inline-size: 12px;
+	color: var(--canon-muted-foreground);
+}
+
+.cron-field-chevron svg {
+	inline-size: 12px;
+	block-size: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.cron-field-chevron {
+		transition: transform 0.25s ease-in-out;
+	}
+}
+
+.cron-field--open .cron-field-chevron {
+	transform: rotate(180deg);
+}
+
+.cron-builder .canon-text-cell.cron-field-source {
+	flex: none;
+	inline-size: 132px;
+	font-family: var(--canon-mono-font);
+	font-size: 17px;
+	font-weight: var(--canon-weight-medium);
+}
+
+.cron-field-panel {
+	display: contents;
+}
+
+/* schedule */
+.cron-sentence {
+	margin: 0;
+	padding: 12px var(--canon-panel-padding);
+	background: var(--canon-card);
+	font-size: var(--canon-text-body);
+}
+
+.cron-builder .cron-canonical .canon-value-line-value {
+	font-family: var(--canon-mono-font);
+}
+
+/* picture */
+.cron-rails {
+	margin: 0;
+	padding: 12px var(--canon-panel-padding) var(--canon-panel-padding);
+	background: var(--canon-card);
+	container-type: inline-size;
+}
+
+.cron-head {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
+.cron-head-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-inline-size: 0;
+}
+
+.cron-head-caption {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+}
+
+.cron-head-when {
+	font-size: var(--canon-text-subheadline);
+	font-weight: var(--canon-weight-medium);
+}
+
+.cron-head-when--none {
+	color: var(--canon-muted-foreground);
+}
+
+.cron-head-when--never {
+	color: var(--canon-destructive);
+}
+
+.cron-rail-list {
+	position: relative;
+	display: grid;
+	gap: var(--cron-rail-gap);
+	margin-block-start: 16px;
+}
+
+.cron-rail {
+	display: grid;
+	grid-template-rows: 14px 18px;
+	gap: 4px;
+	block-size: var(--cron-rail);
+}
+
+.cron-rail-top {
+	display: flex;
+	gap: 12px;
+	justify-content: space-between;
+	min-inline-size: 0;
+	line-height: 14px;
+}
+
+.cron-rail-name {
+	color: var(--canon-muted-foreground);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.cron-rail-detail {
+	overflow: hidden;
+	max-inline-size: 60%;
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.cron-rail--chosen :is(.cron-rail-name, .cron-rail-detail) {
+	color: var(--canon-primary);
+}
+
+.cron-rail--failed :is(.cron-rail-name, .cron-rail-detail) {
+	color: var(--canon-destructive);
+}
+
+.cron-cells {
+	display: grid;
+	grid-auto-columns: 1fr;
+	grid-auto-flow: column;
+	gap: 2px;
+	background: var(--canon-card);
+}
+
+.cron-rail--minute .cron-cells {
+	gap: 1px;
+}
+
+.cron-rail--blank .cron-cells {
+	outline: var(--canon-hairline) dashed var(--canon-muted-foreground);
+	outline-offset: -1px;
+}
+
+.cron-rail--failed .cron-cells {
+	outline-color: var(--canon-destructive);
+}
+
+.cron-cell {
+	display: grid;
+	place-items: center;
+	min-inline-size: 0;
+	overflow: hidden;
+	color: var(--canon-muted-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 1;
+}
+
+.cron-cell--off {
+	background: var(--canon-muted);
+}
+
+.cron-cell--kept {
+	background: var(--canon-foreground);
+	color: var(--canon-card);
+}
+
+.cron-cell--next {
+	background: var(--canon-primary);
+	color: var(--canon-primary-foreground);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.cron-cell {
+		transition:
+			background-color 0.2s,
+			color 0.2s;
+	}
+}
+
+/* labels only where every one fits: numbers, short names, then initials */
+.cron-cell-long,
+.cron-cell-short {
+	display: none;
+}
+
+@container (min-width: 1100px) {
+	.cron-rail--minute .cron-cell-long {
+		display: block;
+	}
+}
+
+@container (min-width: 400px) {
+	.cron-rail--hour .cron-cell-long {
+		display: block;
+	}
+}
+
+@container (min-width: 520px) {
+	.cron-rail--dom .cron-cell-long {
+		display: block;
+	}
+}
+
+@container (min-width: 120px) {
+	.cron-rail--month .cron-cell-short,
+	.cron-rail--dow .cron-cell-short {
+		display: block;
+	}
+}
+
+@container (min-width: 330px) {
+	.cron-rail--month .cron-cell-short {
+		display: none;
+	}
+
+	.cron-rail--month .cron-cell-long {
+		display: block;
+	}
+}
+
+@container (min-width: 200px) {
+	.cron-rail--dow .cron-cell-short {
+		display: none;
+	}
+
+	.cron-rail--dow .cron-cell-long {
+		display: block;
+	}
+}
+
+/* cron fires on either day rail: a bracket from day to weekday */
+.cron-either {
+	position: absolute;
+	inset-block-start: calc(
+		2 * (var(--cron-rail) + var(--cron-rail-gap)) + 27px
+	);
+	inset-inline-start: -8px;
+	inline-size: 6px;
+	block-size: calc(2 * (var(--cron-rail) + var(--cron-rail-gap)));
+	border: 1.5px solid var(--canon-primary);
+	border-inline-end: 0;
+	color: transparent;
+	font-size: 0;
+}
+
+.cron-either::after {
+	content: "or";
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: -1.5px;
+	padding: 0 3px;
+	background: var(--canon-card);
+	color: var(--canon-primary);
+	font-size: var(--canon-text-caption);
+	font-weight: var(--canon-weight-semibold);
+	transform: translate(-50%, -50%) rotate(-90deg);
+}

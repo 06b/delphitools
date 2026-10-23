@@ -91,7 +91,7 @@ check(
 	'Greatest Hits highlights Substrata and Workflows, links Workflows to its page, no bar',
 	await page.evaluate(() => {
 		const hits = [...document.querySelectorAll('.dt-section')].find((s) =>
-			/Greatest/.test(s.querySelector('.dt-section-title')?.textContent ?? ''),
+			/Greatest/.test(s.querySelector('.canon-jump-heading')?.textContent ?? ''),
 		);
 		const cells = [...(hits?.querySelectorAll('.dt-cell.is-highlight') ?? [])];
 		return (
@@ -107,7 +107,7 @@ check(
 	await page.evaluate(
 		() =>
 			document.querySelectorAll('.dt-wf-row').length >= 15 &&
-			document.querySelector('.dt-header h1')?.textContent?.trim() === 'Workflows' &&
+			document.querySelector('.dt-bar-title')?.textContent?.trim() === 'Workflows' &&
 			[...document.querySelectorAll('.dt-wf-th')].map((h) => h.textContent?.trim()).join() ===
 				'Workflow,First,,Then...,Finally,,' &&
 			document.querySelectorAll('.dt-wf-row').length >= 15 &&
@@ -141,13 +141,13 @@ await page.evaluate(async () => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await page.waitForSelector('.dt-pi-image', { timeout: 10000 });
+await page.waitForSelector('.media-crop-image', { timeout: 10000 });
 check(
 	'the tool control reads Pass along inside a flow',
-	(await buttonText('.dt-pi-btn.is-trailing.is-primary')) === 'Pass along',
-	await buttonText('.dt-pi-btn.is-trailing.is-primary'),
+	(await buttonText('.pi-save')) === 'Pass along',
+	await buttonText('.pi-save'),
 );
-await page.click('.dt-pi-btn.is-trailing.is-primary');
+await page.click('.pi-save');
 const ghostSeen = await page
 	.waitForSelector('.dt-flow-ghost', { timeout: 3000 })
 	.then(() => true)
@@ -155,7 +155,7 @@ const ghostSeen = await page
 await page.waitForFunction(() => location.pathname === '/tools/metadata-stripper', {
 	timeout: 15000,
 });
-await page.waitForSelector('.dt-strip-name', { timeout: 15000 });
+await page.waitForSelector('.ms-source .canon-row-title', { timeout: 15000 });
 await flowSettled();
 state = await barState();
 check(
@@ -170,7 +170,7 @@ check(
 await page.reload({ waitUntil: 'networkidle2' });
 await page.waitForSelector('.dt-flow', { timeout: 15000 });
 const restored = await page
-	.waitForSelector('.dt-strip-name', { timeout: 15000 })
+	.waitForSelector('.ms-source .canon-row-title', { timeout: 15000 })
 	.then(() => true)
 	.catch(() => false);
 state = await barState();
@@ -206,8 +206,8 @@ await other.evaluate(async () => {
 		new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }),
 	);
 });
-await other.waitForSelector('.dt-pi-image', { timeout: 10000 });
-await other.click('.dt-pi-btn.is-trailing.is-primary');
+await other.waitForSelector('.media-crop-image', { timeout: 10000 });
+await other.click('.pi-save');
 await other.waitForFunction(() => location.pathname === '/tools/metadata-stripper', {
 	timeout: 15000,
 });
@@ -254,7 +254,7 @@ check(
 
 await visit(page, '/');
 await startFlow('Colour to gradient');
-await page.$eval('.dt-cc-value', (input) => {
+await page.$eval('.cc-input input', (input) => {
 	const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
 	set.call(input, '#ff0000');
 	input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -272,7 +272,7 @@ await page.waitForFunction(() => location.pathname === '/tools/gradient-genny', 
 });
 await flowSettled();
 state = await barState();
-const firstStop = await page.$eval('input[type="color"]', (input) => input.value);
+const firstStop = await page.$eval('.gg-colour input', (input) => input.value.toLowerCase());
 check(
 	'Next carries the colour as ?color= and the gradient leads with it',
 	state.path === '/tools/gradient-genny?color=ff0000' && firstStop === '#ff0000',
@@ -293,21 +293,21 @@ check(
 await visit(page, '/');
 await startFlow('Extract and normalise');
 await makeClip(page, { audio: true, ms: 1500, name: 'tone.webm' });
-await dropClip(page, '.dt-ax-frame');
+await dropClip(page, '.audio-extractor');
 await page.waitForFunction(
-	() => document.querySelector('.dt-ax-go')?.disabled === false,
+	() => document.querySelector('.media-job-run')?.disabled === false,
 	{ timeout: 15000 },
 );
-await page.click('.dt-ax-go');
-await page.waitForSelector('.dt-ax-out', { timeout: 30000 });
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 });
 check(
 	'a non-final step labels its download control Pass along',
-	(await buttonText('.dt-ax-btn.is-primary')) === 'Pass along',
-	await buttonText('.dt-ax-btn.is-primary'),
+	(await buttonText('.media-job-save')) === 'Pass along',
+	await buttonText('.media-job-save'),
 );
-await page.click('.dt-ax-btn.is-primary');
+await page.click('.media-job-save');
 await page.waitForFunction(
-	() => document.querySelectorAll('.dt-an-cell').length === 4,
+	() => document.querySelectorAll('.an-readings .canon-tiles-tile').length === 4,
 	{ timeout: 20000 },
 );
 await flowSettled();
@@ -317,15 +317,15 @@ check(
 	state.path === '/tools/audio-normaliser' && state.steps.join() === 'done,current',
 	JSON.stringify(state),
 );
-await page.click('.dt-an-go');
-await page.waitForSelector('.dt-an-out', { timeout: 30000 });
+await page.click('.media-job-run');
+await page.waitForSelector('.media-job-save', { timeout: 30000 });
 check(
 	'the last step control reads Pass along too',
-	(await buttonText('.dt-an-btn.is-primary')) === 'Pass along',
-	await buttonText('.dt-an-btn.is-primary'),
+	(await buttonText('.media-job-save')) === 'Pass along',
+	await buttonText('.media-job-save'),
 );
 await captureObjectUrl(page);
-await page.click('.dt-an-btn.is-primary');
+await page.click('.media-job-save');
 await page.waitForSelector('.dt-flow-next.is-done', { timeout: 10000 });
 await page.evaluate(() => {
 	window.__result = undefined;

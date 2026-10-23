@@ -1,0 +1,121 @@
+/* the picture */
+.paper-picture {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 100%;
+	margin: 0;
+	padding: 14px var(--canon-panel-padding) 18px;
+	overflow: hidden;
+	border: 0;
+	border-radius: 0;
+	background: var(--canon-muted);
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+	text-align: start;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	appearance: none;
+}
+
+.paper-picture:focus-visible {
+	outline: 2px solid var(--canon-primary);
+	outline-offset: -4px;
+}
+
+.paper-legend {
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	gap: 2px;
+	min-block-size: 32px;
+	margin-block-end: 16px;
+	padding-inline-end: 110px;
+	font-size: var(--canon-text-footnote);
+	font-weight: var(--canon-weight-bold);
+	line-height: 1.3;
+}
+
+.paper-legend-line {
+	color: var(--paper-slot);
+}
+
+.paper-ratio {
+	position: absolute;
+	inset-block-start: 8px;
+	inset-inline-end: var(--canon-panel-padding);
+}
+
+.paper-area {
+	display: block;
+	flex: 1;
+	min-block-size: 0;
+}
+
+.paper-sheet,
+.paper-guide {
+	position: absolute;
+	box-sizing: border-box;
+	transition-duration: 500ms;
+	transition-property:
+		inset-inline-start, inset-block-start, inline-size, block-size,
+		opacity;
+	transition-timing-function: var(--paper-spring-easing);
+}
+
+.paper-sheet {
+	z-index: 2;
+	border: 1.5px solid var(--paper-slot);
+	background: color-mix(
+		in srgb,
+		var(--paper-slot) var(--paper-slot-fill),
+		transparent
+	);
+}
+
+.paper-sheet--behind {
+	z-index: 1;
+}
+
+.paper-slot-2.paper-sheet,
+.paper-slot-2.paper-guide {
+	border-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.paper-sheet,
+	.paper-guide {
+		transition: none;
+	}
+}
+
+@starting-style {
+	.paper-sheet {
+		opacity: 0;
+	}
+}
+
+.paper-guide {
+	z-index: 0;
+	border: 0 solid var(--paper-slot);
+}
+
+.paper-guide--across {
+	border-block-start-width: 1px;
+}
+
+.paper-guide--upright {
+	border-inline-start-width: 1px;
+}
+
+/* first and large: the typed query drives the lists */
+.paper-sizes .canon-text-cell.paper-find {
+	inline-size: 100%;
+	min-block-size: var(--canon-primary-height);
+	padding-inline: var(--canon-panel-padding);
+	font-size: var(--canon-text-big-number);
+	font-weight: var(--canon-weight-semibold);
+	text-overflow: ellipsis;
+}

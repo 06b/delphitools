@@ -1,121 +1,116 @@
 import { module, test } from 'qunit';
-import { parseColour } from 'delphitools-v2/lib/colour-parse';
+import { hex, parseHex } from 'delphicanon/lib/colour';
+import { solidSpaces, type SolidSpace } from 'delphicanon/lib/colour-space';
 import {
-	convert,
-	formatOutput,
-	FORMATS,
-	type ColourFormat,
-} from 'delphitools-v2/components/tools/colour-converter';
+	colourOf,
+	decimalRgb,
+	fixed,
+	format,
+	pointOf,
+	read,
+	valuesAt,
+	valuesOf,
+} from 'delphitools-v2/components/tools/colour-converter/notation';
 
-const IDS = FORMATS.map((f) => f.id);
+const blue = parseHex('3B82F6')!;
+
+const hexOf = (text: string, space: SolidSpace) => {
+	const values = read(text, space);
+	return values && hex(colourOf(values, space));
+};
 
 module('Unit | Tool | colour-converter', function () {
-	test('reads every format back to the same sRGB triple', function (assert) {
-		const values = convert('hex', '#3b82f6');
-		assert.deepEqual(values?.rgb, [59, 130, 246]);
-
-		for (const id of IDS) {
-			const written = formatOutput(id, values!);
-			const read = parseColour(id, written);
-			assert.deepEqual(
-				read?.map(Math.round),
-				[59, 130, 246],
-				`${id}: ${written}`,
-			);
-		}
-	});
-
-	// oklch hue printed at 1dp; can't pin a saturated colour to the same byte
-	test('round-trips a spread of colours through every format', function (assert) {
-		const hexes = [
-			'#000000',
-			'#ffffff',
-			'#ff0000',
-			'#00ff00',
-			'#0000ff',
-			'#808080',
-			'#fa5f3c',
-			'#1a2744',
-		];
-		for (const hex of hexes) {
-			const values = convert('hex', hex)!;
-			for (const id of IDS) {
-				const again = convert(
-					id,
-					formatOutput(id, values),
-				);
-				const drift = again!.rgb.map((c, i) =>
-					Math.abs(c - values.rgb[i]!),
-				);
-				assert.true(
-					Math.max(...drift) <= 1,
-					`${hex} via ${id} -> ${again?.hex}`,
-				);
-			}
-		}
-	});
-
-	test('accepts the placeholder each format advertises', function (assert) {
-		for (const format of FORMATS) {
-			assert.ok(
-				convert(format.id, format.placeholder),
-				`${format.id}: ${format.placeholder}`,
-			);
-		}
-	});
-
-	test('rejects input that is not three numbers', function (assert) {
-		for (const junk of ['', 'zzz', '1, 2', 'rgb()', '.', '-']) {
-			assert.strictEqual(
-				convert('rgb', junk),
-				null,
-				JSON.stringify(junk),
-			);
-		}
-	});
-
-	// hexToRgb is length-strict; others share the three-number pattern
-	test('rejects three- and eight-digit hex', function (assert) {
-		assert.strictEqual(convert('hex', '#fff'), null);
-		assert.strictEqual(convert('hex', '#3b82f6ff'), null);
-		assert.ok(convert('hex', '3b82f6'), 'bare six-digit is fine');
-	});
-
-	test('clamps out-of-gamut input into sRGB', function (assert) {
-		assert.deepEqual(
-			convert('rgb', '300, -20, 128')?.rgb,
-			[255, 0, 128],
-		);
-	});
-
-	test('formats hue, chroma and lightness to the advertised precision', function (assert) {
-		const values = convert('hex', '#3b82f6')!;
+	test('formats with the web decimals', function (assert) {
 		assert.strictEqual(
-			formatOutput('rgb', values),
+			format(valuesOf(blue, 'rgb'), 'rgb'),
 			'rgb(59, 130, 246)',
 		);
 		assert.strictEqual(
-			formatOutput('rgb-decimal', values),
-			'rgb(0.2314, 0.5098, 0.9647)',
+			format(valuesOf(blue, 'hsl'), 'hsl'),
+			'hsl(217.2, 91.2%, 59.8%)',
 		);
 		assert.strictEqual(
-			formatOutput('hsl', values),
-			'hsl(217.2, 91.2%, 59.8%)',
+			format(valuesOf(blue, 'cmyk'), 'cmyk'),
+			'cmyk(76%, 47%, 0%, 4%)',
+		);
+		assert.strictEqual(
+			decimalRgb([1, 0, 0]),
+			'rgb(1.0000, 0.0000, 0.0000)',
+		);
+		assert.strictEqual(fixed(-0.00001, 2), '0.00');
+	});
+
+	test('reads hex, names, functions and bare numbers', function (assert) {
+		assert.strictEqual(hexOf('59 130 246', 'rgb'), '#3B82F6');
+		assert.strictEqual(hexOf('59, 130, 246', 'rgb'), '#3B82F6');
+		assert.strictEqual(
+			hexOf('rgb(59 130 246 / 50%)', 'oklch'),
+			'#3B82F6',
+		);
+		assert.strictEqual(
+			hexOf('0.2314, 0.5098, 0.9647', 'rgb'),
+			'#3B82F6',
+		);
+		assert.strictEqual(hexOf('#3b82f6', 'lab'), '#3B82F6');
+		assert.strictEqual(hexOf('3b82f6', 'hsl'), '#3B82F6');
+		assert.strictEqual(hexOf('tomato', 'rgb'), '#FF6347');
+		assert.strictEqual(
+			hexOf('oklch(62.31% 0.188 259.8)', 'rgb'),
+			hexOf('0,6231 0,188 259,8', 'oklch'),
+		);
+		assert.strictEqual(
+			hexOf('cmyk(76%, 47%, 0%, 4%)', 'rgb'),
+			hexOf('76 47 0 4', 'cmyk'),
+		);
+		assert.strictEqual(
+			hexOf('hsv(30 80% 90%)', 'rgb'),
+			hexOf('30 80 90', 'hsb'),
 		);
 	});
 
-	test('every format id has a name and a placeholder', function (assert) {
-		const seen = new Set<ColourFormat>();
-		for (const format of FORMATS) {
-			assert.false(
-				seen.has(format.id),
-				`${format.id} is unique`,
+	test('wraps hues', function (assert) {
+		assert.strictEqual(
+			hexOf('hsl(390 100% 50%)', 'rgb'),
+			hexOf('hsl(30 100% 50%)', 'rgb'),
+		);
+		assert.strictEqual(
+			hexOf('-330 100 50', 'hsl'),
+			hexOf('30 100 50', 'hsl'),
+		);
+		assert.strictEqual(read('hsl(390 100% 50%)', 'hsl')?.[0], 30);
+	});
+
+	test('rejects what it cannot read', function (assert) {
+		for (const junk of [
+			'12 34',
+			'nan 1 1',
+			'banana',
+			'',
+			'rgb()',
+			'% 1 2',
+		])
+			assert.strictEqual(read(junk, 'rgb'), undefined, junk);
+	});
+
+	test('round-trips every space', function (assert) {
+		// cmyk rounds to percents
+		for (const space of solidSpaces.filter((s) => s !== 'cmyk')) {
+			const values = valuesOf(blue, space);
+			assert.strictEqual(
+				hexOf(format(values, space), space),
+				'#3B82F6',
+				space,
 			);
-			seen.add(format.id);
-			assert.ok(format.name, `${format.id} has a name`);
-			assert.ok(
-				format.placeholder,
-				`${format.id} has a placeholder`,
+		}
+		for (const space of solidSpaces) {
+			const values = valuesOf(blue, space);
+			const back = valuesAt(pointOf(values, space), space);
+			assert.true(
+				back.every(
+					(v, i) =>
+						Math.abs(v - values[i]!) < 1e-6,
+				),
+				`${space} point`,
 			);
 		}
 	});

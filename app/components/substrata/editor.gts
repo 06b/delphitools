@@ -1,0 +1,757 @@
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
+import { eq } from 'ember-truth-helpers';
+import CanonFigure from 'delphicanon/components/canon-figure';
+import FabricCanvas from 'delphitools-v2/components/substrata/fabric-canvas';
+import Sheets from 'delphitools-v2/components/substrata/pages/sheets';
+import { pageState } from 'delphitools-v2/components/substrata/pages/page-state';
+import SecureContextNotice from 'delphitools-v2/components/substrata/secure-context-notice';
+import EmptyHint from 'delphitools-v2/components/substrata/empty-hint';
+import { Cell, Cells } from 'delphitools-v2/components/substrata/editor/cells';
+import ToolBar from 'delphitools-v2/components/substrata/editor/tool-bar';
+import StatusNote from 'delphitools-v2/components/substrata/editor/status-note';
+import ColourKey from 'delphitools-v2/components/substrata/editor/colour-key';
+import Overlays from 'delphitools-v2/components/substrata/editor/overlays';
+import LayersPanel from 'delphitools-v2/components/substrata/panels/layers';
+import InspectorPanel from 'delphitools-v2/components/substrata/panels/inspector';
+import FxPanel from 'delphitools-v2/components/substrata/panels/fx';
+import ColourTray from 'delphitools-v2/components/substrata/colour/tray';
+import {
+	EDITOR_TOOLS,
+	PANEL_DEFS,
+	chooseTool,
+	currentEditorTool,
+	toolForKey,
+	type EditorTool,
+} from 'delphitools-v2/components/substrata/editor/tools';
+import editorShortcuts from 'delphitools-v2/modifiers/editor-shortcuts';
+import {
+	canRedo,
+	canUndo,
+	getSnapshot,
+	redo,
+	subscribe,
+	undo,
+} from 'delphitools-v2/lib/substrata/doc-store';
+import {
+	editorUi,
+	type EditorPanel,
+} from 'delphitools-v2/lib/substrata/editor-ui';
+import {
+	getActiveSubs,
+	getActiveTool,
+	setActiveSub,
+	subscribeTool,
+} from 'delphitools-v2/lib/substrata/tool';
+import {
+	getZoom,
+	subscribeViewport,
+	viewport,
+} from 'delphitools-v2/lib/substrata/viewport';
+import { sharePanels } from 'delphitools-v2/lib/substrata/rail-share';
+import { isTextEntry } from 'delphitools-v2/lib/text-entry';
+import { TrackedExternal } from 'delphitools-v2/lib/tracked-external';
+import './editor/editor.css';
+
+// iOS EditorLayout metrics, 1 pt = 1 px
+const CELL = 44;
+const FRAME = 2;
+const BOX = CELL + FRAME * 2;
+const PAD = 16;
+const GAP = 8;
+const SEAM = FRAME * 2 + GAP;
+const TAB = 28 + FRAME * 2 - FRAME;
+// iOS phone: compact width, regular height
+const PHONE_WIDTH = 600;
+
+const length = (cells: number, seams = 0) =>
+	cells * CELL + (cells - 1 - seams) + seams * SEAM + FRAME * 2;
+
+const STACK_FULL = length(4);
+const OMNIBAR_FULL = length(EDITOR_TOOLS.length + PANEL_DEFS.length, 1);
+
+const TRAY_SHARE = { short: 0.42, tall: 0.75, full: 1 } as const;
+
+export default class SubstrataEditor extends Component {
+	@tracked width = 1400;
+	@tracked height = 1000;
+
+	doc = new TrackedExternal(subscribe, () => ({
+		doc: getSnapshot(),
+		undo: canUndo(),
+		redo: canRedo(),
+	}));
+	tool = new TrackedExternal(subscribeTool, () => ({
+		tool: getActiveTool(),
+		sub: getActiveSubs()[getActiveTool()],
+	}));
+	zoom = new TrackedExternal(subscribeViewport, getZoom);
+
+	willDestroy() {
+		super.willDestroy();
+		this.doc.unsubscribe();
+		this.tool.unsubscribe();
+		this.zoom.unsubscribe();
+	}
+
+	get phone() {
+		return this.width < PHONE_WIDTH && this.height > this.width;
+	}
+
+	// iOS: when the full omnibar fits in no stretch of the column, one tool
+	// cell blooms and the stack drops redo
+	get compact() {
+		if (this.phone) return true;
+		const room =
+			this.height -
+			PAD * 2 -
+			STACK_FULL -
+			GAP -
+			BOX -
+			GAP -
+			GAP -
+			TAB;
+		return room < OMNIBAR_FULL;
+	}
+
+	get activeTool(): EditorTool {
+		// tool store read for tracking
+		void this.tool.current;
+		return currentEditorTool();
+	}
+
+	get activeToolDef() {
+		return (
+			EDITOR_TOOLS.find((t) => t.id === this.activeTool) ??
+			EDITOR_TOOLS[0]!
+		);
+	}
+
+	get title() {
+		return this.doc.current.doc?.name.trim() || 'Untitled scene';
+	}
+
+	get zoomPercent() {
+		return String(Math.round(this.zoom.current * 100));
+	}
+
+	get trayStyle() {
+		const room = this.height - 220;
+		return htmlSafe(
+			`--sub-tray-max: ${Math.max(CELL, room * TRAY_SHARE[editorUi.trayStop])}px`,
+		);
+	}
+
+	get layoutClass() {
+		if (this.phone) return 'is-phone';
+		const ring = editorUi.ringOpen ? ' is-ringing' : '';
+		return (this.compact ? 'is-compact' : 'is-full') + ring;
+	}
+
+	isToolOn = (id: EditorTool) => this.activeTool === id;
+
+	pick = (id: EditorTool) => {
+		chooseTool(id);
+		editorUi.bloomOpen = false;
+	};
+
+	togglePanel = (id: EditorPanel) => editorUi.toggle(id, this.phone);
+
+	toggleBloom = () => {
+		editorUi.bloomOpen = !editorUi.bloomOpen;
+	};
+
+	// the settings page and the gallery share the drawer
+	openMenu = () => {
+		editorUi.pageOpen = !(
+			editorUi.pageOpen || editorUi.galleryOpen
+		);
+		editorUi.galleryOpen = false;
+	};
+
+	openShare = () => {
+		editorUi.exportOpen = !editorUi.exportOpen;
+	};
+
+	openHelp = () => {
+		editorUi.helpOpen = true;
+	};
+
+	rename = (event: Event) => {
+		const doc = this.doc.current.doc;
+		if (!doc) return;
+		pageState.openRename(
+			{ id: doc.id, name: doc.name },
+			event.currentTarget as HTMLElement,
+		);
+	};
+
+	doUndo = () => undo();
+	doRedo = () => redo();
+	cycleZoom = () => viewport.cycle();
+
+	bloomStyle = (index: number) => {
+		// iOS fan: 125 to 235 degrees around the tool key; the web's seven
+		// tools need a wider radius than iOS's 120 for the cells to clear
+		const count = EDITOR_TOOLS.length;
+		const spread = (110 * Math.PI) / 180;
+		const radius = Math.max(
+			120,
+			((count - 1) * (BOX + 4)) / spread,
+		);
+		const a = ((125 + (110 * index) / (count - 1)) * Math.PI) / 180;
+		const x = Math.cos(a) * radius;
+		const y = Math.sin(a) * radius;
+		return htmlSafe(
+			`--sub-bloom-x: ${x.toFixed(1)}px; --sub-bloom-y: ${y.toFixed(1)}px; --sub-bloom-i: ${count - 1 - index}`,
+		);
+	};
+
+	measure = modifier((root: HTMLElement) => {
+		editorUi.hydrate();
+		// harnesses drive the floating pieces
+		if (import.meta.env.DEV)
+			(window as unknown as Record<string, unknown>)[
+				'__substrataUi'
+			] = editorUi;
+		const ro = new ResizeObserver(() => {
+			this.width = root.clientWidth;
+			this.height = root.clientHeight;
+			this.placeInset(root);
+		});
+		ro.observe(root);
+		// the phone's bar rides on the tray, and a fitted artboard refits
+		// above it (iOS: the canvas area ends above the open panel)
+		let fitted = getZoom();
+		const tray = new ResizeObserver(([entry]) => {
+			const h = entry?.contentRect.height ?? 0;
+			root.style.setProperty(
+				'--sub-tray-h',
+				`${h ? h + GAP : 0}px`,
+			);
+			if (!this.phone) return;
+			requestAnimationFrame(() => {
+				this.placeInset(root);
+				if (Math.abs(getZoom() - fitted) < 1e-3)
+					viewport.fit();
+				fitted = getZoom();
+			});
+		});
+		const rail = root.querySelector<HTMLElement>('.sub-ed-rail');
+		if (rail) tray.observe(rail);
+		const stop = rail ? this.shareRail(rail) : () => {};
+		// the settings page mirrors the frame (data-hand)
+		const hand = new MutationObserver(() => this.placeInset(root));
+		hand.observe(root, { attributeFilter: ['data-hand'] });
+		return () => {
+			ro.disconnect();
+			tray.disconnect();
+			hand.disconnect();
+			stop();
+		};
+	});
+
+	// iOS stackPanels: open panels as tall as their content; when they do
+	// not all fit, the tallest give up room first
+	shareRail = (rail: HTMLElement) => {
+		let frame = 0;
+		const content = new ResizeObserver(() => schedule());
+		const lay = () => {
+			frame = 0;
+			const panels = [
+				...rail.querySelectorAll<HTMLElement>(
+					':scope > .sub-rail-panel',
+				),
+			];
+			content.disconnect();
+			content.observe(rail);
+			for (const p of panels)
+				for (const c of p.querySelectorAll(
+					':scope > .sub-rail-body > *',
+				))
+					content.observe(c);
+			// panels may scroll inside their body; free height reads the
+			// whole content
+			for (const p of panels)
+				p.style.removeProperty('block-size');
+			if (this.phone) return;
+			const naturals = panels.map((p) => p.offsetHeight);
+			const room =
+				rail.clientHeight -
+				GAP * Math.max(0, panels.length - 1);
+			sharePanels(room, naturals).forEach((h, i) =>
+				panels[i]!.style.setProperty(
+					'block-size',
+					`${h}px`,
+				),
+			);
+		};
+		// a row drag moves rows in and out of the list; heights hold until
+		// the pointer lets go
+		let held = false;
+		const schedule = () => {
+			if (!held) frame ||= requestAnimationFrame(lay);
+		};
+		const hold = () => (held = true);
+		const release = () => {
+			if (!held) return;
+			held = false;
+			schedule();
+		};
+		rail.addEventListener('pointerdown', hold, true);
+		window.addEventListener('pointerup', release, true);
+		window.addEventListener('pointercancel', release, true);
+		const children = new MutationObserver(schedule);
+		children.observe(rail, { childList: true, subtree: true });
+		schedule();
+		return () => {
+			cancelAnimationFrame(frame);
+			content.disconnect();
+			children.disconnect();
+			rail.removeEventListener('pointerdown', hold, true);
+			window.removeEventListener('pointerup', release, true);
+			window.removeEventListener(
+				'pointercancel',
+				release,
+				true,
+			);
+		};
+	};
+
+	// the fitted artboard keeps clear of the title, the column and the
+	// settings bar; open panels float over it (iOS artboardArea)
+	placeInset = (root: HTMLElement) => {
+		const area = root.querySelector<HTMLElement>(
+			'.sub-shell-canvas-area',
+		);
+		if (!area) return;
+		const box = area.getBoundingClientRect();
+		const inset = { top: PAD, right: PAD, bottom: PAD, left: PAD };
+		const rect = (sel: string) =>
+			root.querySelector(sel)?.getBoundingClientRect();
+		const title = rect('.sub-ed-title');
+		if (title) inset.top = title.bottom - box.top + PAD;
+		// sides by position: the left hand mirrors the frame (data-hand)
+		const onLeft = (r: DOMRect) =>
+			r.left + r.width / 2 < box.left + box.width / 2;
+		const column = rect('.sub-ed-column');
+		if (column && column.width) {
+			if (onLeft(column))
+				inset.left = column.right - box.left + PAD;
+			else inset.right = box.right - column.left + PAD;
+		}
+		const row = rect('.sub-ed-row');
+		if (row && row.height)
+			inset.bottom = box.bottom - row.top + PAD;
+		const bar = rect('.sub-ed-bar');
+		if (bar && bar.width) {
+			const edge = editorUi.settingsEdge;
+			if (edge === 'bottom')
+				inset.bottom = Math.max(
+					inset.bottom,
+					box.bottom - bar.top + PAD,
+				);
+			else if (edge === 'top')
+				inset.top = Math.max(
+					inset.top,
+					bar.bottom - box.top + PAD,
+				);
+			else if (onLeft(bar))
+				inset.left = Math.max(
+					inset.left,
+					bar.right - box.left + PAD,
+				);
+			else
+				inset.right = Math.max(
+					inset.right,
+					box.right - bar.left + PAD,
+				);
+		}
+		area.dataset['inset'] = [
+			inset.top,
+			inset.right,
+			inset.bottom,
+			inset.left,
+		].join(',');
+	};
+
+	// the open fan or tool column closes on a press elsewhere or Esc
+	bloomClose = modifier((el: HTMLElement) => {
+		const close = () => (editorUi.bloomOpen = false);
+		const onDown = (e: PointerEvent) => {
+			const target = e.target as Element;
+			// the tool key toggles it itself
+			if (
+				!el.contains(target) &&
+				!target.closest('.sub-ed-tools')
+			)
+				close();
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') close();
+		};
+		window.addEventListener('pointerdown', onDown, true);
+		window.addEventListener('keydown', onKey);
+		return () => {
+			window.removeEventListener('pointerdown', onDown, true);
+			window.removeEventListener('keydown', onKey);
+		};
+	});
+
+	toolKeys = modifier(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (
+				e.defaultPrevented ||
+				e.metaKey ||
+				e.ctrlKey ||
+				e.altKey ||
+				isTextEntry(e.target) ||
+				// an open menu or card takes letters for type-ahead
+				(e.target instanceof Element &&
+					e.target.closest(
+						'[role=menu], [role=dialog], [role=listbox]',
+					))
+			)
+				return;
+			const hit = toolForKey(e.key);
+			if (!hit) return;
+			e.preventDefault();
+			setActiveSub(hit[0], hit[1]);
+		};
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	});
+
+	<template>
+		<div
+			class="sub-ed {{this.layoutClass}}"
+			style={{this.trayStyle}}
+			{{this.measure}}
+			{{this.toolKeys}}
+			{{editorShortcuts}}
+		>
+			<div class="sub-shell-canvas-area">
+				<FabricCanvas />
+				<EmptyHint />
+			</div>
+			<StatusNote />
+			<SecureContextNotice />
+
+			<Cells class="sub-ed-help" @small={{true}}>
+				<Cell
+					@label="Help"
+					@text="?"
+					@onClick={{this.openHelp}}
+				/>
+			</Cells>
+
+			<div
+				class="sub-ed-title"
+				role="group"
+				aria-label="Document"
+			>
+				<button
+					type="button"
+					class="sub-ed-title-name"
+					title="Rename"
+					{{on "click" this.rename}}
+				>{{this.title}}</button>
+				<button
+					type="button"
+					class="sub-ed-title-zoom"
+					aria-label="Cycle zoom"
+					{{on "click" this.cycleZoom}}
+				><CanonFigure
+						@text={{this.zoomPercent}}
+						@unit="%"
+						@size={{13}}
+						@colour="var(--canon-muted-foreground)"
+					/></button>
+			</div>
+
+			{{#if this.phone}}
+				<Cells
+					class="sub-ed-phone-stack"
+					@axis="row"
+					@small={{true}}
+				>
+					<Cell
+						@label="Menu"
+						@icon="menu"
+						@selected={{editorUi.pageOpen}}
+						@onClick={{this.openMenu}}
+					/>
+					<Cell
+						@label="Share"
+						@icon="share"
+						@onClick={{this.openShare}}
+					/>
+				</Cells>
+				<div class="sub-ed-row">
+					<Cells @axis="row">
+						<Cell
+							@label={{this.activeToolDef.title}}
+							@icon={{this.activeToolDef.icon}}
+							@selected={{true}}
+							@onClick={{this.toggleBloom}}
+						/>
+					</Cells>
+					<Cells @axis="row">
+						<Cell
+							@label="Undo"
+							@icon="undo-2"
+							@disabled={{this.undoOff}}
+							@onClick={{this.doUndo}}
+						/>
+						<Cell
+							@label="Redo"
+							@icon="redo-2"
+							@disabled={{this.redoOff}}
+							@onClick={{this.doRedo}}
+						/>
+					</Cells>
+					<Cells @axis="row">
+						{{#each PANEL_DEFS as |p|}}
+							<Cell
+								@label={{p.title}}
+								@icon={{p.icon}}
+								@text={{if
+									p.icon
+									""
+									p.title
+								}}
+								@selected={{editorUi.isOpen
+									p.id
+								}}
+								@onClick={{fn
+									this.togglePanel
+									p.id
+								}}
+							/>
+						{{/each}}
+					</Cells>
+					<span class="sub-ed-row-fill"></span>
+					<ColourKey @phone={{true}} />
+				</div>
+				{{#if editorUi.bloomOpen}}
+					<button
+						type="button"
+						class="sub-ed-dim"
+						aria-label="Close"
+						{{on "click" this.toggleBloom}}
+					></button>
+					<div class="sub-ed-phone-tools">
+						{{#each EDITOR_TOOLS as |t|}}
+							<Cells @axis="row">
+								<Cell
+									@label={{t.title}}
+									@icon={{t.icon}}
+									@text={{t.title}}
+									@selected={{this.isToolOn
+										t.id
+									}}
+									@onClick={{fn
+										this.pick
+										t.id
+									}}
+								/>
+							</Cells>
+						{{/each}}
+					</div>
+				{{/if}}
+			{{else}}
+				<div class="sub-ed-column">
+					<Cells class="sub-ed-stack">
+						<Cell
+							@label="Menu"
+							@icon="menu"
+							@selected={{editorUi.pageOpen}}
+							@onClick={{this.openMenu}}
+						/>
+						<Cell
+							@label="Undo"
+							@icon="undo-2"
+							@disabled={{this.undoOff}}
+							@onClick={{this.doUndo}}
+						/>
+						{{#unless this.compact}}
+							<Cell
+								@label="Redo"
+								@icon="redo-2"
+								@disabled={{this.redoOff}}
+								@onClick={{this.doRedo}}
+							/>
+						{{/unless}}
+						<Cell
+							@label="Share"
+							@icon="share"
+							@selected={{editorUi.exportOpen}}
+							@onClick={{this.openShare}}
+						/>
+					</Cells>
+					<div
+						class="sub-ed-omni
+							{{if
+								editorUi.toolsHidden
+								'is-hidden'
+							}}"
+					>
+						<Cells class="sub-ed-tools">
+							{{#if this.compact}}
+								<Cell
+									@label={{this.activeToolDef.title}}
+									@icon={{this.activeToolDef.icon}}
+									@selected={{true}}
+									aria-expanded={{if
+										editorUi.bloomOpen
+										"true"
+										"false"
+									}}
+									@onClick={{this.toggleBloom}}
+								/>
+							{{else}}
+								{{#each
+									EDITOR_TOOLS
+									as |t|
+								}}
+									<Cell
+										@label={{t.title}}
+										@icon={{t.icon}}
+										@selected={{this.isToolOn
+											t.id
+										}}
+										@onClick={{fn
+											this.pick
+											t.id
+										}}
+									/>
+								{{/each}}
+							{{/if}}
+						</Cells>
+						<Cells
+							class="sub-ed-panel-keys"
+						>
+							{{#each
+								PANEL_DEFS
+								as |p|
+							}}
+								<Cell
+									@label={{p.title}}
+									@icon={{p.icon}}
+									@text={{if
+										p.icon
+										""
+										p.title
+									}}
+									@selected={{editorUi.isOpen
+										p.id
+									}}
+									@onClick={{fn
+										this.togglePanel
+										p.id
+									}}
+								/>
+							{{/each}}
+						</Cells>
+						{{#if
+							(this.showBloom
+								this.compact
+							)
+						}}
+							<div
+								class="sub-ed-bloom"
+								{{this.bloomClose}}
+							>
+								{{#each
+									EDITOR_TOOLS
+									as |t i|
+								}}
+									<Cells
+										class="sub-ed-bloom-cell"
+										style={{this.bloomStyle
+											i
+										}}
+									>
+										<Cell
+											@label={{t.title}}
+											@icon={{t.icon}}
+											@selected={{this.isToolOn
+												t.id
+											}}
+											@onClick={{fn
+												this.pick
+												t.id
+											}}
+										/>
+									</Cells>
+								{{/each}}
+							</div>
+						{{/if}}
+					</div>
+					<Cells class="sub-ed-tab">
+						<Cell
+							@label={{if
+								editorUi.toolsHidden
+								"Show Tools"
+								"Hide Tools"
+							}}
+							@icon={{if
+								editorUi.toolsHidden
+								"chevron-down"
+								"chevron-up"
+							}}
+							@onClick={{editorUi.toggleTools}}
+						/>
+					</Cells>
+					<span class="sub-ed-column-fill"></span>
+					<ColourKey />
+				</div>
+			{{/if}}
+
+			<div
+				class="sub-ed-rail
+					{{if this.phone 'is-tray'}}
+					{{if
+						(eq editorUi.panels.length 0)
+						'is-empty'
+					}}"
+			>
+				{{#each editorUi.panels as |p|}}
+					{{#if (eq p "layers")}}
+						<LayersPanel />
+					{{else if (eq p "inspector")}}
+						<InspectorPanel />
+					{{else if (eq p "colour")}}
+						<ColourTray />
+					{{else}}
+						<FxPanel
+							@phone={{this.phone}}
+						/>
+					{{/if}}
+				{{/each}}
+			</div>
+
+			<ToolBar
+				@tool={{this.activeTool}}
+				@phone={{this.phone}}
+			/>
+
+			<Overlays @phone={{this.phone}} />
+			<Sheets @phone={{this.phone}} />
+		</div>
+	</template>
+
+	get undoOff() {
+		return !this.doc.current.undo;
+	}
+
+	get redoOff() {
+		return !this.doc.current.redo;
+	}
+
+	showBloom = (compact: boolean) => compact && editorUi.bloomOpen;
+}

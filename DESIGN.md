@@ -38,6 +38,15 @@ deliberate act: verify it in the browser before you call it done (section 15).
 - **Shared chrome and utilities**: `app/styles/app.scss` (`.segmented`,
   `.dt-tabs-*`, `.dt-sr-only`, the theme token `:root`/`.dark` blocks, the
   `@font-face` pair).
+- **Shell**: `app/templates/application.gts` is `.dt-frame`: the drawer
+  (`app/components/app-sidebar.gts`, a flattened `CanonSidebar` from
+  `delphicanon`, linked with `link:`), 56 px wide when closed, and the sheet
+  (title bar over `.dt-main`). The sheet's folder tab (`app-tab.gts`, after
+  the iOS `FanItemView`) hangs over the drawer's edge, shows the current page
+  and slides the drawer on a click or a drag. The frame is one viewport tall
+  and `.dt-main` scrolls inside it; the document does not scroll. The kit's
+  CSS loads after `app.scss`, so an override of a kit rule needs a higher
+  specificity (`.dt-drawer .canon-sidebar-row`, `html:root`).
 - **Registry / metadata**: `app/lib/tools.ts`.
 - **Icons**: `app/lib/icons.ts`, added with `node scripts/gen-icons.mjs`.
 
@@ -59,8 +68,8 @@ where `n` is 0.25rem units: `size(4)` = 1rem = 16px, `size(10)` = 2.5rem = 40px,
 - `font-size("xs" | "sm" | "base" | "lg" | "xl" | "2xl" | … "5xl")`. The UI runs
   small: `sm` and `xs` dominate; `lg` is a section heading.
 - `font-weight("normal" | "medium" | "semibold" | "bold")`.
-- `font-family("mono" | "sans" | "serif")` — mono and sans both resolve to iA
-  Writer Quattro (section 4).
+- `font-family("mono" | "sans" | "serif")` — sans is Open Sans Condensed, mono
+  Iosevka (section 4).
 - `color("amber-500", …)` — the Tailwind palette, for the rare fixed colour that
   is not a theme token.
 - `tracking(...)`, `leading(...)`, `rounded(...)` — letter-spacing, line-height,
@@ -82,16 +91,21 @@ where `n` is 0.25rem units: `size(4)` = 1rem = 16px, `size(10)` = 2.5rem = 40px,
 
 ## 4. Typography
 
-- One UI typeface: **iA Writer Quattro**, a self-hosted variable font
-  (`public/fonts/…`, weight axis 400–700), declared as an `@font-face` pair in
-  `app.scss`. Do not add another face.
-- Crayon's `$font-families` maps **both** `mono` and `sans` to iA Writer Quattro,
-  and `$default-font` is `mono`, so the whole UI reads as one monospaced-feeling
-  family. `serif` stays a real serif stack (Georgia) for the rare serif need.
-- Body text is Quattro by default. For a specific element, `font-family:
-var(--font-mono)` also resolves to Quattro. Quattro is duospaced, not strictly
-  monospaced; for columnar number alignment add `font-variant-numeric:
-tabular-nums` (used throughout for page counts, readouts, sizes).
+- One UI typeface: **Open Sans Condensed**, Open Sans instanced at width 75 as a
+  self-hosted variable font (`public/fonts/OpenSansCondensedV*.woff2`, weight axis
+  400–700), declared as an `@font-face` pair in `app.scss`. It is the Canon kit's
+  typeface and stands in for the iOS app's SF condensed width.
+- Crayon's `$font-families` maps `sans` (the default, on `body`) to Open Sans
+  Condensed and `mono` to Iosevka, self-hosted at 400 and 700
+  (`public/fonts/Iosevka-*.woff2`, subset to Latin-1, punctuation, arrows and box
+  drawing), then the system monospace stack. Canon tools read it as
+  `--canon-mono-font`. `serif` stays a real serif stack (Georgia) for the rare
+  serif need.
+- Open Sans is proportional; for columnar number alignment add
+  `font-variant-numeric: tabular-nums` (used throughout for page counts,
+  readouts, sizes).
+- iA Writer Quattro is still self-hosted for the subtitle burn-in font choice and
+  the recipe export; the UI does not use it.
 
 ---
 
@@ -224,22 +238,6 @@ The realized shape, top to bottom (see `code-genny`, `qr-genny`,
 Primary "do the thing" buttons (Generate, Apply, Process, Download) are flush and
 fill their container. Full-width primary: `width: 100%; height: size(14)`. In a
 flush bar: a cell with `border-left: 1px`, `align-self: stretch`.
-
----
-
-## 11. Tabs
-
-The tabs primitive is `app/components/ui/tabs.gts`, styled by `.dt-tabs-list` /
-`.dt-tabs-trigger` in `app.scss` (a flush segmented list: 1px frame over a
-`--border` background, triggers fill and share `data-[state="active"]` fill). It
-is already flush — do not re-skin the primitive per tool.
-
-A tool passes its own class through `...attributes`, which Glimmer merges with the
-primitive class, so `.dt-<tool>-tab` is **additive** to `.dt-tabs-trigger`. Use it
-only to add layout, most commonly a fixed height: several tools pin
-`.dt-<tool>-tab { display:flex; height: size(10); align-items:center;
-justify-content:center; }` so tab buttons match across tools. Give the list its
-column count (e.g. `grid-template-columns: repeat(4, 1fr)`).
 
 ---
 

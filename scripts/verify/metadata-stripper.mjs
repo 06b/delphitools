@@ -1,7 +1,11 @@
 
-import { launch, visit, check, finish } from './harness.mjs';
+// the canon metadata-stripper: slot, dossier, found and after tiles, ICC, download
+import { launch, visit, check, finish, sleep } from './harness.mjs';
 
-const { browser, page } = await launch();
+// mupdf logs its xref repair of the corrupt pdf as console errors
+const { browser, page } = await launch({
+	ignore: [/expected object number|cannot find startxref|repair broken xref|repairing PDF document/],
+});
 
 async function dropTaggedJpeg(selector) {
 	await page.evaluate(async (sel) => {
@@ -111,62 +115,103 @@ await visit(page, '/tools/metadata-stripper');
 // real download hangs browser.close()
 const cdp = await page.createCDPSession();
 await cdp.send('Browser.setDownloadBehavior', { behavior: 'deny' });
-await dropTaggedJpeg('.dt-strip-frame');
-await page.waitForFunction(() => document.querySelector('.dt-strip-list'), {
-	timeout: 10000,
-});
 
-const rows = await page.$$eval('.dt-strip-pane:first-child .dt-strip-row', (els) =>
-	els.map((el) => ({
-		label: el.querySelector('.dt-strip-row-label')?.textContent.trim(),
-		detail: el.querySelector('.dt-strip-row-detail')?.textContent.trim(),
-		gps: el.classList.contains('is-gps'),
-	})),
+check(
+	'the split fills the sheet',
+	await page.evaluate(
+		() =>
+			document.querySelector('.dt-canon-tool').getBoundingClientRect().height ===
+			document.querySelector('.metadata-stripper').getBoundingClientRect().height,
+	),
 );
-const byLabel = Object.fromEntries(rows.map((r) => [r.label, r]));
+check(
+	'empty: the banner is the drop slot, the main pane says what to do, Download off',
+	await page.evaluate(
+		() =>
+			!!document.querySelector('.ms-slot .media-slot-prompt')?.textContent.trim() &&
+			!!document.querySelector('.metadata-stripper .canon-empty-row')?.textContent.trim() &&
+			document.querySelector('.ms-download').disabled,
+	),
+);
 
+await dropTaggedJpeg('.metadata-stripper');
+await page.waitForSelector('.ms-found .canon-tiles-tile', { timeout: 10000 });
+
+const tiles = (scope) =>
+	page.$$eval(`${scope} .canon-tiles-tile`, (els) =>
+		Object.fromEntries(
+			els.map((el) => [
+				el.querySelector('.canon-tiles-label')?.textContent.trim(),
+				el.querySelector('.canon-tiles-value')?.textContent.trim(),
+			]),
+		),
+	);
+const found = await tiles('.ms-found');
 check(
 	'GPS coordinates surface with the exact fix',
-	byLabel['GPS coordinates']?.detail ===
-		'51.500000° N, 0.126667° E · alt 100 m',
-	byLabel['GPS coordinates']?.detail,
+	found['GPS coordinates'] === '51.500000° N, 0.126667° E · alt 100 m',
+	found['GPS coordinates'],
+);
+check('camera make and model surface', found.Camera === 'TestCam Model X', found.Camera);
+check('taken timestamp surfaces', found.Taken === '2024:04:30 09:15:22', found.Taken);
+
+const map = await page.evaluate(() => ({
+	label: document.querySelector('.ms-map-label')?.getAttribute('aria-label'),
+	role: document.querySelector('.ms-map-label')?.getAttribute('role'),
+	pin: !!document.querySelector('.ms-pin'),
+	struck: !!document.querySelector('.ms-caption--removed'),
+}));
+check(
+	'the map places the photo and names it, struck once stripped',
+	map.role === 'img' && map.label === '51.5000° N, 0.1267° E' && map.pin && map.struck,
+	JSON.stringify(map),
+);
+const lamps = await page.$$eval('.ms-lamp', (els) =>
+	els.map((el) => `${el.textContent.trim()}:${el.className.match(/ms-lamp--(\w+)/)[1]}`),
 );
 check(
-	'GPS row is highlighted as the headline item',
-	byLabel['GPS coordinates']?.gps === true,
+	'lamps: GPS and EXIF struck, ICC kept on, C2PA off',
+	lamps.includes('GPS:struck') &&
+		lamps.includes('EXIF:struck') &&
+		lamps.includes('ICC:on') &&
+		lamps.includes('C2PA:off'),
+	lamps.join(' '),
+);
+// the last strike lands 700 ms + 7 x 120 ms after the strip, then fades 300 ms
+await sleep(2000);
+const ticks = await page.$$eval('.ms-lamp', (els) =>
+	els.map((el) => {
+		const tick = el.querySelector('.ms-lamp-light svg');
+		const box = tick?.getBoundingClientRect();
+		const shown = !!box && box.width > 0 && getComputedStyle(tick).opacity === '1';
+		return `${el.textContent.trim()}:${shown}`;
+	}),
 );
 check(
-	'camera make and model surface',
-	byLabel['Camera']?.detail === 'TestCam Model X',
-	byLabel['Camera']?.detail,
-);
-check(
-	'taken timestamp surfaces',
-	byLabel['Taken']?.detail === '2024:04:30 09:15:22',
-	byLabel['Taken']?.detail,
+	'a tick shows beside each struck lamp only',
+	ticks.includes('GPS:true') &&
+		ticks.includes('EXIF:true') &&
+		ticks.includes('ICC:false') &&
+		ticks.includes('C2PA:false'),
+	ticks.join(' '),
 );
 
-const removed = await page.$eval(
-	'.dt-strip-cell:nth-child(3) .dt-strip-cell-value',
-	(el) => el.textContent.trim(),
-);
-check(
-	'removed cell names the dropped segments',
-	removed.includes('EXIF (APP1)'),
-	removed,
-);
+const removed =await page.$eval('.ms-removed .canon-row-detail', (el) => el.textContent.trim());
+check('removed row names the dropped segments', removed.includes('EXIF (APP1)'), removed);
 
-const afterText = await page.$eval('.dt-strip-pane.is-right', (el) =>
-	el.textContent.replace(/\s+/g, ' '),
+const after = await tiles('.ms-after');
+check(
+	'after stripping shows only the kept ICC profile',
+	Object.keys(after).join() === 'Colour profile',
+	JSON.stringify(after),
 );
 check(
-	'after pane shows only the kept ICC profile',
-	afterText.includes('Colour profile') && !afterText.includes('TestCam'),
-	afterText.trim().slice(0, 80),
+	'the source row shows the size before and after',
+	/ → /.test(await page.$eval('.ms-source .canon-row-detail', (el) => el.textContent)),
 );
 
 await armDownloadCapture();
-await page.click('.dt-strip-btn.is-primary');
+await page.click('.ms-download');
 await page.waitForFunction(() => window.__captured, { timeout: 5000 });
 const cleaned = await page.evaluate(async () => {
 	const buf = new Uint8Array(await window.__captured.arrayBuffer());
@@ -195,23 +240,138 @@ check(
 check('camera string is gone from the output', !cleaned.hasCam);
 check('ICC kept by default', cleaned.hasIcc);
 
-await page.click('.dt-strip-switch');
+await page.click('.ms-icc .canon-switch');
 await page.waitForFunction(
-	() =>
-		document
-			.querySelector('.dt-strip-cell:nth-child(3) .dt-strip-cell-value')
-			?.textContent.includes('ICC profile (APP2)'),
+	() => document.querySelector('.ms-removed .canon-row-detail')?.textContent.includes('ICC profile (APP2)'),
 	{ timeout: 5000 },
-);
-check('removing the colour profile names it in the removed cell', true);
-
-const afterToggle = await page.$eval('.dt-strip-pane.is-right', (el) =>
-	el.textContent.replace(/\s+/g, ' '),
+).catch(() => {});
+check(
+	'the colour profile switch: removing it names it in the removed row',
+	await page.$eval('.ms-removed .canon-row-detail', (el) => el.textContent.includes('ICC profile (APP2)')),
 );
 check(
-	'after pane now reports nothing left',
-	afterToggle.includes('Nothing left'),
-	afterToggle.trim().slice(0, 80),
+	'after stripping now reports nothing left and the ICC lamp is struck',
+	(await page.$eval('.ms-after', (el) => el.textContent.replace(/\s+/g, ' '))).includes('Nothing left') &&
+		!!(await page.$('.ms-lamp--struck .ms-lamp-name')) &&
+		(await page.$$eval('.ms-lamp', (els) => els.find((el) => el.textContent.trim() === 'ICC').className)).includes('struck'),
+);
+
+await page.evaluate(() =>
+	[...document.querySelectorAll('.ms-source button')].find((b) => b.textContent.trim() === 'Clear').click(),
+);
+await sleep(200);
+check('Clear returns to the slot', !!(await page.$('.ms-slot')) && !(await page.$('.ms-found')));
+
+await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+await dropTaggedJpeg('.metadata-stripper');
+await page.waitForSelector('.ms-pin', { timeout: 10000 });
+check(
+	'reduced motion: the pin and lamps do not animate',
+	await page.evaluate(
+		() =>
+			getComputedStyle(document.querySelector('.ms-pin')).animationName === 'none' &&
+			getComputedStyle(document.querySelector('.ms-lamp')).transitionDuration === '0s',
+	),
+);
+await page.emulateMediaFeatures([]);
+
+// offsets computed, so mupdf reads the xref without repair
+async function dropPdf(selector, body) {
+	await page.evaluate(
+		(sel, text) => {
+			const objects = [
+				'<< /Type /Catalog /Pages 2 0 R /Lang (en-US) >>',
+				'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+				'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>',
+				text,
+			];
+			let out = '%PDF-1.5\n';
+			const offsets = objects.map((object, i) => {
+				const at = out.length;
+				out += `${i + 1} 0 obj\n${object}\nendobj\n`;
+				return at;
+			});
+			const xref = out.length;
+			out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+			for (const at of offsets) out += `${String(at).padStart(10, '0')} 00000 n \n`;
+			out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 4 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+			const transfer = new DataTransfer();
+			transfer.items.add(new File([out], 'GTI Handbuch.pdf', { type: 'application/pdf' }));
+			document.querySelector(sel).dispatchEvent(
+				new DragEvent('drop', { dataTransfer: transfer, bubbles: true }),
+			);
+		},
+		selector,
+		body,
+	);
+}
+
+await visit(page, '/tools/metadata-stripper');
+await dropPdf(
+	'.metadata-stripper',
+	"<< /Title (GTI Handbuch) /Author (Company GmbH) /Creator (LaTeX with hyperref) /Producer (pdfTeX-1.40.26) /CreationDate (D:20260220140500+01'00') >>",
+);
+await page.waitForSelector('.ms-found .canon-tiles-tile', { timeout: 15000 });
+const pdfFound = await tiles('.ms-found');
+check(
+	'pdf: found in original lists the document info',
+	pdfFound.Title === 'GTI Handbuch' &&
+		pdfFound.Author === 'Company GmbH' &&
+		pdfFound.Producer === 'pdfTeX-1.40.26' &&
+		pdfFound.Language === 'en-US' &&
+		pdfFound['PDF version'] === '1.5' &&
+		pdfFound.Created === '20.02.2026 14:05',
+	JSON.stringify(pdfFound),
+);
+check(
+	'pdf: no colour profile switch or content credentials row',
+	!(await page.$('.ms-icc')) && !(await page.$('.ms-c2pa')),
+);
+const pdfAfter = await tiles('.ms-after');
+check(
+	'pdf: after stripping keeps only language and version',
+	Object.keys(pdfAfter).sort().join() === 'Language,PDF version',
+	JSON.stringify(pdfAfter),
+);
+const pdfRemoved = await page.$eval('.ms-removed .canon-row-detail', (el) => el.textContent.trim());
+check('pdf: removed row names the dropped fields', pdfRemoved === 'Title · Author · Creator · Producer · Created', pdfRemoved);
+
+await armDownloadCapture();
+await page.click('.ms-download');
+await page.waitForFunction(() => window.__captured, { timeout: 5000 });
+const cleanedPdf = await page.evaluate(async () => ({
+	type: window.__captured.type,
+	head: new TextDecoder().decode((await window.__captured.arrayBuffer()).slice(0, 5)),
+}));
+check('pdf: the download is a pdf', cleanedPdf.type === 'application/pdf' && cleanedPdf.head === '%PDF-', JSON.stringify(cleanedPdf));
+
+await visit(page, '/tools/metadata-stripper');
+await page.evaluate(() => {
+	const transfer = new DataTransfer();
+	transfer.items.add(new File(['%PDF-1.5 broken'], 'broken.pdf', { type: 'application/pdf' }));
+	document.querySelector('.metadata-stripper').dispatchEvent(
+		new DragEvent('drop', { dataTransfer: transfer, bubbles: true }),
+	);
+});
+await page.waitForSelector('.ms-found .canon-status', { timeout: 15000 });
+check(
+	'pdf: a corrupt file shows the unreadable state, download off',
+	(await page.$eval('.ms-found', (el) => el.textContent)).includes('Format not readable') &&
+		(await page.$eval('.ms-download', (el) => el.disabled)),
+);
+
+await page.setViewport({ width: 390, height: 844 });
+await visit(page, '/tools/metadata-stripper');
+await dropTaggedJpeg('.metadata-stripper');
+await page.waitForSelector('.ms-found .canon-tiles-tile', { timeout: 10000 });
+check(
+	'phone: the lamps sit under the map, nothing scrolls sideways',
+	await page.evaluate(
+		() =>
+			document.querySelector('.ms-lamps').getBoundingClientRect().top >=
+				document.querySelector('.ms-map').getBoundingClientRect().bottom &&
+			document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+	),
 );
 
 await finish(browser);

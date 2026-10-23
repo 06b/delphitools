@@ -1,949 +1,670 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
-import { eq } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import DownloadLabel from 'delphitools-v2/components/download-label';
-import filePaste from 'delphitools-v2/modifiers/file-paste';
-import { downloadUrl } from 'delphitools-v2/lib/download';
+import type Owner from '@ember/owner';
+import { modifier } from 'ember-modifier';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonColourWell from 'delphicanon/components/canon-colour-well';
+import CanonGrid from 'delphicanon/components/canon-grid';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonNumberField from 'delphicanon/components/canon-number-field';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import CanonTiles from 'delphicanon/components/canon-tiles';
+import { parseHex, type Rgb } from 'delphicanon/lib/colour';
+import { stem } from 'delphicanon/lib/files';
+import { springEasing } from 'delphicanon/lib/motion';
+import { IconSvg } from 'delphitools-v2/components/icon';
+import { downloadBlob } from 'delphitools-v2/lib/download';
+import { downloadIcon, passAlong } from 'delphitools-v2/lib/flow-hooks';
+import filePaste, { matchesAccept } from 'delphitools-v2/modifiers/file-paste';
+import {
+	autoStops,
+	bytes,
+	defaultAngle,
+	defaultDominant,
+	fileName,
+	fit,
+	gradient,
+	heightOf,
+	maxRatio,
+	minWidth,
+	ratios,
+	solid,
+	widthLimit,
+	widths,
+	type Bytes,
+	type MatteSpec,
+	type MatteStyle,
+	type Size,
+} from 'delphitools-v2/components/tools/matte-genny/matte';
+import type {
+	MatteReply,
+	MatteRequest,
+} from 'delphitools-v2/components/tools/matte-genny/matte-worker';
+import Picture from 'delphitools-v2/components/tools/matte-genny/picture';
+import './matte-genny/matte-genny.css';
 
-// input type=color needs #rrggbb
-const HEX = /^#[0-9a-f]{6}$/i;
+const loadFailed = 'Image could not be read. Try another file?';
 
-// full-res re-encode per change
-const RENDER_DEBOUNCE_MS = 120;
+// iOS: spring over 0.5 s, damping 0.82
+const spring = htmlSafe(`--matte-spring: ${springEasing(0.82)}`);
 
-// css pixels
-const MAX_PREVIEW = 280;
-
-const BACKDROP_BLUR_PX = 50;
-
-// blurred edges stay off-canvas
-const BACKDROP_OVERSCAN = 1.2;
-
-// second stop darker
-const GRADIENT_FALLOFF = -30;
-
-const MIN_RATIO = 1;
-const MAX_RATIO = 32;
-const MIN_SIZE = 100;
-const MAX_SIZE = 8192;
-
-const LOAD_FAILED = 'Image could not be read. Try another file?';
-
-export type MatteType = 'blur' | 'colour' | 'gradient';
-
-export const RATIO_PRESETS = [
-	{ label: '1:1', w: 1, h: 1, description: 'Square' },
-	{ label: '4:5', w: 4, h: 5, description: 'Portrait' },
-	{ label: '3:4', w: 3, h: 4, description: 'Photo' },
-	{ label: '9:16', w: 9, h: 16, description: 'Stories' },
+const styleNames = ['Blur', 'Solid', 'Gradient'];
+const ratioNames = [...ratios.map(([w, h]) => `${w}:${h}`), 'Custom'];
+const widthNames = widths.map(String);
+const clampRatio = (side: number) =>
+	Math.min(Math.max(Math.round(side), 1), maxRatio);
+const sameRatio = ([a, b]: [number, number], w: number, h: number) =>
+	(a === w && b === h) || (a === h && b === w);
+const pixelsText = (value: number) => `${value} px`;
+const stopLabel = (index: number) => `Stop ${index + 1}`;
+const degreesText = (value: number) => `${value}°`;
+const rgbOf = (stop: Bytes): Rgb => [
+	stop[0] / 255,
+	stop[1] / 255,
+	stop[2] / 255,
 ];
 
-export const SIZE_PRESETS = [1080, 1200, 1440, 2048];
+const Save = <template><IconSvg @name={{(downloadIcon)}} /></template>;
+const Swap = <template><IconSvg @name="arrow-left-right" /></template>;
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Plus = <template><IconSvg @name="plus" /></template>;
+const Minus = <template><IconSvg @name="minus" /></template>;
 
-export const STYLE_OPTIONS: {
-	type: MatteType;
-	label: string;
-	icon: string;
-}[] = [
-	{ type: 'blur', label: 'Blurred', icon: 'layers' },
-	{ type: 'colour', label: 'Solid', icon: 'square' },
-	{ type: 'gradient', label: 'Gradient', icon: 'blend' },
-];
-
-const PRESET_COLOURS = [
-	'#ffffff',
-	'#000000',
-	'#f5f5f5',
-	'#1a1a1a',
-	'#fafafa',
-	'#0a0a0a',
-];
-
-// need dark + text
-const LIGHT_COLOURS = ['#ffffff', '#f5f5f5', '#fafafa'];
-
-export interface Rgb {
-	r: number;
-	g: number;
-	b: number;
+interface Source {
+	url: string;
+	pixels: Size;
+	stem: string;
 }
 
-export interface Size {
-	width: number;
-	height: number;
-}
-
-export interface Rect extends Size {
-	x: number;
-	y: number;
-}
-
-export function outputDimensions(
-	outputSize: number,
-	ratioW: number,
-	ratioH: number,
-): Size {
+// ?matteStyle=<0 blur, 1 solid, 2 gradient> ?matteRatio=16:9 ?matteWidth=<px> ?mattePadding=<px> ?matteColour=%231e6626: the iOS -mattestyle, -matteratio, -mattewidth, -mattepadding, -mattecolour flags; ?matteAngle=<degrees> is web only
+function launchFlags() {
+	const query = new URLSearchParams(window.location.search);
+	const flag = (name: string) => {
+		const value = query.get(name);
+		return value === null ? undefined : Number(value) || 0;
+	};
+	const ratio = (query.get('matteRatio') ?? '')
+		.split(':')
+		.map(Number)
+		.filter((side) => side > 0);
 	return {
-		width: outputSize,
-		height: Math.round((outputSize * ratioH) / ratioW),
+		style: ((flag('matteStyle') ?? 0) % 3) as MatteStyle,
+		colour: parseHex(query.get('matteColour') ?? '') ?? [1, 1, 1],
+		across: ratio.length === 2 ? clampRatio(ratio[0]!) : 1,
+		down: ratio.length === 2 ? clampRatio(ratio[1]!) : 1,
+		width: flag('matteWidth') ?? 1080,
+		padding: Math.min(Math.max(flag('mattePadding') ?? 40, 0), 200),
+		angle:
+			(((flag('matteAngle') ?? defaultAngle) % 360) + 360) %
+			360,
 	};
 }
 
-export function previewSize(max: number, ratioW: number, ratioH: number): Size {
-	const longer = Math.max(ratioW, ratioH);
-	return {
-		width: Math.round((max * ratioW) / longer),
-		height: Math.round((max * ratioH) / longer),
-	};
-}
+/** The port of MatteGeneratorViewController. */
+export default class MatteGenny extends Component {
+	@tracked style: MatteStyle;
+	@tracked colour: Rgb;
+	@tracked ratioW: number;
+	@tracked ratioH: number;
+	@tracked isCustom: boolean;
+	@tracked widthValue: number;
+	@tracked padding: number;
+	@tracked dominant: Bytes = defaultDominant;
+	/** The gradient's own colours once edited; until then it follows the photo. */
+	@tracked customStops?: Bytes[];
+	@tracked angle: number;
+	@tracked source?: Source;
+	@tracked failed = false;
+	@tracked exporting = false;
+	@tracked guides = false;
+	@tracked over = false;
 
-export function fitInside(
-	imageWidth: number,
-	imageHeight: number,
-	box: Size,
-	padding: number,
-): Rect {
-	const scale = Math.min(
-		(box.width - padding * 2) / imageWidth,
-		(box.height - padding * 2) / imageHeight,
+	#worker = new Worker(
+		new URL('./matte-genny/matte-worker.ts', import.meta.url),
+		{ type: 'module' },
 	);
-	const width = imageWidth * scale;
-	const height = imageHeight * scale;
-	return {
-		x: (box.width - width) / 2,
-		y: (box.height - height) / 2,
-		width,
-		height,
-	};
-}
+	#input?: HTMLInputElement;
+	#request = 0;
+	#loading = 0;
+	#exporting = 0;
+	#pending?: { url: string; stem: string };
+	#guideTimer?: number;
 
-export function coverRect(
-	imageWidth: number,
-	imageHeight: number,
-	box: Size,
-	overscan: number,
-): Rect {
-	const scale =
-		Math.max(box.width / imageWidth, box.height / imageHeight) *
-		overscan;
-	const width = imageWidth * scale;
-	const height = imageHeight * scale;
-	return {
-		x: (box.width - width) / 2,
-		y: (box.height - height) / 2,
-		width,
-		height,
-	};
-}
-
-export function adjustBrightness(colour: Rgb, amount: number): Rgb {
-	const clamp = (value: number) =>
-		Math.max(0, Math.min(255, value + amount));
-	return {
-		r: clamp(colour.r),
-		g: clamp(colour.g),
-		b: clamp(colour.b),
-	};
-}
-
-export function rgbCss(colour: Rgb): string {
-	return `rgb(${colour.r}, ${colour.g}, ${colour.b})`;
-}
-
-// canvas downscale to 1px
-function averageColour(image: HTMLImageElement): Rgb | null {
-	const canvas = document.createElement('canvas');
-	canvas.width = 1;
-	canvas.height = 1;
-	const ctx = canvas.getContext('2d');
-	if (!ctx) return null;
-
-	ctx.drawImage(image, 0, 0, 1, 1);
-	const data = ctx.getImageData(0, 0, 1, 1).data;
-	// 1px buffer, 4 bytes
-	return { r: data[0]!, g: data[1]!, b: data[2]! };
-}
-
-function clampInt(value: string, min: number, max: number): number {
-	return Math.max(min, Math.min(max, parseInt(value, 10) || min));
-}
-
-export default class MatteGeneratorTool extends Component {
-	@tracked sourceImage: string | null = null;
-	@tracked fileName = '';
-	@tracked imageWidth = 0;
-	@tracked imageHeight = 0;
-	@tracked matteType: MatteType = 'blur';
-	@tracked matteColour = '#ffffff';
-	@tracked outputSize = 1080;
-	@tracked customSize = '';
-	@tracked ratioW = 1;
-	@tracked ratioH = 1;
-	@tracked customRatio = false;
-	@tracked padding = 40;
-	@tracked resultImage: string | null = null;
-	@tracked loadFailed = false;
-	@tracked dominant: Rgb = { r: 136, g: 136, b: 136 };
-
-	#image: HTMLImageElement | null = null;
-	#timer: ReturnType<typeof setTimeout> | null = null;
-	#destroyed = false;
-
-	willDestroy() {
-		super.willDestroy();
-		this.#destroyed = true;
-		if (this.#timer) clearTimeout(this.#timer);
+	constructor(owner: Owner, args: object) {
+		super(owner, args);
+		const flags = launchFlags();
+		this.style = flags.style;
+		this.colour = flags.colour;
+		this.ratioW = flags.across;
+		this.ratioH = flags.down;
+		this.isCustom = !ratios.some((pair) =>
+			sameRatio(pair, this.ratioW, this.ratioH),
+		);
+		this.widthValue = flags.width;
+		this.padding = flags.padding;
+		this.angle = flags.angle;
+		this.#worker.onmessage = (event: MessageEvent<MatteReply>) =>
+			this.#reply(event.data);
+		// a worker that fails to start or throws leaves nothing busy
+		this.#worker.onerror = () => {
+			this.#exporting = 0;
+			this.exporting = false;
+		};
+		registerDestructor(this, () => {
+			window.clearTimeout(this.#guideTimer);
+			this.#worker.terminate();
+			if (this.#pending)
+				URL.revokeObjectURL(this.#pending.url);
+			if (this.source) URL.revokeObjectURL(this.source.url);
+		});
 	}
 
-	get output(): Size {
-		return outputDimensions(
-			this.outputSize,
-			this.ratioW,
-			this.ratioH,
+	get limit() {
+		return widthLimit(this.ratioW, this.ratioH);
+	}
+
+	get width() {
+		return Math.min(
+			Math.max(this.widthValue, minWidth),
+			this.limit,
 		);
 	}
 
-	get preview(): Size {
-		return previewSize(MAX_PREVIEW, this.ratioW, this.ratioH);
+	get spec(): MatteSpec {
+		return {
+			style: this.style,
+			colour: bytes(this.colour),
+			stops: this.stops,
+			angle: this.angle,
+			ratioW: this.ratioW,
+			ratioH: this.ratioH,
+			width: this.width,
+			padding: this.padding,
+		};
 	}
 
-	get isSquare() {
+	get stops() {
+		return this.customStops ?? autoStops(this.dominant);
+	}
+
+	get stopWells() {
+		return this.stops.map(rgbOf);
+	}
+
+	get isGradient() {
+		return this.style === gradient;
+	}
+
+	get height() {
+		return heightOf(this.width, this.ratioW, this.ratioH);
+	}
+
+	get aspect() {
+		return Math.min(1.5, Math.max(0.8, this.ratioW / this.ratioH));
+	}
+
+	get ratioIndex() {
+		if (this.isCustom) return ratios.length;
+		const index = ratios.findIndex((pair) =>
+			sameRatio(pair, this.ratioW, this.ratioH),
+		);
+		return index < 0 ? ratios.length : index;
+	}
+
+	get widthIndex() {
+		return widths.indexOf(this.width);
+	}
+
+	get shape() {
+		if (this.ratioW === this.ratioH) return 'Square';
+		return this.ratioW > this.ratioH ? 'Landscape' : 'Portrait';
+	}
+
+	get square() {
 		return this.ratioW === this.ratioH;
 	}
 
-	get swapTitle() {
-		return this.isSquare
-			? 'Square — nothing to rotate'
-			: `Rotate to ${this.ratioH}:${this.ratioW}`;
+	get isSolid() {
+		return this.style === solid;
 	}
 
-	get styles() {
-		return STYLE_OPTIONS.map((option) => ({
-			...option,
-			isActive: option.type === this.matteType,
-		}));
+	get ratioText() {
+		return `${this.ratioW}:${this.ratioH}`;
 	}
 
-	get ratios() {
-		return RATIO_PRESETS.map((preset) => ({
-			...preset,
-			isActive:
-				!this.customRatio &&
-				this.ratioW === preset.w &&
-				this.ratioH === preset.h,
-		}));
+	get sourceText() {
+		const pixels = this.source?.pixels;
+		return pixels ? `${pixels.width} × ${pixels.height}` : '';
 	}
 
-	get sizes() {
-		return SIZE_PRESETS.map((size) => ({
-			size,
-			isActive: this.outputSize === size && !this.customSize,
-		}));
-	}
-
-	// input resets unparseable value
-	get pickerValue() {
-		return HEX.test(this.matteColour)
-			? this.matteColour
-			: '#ffffff';
-	}
-
-	get swatches() {
-		return PRESET_COLOURS.map((colour) => ({
-			colour,
-			// literals from PRESET_COLOURS
-			style: htmlSafe(`background-color: ${colour}`),
-			isActive: colour === this.matteColour,
-		}));
-	}
-
-	get customSwatchStyle() {
-		const ink = LIGHT_COLOURS.includes(this.pickerValue)
-			? '#000000'
-			: '#ffffff';
-		return htmlSafe(
-			`background-color: ${this.pickerValue}; color: ${ink}`,
+	get tiles() {
+		const { source } = this;
+		if (!source) return [];
+		const photo = fit(
+			source.pixels,
+			{ width: this.width, height: this.height },
+			this.padding,
 		);
+		return [
+			{ label: 'Source', value: this.sourceText },
+			{
+				label: 'Photo',
+				value: `${Math.round(photo.width)} × ${Math.round(photo.height)}`,
+			},
+			{
+				label: 'Scale',
+				value: `${Math.round((photo.width / source.pixels.width) * 100)} %`,
+			},
+		];
 	}
 
-	get previewStyle() {
-		const { width, height } = this.preview;
-		let background = '';
-
-		if (this.matteType === 'colour') {
-			background = `background: ${this.pickerValue};`;
-		} else if (this.matteType === 'gradient') {
-			const from = rgbCss(this.dominant);
-			const to = rgbCss(
-				adjustBrightness(
-					this.dominant,
-					GRADIENT_FALLOFF,
-				),
-			);
-			background = `background: linear-gradient(135deg, ${from}, ${to});`;
-		}
-
-		// all values already validated
-		return htmlSafe(
-			`width: ${width}px; height: ${height}px; ${background}`,
-		);
+	get exportDisabled() {
+		return !this.source || this.exporting;
 	}
 
-	get previewInsetStyle() {
-		const inset =
-			(this.padding / this.outputSize) * this.preview.width;
-		return htmlSafe(`padding: ${inset}px`);
-	}
+	keepInput = modifier((input: HTMLInputElement) => {
+		this.#input = input;
+	});
 
-	readFile = (file: File) => {
-		this.fileName = file.name.replace(/\.[^.]+$/, '');
-		this.loadFailed = false;
-		const reader = new FileReader();
-		reader.onload = () => {
-			const dataUrl = reader.result as string;
-			const image = new Image();
-			image.onload = () => {
-				if (this.#destroyed) return;
-				this.#image = image;
-				this.imageWidth = image.width;
-				this.imageHeight = image.height;
-				this.sourceImage = dataUrl;
-				this.resultImage = null;
-				this.dominant =
-					averageColour(image) ?? this.dominant;
-				this.queueRender();
-			};
-			// next app dropped decode failures
-			image.onerror = this.fail;
-			image.src = dataUrl;
-		};
-		reader.onerror = this.fail;
-		reader.readAsDataURL(file);
-	};
+	choose = () => this.#input?.click();
 
-	handleFileSelect = (event: Event) => {
+	picked = (event: Event) => {
 		const input = event.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) this.readFile(file);
-		// same file twice refires change
+		// the same file twice fires change again
 		input.value = '';
+		if (file) this.load(file);
 	};
 
-	handleDrop = (event: DragEvent) => {
+	dragOver = (event: DragEvent) => {
+		if (!event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
-		const file = event.dataTransfer?.files[0];
-		if (file?.type.startsWith('image/')) this.readFile(file);
+		this.over = true;
 	};
 
-	// else browser navigates to file
-	allowDrop = (event: DragEvent) => {
+	dragLeave = (event: DragEvent) => {
+		const root = event.currentTarget as Element;
+		if (!root.contains(event.relatedTarget as Node | null))
+			this.over = false;
+	};
+
+	drop = (event: DragEvent) => {
+		this.over = false;
+		const file = [...(event.dataTransfer?.files ?? [])].find((f) =>
+			matchesAccept(f, 'image/*'),
+		);
+		if (!file) return;
 		event.preventDefault();
+		this.load(file);
 	};
 
-	fail = () => {
-		if (this.#destroyed) return;
-		this.#image = null;
-		this.sourceImage = null;
-		this.fileName = '';
-		this.imageWidth = 0;
-		this.imageHeight = 0;
-		this.resultImage = null;
-		this.loadFailed = true;
+	#reply(reply: MatteReply) {
+		if (reply.id === this.#exporting) {
+			this.#exporting = 0;
+			this.exporting = false;
+			if (reply.kind === 'rendered' && this.source)
+				downloadBlob(
+					reply.blob,
+					fileName(
+						this.source.stem,
+						this.width,
+						this.height,
+					),
+				);
+			return;
+		}
+		const pending = this.#pending;
+		if (reply.id !== this.#loading || !pending) return;
+		this.#loading = 0;
+		this.#pending = undefined;
+		if (reply.kind !== 'loaded') {
+			URL.revokeObjectURL(pending.url);
+			this.clear();
+			this.failed = true;
+			return;
+		}
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.source = {
+			url: pending.url,
+			stem: pending.stem,
+			pixels: { width: reply.width, height: reply.height },
+		};
+		this.dominant = reply.dominant;
+		this.failed = false;
+	}
+
+	#post(request: MatteRequest) {
+		this.#worker.postMessage(request);
+	}
+
+	load = (file: File) => {
+		if (this.#pending) URL.revokeObjectURL(this.#pending.url);
+		this.#pending = {
+			url: URL.createObjectURL(file),
+			stem: stem(file.name) || 'image',
+		};
+		this.#loading = ++this.#request;
+		this.#post({ kind: 'load', id: this.#loading, file });
 	};
 
 	clear = () => {
-		this.#image = null;
-		this.sourceImage = null;
-		this.fileName = '';
-		this.imageWidth = 0;
-		this.imageHeight = 0;
-		this.resultImage = null;
-		this.loadFailed = false;
+		if (this.#pending) URL.revokeObjectURL(this.#pending.url);
+		if (this.source) URL.revokeObjectURL(this.source.url);
+		this.#pending = undefined;
+		this.#loading = 0;
+		this.#exporting = 0;
+		this.source = undefined;
+		this.dominant = defaultDominant;
+		this.failed = false;
+		this.exporting = false;
 	};
 
-	setMatteType = (type: MatteType) => {
-		this.matteType = type;
-		this.queueRender();
+	pickStyle = (index: number) => (this.style = index as MatteStyle);
+
+	pickColour = (colour: Rgb) => (this.colour = colour);
+
+	pickRatio = (index: number) => {
+		this.isCustom = index === ratios.length;
+		if (this.isCustom) return;
+		const [short, long] = ratios[index]!;
+		// keeps the current orientation
+		[this.ratioW, this.ratioH] =
+			this.ratioW > this.ratioH
+				? [long, short]
+				: [short, long];
 	};
 
-	setMatteColour = (colour: string) => {
-		this.matteColour = colour;
-		this.queueRender();
+	pickStop = (index: number, colour: Rgb) => {
+		const stops = [...this.stops];
+		stops[index] = bytes(colour);
+		this.customStops = stops;
 	};
 
-	pickMatteColour = (event: Event) => {
-		this.setMatteColour((event.target as HTMLInputElement).value);
+	addStop = () => {
+		const { stops } = this;
+		this.customStops = [...stops, stops[stops.length - 1]!];
 	};
 
-	selectRatio = (w: number, h: number) => {
-		this.ratioW = w;
-		this.ratioH = h;
-		this.customRatio = false;
-		this.queueRender();
+	removeStop = () => {
+		this.customStops = this.stops.slice(0, -1);
 	};
 
-	enableCustomRatio = () => {
-		this.customRatio = true;
-		this.queueRender();
-	};
-
-	swapRatio = () => {
-		const w = this.ratioW;
-		this.ratioW = this.ratioH;
-		this.ratioH = w;
-		this.queueRender();
-	};
-
-	setRatioW = (event: Event) => {
-		this.ratioW = clampInt(
-			(event.target as HTMLInputElement).value,
-			MIN_RATIO,
-			MAX_RATIO,
-		);
-		this.queueRender();
-	};
-
-	setRatioH = (event: Event) => {
-		this.ratioH = clampInt(
-			(event.target as HTMLInputElement).value,
-			MIN_RATIO,
-			MAX_RATIO,
-		);
-		this.queueRender();
-	};
-
-	selectSize = (size: number) => {
-		this.outputSize = size;
-		this.customSize = '';
-		this.queueRender();
-	};
-
-	setCustomSize = (event: Event) => {
-		const raw = (event.target as HTMLInputElement).value;
-		this.customSize = raw;
-		const value = parseInt(raw, 10);
-		if (value >= MIN_SIZE && value <= MAX_SIZE) {
-			this.outputSize = value;
-			this.queueRender();
-		}
-	};
-
-	setPadding = (event: Event) => {
-		this.padding = Number((event.target as HTMLInputElement).value);
-		this.queueRender();
-	};
-
-	queueRender = () => {
-		if (this.#timer) clearTimeout(this.#timer);
-		this.#timer = setTimeout(this.render, RENDER_DEBOUNCE_MS);
-	};
-
-	render = () => {
-		const image = this.#image;
-		if (this.#destroyed || !image) return;
-
-		const box = this.output;
-		const canvas = document.createElement('canvas');
-		canvas.width = box.width;
-		canvas.height = box.height;
-
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return this.fail();
-
-		this.#drawMatte(ctx, image, box);
-
-		const fit = fitInside(
-			image.width,
-			image.height,
-			box,
-			this.padding,
-		);
-		ctx.drawImage(image, fit.x, fit.y, fit.width, fit.height);
-
-		this.resultImage = canvas.toDataURL('image/png');
-	};
-
-	#drawMatte(
-		ctx: CanvasRenderingContext2D,
-		image: HTMLImageElement,
-		box: Size,
-	) {
-		if (this.matteType === 'colour') {
-			ctx.fillStyle = this.pickerValue;
-			ctx.fillRect(0, 0, box.width, box.height);
-			return;
-		}
-
-		if (this.matteType === 'gradient') {
-			const gradient = ctx.createLinearGradient(
-				0,
-				0,
-				box.width,
-				box.height,
-			);
-			gradient.addColorStop(0, rgbCss(this.dominant));
-			gradient.addColorStop(
-				1,
-				rgbCss(
-					adjustBrightness(
-						this.dominant,
-						GRADIENT_FALLOFF,
-					),
-				),
-			);
-			ctx.fillStyle = gradient;
-			ctx.fillRect(0, 0, box.width, box.height);
-			return;
-		}
-
-		ctx.filter = `blur(${BACKDROP_BLUR_PX}px)`;
-		const cover = coverRect(
-			image.width,
-			image.height,
-			box,
-			BACKDROP_OVERSCAN,
-		);
-		ctx.drawImage(
-			image,
-			cover.x,
-			cover.y,
-			cover.width,
-			cover.height,
-		);
-		ctx.filter = 'none';
+	get removeStopDisabled() {
+		return this.stops.length <= 2;
 	}
 
-	download = () => {
-		if (!this.resultImage) return;
-		const { width, height } = this.output;
-		downloadUrl(
-			this.resultImage,
-			`${this.fileName}-matte-${width}x${height}.png`,
+	setAngle = (value: number) => (this.angle = value);
+
+	swap = () => {
+		[this.ratioW, this.ratioH] = [this.ratioH, this.ratioW];
+	};
+
+	setAcross = (value: number) => (this.ratioW = value);
+
+	setDown = (value: number) => (this.ratioH = value);
+
+	pickWidth = (index: number) => (this.widthValue = widths[index]!);
+
+	setWidth = (value: number) => (this.widthValue = value);
+
+	setPadding = (value: number) => {
+		this.padding = value;
+		this.guides = true;
+		window.clearTimeout(this.#guideTimer);
+		this.#guideTimer = window.setTimeout(
+			() => (this.guides = false),
+			1000,
 		);
+	};
+
+	export = () => {
+		if (this.exportDisabled) return;
+		this.exporting = true;
+		this.#exporting = ++this.#request;
+		this.#post({
+			kind: 'render',
+			id: this.#exporting,
+			spec: this.spec,
+		});
 	};
 
 	<template>
-		<div
-			class="dt-matte"
-			{{filePaste this.readFile accept="image/*"}}
+		<CanonSplit
+			class="matte-genny"
+			@halves={{true}}
+			@collapsesTo={{200}}
+			style={{spring}}
+			{{filePaste this.load accept="image/*"}}
+			{{on "dragover" this.dragOver}}
+			{{on "dragleave" this.dragLeave}}
+			{{on "drop" this.drop}}
 		>
-			<div class="dt-matte-frame">
-				{{#if this.sourceImage}}
-					<div class="dt-matte-bar">
-						<span class="dt-matte-source">
-							<Icon @name="image" />
-							<span
-								class="dt-matte-name"
-							>{{this.fileName}}</span>
-							<span
-								class="dt-matte-dims"
-							>{{this.imageWidth}}
-								×
-								{{this.imageHeight}}</span>
-						</span>
-						<button
-							type="button"
-							class="dt-matte-bar-btn"
-							{{on
-								"click"
-								this.clear
-							}}
+			<:sidebar>
+				<CanonCanvas
+					@aspect={{this.aspect}}
+					@background="var(--canon-muted)"
+					@pattern={{true}}
+				>
+					<Picture
+						@spec={{this.spec}}
+						@photo={{this.source.url}}
+						@pixels={{this.source.pixels}}
+						@guides={{this.guides}}
+						@busy={{this.exporting}}
+						@onChoose={{this.choose}}
+						@over={{this.over}}
+					/>
+				</CanonCanvas>
+			</:sidebar>
+			<:main>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="matte-source"
+							@title={{this.source.stem}}
+							@detail={{this.sourceText}}
+							@form="flush"
 						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-					</div>
-
-					<div class="dt-matte-columns">
-						<div class="dt-matte-controls">
-							<div
-								class="dt-matte-section"
-							>
-								<span
-									class="dt-matte-label"
-								>Style</span>
-								<div
-									class="segmented dt-matte-styles"
-								>
-									{{#each
-										this.styles
-										key="type"
-										as |option|
-									}}
-										<button
-											type="button"
-											class="dt-matte-choice
-												{{if
-													option.isActive
-													'is-active'
-												}}"
-											{{on
-												"click"
-												(fn
-													this.setMatteType
-													option.type
-												)
-											}}
-										>
-											<Icon
-												@name={{option.icon}}
-											/>
-											{{option.label}}
-										</button>
-									{{/each}}
-								</div>
-							</div>
-
-							{{#if
-								(eq
-									this.matteType
-									"colour"
-								)
-							}}
-								<div
-									class="dt-matte-section"
-								>
-									<span
-										class="dt-matte-label"
-									>Matte
-										Colour</span>
-									<div
-										class="dt-matte-swatches"
-									>
-										{{#each
-											this.swatches
-											key="colour"
-											as |swatch|
-										}}
-											<button
-												type="button"
-												class="dt-matte-swatch
-													{{if
-														swatch.isActive
-														'is-active'
-													}}"
-												style={{swatch.style}}
-												title={{swatch.colour}}
-												aria-label={{swatch.colour}}
-												{{on
-													"click"
-													(fn
-														this.setMatteColour
-														swatch.colour
-													)
-												}}
-											></button>
-										{{/each}}
-										<span
-											class="dt-matte-custom"
-											style={{this.customSwatchStyle}}
-										>
-											+
-											<input
-												type="color"
-												value={{this.pickerValue}}
-												aria-label="Custom colour"
-												{{on
-													"input"
-													this.pickMatteColour
-												}}
-											/>
-										</span>
-									</div>
-									<p
-										class="dt-matte-hint"
-									>Click
-										the
-										coloured
-										cells
-										to
-										select,
-										or
-										the
-										last
-										cell
-										to
-										pick
-										a
-										custom
-										colour.</p>
-								</div>
-							{{/if}}
-
-							<div
-								class="dt-matte-section"
-							>
-								<span
-									class="dt-matte-label"
-								>Aspect Ratio</span>
-								<div
-									class="segmented dt-matte-ratios"
-								>
-									{{#each
-										this.ratios
-										key="label"
-										as |preset|
-									}}
-										<button
-											type="button"
-											class="dt-matte-choice
-												{{if
-													preset.isActive
-													'is-active'
-												}}"
-											title={{preset.description}}
-											{{on
-												"click"
-												(fn
-													this.selectRatio
-													preset.w
-													preset.h
-												)
-											}}
-										>{{preset.label}}</button>
-									{{/each}}
-									<button
-										type="button"
-										class="dt-matte-choice
-											{{if
-												this.customRatio
-												'is-active'
-											}}"
-										{{on
-											"click"
-											this.enableCustomRatio
-										}}
-									>Custom</button>
-								</div>
-								<div
-									class="dt-matte-row"
-								>
-									<button
-										type="button"
-										class="dt-matte-swap"
-										disabled={{this.isSquare}}
-										title={{this.swapTitle}}
-										aria-label="Rotate matte orientation"
-										{{on
-											"click"
-											this.swapRatio
-										}}
-									>
-										<Icon
-											@name="refresh-cw"
-										/>
-										Swap
-									</button>
-									{{#if
-										this.customRatio
-									}}
-										<span
-											class="dt-matte-pair"
-										>
-											<input
-												type="number"
-												class="dt-matte-number"
-												min="1"
-												max="32"
-												aria-label="Ratio width"
-												value={{this.ratioW}}
-												{{on
-													"input"
-													this.setRatioW
-												}}
-											/>
-											<span
-												class="dt-matte-colon"
-											>:</span>
-											<input
-												type="number"
-												class="dt-matte-number"
-												min="1"
-												max="32"
-												aria-label="Ratio height"
-												value={{this.ratioH}}
-												{{on
-													"input"
-													this.setRatioH
-												}}
-											/>
-										</span>
-									{{/if}}
-								</div>
-							</div>
-
-							<div
-								class="dt-matte-section"
-							>
-								<span
-									class="dt-matte-label"
-								>Output Width</span>
-								<div
-									class="segmented dt-matte-sizes"
-								>
-									{{#each
-										this.sizes
-										key="size"
-										as |entry|
-									}}
-										<button
-											type="button"
-											class="dt-matte-choice
-												{{if
-													entry.isActive
-													'is-active'
-												}}"
-											{{on
-												"click"
-												(fn
-													this.selectSize
-													entry.size
-												)
-											}}
-										>{{entry.size}}px</button>
-									{{/each}}
-								</div>
-								<div
-									class="dt-matte-row"
-								>
-									<input
-										type="number"
-										class="dt-matte-number is-wide"
-										min="100"
-										max="8192"
-										placeholder="Custom px…"
-										aria-label="Custom output width"
-										value={{this.customSize}}
-										{{on
-											"input"
-											this.setCustomSize
-										}}
-									/>
-								</div>
-							</div>
-
-							<div
-								class="dt-matte-section is-last"
-							>
-								<div
-									class="dt-matte-head"
-								>
-									<label
-										for="dt-matte-padding"
-									>Padding</label>
-									<span
-										class="dt-matte-readout"
-									>{{this.padding}}px</span>
-								</div>
-								<input
-									id="dt-matte-padding"
-									type="range"
-									class="dt-matte-slider"
-									min="0"
-									max="200"
-									step="10"
-									value={{this.padding}}
-									{{on
-										"input"
-										this.setPadding
-									}}
-								/>
-							</div>
-						</div>
-
-						<div class="dt-matte-side">
-							<span
-								class="dt-matte-label"
-							>Preview</span>
-							<div
-								class="dt-matte-stage"
-							>
-								<div
-									class="dt-matte-box"
-									style={{this.previewStyle}}
-								>
-									{{#if
-										(eq
-											this.matteType
-											"blur"
-										)
-									}}
-										<img
-											class="dt-matte-backdrop"
-											src={{this.sourceImage}}
-											alt=""
-										/>
-									{{/if}}
-									<div
-										class="dt-matte-inset"
-										style={{this.previewInsetStyle}}
-									>
-										<img
-											src={{this.sourceImage}}
-											alt="Preview"
-										/>
-									</div>
-								</div>
-							</div>
-							<p
-								class="dt-matte-readout is-centred"
-							>{{this.output.width}}
-								×
-								{{this.output.height}}
-								px</p>
-						</div>
-					</div>
-
-					{{#if this.resultImage}}
-						<button
-							type="button"
-							class="dt-matte-run"
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel
-								@label="Download {{this.output.width}} × {{this.output.height}}"
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
 							/>
-						</button>
-					{{/if}}
-				{{else}}
-					<label
-						class="dt-matte-drop"
-						{{on "drop" this.handleDrop}}
-						{{on "dragover" this.allowDrop}}
-					>
-						<input
-							type="file"
-							accept="image/*"
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
-							}}
+						</CanonRow>
+					</CanonRows>
+				{{else if this.failed}}
+					<CanonRows @framed={{true}}>
+						<CanonStatus
+							@text={{loadFailed}}
+							@tone="warn"
+							@row={{true}}
 						/>
-						<Icon @name="upload" />
-						<span
-							class="dt-matte-drop-title"
-						>Drop image here</span>
-						<span
-							class="dt-matte-drop-hint"
-						>or click to select, or paste</span>
-					</label>
+					</CanonRows>
 				{{/if}}
-
-				{{#if this.loadFailed}}
-					<p
-						class="dt-matte-error"
-						role="alert"
-					>{{LOAD_FAILED}}</p>
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Style" />
+					<CanonSegmented
+						class="matte-styles"
+						@items={{styleNames}}
+						@selected={{this.style}}
+						@onChange={{this.pickStyle}}
+					/>
+					{{#if this.isSolid}}
+						<CanonColourWell
+							@label="Colour"
+							@colour={{this.colour}}
+							@onChange={{this.pickColour}}
+						/>
+					{{/if}}
+					{{#if this.isGradient}}
+						{{#each
+							this.stopWells
+							as |stop index|
+						}}
+							<CanonColourWell
+								class="matte-stop"
+								@label={{stopLabel
+									index
+								}}
+								@colour={{stop}}
+								@onChange={{fn
+									this.pickStop
+									index
+								}}
+							/>
+						{{/each}}
+						<CanonGrid @columns={{2}}>
+							<CanonButton
+								class="matte-add-stop"
+								@kind="cell"
+								@text="Add Stop"
+								@icon={{Plus}}
+								@onClick={{this.addStop}}
+							/>
+							<CanonButton
+								class="matte-remove-stop"
+								@kind="cell"
+								@text="Remove Stop"
+								@icon={{Minus}}
+								@disabled={{this.removeStopDisabled}}
+								@onClick={{this.removeStop}}
+							/>
+						</CanonGrid>
+						<CanonRow
+							class="matte-angle"
+							@title="Angle"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.angle}}
+								@min={{0}}
+								@max={{359}}
+								@step={{1}}
+								@readout={{degreesText}}
+								@labelledBy={{titleId}}
+								@onChange={{this.setAngle}}
+							/>
+						</CanonRow>
+					{{/if}}
+					<CanonHeading @text="Ratio" />
+					<CanonSegmented
+						class="matte-ratios"
+						@items={{ratioNames}}
+						@selected={{this.ratioIndex}}
+						@onChange={{this.pickRatio}}
+					/>
+					{{#if this.isCustom}}
+						<CanonGrid @columns={{2}}>
+							<CanonNumberField
+								@value={{this.ratioW}}
+								@min={{1}}
+								@max={{maxRatio}}
+								@label="Ratio width"
+								@onChange={{this.setAcross}}
+							/>
+							<CanonNumberField
+								@value={{this.ratioH}}
+								@min={{1}}
+								@max={{maxRatio}}
+								@label="Ratio height"
+								@onChange={{this.setDown}}
+							/>
+						</CanonGrid>
+					{{/if}}
+					<CanonRow
+						class="matte-orientation"
+						@title={{this.ratioText}}
+						@detail={{this.shape}}
+						@form="flush"
+					>
+						<CanonButton
+							@kind="cell"
+							@text="Swap"
+							@icon={{Swap}}
+							@disabled={{this.square}}
+							@onClick={{this.swap}}
+						/>
+					</CanonRow>
+					<CanonHeading @text="Output" />
+					<CanonSegmented
+						class="matte-widths"
+						@items={{widthNames}}
+						@selected={{this.widthIndex}}
+						@onChange={{this.pickWidth}}
+					/>
+					<CanonRow
+						class="matte-width"
+						@title="Width"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonNumberField
+							@value={{this.width}}
+							@min={{minWidth}}
+							@max={{this.limit}}
+							@step={{10}}
+							@unit="px"
+							@labelledBy={{titleId}}
+							@onChange={{this.setWidth}}
+						/>
+					</CanonRow>
+					<CanonRow
+						class="matte-padding"
+						@title="Padding"
+						@form="flush"
+						as |titleId|
+					>
+						<CanonSlider
+							@value={{this.padding}}
+							@min={{0}}
+							@max={{200}}
+							@step={{10}}
+							@readout={{pixelsText}}
+							@labelledBy={{titleId}}
+							@onChange={{this.setPadding}}
+						/>
+					</CanonRow>
+					<CanonButton
+						class="matte-download"
+						@kind="primary"
+						@text={{passAlong "Download"}}
+						@icon={{Save}}
+						@iconStyle="oversized"
+						@disabled={{this.exportDisabled}}
+						@onClick={{this.export}}
+					/>
+				</CanonRows>
+				{{#if this.source}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Image" />
+						<CanonTiles
+							@items={{this.tiles}}
+						/>
+					</CanonRows>
 				{{/if}}
-			</div>
-		</div>
+				{{! the empty photo slot opens it }}
+				{{! template-lint-disable require-input-label }}
+				<input
+					type="file"
+					accept="image/*"
+					hidden
+					{{this.keepInput}}
+					{{on "change" this.picked}}
+				/>
+			</:main>
+		</CanonSplit>
 	</template>
 }

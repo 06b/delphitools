@@ -1,11 +1,23 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq, not } from 'ember-truth-helpers';
-import Icon from 'delphitools-v2/components/icon';
-import NdsLoader from 'delphitools-v2/components/ui/nds-loader';
-import DownloadLabel from 'delphitools-v2/components/download-label';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import CanonButton from 'delphicanon/components/canon-button';
+import CanonCanvas from 'delphicanon/components/canon-canvas';
+import CanonCompressionScale from 'delphicanon/components/canon-compression-scale';
+import CanonHeading from 'delphicanon/components/canon-heading';
+import CanonImageCompare from 'delphicanon/components/canon-image-compare';
+import CanonPageStrip, {
+	pageStripHeight,
+	type CanonPage,
+} from 'delphicanon/components/canon-page-strip';
+import CanonRow from 'delphicanon/components/canon-row';
+import CanonRows from 'delphicanon/components/canon-rows';
+import CanonSegmented from 'delphicanon/components/canon-segmented';
+import CanonSlider from 'delphicanon/components/canon-slider';
+import CanonSplit from 'delphicanon/components/canon-split';
+import CanonStatus from 'delphicanon/components/canon-status';
+import { IconSvg } from 'delphitools-v2/components/icon';
 import filePaste from 'delphitools-v2/modifiers/file-paste';
 import { downloadBlob } from 'delphitools-v2/lib/download';
 import {
@@ -14,23 +26,37 @@ import {
 	formatBytes,
 	savingsPercent,
 } from 'delphitools-v2/lib/pdf-compress';
+import Drop from 'delphitools-v2/components/tools/media/drop';
+import Job from 'delphitools-v2/components/tools/media/job';
+import Slot from 'delphitools-v2/components/tools/media/slot';
+import { comparison, open, sizes, thumbnails } from 'delphitools-v2/lib/pdfjs';
+import './media/media.css';
 
 const ACCEPT = '.pdf,application/pdf';
+const modes = ['Recompress', 'Keep'];
+// iOS loss notes, per mode
+const losses = ['Lossy images', 'Lossless'];
+const sizeLabels = MAX_SIZES.map((s) => s.label);
+const whole = (value: number) => String(Math.round(value));
 
-interface Source {
-	file: File;
-	size: number;
-}
+const Trash = <template><IconSvg @name="trash-2" /></template>;
+const Shrink = <template><IconSvg @name="shrink" /></template>;
 
 interface Compressed {
 	blob: Blob;
 	size: number;
-	pageCount: number;
 	imagesTouched: number;
 }
 
-export default class PdfCompressorTool extends Component {
-	@tracked source: Source | null = null;
+/** The port of PDFCompressorViewController, on the web tool's MuPDF worker. */
+export default class PdfCompressor extends Component {
+	drop = new Drop(ACCEPT, (file) => this.load(file));
+
+	@tracked file: File | null = null;
+	@tracked pages: CanonPage[] = [];
+	@tracked page = 0;
+	@tracked before = '';
+	@tracked after = '';
 	@tracked recompressImages = true;
 	@tracked quality = 65;
 	@tracked maxEdge = 0;
@@ -39,126 +65,162 @@ export default class PdfCompressorTool extends Component {
 	@tracked failed = false;
 
 	#bytes: ArrayBuffer | null = null;
+	#pdf?: PDFDocumentProxy;
+	#result?: PDFDocumentProxy;
+	// a new file
+	#token = 0;
+	// a new file or setting
 	#seq = 0;
+	// a new comparison
+	#shown = 0;
 
-	get sizes() {
-		return MAX_SIZES;
+	willDestroy() {
+		super.willDestroy();
+		this.#close();
 	}
 
-	get beforeSize(): string {
-		return this.source ? formatBytes(this.source.size) : '';
+	get modeIndex() {
+		return this.recompressImages ? 0 : 1;
 	}
 
-	get afterSize(): string {
-		return this.compressed ? formatBytes(this.compressed.size) : '';
+	get loss() {
+		return losses[this.modeIndex]!;
 	}
 
-	get imagesLabel(): string {
-		const n = this.compressed?.imagesTouched ?? 0;
-		return n > 0 ? `${n} image${n === 1 ? '' : 's'}` : '';
+	get sizeIndex() {
+		return MAX_SIZES.findIndex((s) => s.value === this.maxEdge);
 	}
 
-	get savings(): number | null {
-		if (!this.source || !this.compressed) return null;
-		return savingsPercent(this.source.size, this.compressed.size);
+	get detail() {
+		if (!this.file) return '';
+		const parts = [formatBytes(this.file.size)];
+		const n = this.pages.length;
+		if (n) parts.push(n === 1 ? '1 page' : `${n} pages`);
+		return parts.join(' · ');
 	}
 
-	get isLarger(): boolean {
-		return (this.savings ?? 0) > 0;
+	get aspect() {
+		const size = this.pages[this.page]?.size;
+		return size
+			? Math.max(0.2, size.width / Math.max(size.height, 1))
+			: 210 / 297;
 	}
 
-	get savingsLabel(): string {
-		const savings = this.savings;
-		if (savings === null) return '';
-		if (savings === 0) return '±0%';
-		return `${savings < 0 ? '−' : '+'}${Math.abs(savings)}%`;
+	get fileName() {
+		return `${(this.file?.name ?? '').replace(/\.pdf$/i, '')}-small.pdf`;
 	}
 
-	get downloadName(): string {
-		if (!this.source) return '';
-		return (
-			this.source.file.name.replace(/\.pdf$/i, '') +
-			'-small.pdf'
-		);
+	get resultRow() {
+		const { compressed, file } = this;
+		if (!compressed || !file) return null;
+		const savings = savingsPercent(file.size, compressed.size);
+		const parts = [
+			formatBytes(compressed.size),
+			savings === 0
+				? '±0%'
+				: `${savings < 0 ? '−' : '+'}${Math.abs(savings)}%`,
+		];
+		const n = compressed.imagesTouched;
+		if (n > 0) parts.push(`${n} image${n === 1 ? '' : 's'}`);
+		return { name: this.fileName, detail: parts.join(' · ') };
 	}
 
-	readFile = (file: File) => {
+	load = (file: File) => {
 		if (
 			file.type !== 'application/pdf' &&
 			!/\.pdf$/i.test(file.name)
 		)
 			return;
-		void this.#setSource(file);
+		void this.#load(file);
 	};
 
-	handleFileSelect = (event: Event) => {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) void this.#setSource(file);
-		input.value = '';
-	};
-
-	handleDrop = (event: DragEvent) => {
-		event.preventDefault();
-		const file = [...(event.dataTransfer?.files ?? [])].find(
-			(f) =>
-				f.type === 'application/pdf' ||
-				/\.pdf$/i.test(f.name),
+	async #load(file: File) {
+		this.clear();
+		const token = this.#token;
+		this.file = file;
+		const bytes = await file.arrayBuffer();
+		if (token !== this.#token) return;
+		this.#bytes = bytes;
+		let pdf: PDFDocumentProxy;
+		try {
+			pdf = await open(bytes);
+		} catch {
+			// unreadable here; MuPDF may still compress it
+			return;
+		}
+		if (token !== this.#token) return void pdf.destroy();
+		this.#pdf = pdf;
+		this.pages = (await sizes(pdf)).map((size) => ({ size }));
+		if (token !== this.#token) return;
+		void this.#compare();
+		await thumbnails(
+			pdf,
+			() => token === this.#token,
+			(index, picture) => {
+				const pages = [...this.pages];
+				pages[index] = { ...pages[index]!, picture };
+				this.pages = pages;
+			},
 		);
-		if (file) void this.#setSource(file);
-	};
-
-	// preventDefault enables drop
-	allowDrop = (event: DragEvent) => {
-		event.preventDefault();
-	};
-
-	async #setSource(file: File) {
-		this.#seq++; // any in-flight compress lands nowhere
-		this.compressed = null;
-		this.failed = false;
-		this.source = { file, size: file.size };
-		this.#bytes = await file.arrayBuffer();
 	}
 
-	#invalidate() {
-		this.compressed = null;
-		this.failed = false;
+	async #compare() {
+		const shown = ++this.#shown;
+		const [before, after] = await Promise.all([
+			this.#pdf ? comparison(this.#pdf, this.page) : '',
+			this.#result ? comparison(this.#result, this.page) : '',
+		]);
+		if (shown !== this.#shown) {
+			for (const url of [before, after])
+				if (url) URL.revokeObjectURL(url);
+			return;
+		}
+		this.#revokeCompare();
+		this.before = before;
+		this.after = after;
 	}
 
-	setImages = (recompress: boolean) => {
+	selectPage = (index: number) => {
+		if (index === this.page) return;
+		this.page = index;
+		void this.#compare();
+	};
+
+	pickMode = (index: number) => {
+		const recompress = index === 0;
 		if (recompress === this.recompressImages) return;
 		this.recompressImages = recompress;
 		this.#invalidate();
 	};
 
-	setQuality = (event: Event) => {
-		this.quality = Number((event.target as HTMLInputElement).value);
+	pickQuality = (value: number) => {
+		if (value === this.quality) return;
+		this.quality = value;
 		this.#invalidate();
 	};
 
-	setMaxEdge = (value: number) => {
-		if (value === this.maxEdge) return;
+	pickSize = (index: number) => {
+		const value = MAX_SIZES[index]?.value;
+		if (value === undefined || value === this.maxEdge) return;
 		this.maxEdge = value;
 		this.#invalidate();
 	};
 
-	clear = () => {
+	// a setting change drops the result
+	#invalidate() {
 		this.#seq++;
-		this.source = null;
+		this.compressing = false;
 		this.compressed = null;
 		this.failed = false;
-		this.#bytes = null;
-	};
+		void this.#result?.destroy();
+		this.#result = undefined;
+		if (this.after) {
+			URL.revokeObjectURL(this.after);
+			this.after = '';
+		}
+	}
 
-	download = () => {
-		if (this.compressed)
-			downloadBlob(this.compressed.blob, this.downloadName);
-	};
-
-	compress = () => {
-		void this.#compress();
-	};
+	compress = () => void this.#compress();
 
 	async #compress() {
 		const bytes = this.#bytes;
@@ -167,21 +229,26 @@ export default class PdfCompressorTool extends Component {
 		this.compressing = true;
 		this.failed = false;
 		try {
-			// worker detaches its buffer
+			// the worker detaches its buffer
 			const result = await compressPdf(bytes.slice(0), {
 				recompressImages: this.recompressImages,
 				quality: this.quality,
 				maxEdge: this.maxEdge,
 			});
-			if (seq !== this.#seq) return; // a newer file or setting won the race
+			if (seq !== this.#seq) return;
 			this.compressed = {
 				blob: new Blob([result.bytes], {
 					type: 'application/pdf',
 				}),
 				size: result.bytes.byteLength,
-				pageCount: result.pageCount,
 				imagesTouched: result.imagesTouched,
 			};
+			const pdf = await open(result.bytes).catch(
+				() => undefined,
+			);
+			if (seq !== this.#seq) return void pdf?.destroy();
+			this.#result = pdf;
+			void this.#compare();
 		} catch {
 			if (seq === this.#seq) this.failed = true;
 		} finally {
@@ -189,250 +256,192 @@ export default class PdfCompressorTool extends Component {
 		}
 	}
 
+	save = () => {
+		if (this.compressed)
+			downloadBlob(this.compressed.blob, this.fileName);
+	};
+
+	clear = () => {
+		this.#token++;
+		this.#close();
+		this.#invalidate();
+		this.#shown++;
+		this.file = null;
+		this.#bytes = null;
+		this.pages = [];
+		this.page = 0;
+	};
+
+	#revokeCompare() {
+		for (const url of [this.before, this.after])
+			if (url) URL.revokeObjectURL(url);
+	}
+
+	#close() {
+		for (const page of this.pages)
+			if (page.picture) URL.revokeObjectURL(page.picture);
+		this.#revokeCompare();
+		this.before = '';
+		this.after = '';
+		void this.#pdf?.destroy();
+		void this.#result?.destroy();
+		this.#pdf = undefined;
+		this.#result = undefined;
+	}
+
 	<template>
-		<div class="dt-pcmp" {{filePaste this.readFile accept=ACCEPT}}>
-			<div
-				class="dt-pcmp-frame"
-				{{on "drop" this.handleDrop}}
-				{{on "dragover" this.allowDrop}}
-			>
-				{{#unless this.source}}
-					<label class="dt-pcmp-drop">
-						<input
-							type="file"
-							accept={{ACCEPT}}
-							class="dt-sr-only"
-							{{on
-								"change"
-								this.handleFileSelect
+		<CanonSplit
+			class="pdf-compressor"
+			{{filePaste this.load accept=ACCEPT}}
+			{{on "dragover" this.drop.enter}}
+			{{on "dragleave" this.drop.leave}}
+			{{on "drop" this.drop.drop}}
+		>
+			<:banner>
+				<CanonCanvas
+					@height={{pageStripHeight}}
+					@background="var(--canon-muted)"
+				>
+					{{#if this.file}}
+						<CanonPageStrip
+							@pages={{this.pages}}
+							@selected={{this.page}}
+							@onSelect={{this.selectPage}}
+						/>
+					{{else}}
+						<Slot
+							class="pc-slot"
+							@prompt="Drop PDF here"
+							@icon="shrink"
+							@accept={{ACCEPT}}
+							@over={{this.drop.over}}
+							@onFile={{this.load}}
+						/>
+					{{/if}}
+				</CanonCanvas>
+			</:banner>
+			<:sidebar>
+				{{#if this.file}}
+					<CanonRows @framed={{true}}>
+						<CanonHeading @text="Source" />
+						<CanonRow
+							class="pc-source"
+							@title={{this.file.name}}
+							@detail={{this.detail}}
+							@form="flush"
+						>
+							<CanonButton
+								@kind="cell"
+								@text="Clear"
+								@icon={{Trash}}
+								@onClick={{this.clear}}
+							/>
+						</CanonRow>
+					</CanonRows>
+				{{/if}}
+				<CanonRows @framed={{true}}>
+					<CanonHeading @text="Images" />
+					<CanonSegmented
+						class="pc-modes"
+						@items={{modes}}
+						@selected={{this.modeIndex}}
+						@disabled={{this.compressing}}
+						@onChange={{this.pickMode}}
+					/>
+					<CanonStatus
+						class="pc-loss"
+						@text={{this.loss}}
+						@tone="muted"
+						@row={{true}}
+					/>
+					{{#if this.recompressImages}}
+						<CanonRow
+							class="pc-quality"
+							@title="Quality"
+							@form="flush"
+							as |titleId|
+						>
+							<CanonSlider
+								@value={{this.quality}}
+								@min={{30}}
+								@max={{90}}
+								@step={{1}}
+								@readout={{whole}}
+								@labelledBy={{titleId}}
+								@onChange={{this.pickQuality}}
+							/>
+						</CanonRow>
+						<CanonHeading
+							@text="Max size"
+						/>
+						<CanonSegmented
+							class="pc-sizes"
+							@items={{sizeLabels}}
+							@selected={{this.sizeIndex}}
+							@disabled={{this.compressing}}
+							@onChange={{this.pickSize}}
+						/>
+					{{/if}}
+				</CanonRows>
+				<CanonRows @framed={{true}}>
+					<Job
+						@title="Compress"
+						@icon={{Shrink}}
+						@failure="Failed"
+						@disabled={{if
+							this.file
+							false
+							true
+						}}
+						@busy={{this.compressing}}
+						@failed={{this.failed}}
+						@result={{this.resultRow}}
+						@onRun={{this.compress}}
+						@onSave={{this.save}}
+					/>
+				</CanonRows>
+			</:sidebar>
+			<:main>
+				<CanonCanvas
+					@height={{150}}
+					@boxing="unlessWide"
+				>
+					<CanonCompressionScale
+						@before={{if
+							this.file
+							this.file.size
+							0
+						}}
+						@after={{if
+							this.compressed
+							this.compressed.size
+							0
+						}}
+						@format="Compressed"
+						@working={{this.compressing}}
+					/>
+				</CanonCanvas>
+				{{#if this.file}}
+					<CanonCanvas
+						class="pc-compare"
+						@aspect={{this.aspect}}
+						@maxHeight={{640}}
+						@boxing="unlessWide"
+						@background="var(--canon-muted)"
+					>
+						<CanonImageCompare
+							@before={{if
+								this.before
+								this.before
+							}}
+							@after={{if
+								this.after
+								this.after
 							}}
 						/>
-						<Icon @name="shrink" />
-						<span
-							class="dt-pcmp-drop-title"
-						>Drop PDF here</span>
-						<span
-							class="dt-pcmp-drop-hint"
-						>click or paste</span>
-					</label>
-				{{/unless}}
-
-				{{#if this.source}}
-					<div class="dt-pcmp-bar">
-						<div class="dt-pcmp-info">
-							<p
-								class="dt-pcmp-name"
-							>{{this.source.file.name}}</p>
-							<p
-								class="dt-pcmp-meta"
-							>{{this.beforeSize}}</p>
-						</div>
-						<button
-							type="button"
-							class="dt-pcmp-btn"
-							{{on
-								"click"
-								this.clear
-							}}
-						>
-							<Icon @name="trash-2" />
-							Clear
-						</button>
-						<button
-							type="button"
-							class="dt-pcmp-btn is-primary"
-							disabled={{this.compressing}}
-							{{on
-								"click"
-								this.compress
-							}}
-						>
-							{{#if this.compressing}}
-								<NdsLoader />
-							{{else}}
-								<Icon
-									@name="shrink"
-								/>
-							{{/if}}
-							{{if
-								this.compressing
-								"Compressing…"
-								"Compress"
-							}}
-						</button>
-						<button
-							type="button"
-							class="dt-pcmp-btn"
-							disabled={{not
-								this.compressed
-							}}
-							{{on
-								"click"
-								this.download
-							}}
-						>
-							<DownloadLabel />
-						</button>
-					</div>
-
-					<div class="dt-pcmp-fields">
-						<div class="dt-pcmp-field">
-							<span>Images</span>
-							<div
-								class="segmented dt-pcmp-images"
-							>
-								<button
-									type="button"
-									class="dt-pcmp-opt
-										{{if
-											this.recompressImages
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setImages
-											true
-										)
-									}}
-								>Recompress</button>
-								<button
-									type="button"
-									class="dt-pcmp-opt
-										{{unless
-											this.recompressImages
-											'is-active'
-										}}"
-									{{on
-										"click"
-										(fn
-											this.setImages
-											false
-										)
-									}}
-								>Keep</button>
-							</div>
-						</div>
-
-						{{#if this.recompressImages}}
-							<label
-								class="dt-pcmp-field"
-							>
-								<span
-								>Quality</span>
-								<span
-									class="dt-pcmp-slider"
-								>
-									<input
-										type="range"
-										min="30"
-										max="90"
-										step="1"
-										value={{this.quality}}
-										{{on
-											"input"
-											this.setQuality
-										}}
-									/>
-									<span
-										class="dt-pcmp-readout"
-									>{{this.quality}}</span>
-								</span>
-							</label>
-
-							<div
-								class="dt-pcmp-field"
-							>
-								<span>Max size</span>
-								<div
-									class="segmented dt-pcmp-sizes"
-								>
-									{{#each
-										this.sizes
-										key="value"
-										as |s|
-									}}
-										<button
-											type="button"
-											class="dt-pcmp-opt
-												{{if
-													(eq
-														this.maxEdge
-														s.value
-													)
-													'is-active'
-												}}"
-											{{on
-												"click"
-												(fn
-													this.setMaxEdge
-													s.value
-												)
-											}}
-										>{{s.label}}</button>
-									{{/each}}
-								</div>
-							</div>
-						{{/if}}
-					</div>
-
-					<div class="dt-pcmp-result">
-						<div class="dt-pcmp-stat">
-							<span
-								class="dt-pcmp-stat-label"
-							>Before</span>
-							<span
-								class="dt-pcmp-stat-value"
-							>{{this.beforeSize}}</span>
-						</div>
-						<Icon @name="arrow-right" />
-						<div class="dt-pcmp-stat">
-							<span
-								class="dt-pcmp-stat-label"
-							>After</span>
-							{{#if this.compressed}}
-								<span
-									class="dt-pcmp-stat-value"
-								>
-									{{this.afterSize}}
-									<span
-										class="dt-pcmp-savings
-											{{if
-												this.isLarger
-												'is-larger'
-											}}"
-									>{{this.savingsLabel}}</span>
-								</span>
-								{{#if
-									this.imagesLabel
-								}}
-									<span
-										class="dt-pcmp-substat"
-									>{{this.imagesLabel}}</span>
-								{{/if}}
-							{{else if
-								this.compressing
-							}}
-								<span
-									class="dt-pcmp-status"
-								>
-									<NdsLoader
-									/>
-									Compressing…
-								</span>
-							{{else if this.failed}}
-								<span
-									class="dt-pcmp-status"
-								>Failed</span>
-							{{else}}
-								<span
-									class="dt-pcmp-stat-value dt-pcmp-idle"
-								>—</span>
-							{{/if}}
-						</div>
-					</div>
+					</CanonCanvas>
 				{{/if}}
-			</div>
-		</div>
+			</:main>
+		</CanonSplit>
 	</template>
 }

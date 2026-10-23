@@ -1,0 +1,70 @@
+.split-picture {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	color: var(--canon-foreground);
+	font-family: var(--canon-font);
+}
+
+.split-area {
+	position: absolute;
+	inset: var(--canon-panel-padding);
+}
+
+.split-point {
+	position: absolute;
+	inline-size: 0;
+	block-size: 0;
+	pointer-events: none;
+}
+
+.split-tile {
+	position: absolute;
+	overflow: hidden;
+	box-sizing: border-box;
+	padding: 0;
+	border: var(--canon-hairline) solid var(--canon-border);
+	background: var(--canon-card);
+	cursor: pointer;
+}
+
+.split-tile:focus-visible {
+	z-index: 1;
+	outline: var(--canon-frame) solid var(--canon-primary);
+}
+
+.split-tile img {
+	position: absolute;
+	display: block;
+	max-inline-size: none;
+	user-select: none;
+	pointer-events: none;
+}
+
+.split-tile-label {
+	position: absolute;
+	inset-block-start: 3px;
+	inset-inline-start: 3px;
+	padding: 1px 4px;
+	background: color-mix(in srgb, var(--canon-card) 85%, transparent);
+	color: var(--canon-foreground);
+	font-family: var(--canon-mono-font);
+	font-size: 10px;
+	font-weight: var(--canon-weight-semibold);
+	line-height: 12px;
+	white-space: nowrap;
+}
+
+.split-picture--springs .split-tile {
+	transition:
+		left 600ms var(--split-spring) 50ms,
+		top 600ms var(--split-spring) 50ms,
+		width 600ms var(--split-spring) 50ms,
+		height 600ms var(--split-spring) 50ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.split-picture--springs .split-tile {
+		transition: none;
+	}
+}
