@@ -1,0 +1,77 @@
+#!/bin/sh
+# curl -fsSL https://delphi.tools/install | sh
+# DT_INSTALL_DIR overrides the target directory (default ~/.local/bin).
+set -eu
+
+repo=1612elphi/delphitools-cli
+
+die() {
+	echo "dt-install: $*" >&2
+	exit 1
+}
+
+need() {
+	command -v "$1" >/dev/null 2>&1 || die "missing $1"
+}
+
+# wrapped so a truncated download runs nothing
+main() {
+	need curl
+	need tar
+
+	case "$(uname -s)" in
+	Darwin) os=apple-darwin ;;
+	Linux) os=unknown-linux-gnu ;;
+	*) die "unsupported $(uname -s)" ;;
+	esac
+	case "$(uname -m)" in
+	arm64 | aarch64) arch=aarch64 ;;
+	x86_64 | amd64) arch=x86_64 ;;
+	*) die "unsupported $(uname -m)" ;;
+	esac
+
+	name="delphitools-cli-$arch-$os"
+	url="https://github.com/$repo/releases/latest/download"
+	dir="${DT_INSTALL_DIR:-$HOME/.local/bin}"
+	tmp="$(mktemp -d)"
+	trap 'rm -rf "$tmp"' EXIT
+
+	curl -fsSL -o "$tmp/$name.tar.xz" "$url/$name.tar.xz"
+	curl -fsSL -o "$tmp/sha256.sum" "$url/sha256.sum"
+	grep "[ *]$name.tar.xz\$" "$tmp/sha256.sum" >"$tmp/want" ||
+		die "checksum missing"
+	if command -v sha256sum >/dev/null 2>&1; then
+		(cd "$tmp" && sha256sum -c --quiet want) || die "checksum mismatch"
+	else
+		(cd "$tmp" && shasum -a 256 -c --quiet want) ||
+			die "checksum mismatch"
+	fi
+
+	tar -xJf "$tmp/$name.tar.xz" -C "$tmp"
+	mkdir -p "$dir"
+	# overwriting a signed binary in place gets it SIGKILLed on macOS
+	rm -f "$dir/delphi"
+	cp "$tmp/$name/delphi" "$dir/delphi"
+	ln -sf delphi "$dir/dt"
+	ln -sf delphi "$dir/delphitools"
+	"$dir/delphi" --version
+
+	case ":$PATH:" in
+	*":$dir:"*) ;;
+	*)
+		# ∑CG: install dir is not on PATH; printed after a successful install
+		#   spec: one line, names $dir, tells the user to add it to PATH, ≤ 60 chars plus the path, lowercase, no period
+		#   sample: "dt-install: add $dir to your PATH"
+		echo "∑CG" >&2
+		;;
+	esac
+	found="$(command -v dt 2>/dev/null || true)"
+	if [ -n "$found" ] && [ "$found" != "$dir/dt" ]; then
+		# ∑CG: another dt (e.g. the deprecated cargo build in ~/.cargo/bin) is earlier on PATH
+		#   spec: one line, names $found, tells the user it shadows the new install and to remove it, lowercase, no period
+		#   sample: "dt-install: $found comes first on PATH; remove it (cargo uninstall delphitools-cli)"
+		echo "∑CG" >&2
+	fi
+}
+
+main "$@"

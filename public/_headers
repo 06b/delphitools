@@ -14,3 +14,8 @@
   Cache-Control: public, max-age=86400
 /mediainfo/*
   Cache-Control: public, max-age=86400
+
+# curl | sh installer; text/plain so browsers show it
+/install
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
