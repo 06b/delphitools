@@ -6,6 +6,7 @@ import { LinkTo } from '@ember/routing';
 import { htmlSafe } from '@ember/template';
 import { BUILT_WITH } from 'delphitools-v2/components/about-delphitools';
 import Icon from 'delphitools-v2/components/icon';
+import { isHalloween } from 'delphitools-v2/lib/hero-art';
 import type MagazineService from 'delphitools-v2/services/magazine';
 import './hero-copy.css';
 
@@ -55,6 +56,7 @@ export default class HeroCopy extends Component {
 	@service declare magazine: MagazineService;
 
 	@tracked flipped = false;
+	halloween = isHalloween();
 
 	openMagazine = () => this.magazine.open();
 
@@ -85,9 +87,17 @@ export default class HeroCopy extends Component {
 					></button>
 					<div class="dt-hero-flip-content">
 						<p class="dt-hero-lead">
-							A collection of small,
-							low stakes and low
-							effort tools.
+							{{#if this.halloween}}
+								A collection of
+								evil, abhorrent
+								and frightening
+								tools.
+							{{else}}
+								A collection of
+								small, low
+								stakes and low
+								effort tools.
+							{{/if}}
 						</p>
 						<p class="dt-hero-ctas">
 							<button
@@ -111,20 +121,40 @@ export default class HeroCopy extends Component {
 									@name="play"
 								/></a>
 						</p>
-						<p>
-							No logins, no paywalls,
-							no data collection,
-							forever.
-							<br />
-							Fully
-							<a
-								href="https://github.com/1612elphi/delphitools"
-							>open source</a>, 0-BSD
-							licensed for anyone.
-							<br />
-							Long live the handmade
-							web.
-						</p>
+						{{#if this.halloween}}
+							<p>
+								No sun may ever
+								shine again, you
+								are all my
+								vassals.
+								<br />
+								Soon you shall
+								join as well.
+								2817-BSD
+								licensed for
+								nobody.
+								<br />
+								Long live
+								Garbajcam
+							</p>
+						{{else}}
+							<p>
+								No logins, no
+								paywalls, no
+								data collection,
+								forever.
+								<br />
+								Fully
+								<a
+									href="https://github.com/1612elphi/delphitools"
+								>open source</a>,
+								0-BSD licensed
+								for anyone.
+								<br />
+								Long live the
+								handmade web.
+							</p>
+						{{/if}}
 					</div>
 				</div>
 				<div

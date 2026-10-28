@@ -18,6 +18,7 @@ import { toolCategories, featuredTools } from 'delphitools-v2/lib/tools';
 import type { Tool, ToolCategory } from 'delphitools-v2/lib/tools';
 import { matchesQuery } from 'delphitools-v2/lib/tool-search';
 import { COMMIT_SHA, PRIDE, VERSION } from 'delphitools-v2/lib/build-flags';
+import { isHalloween } from 'delphitools-v2/lib/hero-art';
 import type SidebarService from 'delphitools-v2/services/sidebar';
 import type MagazineService from 'delphitools-v2/services/magazine';
 import { isPlainClick } from 'delphitools-v2/services/magazine';
@@ -146,6 +147,7 @@ export default class AppSidebar extends Component {
 	};
 
 	pride = PRIDE;
+	halloween = isHalloween();
 	commitSha = COMMIT_SHA;
 	pages = PAGES;
 	opensSection = opensSection;
@@ -279,7 +281,11 @@ export default class AppSidebar extends Component {
 							class="dt-brand"
 						>
 							<img
-								src="/delphi-lowlod.png"
+								src={{if
+									this.halloween
+									"/heroes/garbajcam.png"
+									"/delphi-lowlod.png"
+								}}
 								width="64"
 								height="64"
 								alt=""
@@ -299,7 +305,11 @@ export default class AppSidebar extends Component {
 											'pride-wordmark'
 										}}"
 								>
-									delphitools
+									{{if
+										this.halloween
+										"garbajtools"
+										"delphitools"
+									}}
 								</span>
 								<span
 									class="dt-brand-sub"
@@ -314,7 +324,10 @@ export default class AppSidebar extends Component {
 										{{#if
 											this.pride
 										}}trans
-											rights{{else}}indie
+											rights{{else if
+											this.halloween
+										}}evil
+											tools{{else}}indie
 											tools{{/if}}
 									</span>
 									<span

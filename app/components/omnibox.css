@@ -36,6 +36,14 @@
 	mask-image: var(--hero-pattern);
 }
 
+/* halloween: the face tile, 92 px like the icon tiles */
+.halloween .dt-hero-pattern > div {
+	--hero-block: 92px;
+
+	background: url("/heroes/garbajcam-tile.png") 0 0 / 92px 92px;
+	mask-image: none;
+}
+
 @keyframes dt-hero-drift {
 	to {
 		transform: translate(

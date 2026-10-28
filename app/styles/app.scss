@@ -173,6 +173,27 @@ html.classic:root {
 	--sidebar-ring: oklch(0.75 0.1 95);
 }
 
+// the Garbajtools green; light mode darkens it to 5.9:1 on the background
+html.halloween:root {
+	--canon-primary: rgb(63 106 2);
+	--canon-primary-foreground: color(srgb 0.98 0.961 0.902);
+	--primary: rgb(63 106 2);
+	--primary-foreground: color(srgb 0.98 0.961 0.902);
+	--sidebar-primary: rgb(63 106 2);
+	--sidebar-primary-foreground: color(srgb 0.98 0.961 0.902);
+	--sidebar-ring: rgb(63 106 2);
+}
+
+html.halloween.dark:root {
+	--canon-primary: rgb(126 211 3);
+	--canon-primary-foreground: rgb(12 26 0);
+	--primary: rgb(126 211 3);
+	--primary-foreground: rgb(12 26 0);
+	--sidebar-primary: rgb(126 211 3);
+	--sidebar-primary-foreground: rgb(12 26 0);
+	--sidebar-ring: rgb(126 211 3);
+}
+
 html {
 	color-scheme: light;
 }

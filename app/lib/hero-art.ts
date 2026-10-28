@@ -5,7 +5,7 @@ export interface HeroArt {
 	url?: string;
 }
 
-export const HERO_ART: HeroArt[] = [
+const ART: HeroArt[] = [
 	{
 		src: '/heroes/delphi.webp',
 		artist: 'delphi',
@@ -73,3 +73,12 @@ export const HERO_ART: HeroArt[] = [
 		url: 'https://bsky.app/profile/glasswave.bsky.social',
 	},
 ];
+
+// html.halloween is set by the boot script in index.html
+export const isHalloween = (): boolean =>
+	typeof document !== 'undefined' &&
+	document.documentElement.classList.contains('halloween');
+
+export const HERO_ART: HeroArt[] = isHalloween()
+	? [{ src: '/heroes/garbajtools.gif' }]
+	: ART;

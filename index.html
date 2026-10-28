@@ -25,12 +25,25 @@
     <script>
       (function () {
         try {
+          // 31 October only; ?halloween previews it
+          var d = new Date();
+          if ((d.getMonth() === 9 && d.getDate() === 31) || /[?&]halloween\b/.test(location.search))
+            document.documentElement.classList.add('halloween');
           var t = localStorage.getItem('theme');
           var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches);
           // delphicanon tokens follow prefers-color-scheme unless html.light is set
           document.documentElement.classList.add(dark ? 'dark' : 'light');
           if (localStorage.getItem('font') === 'classic') document.documentElement.classList.add('classic');
         } catch (e) {}
+        // ctrl+shift+h toggles the halloween preview
+        addEventListener('keydown', function (e) {
+          if (!e.ctrlKey || !e.shiftKey || e.code !== 'KeyH') return;
+          e.preventDefault();
+          var u = new URL(location.href);
+          if (u.searchParams.has('halloween')) u.searchParams.delete('halloween');
+          else u.searchParams.set('halloween', '');
+          location.href = u.href;
+        });
       })();
     </script>
 
